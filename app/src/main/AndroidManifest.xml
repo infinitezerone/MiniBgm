@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <queries>
         <!-- 哔哩哔哩 -->
@@ -26,6 +29,11 @@
         <!-- 外部播放器 mpv / VLC（StreamingAppLauncher.isAppInstalled 依赖 getPackageInfo 探测） -->
         <package android:name="is.xyz.mpv" />
         <package android:name="org.videolan.vlc" />
+        <!-- 常用磁力/BT 下载客户端 -->
+        <package android:name="com.xunlei.downloadprovider" />
+        <package android:name="com.delphicoder.flud" />
+        <package android:name="com.dv.adm" />
+        <package android:name="com.clouddrive.pikpak" />
 
         <intent>
             <action android:name="android.intent.action.VIEW" />
@@ -39,6 +47,16 @@
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="video/*" />
+        </intent>
+        <!-- 磁力链接处理意图 -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="magnet" />
+        </intent>
+        <!-- 种子文件处理意图 -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/x-bittorrent" />
         </intent>
     </queries>
 
@@ -100,6 +118,12 @@
                     android:scheme="minibgm" />
             </intent-filter>
         </activity>
+
+        <!-- 磁力/BT 后台与前台下载服务 -->
+        <service
+            android:name="com.infinitezerone.minibgm.core.data.download.TorrentDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

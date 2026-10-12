@@ -1,30 +1,46 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
+import com.infinitezerone.minibgm.core.data.download.TorrentIntentDispatcher
+import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourceActionCard
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourcesBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourcesSectionLabel
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.MikanTorrentResource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
@@ -34,6 +50,10 @@ import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.StreamingAppLauncher
 import com.infinitezerone.minibgm.core.navigation.launchExternalPlayer
 import com.infinitezerone.minibgm.feature.subject.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.koin.compose.koinInject
 
 /**
  * 统一的「播放来源」BottomSheet，条目级与分集级共用同一组件（[episode] 为 null 即条目级）：
@@ -473,6 +493,11 @@ private fun MikanResourcesSection(
     context: Context,
     onDismissAndRun: (() -> Unit) -> Unit,
 ) {
+    val torrentRepository: TorrentRepository = koinInject()
+    val torrentIntentDispatcher: TorrentIntentDispatcher = koinInject()
+    val coroutineScope = rememberCoroutineScope()
+    var expandedIndex by remember { mutableStateOf<Int?>(-1) }
+
     Spacer(modifier = Modifier.height(4.dp))
     BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_mikan_fansub_section))
     if (isMikanLoading) {
@@ -490,58 +515,255 @@ private fun MikanResourcesSection(
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
         )
     } else {
-        for (resource in mikanResources.take(15)) {
-            val groupTitle =
-                buildString {
-                    if (resource.fansubName.isNotBlank()) append("[${resource.fansubName}] ")
-                    if (resource.resolution.isNotBlank()) append("${resource.resolution} ")
-                    if (resource.formattedSize.isNotBlank()) append("· ${resource.formattedSize}")
-                }.trim().ifBlank { resource.title }
-
-            BgmSourceActionCard(
-                title = groupTitle,
-                subtitle = resource.title,
-                iconVector = BgmIcons.Download,
-                iconTint = MaterialTheme.colorScheme.primary,
-                trailingContent = {
-                    Text(
-                        text = stringResource(R.string.feature_subject_source_mikan_copy_magnet),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Medium,
-                    )
-                },
-                onClick = {
-                    onDismissAndRun {
-                        copyMagnetAndLaunch(context, resource)
-                    }
-                },
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            mikanResources.take(15).forEachIndexed { index, resource ->
+                MikanTorrentCard(
+                    resource = resource,
+                    isExpanded = expandedIndex == index,
+                    onToggleExpand = {
+                        expandedIndex = if (expandedIndex == index) null else index
+                    },
+                    onInAppDownload = {
+                        coroutineScope.launch {
+                            torrentRepository.startDownload(
+                                title = resource.title,
+                                magnetUrl = resource.magnetUrl,
+                                torrentUrl = resource.torrentUrl.ifBlank { null },
+                                totalBytes = resource.contentLength,
+                            )
+                            withContext(Dispatchers.Main) {
+                                Toast
+                                    .makeText(
+                                        context,
+                                        context.getString(R.string.feature_subject_source_mikan_download_started),
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                            }
+                        }
+                        onDismissAndRun {}
+                    },
+                    onExternalLaunch = {
+                        onDismissAndRun {
+                            torrentIntentDispatcher.launchMagnet(resource.magnetUrl)
+                        }
+                    },
+                    onDownloadTorrent = {
+                        if (resource.torrentUrl.isNotBlank()) {
+                            coroutineScope.launch {
+                                val result = torrentRepository.downloadTorrentFile(resource.torrentUrl, resource.title)
+                                withContext(Dispatchers.Main) {
+                                    result
+                                        .onSuccess { path ->
+                                            Toast
+                                                .makeText(
+                                                    context,
+                                                    context.getString(R.string.feature_subject_source_mikan_torrent_downloaded),
+                                                    Toast.LENGTH_SHORT,
+                                                ).show()
+                                            torrentIntentDispatcher.launchTorrentFile(path)
+                                        }.onFailure {
+                                            Toast
+                                                .makeText(
+                                                    context,
+                                                    context.getString(R.string.feature_subject_source_mikan_torrent_failed),
+                                                    Toast.LENGTH_SHORT,
+                                                ).show()
+                                        }
+                                }
+                            }
+                        } else {
+                            Toast.makeText(context, "当前资源未提供种子直链", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onCopyMagnet = {
+                        torrentIntentDispatcher.copyMagnetToClipboard(resource.magnetUrl)
+                        Toast
+                            .makeText(
+                                context,
+                                context.getString(R.string.feature_subject_source_mikan_copied_magnet),
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                    },
+                )
+            }
         }
     }
 }
 
-private fun copyMagnetAndLaunch(
-    context: Context,
+@Composable
+private fun MikanTorrentCard(
     resource: MikanTorrentResource,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    onInAppDownload: () -> Unit,
+    onExternalLaunch: () -> Unit,
+    onDownloadTorrent: () -> Unit,
+    onCopyMagnet: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    if (resource.magnetUrl.isNotBlank()) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        val clip = ClipData.newPlainText("magnet", resource.magnetUrl)
-        clipboard?.setPrimaryClip(clip)
-        Toast
-            .makeText(
-                context,
-                context.getString(R.string.feature_subject_source_mikan_copied_magnet),
-                Toast.LENGTH_SHORT,
-            ).show()
-        runCatching {
-            val intent =
-                Intent(Intent.ACTION_VIEW).apply {
-                    data = Uri.parse(resource.magnetUrl)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val groupTitle =
+        buildString {
+            if (resource.fansubName.isNotBlank()) append("[${resource.fansubName}] ")
+            if (resource.resolution.isNotBlank()) append("${resource.resolution} ")
+            if (resource.formattedSize.isNotBlank()) append("· ${resource.formattedSize}")
+        }.trim().ifBlank { resource.title }
+
+    Surface(
+        onClick = onToggleExpand,
+        shape = BgmShapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = BgmIcons.Download,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
-            context.startActivity(intent)
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = groupTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (resource.title.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = resource.title,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+
+                Icon(
+                    imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            AnimatedVisibility(visible = isExpanded) {
+                Column {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        MikanActionButton(
+                            text = stringResource(R.string.feature_subject_source_mikan_in_app_download),
+                            icon = BgmIcons.Download,
+                            isPrimary = true,
+                            onClick = onInAppDownload,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MikanActionButton(
+                            text = stringResource(R.string.feature_subject_source_mikan_external_app),
+                            icon = BgmIcons.OpenInNew,
+                            isPrimary = false,
+                            onClick = onExternalLaunch,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        MikanActionButton(
+                            text = stringResource(R.string.feature_subject_source_mikan_download_torrent),
+                            icon = BgmIcons.FolderOpen,
+                            isPrimary = false,
+                            onClick = onDownloadTorrent,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MikanActionButton(
+                            text = stringResource(R.string.feature_subject_source_mikan_copy_magnet),
+                            icon = BgmIcons.ContentCopy,
+                            isPrimary = false,
+                            onClick = onCopyMagnet,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MikanActionButton(
+    text: String,
+    icon: ImageVector,
+    isPrimary: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        shape = BgmShapes.small,
+        color =
+            if (isPrimary) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHighest
+            },
+        modifier = modifier,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint =
+                    if (isPrimary) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                modifier = Modifier.size(15.dp),
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color =
+                    if (isPrimary) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                maxLines = 1,
+            )
         }
     }
 }

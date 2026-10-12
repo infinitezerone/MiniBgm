@@ -2,6 +2,8 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 应用内安装包更新缓存目录 -->
     <cache-path name="update_apks" path="updates/" />
+    <!-- 种子文件缓存目录 -->
+    <cache-path name="torrents" path="torrents/" />
     <!-- 应用私有扩展与模块目录 -->
     <files-path name="modules" path="modules/" />
 </paths>

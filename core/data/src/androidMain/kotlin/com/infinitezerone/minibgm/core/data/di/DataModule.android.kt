@@ -3,10 +3,12 @@ package com.infinitezerone.minibgm.core.data.di
 import com.infinitezerone.minibgm.core.data.crash.CrashLogRepository
 import com.infinitezerone.minibgm.core.data.crash.FileCrashLogRepository
 import com.infinitezerone.minibgm.core.data.crash.crashLogDir
-import com.infinitezerone.minibgm.core.data.download.AndroidApkInstaller
 import com.infinitezerone.minibgm.core.data.download.AndroidAssetDownloader
-import com.infinitezerone.minibgm.core.data.download.ApkInstaller
+import com.infinitezerone.minibgm.core.data.download.AndroidTorrentIntentDispatcher
 import com.infinitezerone.minibgm.core.data.download.AssetDownloader
+import com.infinitezerone.minibgm.core.data.download.TorrentIntentDispatcher
+import com.infinitezerone.minibgm.core.data.repository.AndroidTorrentRepository
+import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
 import com.infinitezerone.minibgm.core.data.seasonal.FileSeasonalDiskCache
 import com.infinitezerone.minibgm.core.data.seasonal.SeasonalDiskCache
 import com.infinitezerone.minibgm.core.data.util.ConnectivityManagerNetworkMonitor
@@ -24,7 +26,13 @@ val platformDataModule =
                 assetDownloadService = get(),
             )
         }
-        single<ApkInstaller> { AndroidApkInstaller(androidContext()) }
+        single<TorrentIntentDispatcher> { AndroidTorrentIntentDispatcher(androidContext()) }
+        single<TorrentRepository> {
+            AndroidTorrentRepository(
+                context = androidContext(),
+                assetDownloader = get(),
+            )
+        }
         single<com.infinitezerone.minibgm.core.data.repository.UpdateRepository> {
             com.infinitezerone.minibgm.core.data.repository.UpdateRepositoryImpl(
                 updateService = get(),

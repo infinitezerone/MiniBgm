@@ -188,6 +188,12 @@
     <string name="feature_subject_source_ep_hua_format">第%1$s话</string>
     <string name="feature_subject_source_mikan_fansub_section">字幕组原画资源 (蜜柑计划)</string>
     <string name="feature_subject_source_mikan_copy_magnet">复制磁力</string>
+    <string name="feature_subject_source_mikan_in_app_download">应用内下载</string>
+    <string name="feature_subject_source_mikan_external_app">外部打开</string>
+    <string name="feature_subject_source_mikan_download_torrent">下载种子</string>
+    <string name="feature_subject_source_mikan_download_started">已加入下载队列，可在通知栏查看进度</string>
+    <string name="feature_subject_source_mikan_torrent_downloaded">种子文件已就绪</string>
+    <string name="feature_subject_source_mikan_torrent_failed">种子文件下载失败</string>
     <string name="feature_subject_source_mikan_copied_magnet">已复制磁力链接，可粘贴至外部下载器或网盘</string>
     <string name="feature_subject_source_mikan_loading">正在获取字幕组资源…</string>
     <string name="feature_subject_source_mikan_empty">暂未检索到当前分集的字幕组资源</string>
