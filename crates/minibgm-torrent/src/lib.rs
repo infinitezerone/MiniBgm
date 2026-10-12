@@ -86,12 +86,6 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
         }
     };
 
-    // Android 环境下未提供默认 $HOME 环境变量，导致依赖 directories crate 的库解析失败
-    // 兜底注入应用私有安全目录，确保所有底层库均可平稳运行
-    if std::env::var_os("HOME").is_none() {
-        std::env::set_var("HOME", &save_dir_str);
-    }
-
     let rt = match runtime() {
         Ok(r) => r,
         Err(e) => return env.new_string(format!("ERROR: {e}")).unwrap().into_raw(),
