@@ -1,0 +1,18 @@
+[package]
+name = "minibgm-torrent"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tokio = { version = "1", features = ["net", "rt-multi-thread", "time", "sync", "fs", "io-util", "macros"] }
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "server", "server-auto"] }
+http-body-util = "0.1"
+bytes = "1"
+jni = "0.21"
+url = "2.5"
+log = "0.4"
+android_logger = "0.14"

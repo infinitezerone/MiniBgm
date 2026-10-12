@@ -55,5 +55,9 @@ gradlePlugin {
             id = "minibgm.ech.native"
             implementationClass = "com.infinitezerone.minibgm.ech.EchNativePlugin"
         }
+        register("torrentNative") {
+            id = "minibgm.torrent.native"
+            implementationClass = "com.infinitezerone.minibgm.torrent.TorrentNativePlugin"
+        }
     }
 }

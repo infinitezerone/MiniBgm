@@ -100,3 +100,14 @@ description: >-
 5. **控制栏显隐用"转变沿"而非状态捆绑**：暂停/结束时若把 `!isPlaying` 写进常显条件，用户将永远无法隐藏控制栏、得不到纯净暂停帧（B 站/YouTube 均支持暂停后单击隐藏）。正确形态：进入暂停的瞬间自动置 `controlsVisible = true`（转变沿），之后恢复单击切换语义；强制常显只保留给"有必须可见内容"的状态（缓冲 spinner、结束态、错误态）。同理，播放出错时收起活跃面板（`overlayHostState.cancelActive()`），避免面板遮罩挡住错误态的重试/换源按钮。
 6. **依赖约束先看契约源码，不看搜索摘要**：
    * 接口有没有端点、是否强制验证码、是否支持原生发帖（如 P-005 Turnstile 阻塞），必须查验 OpenAPI 或实测返回，不盲信模型搜索猜测。
+
+---
+
+## 剧本 8：原生流播与后台传输真实性规范（Stream Engine & Native Fidelity）
+* **规范先例**：`crates/minibgm-torrent` 与 `AndroidTorrentStreamEngine`
+* **流媒体发流真实性**：
+  * 严禁在生产代码中使用空 `ServerSocket(0)` 占位或以纯文本假装动态库（如已废止的 `minibgm_streamer_placeholder` 反模式）；
+  * 流媒体引擎向播放器派发 `127.0.0.1:port` 地址前，本地 HTTP 守护服务必须已真实就绪，并严格支持 HTTP 206 Partial Content / Range 头部响应（满足播放器 moov/Seek 元数据探针需求）；
+  * 若底层 Native 模块或资源未就绪，必须显式抛出异常或下发 `TorrentStreamState.Error` 阻断，绝不允许派发不可达的伪地址导致播放器静默超时崩溃（`SocketTimeoutException`）。
+* **重要写操作/外部下载前置确认**：
+  * 任何涉及消耗流量下载扩展组件或启动后台大任务的操作，必须通过 `BgmOverlayHost` + `overlayHostState.await(ConfirmDialogAction(...))` 获得用户显式确认后方可执行。

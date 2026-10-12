@@ -84,7 +84,8 @@ object EpisodeSanityChecker {
             return false
         }
         // 若目标明确为第 2 季及以上，而候选明确声明了第一季/第1期
-        if (targetExplicitSeason != null && targetExplicitSeason > 1 &&
+        if (targetExplicitSeason != null &&
+            targetExplicitSeason > 1 &&
             (candidateVodName.contains("第一季") || candidateVodName.contains("第1季") || candidateVodName.contains("第1期"))
         ) {
             return false

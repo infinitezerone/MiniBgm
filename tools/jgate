@@ -167,7 +167,7 @@ fi
 echo "[jgate] 模块 ${#modules[@]} 个：${modules[*]:-（无）}"
 echo "[jgate] 将执行：${gradle_tasks[*]}"
 if [ "$need_rust" = "1" ]; then
-  echo "[jgate] 将执行（Rust）：cargo fmt --all --check → cargo clippy --locked -p minibgm-ech --all-targets -- -D warnings → cargo test --locked -p minibgm-ech"
+  echo "[jgate] 将执行（Rust）：cargo fmt --all --check → cargo clippy --locked --workspace --all-targets -- -D warnings → cargo test --locked --workspace"
 fi
 
 if [ "$plan_only" = "1" ]; then
@@ -244,6 +244,11 @@ else
   rust_in_vcvars=0
   vsroot=""
   case "$(uname -s)" in
+    Darwin)
+      if [ -d "/Library/Developer/CommandLineTools" ] && [ -z "${DEVELOPER_DIR:-}" ]; then
+        export DEVELOPER_DIR="/Library/Developer/CommandLineTools"
+      fi
+      ;;
     MINGW* | MSYS* | CYGWIN*)
       # bash 的 `_`（上一条命令）传入 cl.exe 会让 MSVC 前端静默 exit 2（二分定位实锤，
       # 2026-10）。unset 无效——bash 每次执行外部命令都会重设 `_`，必须在 exec 时用
@@ -280,7 +285,7 @@ else
   echo "[jgate]   ↳ fmt $((SECONDS - start))s"
 
   cl_log=$(mktemp /tmp/jgate-clippy-XXXXXX.log)
-  run_cargo cargo clippy --locked -p minibgm-ech --all-targets -- -D warnings >"$cl_log" 2>&1
+  run_cargo cargo clippy --locked --workspace --all-targets -- -D warnings >"$cl_log" 2>&1
   cl_rc=$?
   cat "$cl_log"
   echo "[jgate]   ↳ clippy $((SECONDS - start))s"
@@ -302,7 +307,7 @@ else
   rm -f "$cl_log"
 
   start=$SECONDS
-  run_cargo cargo test --locked -p minibgm-ech || { echo "[jgate] ❌ cargo test 未通过"; exit 1; }
+  run_cargo cargo test --locked --workspace || { echo "[jgate] ❌ cargo test 未通过"; exit 1; }
   echo "[jgate]   ↳ test $((SECONDS - start))s"
   rust_ran=1
 fi

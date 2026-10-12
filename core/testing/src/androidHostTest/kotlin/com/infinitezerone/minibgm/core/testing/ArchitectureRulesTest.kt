@@ -34,6 +34,7 @@ import kotlin.test.fail
  * 17. 一次性事件生命周期感知：feature UI 源码严禁直接对 ViewModel 一次性事件流调用裸 .collect，必须使用 :core:designsystem 的 ObserveAsEvents 绑定生命周期（STARTED）
  * 18. 事件文案资源化：ViewModel 的一次性事件（ShowSnackbar）严禁内联用户可见文案（CJK 字面量），
  *     必须以 @StringRes + formatArgs 下发、UI 侧解析；服务端运行时消息经 message 字段透传（源自播放器文案硬编码复盘）
+ * 19. 流媒体发流真实性：流引擎严禁派发未就绪的空 Socket 伪地址；严禁使用虚假 placeholder 桩伪装媒体流（源自磁力边下边播虚假桩复盘）
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -690,6 +691,46 @@ class ArchitectureRulesTest {
         if (violations.isNotEmpty()) {
             fail(
                 "违反一次性事件文案资源化规范（ShowSnackbar 严禁内联中文字面量，多语言与文案审查都在资源体系内收口）：\n" +
+                    violations.joinToString("\n"),
+            )
+        }
+    }
+
+    @Test
+    fun stream_engines_never_use_fake_placeholders_or_unbound_sockets() {
+        val dataDir = File(projectRoot, "core/data")
+        assertTrue(dataDir.isDirectory, "core/data 目录未找到: ${dataDir.absolutePath}")
+
+        val violations = mutableListOf<String>()
+        val forbiddenTokens =
+            listOf(
+                "minibgm_streamer_placeholder",
+                "minibgm_fake",
+            )
+
+        dataDir
+            .resolve("src")
+            .walkTopDown()
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { sourceFile ->
+                val content = sourceFile.readText()
+                val relPath = sourceFile.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+
+                forbiddenTokens.forEach { token ->
+                    if (content.contains(token)) {
+                        violations.add("$relPath 违规包含虚假流占位标记 '$token'")
+                    }
+                }
+
+                if (content.contains("ServerSocket(0)") && (relPath.contains("Torrent") || relPath.contains("Stream"))) {
+                    violations.add("$relPath 严禁在流媒体引擎中使用 ServerSocket(0) 伪造空端口分发流地址（必须由真实常驻服务端或 JNI 监听绑定）")
+                }
+            }
+
+        if (violations.isNotEmpty()) {
+            fail(
+                "违反流媒体发流真实性规范（严禁伪造 placeholder 虚假文件或未绑定的空 Socket 伪地址欺骗播放器）：\n" +
                     violations.joinToString("\n"),
             )
         }

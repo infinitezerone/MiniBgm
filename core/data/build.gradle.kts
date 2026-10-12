@@ -3,6 +3,7 @@ import com.infinitezerone.minibgm.kmpAndroidLibrary
 plugins {
     alias(libs.plugins.minibgm.kmp.library)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.minibgm.torrent.native)
 }
 
 kmpAndroidLibrary {
