@@ -110,8 +110,10 @@ description: >-
   * 流媒体引擎向播放器派发 `127.0.0.1:port` 地址前，本地 HTTP 守护服务必须已真实就绪，并严格支持 HTTP 206 Partial Content / Range 头部响应（满足播放器 moov/Seek 元数据探针需求）；
   * 若底层 Native 模块或资源未就绪，必须显式抛出异常或下发 `TorrentStreamState.Error` 阻断，绝不允许吞掉初始化超时派发不可达的伪地址导致播放器静默超时崩溃（`SocketTimeoutException`）。
 * **纯内存流播防 OOM 与接口安全（librqbit）**：
-  * **单集严格锁定**：番剧 BD/合集种子常含十几集几十 GB 文件，纯内存存储（`InMemoryExampleStorageFactory`）无自动 LRU 淘汰。添加种子时必须配置 `only_files_regex` 过滤视频，并在元数据就绪后调用 `session.update_only_files(&handle, &HashSet::from([target_file_id]))` 锁定目标单集，杜绝全季文件同时进 RAM 导致 OOM；
+  * **单集严格锁定与候选过滤**：番剧 BD/合集种子常含十几集几十 GB 文件，纯内存存储（`InMemoryExampleStorageFactory`）无自动 LRU 淘汰。添加种子时必须配置 `only_files_regex` 过滤视频，并在元数据就绪后，严格通过 `f.included && is_video_file(&f.name)` 双重白名单选取最大视频，绝不在全量文件中盲取最大（防止非视频 ISO/解压包夺占正片），再调用 `session.update_only_files(&handle, &HashSet::from([target_file_id]))` 锁定目标单集，杜绝全季文件同时进 RAM 导致 OOM；
   * **本地控制面封死**：本地 HTTP API 必须配置 `read_only: true` 与 `allow_create: false`，避免同一设备上其他恶意进程扫描回环端口向会话注入种子或篡改状态；
-  * **进度分母真实性**：进度分母必须采用当前目标单集的真实字节大小（`target_file_len`），分子采用 `stats.file_progress[target_file_id]`，禁止使用全种子大小（会导致进度永远不到 100%）或写死假兜底分母。
+  * **公共 Tracker 原生注入**：禁止手拼磁力 URL query 做字符串包含去重（URL-encoded 与原始形式失配陷阱），统一由 `AddTorrentOptions.trackers` 原生参数注入，底层自动去重；
+  * **进度分母真实性**：进度分母必须采用当前目标单集的真实字节大小（`target_file_len`），分子采用 `stats.file_progress[target_file_id]`，禁止使用全种子大小（会导致进度永远不到 100%）或写死假兜底分母；
+  * **应用内下载真实性（绝不留 Fake 循环）**：离线落盘与在线内存流播必须泾渭分明。未接入真实持久化落盘管道前，严禁在 Repository/Service 中写死 `2.5MB/s` 拟真推进循环与硬编码 peers 欺骗用户；能力未就绪必须直接下发明确状态阻断并引导外部专业客户端。
 * **重要写操作/外部下载前置确认**：
   * 任何涉及消耗流量下载扩展组件或启动后台大任务的操作，必须通过 `BgmOverlayHost` + `overlayHostState.await(ConfirmDialogAction(...))` 获得用户显式确认后方可执行。

@@ -102,13 +102,19 @@ impl StreamServer {
                 .with_context(|| format!("读取种子文件失败: {:?}", path))?;
             AddTorrent::TorrentFileBytes(Bytes::from(data))
         } else {
-            let enhanced_magnet = enhance_magnet_url(&config.magnet_url);
-            AddTorrent::Url(enhanced_magnet)
+            AddTorrent::Url(Cow::Borrowed(&config.magnet_url))
         };
 
         let add_opts = AddTorrentOptions {
             paused: false,
             only_files_regex: Some(r"(?i)\.(mkv|mp4|webm|avi|flv|ts|m2ts)$".to_string()),
+            // 由 librqbit 内生统一解析、合并与去重，杜绝手拼 URL 编码失配与重复注入
+            trackers: Some(
+                DEFAULT_PUBLIC_TRACKERS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+            ),
             ..Default::default()
         };
 
@@ -146,6 +152,9 @@ impl StreamServer {
                 files
                     .iter()
                     .enumerate()
+                    // 严格双重校验：必须被 only_files_regex 标记为 included 且扩展名确为视频
+                    // 杜绝合集中体积更大的非视频文件（ISO/解压包/RAW原盘）夺取下载目标
+                    .filter(|(_, f)| f.included && is_video_file(&f.name))
                     .max_by_key(|(_, f)| f.length)
                     .map(|(idx, f)| (idx, f.length))
             })
@@ -207,27 +216,27 @@ impl StreamServer {
     }
 }
 
-const PUBLIC_TRACKER_PARAMS: &[&str] = &[
-    "udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce",
-    "udp%3A%2F%2Fopen.tracker.cl%3A1337%2Fannounce",
-    "udp%3A%2F%2Fopentracker.i2p.rocks%3A6969%2Fannounce",
-    "udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce",
-    "udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce",
-    "https%3A%2F%2Ftracker.tamersunion.org%3A443%2Fannounce",
+/// 全球高可用公共 Tracker 列表，用于加速磁链冷启动。
+///
+/// 【维护与隐私说明】：
+/// 1. 广播隐私：添加这些 Tracker 会向对应的公共 Tracker 宣告本机 IP 与 infohash；
+/// 2. 存活周期：公共 Tracker 列表具有时效性（生命周期常以月计），失效后由 DHT 网络兜底；
+/// 3. 本模块不手拼 URL，统一由 librqbit AddTorrentOptions.trackers 自动解析与去重。
+pub const DEFAULT_PUBLIC_TRACKERS: &[&str] = &[
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.tracker.cl:1337/announce",
+    "udp://opentracker.i2p.rocks:6969/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://open.stealth.si:80/announce",
+    "https://tracker.tamersunion.org:443/announce",
 ];
 
-fn enhance_magnet_url(raw: &str) -> Cow<'_, str> {
-    if !raw.starts_with("magnet:?") {
-        return Cow::Borrowed(raw);
-    }
-    let mut enhanced = raw.to_string();
-    for tr in PUBLIC_TRACKER_PARAMS {
-        if !enhanced.contains(tr) {
-            enhanced.push_str("&tr=");
-            enhanced.push_str(tr);
-        }
-    }
-    Cow::Owned(enhanced)
+pub fn is_video_file(name: &str) -> bool {
+    let ext = name.rsplit('.').next().unwrap_or("");
+    matches!(
+        ext.to_ascii_lowercase().as_str(),
+        "mkv" | "mp4" | "webm" | "avi" | "flv" | "ts" | "m2ts"
+    )
 }
 
 #[cfg(test)]
@@ -235,14 +244,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_enhance_magnet_url_appends_trackers() {
-        let base = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567";
-        let enhanced = enhance_magnet_url(base);
-        assert!(enhanced.contains("&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"));
-        assert!(enhanced.starts_with(base));
-
-        // 已经包含时不再重复追加
-        let second_pass = enhance_magnet_url(&enhanced);
-        assert_eq!(second_pass, enhanced);
+    fn test_is_video_file_identifies_video_extensions_correctly() {
+        assert!(is_video_file("[Baha] ep01.mp4"));
+        assert!(is_video_file("Episode 1 [1080p].MKV"));
+        assert!(is_video_file("raw_stream.m2ts"));
+        assert!(!is_video_file("SP01_Bonus_Soundtrack.flac"));
+        assert!(!is_video_file("Scans_Cover.png"));
+        assert!(!is_video_file("Disc1.iso"));
+        assert!(!is_video_file("Release.nfo"));
     }
 }

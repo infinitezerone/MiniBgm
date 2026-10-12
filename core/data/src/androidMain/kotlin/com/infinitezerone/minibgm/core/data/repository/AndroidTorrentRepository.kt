@@ -89,48 +89,19 @@ class AndroidTorrentRepository(
             }
         }
 
-        // 2. 状态切换为下载中
+        // 2. 明确离线下载状态（严禁使用 2.5MB/s 伪进度与假 peers 欺骗用户）
+        // 当前项目主轴为纯内存零闪存流播（TorrentStreamEngine）；
+        // 应用内大文件离线落盘引擎尚未接入多任务持久化管线，明确阻断并引导外部客户端或在线流播
         updateTask(taskId) {
             it.copy(
-                status = TorrentTaskStatus.DOWNLOADING,
-                connectedPeers = 8,
-                connectedSeeds = 3,
-            )
-        }
-
-        // 3. 模拟下载推进（后续若接入动态 native 引擎，此处由引擎回调驱动）
-        val targetBytes = if (task.totalBytes > 0L) task.totalBytes else 450L * 1024 * 1024
-        var downloaded = 0L
-        val chunkSize = (2.5 * 1024 * 1024).toLong() // 2.5MB/s 拟真速率
-
-        while (downloaded < targetBytes) {
-            kotlinx.coroutines.delay(1000)
-            val currentTask = _tasks.value.firstOrNull { it.id == taskId }
-            if (currentTask == null || currentTask.status == TorrentTaskStatus.PAUSED || currentTask.status == TorrentTaskStatus.ERROR) {
-                return
-            }
-
-            downloaded = (downloaded + chunkSize).coerceAtMost(targetBytes)
-            updateTask(taskId) {
-                it.copy(
-                    totalBytes = targetBytes,
-                    downloadedBytes = downloaded,
-                    downloadSpeedBytesPerSec = chunkSize,
-                )
-            }
-        }
-
-        // 4. 下载完成
-        updateTask(taskId) {
-            it.copy(
-                status = TorrentTaskStatus.COMPLETED,
-                downloadedBytes = targetBytes,
-                totalBytes = targetBytes,
+                status = TorrentTaskStatus.ERROR,
                 downloadSpeedBytesPerSec = 0L,
-                completionTimestamp = System.currentTimeMillis(),
+                connectedPeers = 0,
+                connectedSeeds = 0,
+                errorMessage = "应用内离线下载引擎重构中，请使用外部客户端下载或直接在线播放",
             )
         }
-        logger.i { "任务下载完成: $taskId" }
+        logger.w { "任务 $taskId 阻断: 应用内离线落盘下载未就绪，已提示切换外部客户端" }
     }
 
     override suspend fun pauseDownload(taskId: String) {
