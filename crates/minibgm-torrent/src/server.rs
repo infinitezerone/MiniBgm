@@ -108,13 +108,6 @@ impl StreamServer {
         let add_opts = AddTorrentOptions {
             paused: false,
             only_files_regex: Some(r"(?i)\.(mkv|mp4|webm|avi|flv|ts|m2ts)$".to_string()),
-            // 由 librqbit 内生统一解析、合并与去重，杜绝手拼 URL 编码失配与重复注入
-            trackers: Some(
-                DEFAULT_PUBLIC_TRACKERS
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect(),
-            ),
             ..Default::default()
         };
 
@@ -215,21 +208,6 @@ impl StreamServer {
         self.cancel_token.cancel();
     }
 }
-
-/// 全球高可用公共 Tracker 列表，用于加速磁链冷启动。
-///
-/// 【维护与隐私说明】：
-/// 1. 广播隐私：添加这些 Tracker 会向对应的公共 Tracker 宣告本机 IP 与 infohash；
-/// 2. 存活周期：公共 Tracker 列表具有时效性（生命周期常以月计），失效后由 DHT 网络兜底；
-/// 3. 本模块不手拼 URL，统一由 librqbit AddTorrentOptions.trackers 自动解析与去重。
-pub const DEFAULT_PUBLIC_TRACKERS: &[&str] = &[
-    "udp://tracker.opentrackr.org:1337/announce",
-    "udp://open.tracker.cl:1337/announce",
-    "udp://opentracker.i2p.rocks:6969/announce",
-    "udp://tracker.torrent.eu.org:451/announce",
-    "udp://open.stealth.si:80/announce",
-    "https://tracker.tamersunion.org:443/announce",
-];
 
 pub fn is_video_file(name: &str) -> bool {
     let ext = name.rsplit('.').next().unwrap_or("");
