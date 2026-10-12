@@ -51,6 +51,10 @@ impl StreamServer {
             default_storage_factory: Some(storage_factory),
             fastresume: false,
             persistence: None,
+            dht: Some(librqbit::DhtSessionConfig {
+                persistence: None,
+                ..Default::default()
+            }),
             cancellation_token: Some(cancel_token.clone()),
             ..Default::default()
         };
