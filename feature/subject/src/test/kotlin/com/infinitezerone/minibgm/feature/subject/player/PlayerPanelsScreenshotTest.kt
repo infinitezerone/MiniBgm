@@ -202,13 +202,6 @@ class PlayerPanelsScreenshotTest {
                         currentIndex = 2,
                         episodes = episodes,
                         selectedEpisodeSort = 3f,
-                        sources =
-                            listOf(
-                                PlayerSourceTab(id = "direct", name = "默认直链", isDirect = true),
-                                PlayerSourceTab(id = "rule1", name = "备用规则源"),
-                            ),
-                        sourceFailureCounts = emptyMap(),
-                        selectedSourceIndex = 0,
                         autoNextEnabled = true,
                         selectedEpisodeId = 3L,
                         totalEpisodes = 12,
@@ -216,7 +209,6 @@ class PlayerPanelsScreenshotTest {
                         isLoadingMoreEpisodes = false,
                         onLoadMoreEpisodes = {},
                         onToggleAutoNext = {},
-                        onSelectSource = {},
                         onSelectEpisode = {},
                         onSelectQueueIndex = {},
                         onClose = {},
@@ -430,15 +422,43 @@ class PlayerPanelsScreenshotTest {
                     onToggleFollow = {},
                     onSelectEpisode = {},
                     onOpenAllEpisodes = {},
-                    onSelectSource = {},
+                    onOpenSourcesPanel = {},
                     onRequestOpenSources = null,
-                    onManageRules = null,
                     onSubjectClick = {},
                     modifier = Modifier.fillMaxSize(),
                 )
             }
         }
         composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/player_intro.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w420dp-h1000dp")
+    fun sources_bottom_sheet_portrait() {
+        val sampleSources =
+            listOf(
+                PlayerSourceTab(id = "direct", name = "默认直链", isDirect = true),
+                PlayerSourceTab(id = "rule1", name = "源 A (樱花动漫)"),
+                PlayerSourceTab(id = "rule2", name = "源 B (AGE 动漫)"),
+            )
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                PlayerSourcesBottomSheet(
+                    sources = sampleSources,
+                    selectedIndex = 0,
+                    sourceFailureCounts = mapOf("rule2" to 2),
+                    isResolvingSource = false,
+                    resolveAttempt = 0,
+                    resolveAttemptTotal = 0,
+                    matchedVodName = "葬送的芙莉莲 第 3 话",
+                    onSelectSource = {},
+                    onManageRules = {},
+                    onDismiss = {},
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/player_sources_sheet.png")
     }
 
     private companion object {

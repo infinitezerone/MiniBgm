@@ -15,6 +15,7 @@ import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
 import com.infinitezerone.minibgm.core.network.AssetDownloadService
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,7 +36,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.serialization.encodeToString
 import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -45,13 +46,15 @@ class AndroidTorrentRepository(
     private val assetDownloader: AssetDownloader,
     private val assetDownloadService: AssetDownloadService,
     private val streamEngine: TorrentStreamEngine,
-    private val torrentTaskDao: TorrentTaskDao? = null,
+    private val torrentTaskDao: TorrentTaskDao,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val startForegroundService: (Context, String, String) -> Unit = TorrentDownloadService::start,
     private val peerConnectTimeoutMs: Long = DEFAULT_PEER_CONNECT_TIMEOUT_MS,
 ) : TorrentRepository {
     private val logger = bgmLogger("Bgm/TorrentRepository")
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val restoreDeferred = CompletableDeferred<Unit>()
+    private val persistenceChannel = Channel<PersistenceAction>(Channel.UNLIMITED)
 
     private val _tasks = MutableStateFlow<List<TorrentTask>>(emptyList())
     override val tasks: StateFlow<List<TorrentTask>> = _tasks.asStateFlow()
@@ -64,9 +67,35 @@ class AndroidTorrentRepository(
     @Volatile
     private var isPreempting = false
 
+    private sealed interface PersistenceAction {
+        data class Upsert(
+            val entity: TorrentTaskEntity,
+        ) : PersistenceAction
+
+        data class Delete(
+            val taskId: String,
+        ) : PersistenceAction
+    }
+
     init {
         scope.launch {
-            restorePersistedTasks()
+            try {
+                restorePersistedTasks()
+            } catch (e: Exception) {
+                logger.e(e) { "恢复本地 Torrent 任务持久化失败" }
+            } finally {
+                restoreDeferred.complete(Unit)
+            }
+            for (action in persistenceChannel) {
+                runCatching {
+                    when (action) {
+                        is PersistenceAction.Upsert -> torrentTaskDao.upsertTask(action.entity)
+                        is PersistenceAction.Delete -> torrentTaskDao.deleteTask(action.taskId)
+                    }
+                }.onFailure { e ->
+                    logger.e(e) { "持久化 Torrent 任务操作失败: $action" }
+                }
+            }
         }
     }
 
@@ -82,6 +111,7 @@ class AndroidTorrentRepository(
         episodeSort: Float,
         episodeName: String,
     ): String {
+        restoreDeferred.await()
         val incomingHash = extractInfoHash(magnetUrl)
         val existingTask =
             _tasks.value.firstOrNull { task ->
@@ -126,7 +156,7 @@ class AndroidTorrentRepository(
             )
 
         _tasks.update { it + initialTask }
-        persistTasksSnapshot()
+        persistenceChannel.trySend(PersistenceAction.Upsert(initialTask.toEntity()))
 
         // 唤起前台通知服务并投入串行下载队列（避免多任务并发争抢底层单实例 librqbit 会话互相掐断）
         startForegroundService(context, taskId, title)
@@ -271,13 +301,18 @@ class AndroidTorrentRepository(
                 try {
                     runTaskPipeline(nextId)
                 } finally {
-                    synchronized(this@AndroidTorrentRepository) {
-                        if (activeRunningTaskId == nextId) {
-                            activeRunningTaskId = null
+                    val shouldScheduleNext =
+                        synchronized(this@AndroidTorrentRepository) {
+                            val isStillCurrent = activeRunningTaskId == nextId
+                            if (isStillCurrent) {
+                                activeRunningTaskId = null
+                            }
+                            activeJobs.remove(nextId)
+                            isStillCurrent
                         }
-                        activeJobs.remove(nextId)
+                    if (shouldScheduleNext) {
+                        scheduleNextIfIdle()
                     }
-                    scheduleNextIfIdle()
                 }
             }
         activeJobs[nextId] = job
@@ -308,12 +343,21 @@ class AndroidTorrentRepository(
         // 2. 启动流媒体 P2P 引擎，将目标目录直接指向持久化下载目录（使 librqbit 直接落盘真实文件，杜绝二次 HTTP 拷贝）
         val downloadDir = resolveDownloadDir()
         streamEngine.setDownloadSessionProtected(true)
+        val episodeHint =
+            when {
+                task.episodeSort > 0f -> {
+                    if (task.episodeSort % 1.0f == 0f) task.episodeSort.toInt().toString() else task.episodeSort.toString()
+                }
+                task.episodeName.isNotBlank() -> task.episodeName
+                else -> null
+            }
         val streamResult =
             streamEngine.startStream(
                 title = task.title,
                 magnetUrl = task.magnetUrl,
                 torrentUrl = localTorrentPath ?: task.torrentUrl,
                 saveDirPath = downloadDir.absolutePath,
+                episodeHint = episodeHint,
             )
 
         val streamUrl =
@@ -384,7 +428,7 @@ class AndroidTorrentRepository(
                             is TorrentStreamState.Ready -> {
                                 updateStallWatchdog(isActiveProgress = false)
                                 if (state.totalBytes > 0L || state.connectedPeers > 0) {
-                                    updateTask(taskId) {
+                                    updateTask(taskId, persist = false) {
                                         if (it.status == TorrentTaskStatus.DOWNLOADING) {
                                             it.copy(
                                                 totalBytes = if (state.totalBytes > 0L) state.totalBytes else it.totalBytes,
@@ -409,7 +453,7 @@ class AndroidTorrentRepository(
                                         bytesAdvanced ||
                                         isCompleted
                                 updateStallWatchdog(isActiveProgress = hasActiveTransfer)
-                                updateTask(taskId) {
+                                updateTask(taskId, persist = false) {
                                     if (it.status == TorrentTaskStatus.DOWNLOADING) {
                                         it.copy(
                                             downloadedBytes = maxOf(it.downloadedBytes, state.bufferedBytes),
@@ -472,8 +516,8 @@ class AndroidTorrentRepository(
             }
         } catch (e: Exception) {
             val currentStatus = _tasks.value.firstOrNull { it.id == taskId }?.status
-            if (currentStatus == TorrentTaskStatus.QUEUED) {
-                logger.i { "任务 $taskId 已处于 QUEUED 抢占态，跳过错误状态覆盖" }
+            if (currentStatus == TorrentTaskStatus.QUEUED || currentStatus == TorrentTaskStatus.PAUSED) {
+                logger.i { "任务 $taskId 已处于 $currentStatus 态，跳过错误状态覆盖" }
                 return
             }
             logger.e(e) { "任务 $taskId 原生下载异常: ${e.message}" }
@@ -515,7 +559,7 @@ class AndroidTorrentRepository(
                     when (state) {
                         is TorrentStreamState.Ready -> {
                             if (state.totalBytes > 0L || state.connectedPeers > 0) {
-                                updateTask(taskId) {
+                                updateTask(taskId, persist = false) {
                                     if (it.status == TorrentTaskStatus.DOWNLOADING) {
                                         it.copy(
                                             totalBytes = if (state.totalBytes > 0L) state.totalBytes else it.totalBytes,
@@ -529,7 +573,7 @@ class AndroidTorrentRepository(
                         }
 
                         is TorrentStreamState.Buffering -> {
-                            updateTask(taskId) {
+                            updateTask(taskId, persist = false) {
                                 if (it.status == TorrentTaskStatus.DOWNLOADING) {
                                     it.copy(
                                         downloadedBytes = maxOf(it.downloadedBytes, state.bufferedBytes),
@@ -591,7 +635,7 @@ class AndroidTorrentRepository(
 
                     if (now - lastEmitTime >= 500 || (finalTotalBytes > 0L && currentDownloaded >= finalTotalBytes)) {
                         lastEmitTime = now
-                        updateTask(taskId) {
+                        updateTask(taskId, persist = false) {
                             it.copy(
                                 downloadedBytes = maxOf(it.downloadedBytes, currentDownloaded),
                                 totalBytes = if (finalTotalBytes > 0L) finalTotalBytes else it.totalBytes,
@@ -634,8 +678,8 @@ class AndroidTorrentRepository(
             throw e
         } catch (e: Exception) {
             val currentStatus = _tasks.value.firstOrNull { it.id == taskId }?.status
-            if (currentStatus == TorrentTaskStatus.QUEUED) {
-                logger.i { "任务 $taskId 已处于 QUEUED 抢占态，跳过错误状态覆盖" }
+            if (currentStatus == TorrentTaskStatus.QUEUED || currentStatus == TorrentTaskStatus.PAUSED) {
+                logger.i { "任务 $taskId 已处于 $currentStatus 态，跳过错误状态覆盖" }
                 return
             }
             logger.e(e) { "任务 $taskId 下载异常: ${e.message}" }
@@ -658,19 +702,22 @@ class AndroidTorrentRepository(
     }
 
     override suspend fun pauseDownload(taskId: String) {
+        restoreDeferred.await()
+        val runningJob: Job?
         val wasRunning =
             synchronized(this) {
                 val running = activeRunningTaskId == taskId
                 if (running) {
                     activeRunningTaskId = null
                 }
-                activeJobs.remove(taskId)?.cancel()
+                runningJob = activeJobs.remove(taskId)
                 running
             }
         if (wasRunning) {
             streamEngine.setDownloadSessionProtected(false)
             streamEngine.stopStream(force = true)
         }
+        runningJob?.cancelAndJoin()
         updateTask(taskId) {
             it.copy(
                 status = TorrentTaskStatus.PAUSED,
@@ -688,6 +735,7 @@ class AndroidTorrentRepository(
         taskId: String,
         resetDownloadedBytes: Boolean,
     ) {
+        restoreDeferred.await()
         val task = _tasks.value.firstOrNull { it.id == taskId } ?: return
         if (task.status == TorrentTaskStatus.PAUSED ||
             task.status == TorrentTaskStatus.ERROR ||
@@ -714,19 +762,22 @@ class AndroidTorrentRepository(
         taskId: String,
         deleteFiles: Boolean,
     ) {
+        restoreDeferred.await()
+        val runningJob: Job?
         val wasRunning =
             synchronized(this) {
                 val running = activeRunningTaskId == taskId
                 if (running) {
                     activeRunningTaskId = null
                 }
-                activeJobs.remove(taskId)?.cancel()
+                runningJob = activeJobs.remove(taskId)
                 running
             }
         if (wasRunning) {
             streamEngine.setDownloadSessionProtected(false)
             streamEngine.stopStream(force = true)
         }
+        runningJob?.cancelAndJoin()
         val task = _tasks.value.firstOrNull { it.id == taskId }
         if (deleteFiles && task != null) {
             runCatching {
@@ -736,13 +787,7 @@ class AndroidTorrentRepository(
             }
         }
         _tasks.update { list -> list.filterNot { it.id == taskId } }
-        val dao = torrentTaskDao
-        if (dao != null) {
-            scope.launch {
-                runCatching { dao.deleteTask(taskId) }
-            }
-        }
-        persistTasksSnapshot()
+        persistenceChannel.trySend(PersistenceAction.Delete(taskId))
         if (wasRunning) {
             scheduleNextIfIdle()
         }
@@ -781,12 +826,26 @@ class AndroidTorrentRepository(
 
     private fun updateTask(
         taskId: String,
+        persist: Boolean = true,
         transform: (TorrentTask) -> TorrentTask,
     ) {
+        var updatedTask: TorrentTask? = null
         _tasks.update { list ->
-            list.map { if (it.id == taskId) transform(it) else it }
+            list.map {
+                if (it.id == taskId) {
+                    val updated = transform(it)
+                    updatedTask = updated
+                    updated
+                } else {
+                    it
+                }
+            }
         }
-        persistTasksSnapshot()
+        if (persist) {
+            updatedTask?.let { task ->
+                persistenceChannel.trySend(PersistenceAction.Upsert(task.toEntity()))
+            }
+        }
     }
 
     private fun resolveDownloadDir(): File = File(context.getExternalFilesDir(null) ?: context.filesDir, "downloads").apply { mkdirs() }
@@ -794,29 +853,31 @@ class AndroidTorrentRepository(
     private fun resolveManifestFile(): File = File(resolveDownloadDir(), "tasks_manifest.json")
 
     private suspend fun restorePersistedTasks() {
-        val dao = torrentTaskDao
-        if (dao != null) {
-            val entities = dao.getAllTasks()
-            if (entities.isNotEmpty()) {
-                val normalized = entities.map { it.toDomain().normalizeOnStartup() }
-                _tasks.value = normalized
-                dao.upsertTasks(normalized.map { it.toEntity() })
-                return
+        val entities = torrentTaskDao.getAllTasks()
+        if (entities.isNotEmpty()) {
+            val normalized = entities.map { it.toDomain().normalizeOnStartup() }
+            _tasks.update { inMemory ->
+                val inMemoryIds = inMemory.map { it.id }.toSet()
+                val restoredFiltered = normalized.filterNot { it.id in inMemoryIds }
+                inMemory + restoredFiltered
             }
-            // 若数据库为空，尝试从存量 tasks_manifest.json 单次迁移数据入库
-            val legacyTasks = loadLegacyJsonTasks()
-            if (legacyTasks.isNotEmpty()) {
-                val normalized = legacyTasks.map { it.normalizeOnStartup() }
-                _tasks.value = normalized
-                dao.upsertTasks(normalized.map { it.toEntity() })
-                runCatching { resolveManifestFile().delete() }
-                return
+            val currentTasks = _tasks.value
+            torrentTaskDao.upsertTasks(currentTasks.map { it.toEntity() })
+            return
+        }
+        // 若数据库为空，尝试从存量 tasks_manifest.json 单次迁移数据入库
+        val legacyTasks = loadLegacyJsonTasks()
+        if (legacyTasks.isNotEmpty()) {
+            val normalized = legacyTasks.map { it.normalizeOnStartup() }
+            _tasks.update { inMemory ->
+                val inMemoryIds = inMemory.map { it.id }.toSet()
+                val restoredFiltered = normalized.filterNot { it.id in inMemoryIds }
+                inMemory + restoredFiltered
             }
-        } else {
-            val legacyTasks = loadLegacyJsonTasks()
-            if (legacyTasks.isNotEmpty()) {
-                _tasks.value = legacyTasks.map { it.normalizeOnStartup() }
-            }
+            val currentTasks = _tasks.value
+            torrentTaskDao.upsertTasks(currentTasks.map { it.toEntity() })
+            runCatching { resolveManifestFile().delete() }
+            return
         }
     }
 
@@ -859,33 +920,6 @@ class AndroidTorrentRepository(
 
             else -> copy(downloadSpeedBytesPerSec = 0L, connectedPeers = 0, streamUrl = "")
         }
-
-    private fun persistTasksSnapshot() {
-        val current = _tasks.value
-        val dao = torrentTaskDao
-        if (dao != null) {
-            scope.launch {
-                runCatching {
-                    dao.upsertTasks(current.map { it.toEntity() })
-                }.onFailure { e ->
-                    logger.e(e) { "持久化 Torrent 任务至 Room 数据库失败" }
-                }
-            }
-        } else {
-            runCatching {
-                val manifest = resolveManifestFile()
-                val tempFile = File(manifest.parentFile, "${manifest.name}.tmp")
-                val payload = BgmHttpClient.jsonConfig.encodeToString(current)
-                tempFile.writeText(payload)
-                if (!tempFile.renameTo(manifest)) {
-                    manifest.writeText(payload)
-                    tempFile.delete()
-                }
-            }.onFailure { e ->
-                logger.e(e) { "持久化 Torrent 任务快照至本地文件失败" }
-            }
-        }
-    }
 
     private fun TorrentTask.toEntity(): TorrentTaskEntity =
         TorrentTaskEntity(

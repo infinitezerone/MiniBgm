@@ -58,6 +58,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
     magnet_url: JString,
     torrent_path: JString,
     save_dir: JString,
+    episode_hint: JString,
 ) -> jstring {
     init_logger();
 
@@ -86,6 +87,11 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
         }
     };
 
+    let episode_hint_str: String = match env.get_string(&episode_hint) {
+        Ok(s) => s.into(),
+        Err(_) => String::new(),
+    };
+
     let rt = match runtime() {
         Ok(r) => r,
         Err(e) => return env.new_string(format!("ERROR: {e}")).unwrap().into_raw(),
@@ -99,6 +105,11 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
             Some(PathBuf::from(torrent_path_str))
         },
         save_dir: PathBuf::from(save_dir_str),
+        episode_hint: if episode_hint_str.trim().is_empty() {
+            None
+        } else {
+            Some(episode_hint_str.trim().to_string())
+        },
     };
 
     // 停止已存在的活跃服务

@@ -169,6 +169,9 @@ fun PlayerScreen(
     val openEpisodesPanel: () -> Unit = {
         coroutineScope.launch { overlayHostState.await(PlayerEpisodesRequest) }
     }
+    val openSourcesPanel: () -> Unit = {
+        coroutineScope.launch { overlayHostState.await(PlayerSourcesRequest) }
+    }
 
     // 单个播放引擎 + 控制器：换源只更新请求头，绝不重建播放器
     val engine = remember(context) { ExoPlayerEngine(context) }
@@ -769,9 +772,8 @@ fun PlayerScreen(
                                 onToggleFollow = viewModel::toggleFollowSubject,
                                 onSelectEpisode = viewModel::selectEpisode,
                                 onOpenAllEpisodes = openEpisodesPanel,
-                                onSelectSource = viewModel::selectSource,
+                                onOpenSourcesPanel = openSourcesPanel,
                                 onRequestOpenSources = onRequestOpenSources,
-                                onManageRules = onManageRules,
                                 onSubjectClick = {
                                     if (uiState.subjectId > 0 && onSubjectClick != null) {
                                         onSubjectClick(uiState.subjectId)
@@ -829,7 +831,6 @@ fun PlayerScreen(
                 uiState = uiState,
                 onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
                 onToggleAutoNext = viewModel::toggleAutoNext,
-                onSelectSource = viewModel::selectSource,
                 onSelectEpisode = viewModel::selectEpisode,
                 onSelectQueueIndex = viewModel::switchTo,
             )
@@ -837,6 +838,11 @@ fun PlayerScreen(
                 uiState = uiState,
                 onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
                 onSelectEpisode = viewModel::selectEpisode,
+            )
+            playerSourcesPanel(
+                uiState = uiState,
+                onSelectSource = viewModel::selectSource,
+                onManageRules = onManageRules ?: onRequestOpenSources,
             )
         }
     }

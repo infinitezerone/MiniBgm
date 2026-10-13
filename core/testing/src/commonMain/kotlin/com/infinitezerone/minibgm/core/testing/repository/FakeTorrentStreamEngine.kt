@@ -70,6 +70,7 @@ class FakeTorrentStreamEngine(
         magnetUrl: String,
         torrentUrl: String?,
         saveDirPath: String?,
+        episodeHint: String?,
     ): Result<String> {
         if (!installed) {
             _streamState.value = TorrentStreamState.PluginRequired()

@@ -190,7 +190,7 @@ data class DanmakuEpisodeOverrideEntity(
  * 磁力/BT 下载任务本地持久化实体。
  *
  * 替代旧有的 tasks_manifest.json 裸文本全量覆写反模式，
- * 提供 ACID 事务级原子读写保证，并通过 Room Flow 响应式驱动上层下载状态流。
+ * 提供 ACID 事务级原子持久化保证，与 Repository 内部 StateFlow 协同维护下载状态。
  */
 @Entity(
     tableName = "torrent_tasks",

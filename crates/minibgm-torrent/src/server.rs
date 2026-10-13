@@ -23,6 +23,7 @@ pub struct StreamConfig {
     pub magnet_url: String,
     pub torrent_path: Option<PathBuf>,
     pub save_dir: PathBuf,
+    pub episode_hint: Option<String>,
 }
 
 pub struct StreamStats {
@@ -155,19 +156,35 @@ impl StreamServer {
             .api_torrent_details(TorrentIdOrHash::Id(torrent_id))
             .context("获取种子文件列表详情失败")?;
 
-        let (target_file_id, target_file_len, target_components) = details
+        let valid_video_files: Vec<_> = details
             .files
             .as_ref()
-            .and_then(|files| {
+            .map(|files| {
                 files
                     .iter()
                     .enumerate()
                     // 严格双重校验：必须被 only_files_regex 标记为 included 且扩展名确为视频
                     // 杜绝合集中体积更大的非视频文件（ISO/解压包/RAW原盘）夺取下载目标
                     .filter(|(_, f)| f.included && is_video_file(&f.name))
-                    .max_by_key(|(_, f)| f.length)
-                    .map(|(idx, f)| (idx, f.length, f.components.clone()))
+                    .collect()
             })
+            .unwrap_or_default();
+
+        let matched_target = if let Some(ref hint) = config.episode_hint {
+            let matches: Vec<_> = valid_video_files
+                .iter()
+                .filter(|(_, f)| matches_episode_hint(&f.name, hint))
+                .copied()
+                .collect();
+            // 若命中多个同分集文件（如不同分段或特典），取其中体积最大者
+            matches.into_iter().max_by_key(|(_, f)| f.length)
+        } else {
+            None
+        };
+
+        let (target_file_id, target_file_len, target_components) = matched_target
+            .or_else(|| valid_video_files.into_iter().max_by_key(|(_, f)| f.length))
+            .map(|(idx, f)| (idx, f.length, f.components.clone()))
             .unwrap_or((0, 0, Vec::new()));
 
         if target_file_len == 0 {
@@ -245,6 +262,65 @@ pub fn is_video_file(name: &str) -> bool {
     )
 }
 
+pub fn matches_episode_hint(filename: &str, hint: &str) -> bool {
+    let hint = hint.trim();
+    if hint.is_empty() {
+        return false;
+    }
+
+    if let Ok(target_num) = hint.parse::<u32>() {
+        let lower = filename.to_lowercase();
+        let bytes = lower.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i].is_ascii_digit() {
+                let start = i;
+                while i < bytes.len() && bytes[i].is_ascii_digit() {
+                    i += 1;
+                }
+                let end = i;
+                if let Ok(found_num) = lower[start..end].parse::<u32>() {
+                    if found_num == target_num {
+                        let is_valid_prefix = if start == 0 {
+                            true
+                        } else {
+                            let prev_char = lower[..start].chars().last().unwrap();
+                            prev_char.is_whitespace()
+                                || matches!(
+                                    prev_char,
+                                    '-' | '_' | '.' | '[' | '(' | '{' | '第' | '/' | '\\' | 'e'
+                                )
+                                || (prev_char == 'p'
+                                    && start >= 2
+                                    && lower[..start].ends_with("ep"))
+                        };
+
+                        let is_valid_suffix = if end >= bytes.len() {
+                            true
+                        } else {
+                            let next_char = lower[end..].chars().next().unwrap();
+                            next_char.is_whitespace()
+                                || matches!(
+                                    next_char,
+                                    '-' | '_' | '.' | ']' | ')' | '}' | '话' | '集' | '/' | '\\'
+                                )
+                        };
+
+                        if is_valid_prefix && is_valid_suffix {
+                            return true;
+                        }
+                    }
+                }
+            } else {
+                i += 1;
+            }
+        }
+        return false;
+    }
+
+    filename.to_lowercase().contains(&hint.to_lowercase())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,5 +343,25 @@ mod tests {
             &["[Sakurato] Steel Ball Run [04].mkv".to_string()],
         );
         assert!(path.ends_with("[Sakurato] Steel Ball Run [04].mkv"));
+    }
+
+    #[test]
+    fn test_matches_episode_hint_correctly_filters_episodes() {
+        assert!(matches_episode_hint(
+            "[Sakurato] Steel Ball Run [04].mkv",
+            "4"
+        ));
+        assert!(matches_episode_hint(
+            "[Sakurato] Steel Ball Run [04].mkv",
+            "04"
+        ));
+        assert!(!matches_episode_hint(
+            "[Sakurato] Steel Ball Run [04].mkv",
+            "05"
+        ));
+        assert!(matches_episode_hint("Chainsaw Man EP02 [1080p].mp4", "2"));
+        assert!(matches_episode_hint("Sousou no Frieren - 12.mkv", "12"));
+        assert!(!matches_episode_hint("Sousou no Frieren - 12.mkv", "1"));
+        assert!(matches_episode_hint("Delicious in Dungeon 第03话.mkv", "3"));
     }
 }

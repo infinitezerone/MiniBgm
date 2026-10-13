@@ -30,6 +30,7 @@ internal interface NativeTorrentBridge {
         magnetUrl: String,
         torrentPath: String,
         saveDir: String,
+        episodeHint: String = "",
     ): String
 
     fun stopStream()
@@ -240,6 +241,7 @@ class AndroidTorrentStreamEngine internal constructor(
         magnetUrl: String,
         torrentUrl: String?,
         saveDirPath: String?,
+        episodeHint: String?,
     ): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
@@ -271,12 +273,15 @@ class AndroidTorrentStreamEngine internal constructor(
 
                 val torrentFilePath = prefetchTorrentIfPresent(title, torrentUrl)
 
-                logger.i { "调用 Rust 原生引擎启动 HTTP 流媒体代理: $infoHash (torrent: $torrentFilePath, saveDir: $targetSaveDir)" }
+                logger.i {
+                    "调用 Rust 原生引擎启动 HTTP 流媒体代理: $infoHash (torrent: $torrentFilePath, saveDir: $targetSaveDir, episodeHint: $episodeHint)"
+                }
                 val resultUrl =
                     nativeBridge.startStream(
                         magnetUrl = magnetUrl,
                         torrentPath = torrentFilePath,
                         saveDir = targetSaveDir,
+                        episodeHint = episodeHint ?: "",
                     )
 
                 if (resultUrl.startsWith("ERROR:")) {
@@ -587,7 +592,8 @@ class AndroidTorrentStreamEngine internal constructor(
             magnetUrl: String,
             torrentPath: String,
             saveDir: String,
-        ): String = nativeStartStream(magnetUrl, torrentPath, saveDir)
+            episodeHint: String,
+        ): String = nativeStartStream(magnetUrl, torrentPath, saveDir, episodeHint)
 
         override fun stopStream() = nativeStopStream()
 
@@ -637,6 +643,7 @@ class AndroidTorrentStreamEngine internal constructor(
             magnetUrl: String,
             torrentPath: String,
             saveDir: String,
+            episodeHint: String,
         ): String
 
         @JvmStatic

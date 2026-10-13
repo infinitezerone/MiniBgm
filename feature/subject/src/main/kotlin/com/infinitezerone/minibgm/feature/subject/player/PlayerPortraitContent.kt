@@ -27,9 +27,8 @@ internal fun PlayerIntroContent(
     onToggleFollow: () -> Unit,
     onSelectEpisode: (PlayerEpisodeItem) -> Unit,
     onOpenAllEpisodes: () -> Unit,
-    onSelectSource: (Int) -> Unit,
+    onOpenSourcesPanel: () -> Unit,
     onRequestOpenSources: (() -> Unit)?,
-    onManageRules: (() -> Unit)?,
     onSubjectClick: () -> Unit,
     modifier: Modifier = Modifier,
     onLoadMoreEpisodes: () -> Unit = {},
@@ -77,17 +76,19 @@ internal fun PlayerIntroContent(
             }
         }
 
-        // 3. 播放源切换条
+        // 3. 当前播放线路卡片（点击呼出统一线路选择抽屉）
         if (uiState.sources.isNotEmpty()) {
-            item(key = "player_sources") {
-                BiliPlayerSourceBar(
+            item(key = "player_current_source") {
+                PlayerCurrentSourceCard(
                     sources = uiState.sources,
-                    sourceFailureCounts = uiState.sourceFailureCounts,
                     selectedIndex = uiState.selectedSourceIndex,
-                    onSelectSource = onSelectSource,
-                    onRequestOpenSources = onRequestOpenSources,
-                    onManageRules = onManageRules,
+                    sourceFailureCounts = uiState.sourceFailureCounts,
+                    isResolvingSource = uiState.isResolvingSource,
+                    resolveAttempt = uiState.resolveAttempt,
+                    resolveAttemptTotal = uiState.resolveAttemptTotal,
                     matchedVodName = uiState.matchedVodName,
+                    hasPlaybackError = uiState.error != null,
+                    onClick = onOpenSourcesPanel,
                 )
             }
         }

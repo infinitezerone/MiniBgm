@@ -1065,6 +1065,31 @@ class ArchitectureRulesTest {
                 "AndroidTorrentRepository.kt 必须依赖 TorrentTaskDao 进行 ACID 任务持久化，严禁裸文件 tasks_manifest.json 覆写作为主存储",
             )
         }
+        if (repoContent.contains("persistTasksSnapshot")) {
+            violations.add(
+                "AndroidTorrentRepository.kt 严禁使用全量快照覆写 persistTasksSnapshot，高频进度不得落库，关键状态必须单行有序提交",
+            )
+        }
+        if (!repoContent.contains("restoreDeferred") || !repoContent.contains("cancelAndJoin")) {
+            violations.add(
+                "AndroidTorrentRepository.kt 必须包含 restoreDeferred 启动门闩与 cancelAndJoin 停机同步守卫",
+            )
+        }
+
+        val dataModuleAndroidFile =
+            File(
+                projectRoot,
+                "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/di/DataModule.android.kt",
+            )
+        assertTrue(dataModuleAndroidFile.isFile, "DataModule.android.kt 未找到")
+        val dataModuleContent = KotlinSourceScanner.sanitize(dataModuleAndroidFile.readText())
+        if (dataModuleContent.contains("getOrNull<TorrentTaskDao>()") ||
+            dataModuleContent.contains("torrentTaskDao = getOrNull()")
+        ) {
+            violations.add(
+                "DataModule.android.kt 中 torrentTaskDao 必须强定义注入 get()，严禁使用 getOrNull() 静默回退",
+            )
+        }
 
         val streamEngineFile =
             File(
@@ -1099,6 +1124,63 @@ class ArchitectureRulesTest {
         assertTrue(
             violations.isEmpty(),
             "违反 ECH 优选池防污染与 BT 流播/下载单盘协同红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    @Test
+    fun production_sources_never_use_reflection_getIdentifier() {
+        val scanRoots =
+            listOf(
+                File(projectRoot, "core"),
+                File(projectRoot, "feature"),
+                File(projectRoot, "app"),
+            )
+        val violations = mutableListOf<String>()
+        scanRoots.forEach { dir ->
+            if (dir.isDirectory) {
+                dir
+                    .walkTopDown()
+                    .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                    .filter { it.isFile && it.extension == "kt" }
+                    .forEach { file ->
+                        val code = KotlinSourceScanner.sanitize(file.readText())
+                        if (code.contains(".getIdentifier(") || code.contains("getIdentifier(")) {
+                            val rel = file.relativeTo(projectRoot).path
+                            violations.add("$rel 违规使用反射 getIdentifier 查找资源，必须通过依赖倒置或静态资源引用")
+                        }
+                    }
+            }
+        }
+        assertTrue(
+            violations.isEmpty(),
+            "违反资源体系静态引用红线（严禁反射查找资源）：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    @Test
+    fun player_sources_interaction_strictly_centralized() {
+        val subjectSrcDir = File(projectRoot, "feature/subject/src/main/kotlin")
+        if (!subjectSrcDir.isDirectory) return
+
+        val violations = mutableListOf<String>()
+        subjectSrcDir
+            .walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { file ->
+                val text = file.readText()
+                val rel = file.relativeTo(projectRoot).path
+                if (text.contains("fun PlayerSourceSelector(") || text.contains("fun BiliPlayerSourceBar(")) {
+                    violations.add("$rel 遗留了废弃的线路选择条，必须使用统一的 PlayerCurrentSourceCard 与 PlayerSourcesBottomSheet")
+                }
+                if (file.name == "PlayerEpisodeQueueDrawer.kt" &&
+                    (text.contains("PlayerSourceTab") || text.contains("selectedSourceIndex"))
+                ) {
+                    violations.add("$rel 选集抽屉违规嵌入了线路选择器，抽屉必须专注选集，切源收拢至统一浮层")
+                }
+            }
+        assertTrue(
+            violations.isEmpty(),
+            "违反播放线路统一收敛规范：\n" + violations.joinToString("\n"),
         )
     }
 

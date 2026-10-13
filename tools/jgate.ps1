@@ -41,7 +41,18 @@ if (-not $bashExe) {
     exit 1
 }
 
-# 2. Run tools/jgate
+# 2. Pre-check / build native libraries
+$buildNativePs1 = Join-Path $PSScriptRoot "build-native.ps1"
+if (Test-Path $buildNativePs1) {
+    Write-Host "[jgate.ps1] Ensuring native libraries are ready..." -ForegroundColor Cyan
+    & $buildNativePs1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "[jgate.ps1] Prebuilt native libraries verification/build failed."
+        exit $LASTEXITCODE
+    }
+}
+
+# 3. Run tools/jgate
 Push-Location $repoRoot
 try {
     & $bashExe tools/jgate @args

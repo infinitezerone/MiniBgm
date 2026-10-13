@@ -36,6 +36,8 @@ data object PlayerEpisodeQueueRequest : OverlayRequest<Unit>
 
 data object PlayerEpisodesRequest : OverlayRequest<Unit>
 
+data object PlayerSourcesRequest : OverlayRequest<Unit>
+
 /**
  * 播放设置面板（清晰度/倍速/画面比例/字幕/音轨/弹幕/单集循环）。
  * 竖屏与横屏统一走底部弹层：OverlayHost 渲染的内容独立于舞台层级，
@@ -97,7 +99,6 @@ fun OverlayProviderScope.playerEpisodeQueuePanel(
     uiState: PlayerUiState,
     onLoadMoreEpisodes: () -> Unit,
     onToggleAutoNext: () -> Unit,
-    onSelectSource: (Int) -> Unit,
     onSelectEpisode: (PlayerEpisodeItem) -> Unit,
     onSelectQueueIndex: (Int) -> Unit,
 ) {
@@ -153,16 +154,12 @@ fun OverlayProviderScope.playerEpisodeQueuePanel(
                     selectedEpisodeSort = uiState.episodeSort,
                     selectedEpisodeId = uiState.episodeId,
                     selectedEpisodeType = uiState.episodeType,
-                    sources = uiState.sources,
-                    sourceFailureCounts = uiState.sourceFailureCounts,
-                    selectedSourceIndex = uiState.selectedSourceIndex,
                     autoNextEnabled = uiState.autoNextEnabled,
                     totalEpisodes = uiState.totalEpisodes,
                     hasMoreEpisodes = uiState.hasMoreEpisodes,
                     isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
                     onLoadMoreEpisodes = onLoadMoreEpisodes,
                     onToggleAutoNext = onToggleAutoNext,
-                    onSelectSource = onSelectSource,
                     onSelectEpisode = {
                         onSelectEpisode(it)
                         visibleState.targetState = false
@@ -199,6 +196,39 @@ fun OverlayProviderScope.playerEpisodesPanel(
                 onSelectEpisode(it)
                 onRespond(Unit)
             },
+            onDismiss = { onRespond(Unit) },
+        )
+    }
+}
+
+/**
+ * 统一播放线路选择底部弹层。
+ */
+fun OverlayProviderScope.playerSourcesPanel(
+    uiState: PlayerUiState,
+    onSelectSource: (Int) -> Unit,
+    onManageRules: (() -> Unit)?,
+) {
+    overlay<PlayerSourcesRequest, Unit> { _, onRespond ->
+        PlayerSourcesBottomSheet(
+            sources = uiState.sources,
+            selectedIndex = uiState.selectedSourceIndex,
+            sourceFailureCounts = uiState.sourceFailureCounts,
+            isResolvingSource = uiState.isResolvingSource,
+            resolveAttempt = uiState.resolveAttempt,
+            resolveAttemptTotal = uiState.resolveAttemptTotal,
+            matchedVodName = uiState.matchedVodName,
+            onSelectSource = { index ->
+                onSelectSource(index)
+                onRespond(Unit)
+            },
+            onManageRules =
+                onManageRules?.let { manage ->
+                    {
+                        onRespond(Unit)
+                        manage()
+                    }
+                },
             onDismiss = { onRespond(Unit) },
         )
     }

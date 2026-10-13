@@ -39,7 +39,7 @@ val platformDataModule =
                 assetDownloader = get(),
                 assetDownloadService = get(),
                 streamEngine = get(),
-                torrentTaskDao = getOrNull(),
+                torrentTaskDao = get(),
             )
         }
         single<TorrentStreamEngine> {

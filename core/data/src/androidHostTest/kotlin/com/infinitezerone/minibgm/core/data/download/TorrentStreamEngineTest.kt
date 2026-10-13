@@ -312,6 +312,7 @@ private class StubNativeTorrentBridge(
         magnetUrl: String,
         torrentPath: String,
         saveDir: String,
+        episodeHint: String,
     ): String = "http://127.0.0.1:18080/stream/0"
 
     override fun stopStream() = Unit

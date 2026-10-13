@@ -17,6 +17,7 @@ import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
 import com.infinitezerone.minibgm.core.data.repository.UpdateRepository
 import com.infinitezerone.minibgm.core.data.seasonal.SeasonalDiskCache
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
+import com.infinitezerone.minibgm.core.database.di.databaseModule
 import com.infinitezerone.minibgm.core.network.AssetDownloadService
 import com.infinitezerone.minibgm.core.network.GitHubReleaseDto
 import com.infinitezerone.minibgm.core.network.UpdateService
@@ -87,6 +88,7 @@ class AppModuleTest : KoinTest {
                 androidContext(stubContext)
                 modules(
                     platformDataModule,
+                    databaseModule,
                     module {
                         single<AssetDownloadService> {
                             object : AssetDownloadService {
@@ -133,6 +135,7 @@ class AppModuleTest : KoinTest {
                 androidContext(stubContext)
                 modules(
                     platformDataModule,
+                    databaseModule,
                     userModule,
                     module {
                         single<AssetDownloadService> {

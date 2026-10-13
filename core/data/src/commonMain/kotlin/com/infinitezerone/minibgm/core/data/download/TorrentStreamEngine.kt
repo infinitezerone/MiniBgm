@@ -28,6 +28,7 @@ interface TorrentStreamEngine {
      * @param magnetUrl 磁力链接
      * @param torrentUrl 可选种子直链（用于加速元数据抓取）
      * @param saveDirPath 可选目标落盘目录（离线下载任务传入持久化目录，使 librqbit 直接落盘而无需二次 HTTP 拷贝）
+     * @param episodeHint 可选剧集提示（用于合集/多视频种子中智能筛选匹配单集，避免下错剧集）
      * @return 成功时返回本地 HTTP 播放直链（如 http://127.0.0.1:8899/stream?hash=...）
      */
     suspend fun startStream(
@@ -35,6 +36,7 @@ interface TorrentStreamEngine {
         magnetUrl: String,
         torrentUrl: String? = null,
         saveDirPath: String? = null,
+        episodeHint: String? = null,
     ): Result<String>
 
     /**

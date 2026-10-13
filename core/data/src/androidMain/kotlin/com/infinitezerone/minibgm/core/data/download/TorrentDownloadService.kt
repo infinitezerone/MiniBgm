@@ -38,6 +38,10 @@ class TorrentDownloadService :
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
 
+    private val strings: TorrentNotificationStrings by lazy {
+        getKoin().getOrNull<TorrentNotificationStrings>() ?: DefaultTorrentNotificationStrings
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -56,11 +60,11 @@ class TorrentDownloadService :
 
         when (action) {
             ACTION_START -> {
-                val initialTitle = intent.getStringExtra(EXTRA_TITLE) ?: resolveString("app_download_notification_initial_title", "正在下载资源")
+                val initialTitle = intent.getStringExtra(EXTRA_TITLE) ?: strings.initialTitle
                 val initialNotification =
                     buildProgressNotification(
                         title = initialTitle,
-                        statusText = resolveString("app_download_notification_preparing", "准备下载…"),
+                        statusText = strings.preparing,
                         percentage = 0,
                         speedBytesPerSec = 0L,
                         taskId = taskId,
@@ -111,12 +115,10 @@ class TorrentDownloadService :
                 if (activeTask != null) {
                     val statusText =
                         when (activeTask.status) {
-                            TorrentTaskStatus.RESOLVING -> resolveString("app_download_notification_resolving", "正在解析磁力元数据…")
-                            TorrentTaskStatus.QUEUED -> resolveString("app_download_notification_queued", "排队中…")
+                            TorrentTaskStatus.RESOLVING -> strings.resolving
+                            TorrentTaskStatus.QUEUED -> strings.queued
                             else ->
-                                resolveString(
-                                    "app_download_notification_progress",
-                                    "%1\$d%% · %2\$s",
+                                strings.progress(
                                     activeTask.percentage,
                                     activeTask.formattedDownloadSpeed,
                                 )
@@ -149,10 +151,10 @@ class TorrentDownloadService :
             val channel =
                 NotificationChannel(
                     CHANNEL_ID,
-                    resolveString("app_download_notification_channel_name", "磁力与视频下载"),
+                    strings.channelName,
                     NotificationManager.IMPORTANCE_LOW,
                 ).apply {
-                    description = resolveString("app_download_notification_channel_desc", "展示后台磁力与视频文件下载进度")
+                    description = strings.channelDesc
                     setShowBadge(false)
                 }
             notificationManager.createNotificationChannel(channel)
@@ -202,7 +204,7 @@ class TorrentDownloadService :
                         )
                     addAction(
                         android.R.drawable.ic_media_pause,
-                        resolveString("app_download_notification_action_pause", "暂停"),
+                        strings.actionPause,
                         pausePendingIntent,
                     )
 
@@ -220,7 +222,7 @@ class TorrentDownloadService :
                         )
                     addAction(
                         android.R.drawable.ic_menu_close_clear_cancel,
-                        resolveString("app_download_notification_action_cancel", "取消"),
+                        strings.actionCancel,
                         cancelPendingIntent,
                     )
                 }
@@ -242,24 +244,11 @@ class TorrentDownloadService :
         return NotificationCompat
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setContentTitle(resolveString("app_download_notification_completed_title", "下载完成"))
+            .setContentTitle(strings.completedTitle)
             .setContentText(task.title)
             .setContentIntent(contentPendingIntent)
             .setAutoCancel(true)
             .build()
-    }
-
-    private fun resolveString(
-        key: String,
-        fallback: String,
-        vararg args: Any,
-    ): String {
-        val resId = resources.getIdentifier(key, "string", packageName)
-        return if (resId != 0) {
-            if (args.isNotEmpty()) getString(resId, *args) else getString(resId)
-        } else {
-            if (args.isNotEmpty()) String.format(fallback, *args) else fallback
-        }
     }
 
     companion object {

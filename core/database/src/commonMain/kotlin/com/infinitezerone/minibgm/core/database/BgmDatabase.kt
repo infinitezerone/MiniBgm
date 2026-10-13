@@ -32,7 +32,7 @@ import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
         DanmakuEpisodeOverrideEntity::class,
         TorrentTaskEntity::class,
     ],
-    // v11：磁力/BT 下载任务本地持久化表（TorrentTaskEntity）。
+    // v11：磁力/BT 下载任务本地持久化表（TorrentTaskEntity）。现阶段暂不写迁移——破坏性回退（fallbackToDestructiveMigration）。
     // v10：弹幕分集用户纠正覆盖表。不写迁移——破坏性回退（fallbackToDestructiveMigration）整体清空重建。
     // v9：AniList↔bgm 映射缓存 + bangumi-data 月切片 ETag。
     // v8：助手多会话（assistant_sessions 表 + messages.sessionId 列）。

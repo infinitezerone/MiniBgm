@@ -305,16 +305,7 @@ interface DanmakuOverrideDao {
 @Dao
 interface TorrentTaskDao {
     @Query("SELECT * FROM torrent_tasks ORDER BY createdTimestamp ASC")
-    fun observeAllTasks(): Flow<List<TorrentTaskEntity>>
-
-    @Query("SELECT * FROM torrent_tasks ORDER BY createdTimestamp ASC")
     suspend fun getAllTasks(): List<TorrentTaskEntity>
-
-    @Query("SELECT * FROM torrent_tasks WHERE id = :taskId")
-    suspend fun getTaskById(taskId: String): TorrentTaskEntity?
-
-    @Query("SELECT * FROM torrent_tasks WHERE magnetUrl = :magnetUrl LIMIT 1")
-    suspend fun getTaskByMagnetUrl(magnetUrl: String): TorrentTaskEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertTask(task: TorrentTaskEntity)
@@ -324,7 +315,4 @@ interface TorrentTaskDao {
 
     @Query("DELETE FROM torrent_tasks WHERE id = :taskId")
     suspend fun deleteTask(taskId: String)
-
-    @Query("DELETE FROM torrent_tasks")
-    suspend fun clearAllTasks()
 }

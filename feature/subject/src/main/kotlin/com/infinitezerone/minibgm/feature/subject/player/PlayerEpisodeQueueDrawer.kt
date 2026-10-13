@@ -44,7 +44,7 @@ import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.feature.subject.R
 
 /**
- * 全屏内选集抽屉：分集分段列表 + 播放源切换 + 自动连播开关。
+ * 全屏内选集抽屉：分集分段列表 + 自动连播开关。
  */
 @Composable
 internal fun PlayerEpisodeQueueDrawer(
@@ -52,9 +52,6 @@ internal fun PlayerEpisodeQueueDrawer(
     currentIndex: Int,
     episodes: List<PlayerEpisodeItem>,
     selectedEpisodeSort: Float,
-    sources: List<PlayerSourceTab>,
-    sourceFailureCounts: Map<String, Int>,
-    selectedSourceIndex: Int,
     autoNextEnabled: Boolean,
     selectedEpisodeId: Long = 0L,
     selectedEpisodeType: Int = 0,
@@ -63,7 +60,6 @@ internal fun PlayerEpisodeQueueDrawer(
     isLoadingMoreEpisodes: Boolean = false,
     onLoadMoreEpisodes: () -> Unit = {},
     onToggleAutoNext: () -> Unit,
-    onSelectSource: (Int) -> Unit,
     onSelectEpisode: (PlayerEpisodeItem) -> Unit,
     onSelectQueueIndex: (Int) -> Unit,
     onClose: () -> Unit,
@@ -149,34 +145,6 @@ internal fun PlayerEpisodeQueueDrawer(
                         contentDescription = stringResource(R.string.feature_subject_player_close_drawer),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-            }
-
-            if (sources.isNotEmpty()) {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    itemsIndexed(sources) { index, source ->
-                        val isSelected = index == selectedSourceIndex
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { onSelectSource(index) },
-                            label = {
-                                val rawName = source.nameRes?.let { stringResource(it) } ?: source.name
-                                val displayLabel = formatSourceDisplayName(rawName, index, source.isDirect)
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(displayLabel)
-                                    SourceFailureHint(sourceFailureCounts[source.id] ?: 0)
-                                }
-                            },
-                            colors =
-                                FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                ),
-                        )
-                    }
                 }
             }
 

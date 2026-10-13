@@ -16,6 +16,7 @@ import com.infinitezerone.minibgm.feature.subject.di.subjectModule
 import com.infinitezerone.minibgm.feature.user.di.userModule
 import com.infinitezerone.minibgm.feature.widget.di.widgetModule
 import com.infinitezerone.minibgm.sync.work.di.syncWorkModule
+import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 
 /** 全 app 统一的 User-Agent 模板（API 请求与图片下载共用一个决策），版本随 BuildConfig 自动更新 */
@@ -44,4 +45,33 @@ fun appModule(enableNetworkLogging: Boolean = BuildConfig.DEBUG) =
             widgetModule,
         )
         single { BgmDispatchers() }
+        single<com.infinitezerone.minibgm.core.data.download.TorrentNotificationStrings> {
+            val context = androidContext()
+            object : com.infinitezerone.minibgm.core.data.download.TorrentNotificationStrings {
+                override val channelName: String =
+                    context.getString(com.infinitezerone.minibgm.R.string.app_download_notification_channel_name)
+                override val channelDesc: String =
+                    context.getString(com.infinitezerone.minibgm.R.string.app_download_notification_channel_desc)
+                override val initialTitle: String =
+                    context.getString(com.infinitezerone.minibgm.R.string.app_download_notification_initial_title)
+                override val preparing: String =
+                    context.getString(com.infinitezerone.minibgm.R.string.app_download_notification_preparing)
+                override val resolving: String =
+                    context.getString(com.infinitezerone.minibgm.R.string.app_download_notification_resolving)
+                override val queued: String =
+                    context.getString(com.infinitezerone.minibgm.R.string.app_download_notification_queued)
+
+                override fun progress(
+                    percent: Int,
+                    speed: String,
+                ): String = context.getString(com.infinitezerone.minibgm.R.string.app_download_notification_progress, percent, speed)
+
+                override val completedTitle: String =
+                    context.getString(com.infinitezerone.minibgm.R.string.app_download_notification_completed_title)
+                override val actionPause: String =
+                    context.getString(com.infinitezerone.minibgm.R.string.app_download_notification_action_pause)
+                override val actionCancel: String =
+                    context.getString(com.infinitezerone.minibgm.R.string.app_download_notification_action_cancel)
+            }
+        }
     }

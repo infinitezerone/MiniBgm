@@ -126,6 +126,7 @@ class TorrentRepositoryTest {
                         assetDownloader = downloader,
                         assetDownloadService = streamService,
                         streamEngine = streamEngine,
+                        torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
                         startForegroundService = { _, _, _ -> },
                     )
@@ -212,12 +213,14 @@ class TorrentRepositoryTest {
                         mockTargetFilePath = nativeMkvFile.absolutePath
                     }
 
+                val fakeDao = FakeTorrentTaskDao()
                 val repo =
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
                         assetDownloadService = streamService,
                         streamEngine = streamEngine,
+                        torrentTaskDao = fakeDao,
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
                         startForegroundService = { _, _, _ -> },
                     )
@@ -325,6 +328,7 @@ class TorrentRepositoryTest {
                         assetDownloader = downloader,
                         assetDownloadService = streamService,
                         streamEngine = streamEngine,
+                        torrentTaskDao = fakeDao,
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
                         startForegroundService = { _, _, _ -> },
                     )
@@ -402,6 +406,7 @@ class TorrentRepositoryTest {
                         assetDownloader = downloader,
                         assetDownloadService = streamService,
                         streamEngine = streamEngine,
+                        torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
                         startForegroundService = { _, _, _ -> },
                         peerConnectTimeoutMs = 5_000L,
@@ -499,6 +504,7 @@ class TorrentRepositoryTest {
                         assetDownloader = downloader,
                         assetDownloadService = streamService,
                         streamEngine = streamEngine,
+                        torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
                         startForegroundService = { _, _, _ -> },
                         peerConnectTimeoutMs = 0L,
@@ -596,6 +602,7 @@ class TorrentRepositoryTest {
                         assetDownloader = downloader,
                         assetDownloadService = streamService,
                         streamEngine = streamEngine,
+                        torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
                         startForegroundService = { _, _, _ -> },
                         peerConnectTimeoutMs = 50L,
@@ -633,6 +640,199 @@ class TorrentRepositoryTest {
                 // 即使 connectedPeers > 0，因为零速度零进度，看门狗应精准熔断为 ERROR
                 val taskAfterTimeout = repo.tasks.value.single { it.id == taskId }
                 assertEquals(TorrentTaskStatus.ERROR, taskAfterTimeout.status)
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
+
+    @Test
+    fun androidTorrentRepository_pauseDownload_awaitsTeardown_doesNotStopNextTask() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_pause_teardown_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ) = DownloadState.Completed(destinationPath, 64L)
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val streamService =
+                    object : AssetDownloadService {
+                        override suspend fun streamAsset(
+                            url: String,
+                            rangeStart: Long,
+                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                        ): Long = 0L
+                    }
+
+                val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
+                val streamEngine =
+                    FakeTorrentStreamEngine(initialInstalled = true).apply {
+                        mockTargetFilePath = File(downloadDir, "ep.mkv").absolutePath
+                    }
+
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        torrentTaskDao = FakeTorrentTaskDao(),
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                        peerConnectTimeoutMs = 0L,
+                    )
+
+                val task1Id =
+                    repo.startDownload(
+                        title = "Ep 1",
+                        magnetUrl = "magnet:?xt=urn:btih:1111111111111111111111111111111111111111",
+                        totalBytes = 1000L,
+                    )
+                val task2Id =
+                    repo.startDownload(
+                        title = "Ep 2",
+                        magnetUrl = "magnet:?xt=urn:btih:2222222222222222222222222222222222222222",
+                        totalBytes = 1000L,
+                    )
+
+                assertEquals(
+                    TorrentTaskStatus.DOWNLOADING,
+                    repo.tasks.value
+                        .single { it.id == task1Id }
+                        .status,
+                )
+                assertEquals(
+                    TorrentTaskStatus.QUEUED,
+                    repo.tasks.value
+                        .single { it.id == task2Id }
+                        .status,
+                )
+
+                // 暂停正在运行的任务 1：必须等待其协程与底层会话清理完成，再拉起任务 2
+                repo.pauseDownload(task1Id)
+
+                assertEquals(
+                    TorrentTaskStatus.PAUSED,
+                    repo.tasks.value
+                        .single { it.id == task1Id }
+                        .status,
+                )
+                val task2 = repo.tasks.value.single { it.id == task2Id }
+                assertEquals(TorrentTaskStatus.DOWNLOADING, task2.status)
+                // 确保任务 2 的会话依然处于受保护运行状态，没有被任务 1 的 finally 扼杀
+                assertTrue(streamEngine.isDownloadSessionProtected())
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
+
+    @Test
+    fun androidTorrentRepository_restore_mergesWithConcurrentTaskWithoutDropping() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_restore_merge_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ) = DownloadState.Completed(destinationPath, 64L)
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val streamService =
+                    object : AssetDownloadService {
+                        override suspend fun streamAsset(
+                            url: String,
+                            rangeStart: Long,
+                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                        ): Long = 0L
+                    }
+
+                val fakeDao = FakeTorrentTaskDao()
+                // 先在 DAO 中存入一个持久化任务
+                fakeDao.upsertTask(
+                    com.infinitezerone.minibgm.core.database.entity.TorrentTaskEntity(
+                        id = "persisted-task-1",
+                        title = "Persisted Episode",
+                        magnetUrl = "magnet:?xt=urn:btih:3333333333333333333333333333333333333333",
+                        torrentUrl = null,
+                        torrentFilePath = null,
+                        status = TorrentTaskStatus.PAUSED.name,
+                        totalBytes = 2000L,
+                        downloadedBytes = 500L,
+                        downloadSpeedBytesPerSec = 0L,
+                        uploadSpeedBytesPerSec = 0L,
+                        connectedPeers = 0,
+                        connectedSeeds = 0,
+                        savePath = "/tmp/fake.mkv",
+                        streamUrl = "",
+                        errorMessage = null,
+                        createdTimestamp = 1000L,
+                        completionTimestamp = null,
+                        subjectId = 1L,
+                        subjectName = "Anime",
+                        subjectCoverUrl = "",
+                        episodeId = 1L,
+                        episodeSort = 1f,
+                        episodeName = "Ep 1",
+                    ),
+                )
+
+                val streamEngine = FakeTorrentStreamEngine(initialInstalled = true)
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        torrentTaskDao = fakeDao,
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                        peerConnectTimeoutMs = 0L,
+                    )
+
+                // 启动一个新任务，restore 完成后两者必须都被合并保留，新任务绝不能被覆盖丢失
+                val newTaskId =
+                    repo.startDownload(
+                        title = "New Episode",
+                        magnetUrl = "magnet:?xt=urn:btih:4444444444444444444444444444444444444444",
+                        totalBytes = 3000L,
+                    )
+
+                assertEquals(2, repo.tasks.value.size)
+                assertTrue(repo.tasks.value.any { it.id == "persisted-task-1" })
+                assertTrue(repo.tasks.value.any { it.id == newTaskId })
             } finally {
                 tempRoot.deleteRecursively()
             }

@@ -322,6 +322,16 @@
     <string name="feature_subject_player_err_invalid_url">播放地址已失效或返回错误</string>
     <string name="feature_subject_player_err_unsupported_format">视频流格式无法解析</string>
     <string name="feature_subject_player_err_unknown">播放出现未知异常</string>
+    <string name="feature_subject_player_current_source_label">当前线路</string>
+    <string name="feature_subject_player_current_source_format">当前线路：%1$s</string>
+    <string name="feature_subject_player_switch_source">切换线路</string>
+    <string name="feature_subject_player_sources_sheet_desc">当前分集从所选线路获取播放地址。遇到卡顿或失效可在此切换。</string>
+    <string name="feature_subject_player_source_direct_badge">直链</string>
+    <string name="feature_subject_player_source_rule_badge">规则源</string>
+    <string name="feature_subject_player_source_in_use">正在使用当前线路</string>
+    <string name="feature_subject_player_source_matched_format">已匹配：%1$s · 正在播放</string>
+    <string name="feature_subject_player_source_resolving_format">正在解析线路 (第 %1$d/%2$d 次)…</string>
+    <string name="feature_subject_player_source_error_hint">播放异常 · 点击可切换线路</string>
 
     <!-- 轨道、画质与字幕选择 -->
     <string name="feature_subject_player_tracks_title">播放设置</string>

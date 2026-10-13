@@ -29,7 +29,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 机械执行：源语义由 `:core:testing` 的 ArchitectureRulesTest，依赖图由 build-logic 的 ModuleBoundaryConventionPlugin（配置期断言）。此处只留索引，细节看测试：
 
 1. feature 互不依赖；UI 只经 `:core:data` 仓库；`:core:model` 纯 Kotlin；feature 无原始 IO、无颜色字面量、不外露可变状态（MutableStateFlow 一律禁止；对外只暴露只读 StateFlow，或 Compose State 持有者的只读类型——多字段原子更新用 `Snapshot.withMutableSnapshot`，不用 `update { it.copy(…) }`）；路由密封于 `BgmRoute` 并声明堆叠层。
-2. 瞬态交互收敛：UI 确认/交互浮层统一由 `BgmOverlayHost` + `overlayHostState.await(...)` 挂起承接，严禁在 feature 中写散落的 `var showDialog` 状态机；通用登录提示收口于 `BgmLoginPromptDialog`；ViewModel 一次性事件（Channel(BUFFERED)）严禁裸 `collect`，必须经 `ObserveAsEvents` 绑定生命周期（STARTED）。一次性事件的用户可见文案必须以 `@StringRes` + 格式化参数下发、UI 侧解析（服务端运行时消息经 message 字段透传），严禁 VM 内联文案绕开资源体系。
+2. 瞬态交互收敛：UI 确认/交互浮层统一由 `BgmOverlayHost` + `overlayHostState.await(...)` 挂起承接，严禁在 feature 中写散落的 `var showDialog` 状态机；通用登录提示收口于 `BgmLoginPromptDialog`；ViewModel 一次性事件（Channel(BUFFERED)）严禁裸 `collect`，必须经 `ObserveAsEvents` 绑定生命周期（STARTED）。一次性事件的用户可见文案必须以 `@StringRes` + 格式化参数下发、UI 侧解析（服务端运行时消息经 message 字段透传），严禁 VM 内联文案绕开资源体系；播放器线路选择收敛于统一面板（PlayerSourcesBottomSheet），选集抽屉专注选集、严禁嵌套平铺切源芯片或保留废弃源选择器条（ArchitectureRulesTest 物理红线拦截）。
 3. 可播地址只来自 `findPlayableSources`；一切写操作止于 PENDING_CONFIRMATION 提案卡，用户确认才落库。
 4. 凭据只存在于 `AuthTokensDataSource`；不绕过/削弱 `BgmPkce`；不剥离或覆盖 `User-Agent`；关键写操作包 `withContext(NonCancellable)`。
 5. DI 真实性与契约闭环：底层平台模块（如 platformDataModule）与 feature ViewModel 必须保持依赖定义闭环；严禁在单测中仅用手工假模块伪造 Koin 验证，必须通过真实容器集成测试（AppModuleTest）断言全量解析，严禁构造器新增依赖后遗漏注册引发运行时 NoDefinitionFoundException。
@@ -42,8 +42,8 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 - Ktor 401 自动刷新；刷新彻底失败自动登出——调用方永远不会看到 401。
 - 流媒体发流、P2P 引擎与 ECH 优选池：
   - **原生插件安全与生命周期**：严禁派发未就绪的空 Socket 伪地址；扩展下载与后台大任务严禁静默触发，必须经 `BgmOverlayHost` 显式确认（严禁暴露无确认的 `checkOrInstallEngine` 后门）；按需动态下载的 `.so` 必须按应用版本隔离目录并清理旧版残留、加 `Mutex` 互斥，且在 `System.load` 前调用 `setReadOnly()` 满足 Android 10+ W^X 安全约束（`ArchitectureRulesTest` 物理红线拦截）。
-  - **librqbit 会话约束**：会话必须配置后缀过滤、单集锁定（`only_files`）、`overwrite: true`（防二次启动报 `os error 17`）、`resolve_target_file_path` 暴露真实扩展名落盘路径及异常初始化 `cancel_token.cancel()` 守卫；本地 HTTP API 严格置 `read_only: true`。
-  - **单盘落盘与抢占调度**：离线下载（`AndroidTorrentRepository`）必须传入持久化 `saveDirPath` 并通过 `getActiveTargetFilePath` + `monitorDirectEngineDownload` 直接复用 librqbit 单盘落盘与串行队列 `scheduleNextIfIdle`（严禁走二次 HTTP 回环顺序流双倍写盘）；边下边播抢占后台任务时必须先同步停旧会话、设抢占守卫切断 `finally` 打架并在被取消协程中禁止以 `ERROR` 冲刷 `QUEUED` 状态。
+  - **librqbit 会话约束**：会话必须配置后缀过滤、单集锁定（`only_files`）、`overwrite: true`（防二次启动报 `os error 17`）、`resolve_target_file_path` 暴露真实扩展名落盘路径及异常初始化 `cancel_token.cancel()` 守卫；多视频文件种子必须依据请求剧集（`episodeHint`）精确匹配目标视频，未命中才回退单集最大文件；本地 HTTP API 严格置 `read_only: true`。
+  - **单盘落盘与抢占调度**：离线下载（`AndroidTorrentRepository`）必须传入持久化 `saveDirPath` 并通过 `getActiveTargetFilePath` + `monitorDirectEngineDownload` 直接复用 librqbit 单盘落盘与串行队列 `scheduleNextIfIdle`（严禁走二次 HTTP 回环顺序流双倍写盘）；边下边播抢占、暂停（`pauseDownload`）与取消（`cancelDownload`）后台任务时必须先同步停旧会话、`cancelAndJoin` 等待协程退出再调度下一项，设抢占守卫切断 `finally` 打架并在被取消/异常协程中禁止以 `ERROR` 冲刷 `QUEUED` 或 `PAUSED` 状态；任务恢复（`restorePersistedTasks`）必须通过门闩并合并内存任务防止覆盖并发创建的新任务；下载进度轮询严禁高频全量写库，仅限状态迁移与完成时通过单行通道有序写入；通知文案严禁使用反射 `getIdentifier` 跨模块动态查找资源（`ArchitectureRulesTest` 物理红线拦截）。
   - **死种看门狗与起播守卫**：看门狗探针（`peerConnectTimeoutMs`）严禁被仅有连接但零速度（`speedBytesPerSec == 0` 且无字节前进）的死种 Peer 刷新；落盘完成必须断言磁盘物理文件真实存在与非空；UI 边下边播起播等待必须包裹单次获取超时守卫（`withTimeout`）防止死种无界挂起。
   - **双消费者引用保护**：流引擎通过 `downloadSessionProtected` + `playerSessionActive` 双消费者引用守卫确保边下边播退出播放器或下载刚满 100% 时互不掐断。
   - **网络分流与 ECH 边缘节点保护**：`AssetDownloadService` 必须将 `http://127.0.0.1` 本地回环流分流至流式 `CIO` 引擎（严禁走仅支持 `https://` 且全量内存缓冲的 `EchHttpClientEngine`）；`EchHttpClientEngine` 捕获 `CancellationException` 时仅限在真实请求超时（`TimeoutCancellationException`）下调用 `recordFailure`，严禁因常规协程取消误杀 `EchEdgePool` 黄金边缘节点。

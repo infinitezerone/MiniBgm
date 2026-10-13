@@ -16,18 +16,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -157,94 +153,6 @@ internal fun PlayerSubjectBannerCard(
 }
 
 /**
- * 播放源切换选择器
- */
-@Composable
-internal fun PlayerSourceSelector(
-    sources: List<PlayerSourceTab>,
-    sourceFailureCounts: Map<String, Int>,
-    selectedIndex: Int,
-    onSelectSource: (Int) -> Unit,
-    onRequestOpenSources: (() -> Unit)?,
-    modifier: Modifier = Modifier,
-    onManageRules: (() -> Unit)? = null,
-) {
-    Column(
-        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.feature_subject_player_sources),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            // 「播放源管理」优先跳转规则管理页；未接线时退回来源入口（如 AI 找源）
-            val manageRulesAction = onManageRules ?: onRequestOpenSources
-            if (manageRulesAction != null) {
-                TextButton(
-                    onClick = manageRulesAction,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Settings,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = stringResource(R.string.feature_subject_player_manage_sources),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-            }
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            itemsIndexed(sources) { index, source ->
-                val isSelected = index == selectedIndex
-                val failureCount = sourceFailureCounts[source.id] ?: 0
-                val isFailing = failureCount > 0
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { onSelectSource(index) },
-                    modifier = if (isFailing && !isSelected) Modifier.alpha(0.65f) else Modifier,
-                    label = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = source.nameRes?.let { stringResource(it) } ?: source.name,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            )
-                            SourceFailureHint(sourceFailureCounts[source.id] ?: 0)
-                        }
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = if (source.isDirect) BgmIcons.CloudQueue else BgmIcons.TravelExplore,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    },
-                    colors =
-                        FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        ),
-                )
-            }
-        }
-    }
-}
-
-/**
  * 播放页主信息条：当前分集标题 (左) + [已看] 与 [追番] 胶囊 (右)；
  * 第二行显示番剧名 (可点跳详情)、评分、首播年份及追番状态。
  *
@@ -368,138 +276,160 @@ internal fun BiliSubjectTitleBar(
 }
 
 /**
- * 竖屏播放页 - 播放线路分区：
- * 采用与选集区一致的标准分区排版（左侧标题+线路数，右侧管理入口），
- * 单项采用圆角卡片呈现，彻底替换原先类似开发者悬浮调试工具条的单行紧缩样式。
+ * 竖屏播放页 - 当前线路卡片：
+ * 采用单张紧凑 Surface 卡片承接。
+ * 展示当前选中线路、播放/解析/失败状态与匹配条目名；
+ * 点击整张卡片打开统一线路选择面板。
  */
 @Composable
-internal fun BiliPlayerSourceBar(
+internal fun PlayerCurrentSourceCard(
     sources: List<PlayerSourceTab>,
-    sourceFailureCounts: Map<String, Int>,
     selectedIndex: Int,
-    onSelectSource: (Int) -> Unit,
-    onRequestOpenSources: (() -> Unit)?,
-    onManageRules: (() -> Unit)?,
-    matchedVodName: String? = null,
+    sourceFailureCounts: Map<String, Int>,
+    isResolvingSource: Boolean,
+    resolveAttempt: Int,
+    resolveAttemptTotal: Int,
+    matchedVodName: String?,
+    hasPlaybackError: Boolean,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    if (sources.isEmpty()) return
+
+    val currentSource = sources.getOrNull(selectedIndex) ?: sources.first()
+    val failureCount = sourceFailureCounts[currentSource.id] ?: 0
+    val rawName = currentSource.nameRes?.let { stringResource(it) } ?: currentSource.name
+    val displayLabel = formatSourceDisplayName(rawName, selectedIndex, currentSource.isDirect)
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier.fillMaxWidth(),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = stringResource(R.string.feature_subject_player_sources),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
+            Icon(
+                imageVector = if (currentSource.isDirect) BgmIcons.CloudQueue else BgmIcons.Tv,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
             )
-            if (sources.isNotEmpty()) {
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = stringResource(R.string.feature_subject_player_sources_count_format, sources.size),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (!matchedVodName.isNullOrBlank()) {
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "· $matchedVodName",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-            }
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            val manageAction = onManageRules ?: onRequestOpenSources
-            if (manageAction != null) {
+            Column(modifier = Modifier.weight(1f)) {
                 Row(
-                    modifier =
-                        Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable(onClick = manageAction)
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text(
-                        text = stringResource(R.string.feature_subject_player_manage_sources),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
+                        text = stringResource(R.string.feature_subject_player_current_source_format, displayLabel),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    Icon(
-                        imageVector = BgmIcons.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp),
+
+                    // 线路类型徽标
+                    Box(
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                                .padding(horizontal = 5.dp, vertical = 1.dp),
+                    ) {
+                        Text(
+                            text =
+                                stringResource(
+                                    if (currentSource.isDirect) {
+                                        R.string.feature_subject_player_source_direct_badge
+                                    } else {
+                                        R.string.feature_subject_player_source_rule_badge
+                                    },
+                                ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+
+                    if (failureCount > 0) {
+                        SourceFailureHint(failureCount)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                // 状态副标题
+                if (isResolvingSource) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(10.dp),
+                            strokeWidth = 1.5.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text =
+                                if (resolveAttemptTotal > 0) {
+                                    stringResource(
+                                        R.string.feature_subject_player_source_resolving_format,
+                                        resolveAttempt,
+                                        resolveAttemptTotal,
+                                    )
+                                } else {
+                                    stringResource(R.string.feature_subject_player_unresolved_stream)
+                                },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                } else if (hasPlaybackError) {
+                    Text(
+                        text = stringResource(R.string.feature_subject_player_source_error_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                } else if (!matchedVodName.isNullOrBlank()) {
+                    Text(
+                        text = stringResource(R.string.feature_subject_player_source_matched_format, matchedVodName),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.feature_subject_player_playing),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
-        }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            itemsIndexed(sources) { index, source ->
-                val isSelected = index == selectedIndex
-                val failureCount = sourceFailureCounts[source.id] ?: 0
-                val isFailing = failureCount > 0 && !isSelected
-                val rawName = source.nameRes?.let { stringResource(it) } ?: source.name
-                val displayLabel = formatSourceDisplayName(rawName, index, source.isDirect)
-
-                Surface(
-                    onClick = { onSelectSource(index) },
-                    shape = RoundedCornerShape(8.dp),
-                    color =
-                        if (isSelected) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
-                        },
-                    contentColor =
-                        if (isSelected) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    modifier =
-                        Modifier
-                            .height(34.dp)
-                            .alpha(if (isFailing) 0.55f else 1f),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Icon(
-                            imageVector = if (source.isDirect) BgmIcons.CloudQueue else BgmIcons.Tv,
-                            contentDescription = null,
-                            tint =
-                                if (isSelected) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                },
-                            modifier = Modifier.size(15.dp),
-                        )
-                        Text(
-                            text = displayLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            maxLines = 1,
-                        )
-                    }
-                }
+            // 右侧「切换线路 ›」
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.feature_subject_player_switch_source),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Icon(
+                    imageVector = BgmIcons.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp),
+                )
             }
         }
     }
