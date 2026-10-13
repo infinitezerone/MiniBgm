@@ -310,10 +310,10 @@ internal fun PlayerSourcesBottomSheet(
                                     )
                                 }
                                 Icon(
-                                    imageVector = BgmIcons.ChevronRight,
+                                    imageVector = BgmIcons.ArrowForwardIos,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(16.dp),
+                                    modifier = Modifier.size(14.dp),
                                 )
                             }
                         }

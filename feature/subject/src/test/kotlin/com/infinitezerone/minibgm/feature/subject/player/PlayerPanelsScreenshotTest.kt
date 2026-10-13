@@ -162,6 +162,7 @@ class PlayerPanelsScreenshotTest {
                         onCyclePlaybackSpeed = {},
                         showEpisodeQueue = true,
                         onOpenEpisodeQueue = {},
+                        onOpenSourcesPanel = {},
                         currentQualityLabel = "1080P",
                         onOpenTrackSelection = {},
                         isDanmakuEnabled = true,
@@ -377,6 +378,7 @@ class PlayerPanelsScreenshotTest {
                         onRetry = {},
                         onNextSource = {},
                         onRequestOpenSources = {},
+                        onOpenSourcesPanel = {},
                         playbackSpeed = 1f,
                         onCyclePlaybackSpeed = {},
                         showEpisodeQueue = false,
@@ -454,6 +456,7 @@ class PlayerPanelsScreenshotTest {
                     onSelectSource = {},
                     onManageRules = {},
                     onDismiss = {},
+                    onRequestOpenSources = {},
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

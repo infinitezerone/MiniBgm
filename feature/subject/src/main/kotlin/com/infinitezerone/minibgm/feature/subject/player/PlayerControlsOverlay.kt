@@ -92,6 +92,7 @@ internal fun PlayerControlsOverlay(
     onRetry: () -> Unit,
     onNextSource: (() -> Unit)? = null,
     onRequestOpenSources: (() -> Unit)? = null,
+    onOpenSourcesPanel: (() -> Unit)? = null,
     playbackSpeed: Float,
     onCyclePlaybackSpeed: () -> Unit,
     showEpisodeQueue: Boolean,
@@ -125,6 +126,7 @@ internal fun PlayerControlsOverlay(
                 onRetry = onRetry,
                 onNextSource = onNextSource,
                 onRequestOpenSources = onRequestOpenSources,
+                onOpenSourcesPanel = onOpenSourcesPanel,
             )
             return@Box
         }
@@ -459,6 +461,21 @@ internal fun PlayerControlsOverlay(
                             )
                         }
                     }
+
+                    if (onOpenSourcesPanel != null) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = onOpenSourcesPanel,
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.Tv,
+                                contentDescription = stringResource(R.string.feature_subject_player_sources),
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
                 }
 
                 // 弹幕开关
@@ -530,6 +547,7 @@ private fun BoxScope.PlayerErrorState(
     onRetry: () -> Unit,
     onNextSource: (() -> Unit)?,
     onRequestOpenSources: (() -> Unit)?,
+    onOpenSourcesPanel: (() -> Unit)? = null,
 ) {
     IconButton(
         onClick = onBackClick,
@@ -564,7 +582,11 @@ private fun BoxScope.PlayerErrorState(
             textAlign = TextAlign.Center,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (onNextSource != null) {
+            if (onOpenSourcesPanel != null) {
+                OutlinedButton(onClick = onOpenSourcesPanel) {
+                    Text(stringResource(R.string.feature_subject_player_switch_source), color = Color.White)
+                }
+            } else if (onNextSource != null) {
                 OutlinedButton(onClick = onNextSource) {
                     Text(stringResource(R.string.feature_subject_player_switch_next_source), color = Color.White)
                 }

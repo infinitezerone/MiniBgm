@@ -586,6 +586,7 @@ fun PlayerScreen(
                     }
             },
             onOpenEpisodeQueue = config.onOpenEpisodeQueue,
+            onOpenSourcesPanel = openSourcesPanel,
             onToggleLock = config.onToggleLock,
             onRequestOpenSources = onRequestOpenSources,
             showPipButton = uiState.pipEnabled,
@@ -898,6 +899,7 @@ private fun PlayerVideoStage(
     onNextSource: (() -> Unit)?,
     onCyclePlaybackSpeed: () -> Unit,
     onOpenEpisodeQueue: () -> Unit,
+    onOpenSourcesPanel: (() -> Unit)? = null,
     onToggleLock: () -> Unit,
     onRequestOpenSources: (() -> Unit)?,
     showPipButton: Boolean = true,
@@ -1042,6 +1044,7 @@ private fun PlayerVideoStage(
                 onRetry = onRetry,
                 onNextSource = onNextSource,
                 onRequestOpenSources = onRequestOpenSources,
+                onOpenSourcesPanel = onOpenSourcesPanel,
                 playbackSpeed = playbackSpeed,
                 onCyclePlaybackSpeed = onCyclePlaybackSpeed,
                 showEpisodeQueue = showEpisodeQueue,
