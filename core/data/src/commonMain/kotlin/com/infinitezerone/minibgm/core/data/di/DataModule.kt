@@ -26,6 +26,8 @@ import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepositoryImpl
+import com.infinitezerone.minibgm.core.data.repository.TorrentFeedRepository
+import com.infinitezerone.minibgm.core.data.repository.TorrentFeedRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.resolver.KitsuMappingResolver
 import com.infinitezerone.minibgm.core.data.repository.resolver.KitsuMappingResolverImpl
 import com.infinitezerone.minibgm.core.data.util.UserDataCleaner
@@ -90,6 +92,11 @@ val dataModule =
                 pageFetchService = get<PageFetchService>(),
                 webViewCaptureService = getOrNull(),
                 kitsuMappingResolver = get<KitsuMappingResolver>(),
+            )
+        }
+        single<TorrentFeedRepository> {
+            TorrentFeedRepositoryImpl(
+                pageFetchService = get<PageFetchService>(),
             )
         }
         single<MikanRepository> {
