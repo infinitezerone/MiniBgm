@@ -332,6 +332,8 @@
     <string name="feature_subject_player_source_matched_format">已匹配：%1$s · 正在播放</string>
     <string name="feature_subject_player_source_resolving_format">正在解析线路 (第 %1$d/%2$d 次)…</string>
     <string name="feature_subject_player_source_error_hint">播放异常 · 点击可切换线路</string>
+    <string name="feature_subject_player_source_fallback_format">线路 %1$d</string>
+    <string name="feature_subject_player_source_named_format">线路 %1$d · %2$s</string>
 
     <!-- 轨道、画质与字幕选择 -->
     <string name="feature_subject_player_tracks_title">播放设置</string>

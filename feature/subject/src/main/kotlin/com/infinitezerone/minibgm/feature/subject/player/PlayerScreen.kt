@@ -842,7 +842,8 @@ fun PlayerScreen(
             playerSourcesPanel(
                 uiState = uiState,
                 onSelectSource = viewModel::selectSource,
-                onManageRules = onManageRules ?: onRequestOpenSources,
+                onManageRules = onManageRules,
+                onRequestOpenSources = onRequestOpenSources,
             )
         }
     }

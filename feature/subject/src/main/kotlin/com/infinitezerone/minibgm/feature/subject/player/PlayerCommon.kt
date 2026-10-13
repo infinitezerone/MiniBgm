@@ -273,6 +273,7 @@ internal fun PlayerEmptyView(
  * 将技术向的规则名称（如域名 cj.lziapi.com）清洗为用户友好的线路名（如 线路 1 · lziapi），
  * 若规则本身已有中文或自定义友好名称则予以保留。
  */
+@Composable
 internal fun formatSourceDisplayName(
     rawName: String,
     index: Int,
@@ -282,7 +283,9 @@ internal fun formatSourceDisplayName(
     val trimmed = rawName.trim()
     val isDomainOrUrl = trimmed.contains(".") || trimmed.startsWith("http://") || trimmed.startsWith("https://")
     if (!isDomainOrUrl) {
-        return trimmed.ifBlank { "线路 ${index + 1}" }
+        return trimmed.ifBlank {
+            stringResource(R.string.feature_subject_player_source_fallback_format, index + 1)
+        }
     }
     val host =
         trimmed
@@ -297,8 +300,9 @@ internal fun formatSourceDisplayName(
             .removePrefix("api.")
             .substringBefore(".")
     return if (cleanHost.isNotBlank()) {
-        "线路 ${index + 1} · $cleanHost"
+        stringResource(R.string.feature_subject_player_source_named_format, index + 1, cleanHost)
     } else {
-        "线路 ${index + 1}"
+        stringResource(R.string.feature_subject_player_source_fallback_format, index + 1)
     }
 }
+

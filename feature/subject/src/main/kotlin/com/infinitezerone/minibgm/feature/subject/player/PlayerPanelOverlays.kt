@@ -208,6 +208,7 @@ fun OverlayProviderScope.playerSourcesPanel(
     uiState: PlayerUiState,
     onSelectSource: (Int) -> Unit,
     onManageRules: (() -> Unit)?,
+    onRequestOpenSources: (() -> Unit)? = null,
 ) {
     overlay<PlayerSourcesRequest, Unit> { _, onRespond ->
         PlayerSourcesBottomSheet(
@@ -227,6 +228,13 @@ fun OverlayProviderScope.playerSourcesPanel(
                     {
                         onRespond(Unit)
                         manage()
+                    }
+                },
+            onRequestOpenSources =
+                onRequestOpenSources?.let { openAi ->
+                    {
+                        onRespond(Unit)
+                        openAi()
                     }
                 },
             onDismiss = { onRespond(Unit) },
