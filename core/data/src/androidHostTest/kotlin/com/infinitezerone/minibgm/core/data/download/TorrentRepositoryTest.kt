@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.data.download
 import android.content.ContextWrapper
 import com.infinitezerone.minibgm.core.data.repository.AndroidTorrentRepository
 import com.infinitezerone.minibgm.core.model.DownloadState
+import com.infinitezerone.minibgm.core.model.TorrentStreamState
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
 import com.infinitezerone.minibgm.core.network.AssetDownloadService
 import com.infinitezerone.minibgm.core.testing.repository.FakeTorrentRepository
@@ -542,6 +543,96 @@ class TorrentRepositoryTest {
                     )
                 assertEquals("http://127.0.0.1:8899/stream?hash=fake", reuseResult.getOrNull())
                 assertEquals(2, repo.tasks.value.size)
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
+
+    @Test
+    fun androidTorrentRepository_stallWatchdog_triggersOnConnectedPeersWithZeroSpeed() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_stall_watchdog_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ): DownloadState = DownloadState.Completed(destinationPath, 64L)
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val streamService =
+                    object : AssetDownloadService {
+                        override suspend fun streamAsset(
+                            url: String,
+                            rangeStart: Long,
+                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                        ): Long = 0L
+                    }
+
+                // Fake 引擎：有 connectedPeers = 2，但 speedBytesPerSec = 0，downloadedBytes = 0
+                val streamEngine =
+                    FakeTorrentStreamEngine(initialInstalled = true).apply {
+                        mockTargetFilePath = File(tempRoot, "stall.mkv").absolutePath
+                    }
+
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                        peerConnectTimeoutMs = 50L,
+                    )
+
+                val taskId =
+                    repo.startDownload(
+                        title = "Stall Anime",
+                        magnetUrl = "magnet:?xt=urn:btih:cccccccccccccccccccccccccccccccccccccccc",
+                        totalBytes = 1000L,
+                    )
+
+                // 模拟引擎发射 Buffering 状态：已连上 2 个 Peer，但速度为 0，进度为 0
+                streamEngine.emitStreamState(
+                    TorrentStreamState.Buffering(
+                        progress = 0f,
+                        bufferedBytes = 0L,
+                        targetBytes = 1000L,
+                        speedBytesPerSec = 0L,
+                        connectedPeers = 2,
+                    ),
+                )
+
+                // 在 peerConnectTimeoutMs 触发前，任务仍为 DOWNLOADING
+                assertEquals(
+                    TorrentTaskStatus.DOWNLOADING,
+                    repo.tasks.value
+                        .single { it.id == taskId }
+                        .status,
+                )
+
+                // 推进时钟超过超时阈值
+                testScheduler.advanceTimeBy(100L)
+
+                // 即使 connectedPeers > 0，因为零速度零进度，看门狗应精准熔断为 ERROR
+                val taskAfterTimeout = repo.tasks.value.single { it.id == taskId }
+                assertEquals(TorrentTaskStatus.ERROR, taskAfterTimeout.status)
             } finally {
                 tempRoot.deleteRecursively()
             }

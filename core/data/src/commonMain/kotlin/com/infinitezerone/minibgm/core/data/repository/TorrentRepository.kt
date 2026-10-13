@@ -62,7 +62,10 @@ interface TorrentRepository {
     /**
      * 恢复指定任务。
      */
-    suspend fun resumeDownload(taskId: String)
+    suspend fun resumeDownload(
+        taskId: String,
+        resetDownloadedBytes: Boolean = false,
+    )
 
     /**
      * 取消并移除指定任务。
@@ -81,4 +84,14 @@ interface TorrentRepository {
         torrentUrl: String,
         fileName: String,
     ): Result<String>
+
+    /**
+     * 原生 BT 流媒体引擎扩展插件是否已就绪。
+     */
+    suspend fun isPluginInstalled(): Boolean
+
+    /**
+     * 安装原生 BT 流媒体引擎扩展插件。
+     */
+    suspend fun installPlugin(): Result<Unit>
 }

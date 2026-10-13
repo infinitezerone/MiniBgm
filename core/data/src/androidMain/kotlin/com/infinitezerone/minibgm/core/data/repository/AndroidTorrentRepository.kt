@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.encodeToString
 import java.io.File
 import java.io.IOException
@@ -55,6 +56,9 @@ class AndroidTorrentRepository(
 
     @Volatile
     private var activeRunningTaskId: String? = null
+
+    @Volatile
+    private var isPreempting = false
 
     init {
         restorePersistedTasks()
@@ -87,16 +91,7 @@ class AndroidTorrentRepository(
                 existingTask.status == TorrentTaskStatus.ERROR ||
                 completedFileMissing
             ) {
-                updateTask(existingTask.id) {
-                    it.copy(
-                        status = TorrentTaskStatus.QUEUED,
-                        errorMessage = null,
-                        streamUrl = "",
-                        downloadedBytes = if (completedFileMissing) 0L else it.downloadedBytes,
-                    )
-                }
-                startForegroundService(context, existingTask.id, existingTask.title)
-                scheduleNextIfIdle()
+                resumeDownload(existingTask.id, resetDownloadedBytes = completedFileMissing)
             }
             return existingTask.id
         }
@@ -145,8 +140,8 @@ class AndroidTorrentRepository(
         episodeId: Long,
         episodeSort: Float,
         episodeName: String,
-    ): Result<String> =
-        runCatching {
+    ): Result<String> {
+        try {
             val taskId =
                 startDownload(
                     title = title,
@@ -164,35 +159,44 @@ class AndroidTorrentRepository(
             val currentSnapshot = _tasks.value.firstOrNull { it.id == taskId }
             if (currentSnapshot != null) {
                 if (currentSnapshot.isCompleted && currentSnapshot.savePath.isNotBlank() && File(currentSnapshot.savePath).exists()) {
-                    return@runCatching "file://${currentSnapshot.savePath}"
+                    return Result.success("file://${currentSnapshot.savePath}")
                 }
                 if (currentSnapshot.status == TorrentTaskStatus.DOWNLOADING && currentSnapshot.streamUrl.isNotBlank()) {
-                    return@runCatching currentSnapshot.streamUrl
+                    return Result.success(currentSnapshot.streamUrl)
                 }
             }
 
-            // 若当前有其他任务占用了单实例 P2P 会话，将原活跃任务礼让退回 QUEUED，优先启动用户正在点击“边下边播”的任务
+            // 若当前有其他任务占用了单实例 P2P 会话，通过优先权抢占启动用户正在点击“边下边播”的任务
             preemptAndPrioritizeTask(taskId)
 
-            _tasks
-                .mapNotNull { list ->
-                    val task =
-                        list.firstOrNull { it.id == taskId }
-                            ?: return@mapNotNull Result.failure<String>(CancellationException("下载任务已取消"))
-                    when {
-                        task.isCompleted && task.savePath.isNotBlank() ->
-                            Result.success("file://${task.savePath}")
-                        task.status == TorrentTaskStatus.DOWNLOADING && task.streamUrl.isNotBlank() ->
-                            Result.success(task.streamUrl)
-                        task.status == TorrentTaskStatus.ERROR ->
-                            Result.failure(IOException(task.errorMessage ?: "起播失败"))
-                        task.status == TorrentTaskStatus.PAUSED ->
-                            Result.failure(CancellationException("下载任务已暂停"))
-                        else -> null
-                    }
-                }.first()
-                .getOrThrow()
+            val playUrl =
+                withTimeout(STREAM_ACQUISITION_TIMEOUT_MS) {
+                    _tasks
+                        .mapNotNull { list ->
+                            val task =
+                                list.firstOrNull { it.id == taskId }
+                                    ?: return@mapNotNull Result.failure<String>(CancellationException("下载任务已取消"))
+                            when {
+                                task.isCompleted && task.savePath.isNotBlank() && File(task.savePath).exists() ->
+                                    Result.success("file://${task.savePath}")
+                                task.status == TorrentTaskStatus.DOWNLOADING && task.streamUrl.isNotBlank() ->
+                                    Result.success(task.streamUrl)
+                                task.status == TorrentTaskStatus.ERROR ->
+                                    Result.failure(IOException(task.errorMessage ?: "起播失败"))
+                                task.status == TorrentTaskStatus.PAUSED ->
+                                    Result.failure(CancellationException("下载任务已暂停"))
+                                else -> null
+                            }
+                        }.first()
+                        .getOrThrow()
+                }
+            return Result.success(playUrl)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return Result.failure(e)
         }
+    }
 
     private suspend fun preemptAndPrioritizeTask(targetTaskId: String) {
         val preemptedJob: Job?
@@ -203,6 +207,7 @@ class AndroidTorrentRepository(
                 preemptedTaskId = currentId
                 preemptedJob = activeJobs.remove(currentId)
                 activeRunningTaskId = null
+                isPreempting = true
             } else {
                 preemptedTaskId = null
                 preemptedJob = null
@@ -224,28 +229,35 @@ class AndroidTorrentRepository(
             }
         }
 
-        // 将目标任务移至队列最前，确保 scheduleNextIfIdle 立即选中它
-        _tasks.update { list ->
-            val target = list.firstOrNull { it.id == targetTaskId } ?: return@update list
-            listOf(target) + list.filterNot { it.id == targetTaskId }
-        }
-        persistTasksSnapshot()
-
         if (preemptedJob != null) {
-            preemptedJob.cancelAndJoin()
-            streamEngine.setDownloadSessionProtected(false)
-            streamEngine.stopStream(force = true)
+            try {
+                // 先强停底层原生会话并等待旧协程完成，期间 isPreempting 锁住 scheduleNextIfIdle 防乱序启动
+                streamEngine.setDownloadSessionProtected(false)
+                streamEngine.stopStream(force = true)
+                preemptedJob.cancelAndJoin()
+            } finally {
+                synchronized(this) {
+                    isPreempting = false
+                }
+            }
         }
-        scheduleNextIfIdle()
+        scheduleNextIfIdle(preferredTaskId = targetTaskId)
     }
 
     @Synchronized
-    private fun scheduleNextIfIdle() {
+    private fun scheduleNextIfIdle(preferredTaskId: String? = null) {
+        if (isPreempting) return
         val currentId = activeRunningTaskId
         if (currentId != null && activeJobs[currentId]?.isActive == true) {
             return
         }
-        val nextTask = _tasks.value.firstOrNull { it.status == TorrentTaskStatus.QUEUED } ?: return
+        val queuedTasks = _tasks.value.filter { it.status == TorrentTaskStatus.QUEUED }
+        val nextTask =
+            if (preferredTaskId != null) {
+                queuedTasks.firstOrNull { it.id == preferredTaskId } ?: queuedTasks.firstOrNull()
+            } else {
+                queuedTasks.firstOrNull()
+            } ?: return
         val nextId = nextTask.id
         activeRunningTaskId = nextId
         val job =
@@ -364,7 +376,7 @@ class AndroidTorrentRepository(
                     streamEngine.streamState.first { state ->
                         when (state) {
                             is TorrentStreamState.Ready -> {
-                                updateStallWatchdog(isActiveProgress = state.connectedPeers > 0)
+                                updateStallWatchdog(isActiveProgress = false)
                                 if (state.totalBytes > 0L || state.connectedPeers > 0) {
                                     updateTask(taskId) {
                                         if (it.status == TorrentTaskStatus.DOWNLOADING) {
@@ -386,12 +398,11 @@ class AndroidTorrentRepository(
                                     lastBufferedBytes = state.bufferedBytes
                                 }
                                 val isCompleted = state.targetBytes > 0L && state.bufferedBytes >= state.targetBytes
-                                val hasActivity =
-                                    state.connectedPeers > 0 ||
-                                        state.speedBytesPerSec > 0L ||
+                                val hasActiveTransfer =
+                                    state.speedBytesPerSec > 0L ||
                                         bytesAdvanced ||
                                         isCompleted
-                                updateStallWatchdog(isActiveProgress = hasActivity)
+                                updateStallWatchdog(isActiveProgress = hasActiveTransfer)
                                 updateTask(taskId) {
                                     if (it.status == TorrentTaskStatus.DOWNLOADING) {
                                         it.copy(
@@ -419,26 +430,24 @@ class AndroidTorrentRepository(
                 }
             }
 
-            val currentTask = _tasks.value.firstOrNull { it.id == taskId }
-            val finalLength =
-                targetFile.takeIf { it.exists() }?.length()?.takeIf { it > 0L }
-                    ?: currentTask?.totalBytes?.takeIf { it > 0L }
-                    ?: currentTask?.downloadedBytes
-                    ?: 0L
-
-            updateTask(taskId) {
-                it.copy(
-                    status = TorrentTaskStatus.COMPLETED,
-                    downloadedBytes = finalLength,
-                    totalBytes = finalLength,
-                    downloadSpeedBytesPerSec = 0L,
-                    connectedPeers = 0,
-                    streamUrl = "",
-                    savePath = targetFile.absolutePath,
-                    completionTimestamp = System.currentTimeMillis(),
-                )
+            if (targetFile.exists() && targetFile.length() > 0L) {
+                val finalLength = targetFile.length()
+                updateTask(taskId) {
+                    it.copy(
+                        status = TorrentTaskStatus.COMPLETED,
+                        downloadedBytes = finalLength,
+                        totalBytes = finalLength,
+                        downloadSpeedBytesPerSec = 0L,
+                        connectedPeers = 0,
+                        streamUrl = "",
+                        savePath = targetFile.absolutePath,
+                        completionTimestamp = System.currentTimeMillis(),
+                    )
+                }
+                logger.i { "任务 $taskId 原生引擎直接落盘完成: ${targetFile.absolutePath} ($finalLength 字节)" }
+            } else {
+                throw IOException("下载完成但目标文件未在磁盘生成: ${targetFile.absolutePath}")
             }
-            logger.i { "任务 $taskId 原生引擎直接落盘完成: ${targetFile.absolutePath} ($finalLength 字节)" }
         } catch (e: CancellationException) {
             if (timedOut) {
                 logger.w { "任务 $taskId 连接做种节点超时（${peerConnectTimeoutMs}ms 无可用源）" }
@@ -456,6 +465,11 @@ class AndroidTorrentRepository(
                 throw e
             }
         } catch (e: Exception) {
+            val currentStatus = _tasks.value.firstOrNull { it.id == taskId }?.status
+            if (currentStatus == TorrentTaskStatus.QUEUED) {
+                logger.i { "任务 $taskId 已处于 QUEUED 抢占态，跳过错误状态覆盖" }
+                return
+            }
             logger.e(e) { "任务 $taskId 原生下载异常: ${e.message}" }
             updateTask(taskId) {
                 it.copy(
@@ -613,6 +627,11 @@ class AndroidTorrentRepository(
             logger.i { "任务 $taskId 协程被取消（已暂停或被移除）" }
             throw e
         } catch (e: Exception) {
+            val currentStatus = _tasks.value.firstOrNull { it.id == taskId }?.status
+            if (currentStatus == TorrentTaskStatus.QUEUED) {
+                logger.i { "任务 $taskId 已处于 QUEUED 抢占态，跳过错误状态覆盖" }
+                return
+            }
             logger.e(e) { "任务 $taskId 下载异常: ${e.message}" }
             updateTask(taskId) {
                 it.copy(
@@ -659,20 +678,31 @@ class AndroidTorrentRepository(
         }
     }
 
-    override suspend fun resumeDownload(taskId: String) {
+    override suspend fun resumeDownload(
+        taskId: String,
+        resetDownloadedBytes: Boolean,
+    ) {
         val task = _tasks.value.firstOrNull { it.id == taskId } ?: return
-        if (task.status == TorrentTaskStatus.PAUSED || task.status == TorrentTaskStatus.ERROR) {
+        if (task.status == TorrentTaskStatus.PAUSED ||
+            task.status == TorrentTaskStatus.ERROR ||
+            task.status == TorrentTaskStatus.COMPLETED
+        ) {
             updateTask(taskId) {
                 it.copy(
                     status = TorrentTaskStatus.QUEUED,
                     errorMessage = null,
                     streamUrl = "",
+                    downloadedBytes = if (resetDownloadedBytes) 0L else it.downloadedBytes,
                 )
             }
             startForegroundService(context, taskId, task.title)
             scheduleNextIfIdle()
         }
     }
+
+    override suspend fun isPluginInstalled(): Boolean = streamEngine.isPluginInstalled()
+
+    override suspend fun installPlugin(): Result<Unit> = streamEngine.installPlugin()
 
     override suspend fun cancelDownload(
         taskId: String,
@@ -808,5 +838,6 @@ class AndroidTorrentRepository(
     companion object {
         const val DEFAULT_PEER_CONNECT_TIMEOUT_MS = 45_000L
         const val PEER_CONNECT_TIMEOUT_MESSAGE = "连接做种节点超时（暂无可用源），请点击重试或更换其他资源"
+        const val STREAM_ACQUISITION_TIMEOUT_MS = 60_000L
     }
 }

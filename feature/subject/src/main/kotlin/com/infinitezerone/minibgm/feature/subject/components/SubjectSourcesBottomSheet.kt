@@ -35,7 +35,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.data.download.TorrentIntentDispatcher
-import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
 import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourceActionCard
@@ -510,7 +509,6 @@ private fun MikanResourcesSection(
 ) {
     val torrentRepository: TorrentRepository = koinInject()
     val torrentIntentDispatcher: TorrentIntentDispatcher = koinInject()
-    val torrentStreamEngine: TorrentStreamEngine = koinInject()
     val coroutineScope = rememberCoroutineScope()
     val overlayHostState = rememberOverlayHostState()
     var expandedIndex by remember { mutableStateOf<Int?>(-1) }
@@ -561,6 +559,7 @@ private fun MikanResourcesSection(
                                                 )
                                         )
                                 }
+                            val effectiveEpSort = episode?.let { if (it.sort > 0f) it.sort else it.episodeNumber } ?: 1f
                             if (completedTask != null) {
                                 withContext(Dispatchers.Main) {
                                     onDismissAndRun {
@@ -572,7 +571,7 @@ private fun MikanResourcesSection(
                                                     streamUrl = "file://${completedTask.savePath}",
                                                     episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
                                                     subjectName = subject.displayName,
-                                                    episodeSort = episode?.episodeNumber ?: 1f,
+                                                    episodeSort = effectiveEpSort,
                                                     episodeType = episode?.type ?: 0,
                                                 )
                                             onInternalPlayClick(route)
@@ -582,7 +581,7 @@ private fun MikanResourcesSection(
                                 return@launch
                             }
 
-                            if (!ensureTorrentPluginInstalled(context, overlayHostState, torrentStreamEngine)) {
+                            if (!ensureTorrentPluginInstalled(context, overlayHostState, torrentRepository)) {
                                 return@launch
                             }
                             withContext(Dispatchers.Main) {
@@ -603,7 +602,7 @@ private fun MikanResourcesSection(
                                     subjectName = subject.displayName,
                                     subjectCoverUrl = subject.images?.bestImage.orEmpty(),
                                     episodeId = episode?.id ?: 0L,
-                                    episodeSort = episode?.episodeNumber ?: 1f,
+                                    episodeSort = effectiveEpSort,
                                     episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
                                 )
                             streamResult
@@ -618,7 +617,7 @@ private fun MikanResourcesSection(
                                                         streamUrl = streamUrl,
                                                         episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
                                                         subjectName = subject.displayName,
-                                                        episodeSort = episode?.episodeNumber ?: 1f,
+                                                        episodeSort = effectiveEpSort,
                                                         episodeType = episode?.type ?: 0,
                                                     )
                                                 onInternalPlayClick(route)
@@ -639,7 +638,8 @@ private fun MikanResourcesSection(
                     },
                     onInAppDownload = {
                         coroutineScope.launch {
-                            if (!ensureTorrentPluginInstalled(context, overlayHostState, torrentStreamEngine)) {
+                            val effectiveEpSort = episode?.let { if (it.sort > 0f) it.sort else it.episodeNumber } ?: 1f
+                            if (!ensureTorrentPluginInstalled(context, overlayHostState, torrentRepository)) {
                                 return@launch
                             }
                             torrentRepository.startDownload(
@@ -651,7 +651,7 @@ private fun MikanResourcesSection(
                                 subjectName = subject.displayName,
                                 subjectCoverUrl = subject.images?.bestImage.orEmpty(),
                                 episodeId = episode?.id ?: 0L,
-                                episodeSort = episode?.episodeNumber ?: 1f,
+                                episodeSort = effectiveEpSort,
                                 episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
                             )
                             withContext(Dispatchers.Main) {
@@ -910,9 +910,9 @@ private fun MikanActionButton(
 private suspend fun ensureTorrentPluginInstalled(
     context: Context,
     overlayHostState: OverlayHostState,
-    torrentStreamEngine: TorrentStreamEngine,
+    torrentRepository: TorrentRepository,
 ): Boolean {
-    if (torrentStreamEngine.isPluginInstalled()) {
+    if (torrentRepository.isPluginInstalled()) {
         return true
     }
     val confirmed =
@@ -936,7 +936,7 @@ private suspend fun ensureTorrentPluginInstalled(
                 Toast.LENGTH_SHORT,
             ).show()
     }
-    val installResult = torrentStreamEngine.installPlugin()
+    val installResult = torrentRepository.installPlugin()
     if (installResult.isFailure) {
         withContext(Dispatchers.Main) {
             Toast

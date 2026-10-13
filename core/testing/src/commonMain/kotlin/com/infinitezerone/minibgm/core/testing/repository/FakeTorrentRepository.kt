@@ -101,10 +101,22 @@ class FakeTorrentRepository : TorrentRepository {
         }
     }
 
-    override suspend fun resumeDownload(taskId: String) {
+    override suspend fun resumeDownload(
+        taskId: String,
+        resetDownloadedBytes: Boolean,
+    ) {
         resumeDownloadCallCount++
         mutableTasks.update { list ->
-            list.map { if (it.id == taskId) it.copy(status = TorrentTaskStatus.DOWNLOADING) else it }
+            list.map {
+                if (it.id == taskId) {
+                    it.copy(
+                        status = TorrentTaskStatus.DOWNLOADING,
+                        downloadedBytes = if (resetDownloadedBytes) 0L else it.downloadedBytes,
+                    )
+                } else {
+                    it
+                }
+            }
         }
     }
 
@@ -122,5 +134,17 @@ class FakeTorrentRepository : TorrentRepository {
     ): Result<String> {
         downloadTorrentFileCallCount++
         return Result.success("/fake/cache/torrents/$fileName.torrent")
+    }
+
+    var isPluginInstalledResult: Boolean = true
+    var installPluginCallCount: Int = 0
+        private set
+
+    override suspend fun isPluginInstalled(): Boolean = isPluginInstalledResult
+
+    override suspend fun installPlugin(): Result<Unit> {
+        installPluginCallCount++
+        isPluginInstalledResult = true
+        return Result.success(Unit)
     }
 }
