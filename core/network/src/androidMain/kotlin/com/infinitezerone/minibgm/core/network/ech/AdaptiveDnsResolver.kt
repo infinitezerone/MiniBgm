@@ -71,8 +71,6 @@ internal object AdaptiveDnsResolver {
             isDomainOrSubdomain(host, "bangumi.tv") ||
             isDomainOrSubdomain(host, "chii.in") ||
             isDomainOrSubdomain(host, "sda1.dev") ||
-            isDomainOrSubdomain(host, "mikanani.me") ||
-            isDomainOrSubdomain(host, "mikanime.tv") ||
             isDomainOrSubdomain(host, "kitsu.io") ||
             dynamicEchHosts.any { isDomainOrSubdomain(host, it) }
 

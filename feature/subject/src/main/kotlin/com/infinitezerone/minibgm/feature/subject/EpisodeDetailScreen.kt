@@ -800,8 +800,6 @@ fun EpisodeDetailScreen(
             failedSourceReasons = uiState.failedSourceReasons,
             torrentResources = uiState.torrentResources,
             isTorrentLoading = uiState.isTorrentLoading,
-            mikanResources = uiState.mikanResources,
-            isMikanLoading = uiState.isMikanLoading,
         )
     }
 

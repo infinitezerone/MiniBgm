@@ -46,7 +46,6 @@ import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHos
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.Episode
-import com.infinitezerone.minibgm.core.model.MikanTorrentResource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
@@ -82,8 +81,6 @@ fun SubjectSourcesBottomSheet(
     failedSourceReasons: Map<String, String> = emptyMap(),
     torrentResources: List<TorrentMediaResource> = emptyList(),
     isTorrentLoading: Boolean = false,
-    mikanResources: List<MikanTorrentResource> = emptyList(),
-    isMikanLoading: Boolean = false,
 ) {
     val context = LocalContext.current
     val displayName = subject.displayName
@@ -96,10 +93,6 @@ fun SubjectSourcesBottomSheet(
             }
         }
 
-    val effectiveTorrentResources = remember(torrentResources, mikanResources) {
-        torrentResources.ifEmpty { mikanResources }
-    }
-    val effectiveIsTorrentLoading = isTorrentLoading || isMikanLoading
     val enabledRules = remember(playbackRules) { playbackRules.filter { it.isEnabled } }
     val torrentRules = remember(enabledRules) { enabledRules.filter { it.kind == PlaybackRuleKind.TORRENT } }
     val onlineRules = remember(enabledRules) { enabledRules.filter { it.kind != PlaybackRuleKind.TORRENT } }
@@ -141,11 +134,11 @@ fun SubjectSourcesBottomSheet(
             }
 
             // P2P 种子与字幕组资源（仅在存在启用规则或已加载出资源时渲染）
-            val shouldShowTorrentSection = torrentRules.isNotEmpty() || effectiveTorrentResources.isNotEmpty() || effectiveIsTorrentLoading
+            val shouldShowTorrentSection = torrentRules.isNotEmpty() || torrentResources.isNotEmpty() || isTorrentLoading
             if (shouldShowTorrentSection) {
                 TorrentMediaResourcesSection(
-                    isTorrentLoading = effectiveIsTorrentLoading,
-                    torrentResources = effectiveTorrentResources,
+                    isTorrentLoading = isTorrentLoading,
+                    torrentResources = torrentResources,
                     context = context,
                     subject = subject,
                     episode = null,
@@ -360,11 +353,11 @@ fun SubjectSourcesBottomSheet(
             }
 
             // 3. P2P 种子与字幕组资源（仅在存在启用规则或已加载出资源时渲染）
-            val shouldShowTorrentSection = torrentRules.isNotEmpty() || effectiveTorrentResources.isNotEmpty() || effectiveIsTorrentLoading
+            val shouldShowTorrentSection = torrentRules.isNotEmpty() || torrentResources.isNotEmpty() || isTorrentLoading
             if (shouldShowTorrentSection) {
                 TorrentMediaResourcesSection(
-                    isTorrentLoading = effectiveIsTorrentLoading,
-                    torrentResources = effectiveTorrentResources,
+                    isTorrentLoading = isTorrentLoading,
+                    torrentResources = torrentResources,
                     context = context,
                     subject = subject,
                     episode = episode,
@@ -732,27 +725,6 @@ fun TorrentMediaResourcesSection(
     }
 }
 
-/** 兼容旧调用的包装函数 */
-@Composable
-private fun MikanResourcesSection(
-    isMikanLoading: Boolean,
-    mikanResources: List<MikanTorrentResource>,
-    context: Context,
-    subject: Subject,
-    episode: Episode?,
-    onInternalPlayClick: ((PlayerRoute) -> Unit)? = null,
-    onDismissAndRun: (() -> Unit) -> Unit,
-) {
-    TorrentMediaResourcesSection(
-        isTorrentLoading = isMikanLoading,
-        torrentResources = mikanResources,
-        context = context,
-        subject = subject,
-        episode = episode,
-        onInternalPlayClick = onInternalPlayClick,
-        onDismissAndRun = onDismissAndRun,
-    )
-}
 
 @Composable
 fun TorrentMediaResourceCard(

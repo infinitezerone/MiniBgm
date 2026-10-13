@@ -154,4 +154,24 @@ description: >-
   2. **协议头与内容改写一致性**：环回反代若对响应体中的外部域名进行重写，必须在出站过滤器（`filterOutboundHeaders`）中同步改写 `Content-Security-Policy` 响应头，放行对应镜像源；
   3. **全域全路径 Cookie 注入**：会话鉴权 Cookie 必须在页面加载前，针对目标主机与根路径（`Path=/`）全面写入（如 `setCookie("http://$host", "$cookie; Path=/")`），确保后续同源 AJAX（如 `/p1/login` POST）能完整携带令牌通过代理校验。
 
+---
+
+## 剧本 11：P2P 种子协议中立性与起播抽屉分层规范（P2P Neutrality & Playback Sources Panel）
+* **规范先例**：`SubjectSourcesBottomSheet.kt`、`TorrentFeedRepository.kt` 与 `TorrentRssParser.kt`
+* **根因警示（来自合规审计与站点解耦复盘）**：
+  * 应用若硬编码未授权抓取特定第三方种子站点，将使核心客户端背负版权与合规风险，且难以应对镜像站切换与结构调整；
+  * 核心客户端必须维持类似 Tachiyomi/Kodi 的 100% 协议与架构中立性。
+* **物理防线与操作规范**：
+  1. **100% 协议中立化与规则驱动**：
+     * 核心应用仅保留底层 P2P 流播与下载能力及通用的 RSS/XML 种子提取器，严禁在底层数据层与详情层写死特定域名；
+     * P2P 种子资源发现由用户配置的通用 `PlaybackRuleKind.TORRENT`（`RuleParserType.RSS_TORRENT`）规则驱动；未启用种子源时零网络消耗；
+     * `:core:testing:ArchitectureRulesTest` 设物理红线断言，拦截核心层硬编码特定域名。
+  2. **详情页起播抽屉（SubjectSourcesBottomSheet）现代分层布局**：
+     * **顶部 Header**：分集标题与状态；
+     * **主起播入口**：“立即起播”Hero 卡片；
+     * **在线播放线路**：在线流媒体规则线路；
+     * **P2P 原画与字幕组资源**：按字幕组归类的种子资源卡片，支持“边下边播”与“离线缓存”；未配置规则时引导用户配置；
+     * **辅助工具与外部跳转**：AI 找源、外部跳转与规则管理入口。
+
+
 

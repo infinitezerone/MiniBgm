@@ -21,7 +21,6 @@ val subjectModule =
                 settingsRepository = get(),
                 failureStore = get(),
                 searchRepository = getOrNull(),
-                mikanRepository = getOrNull(),
                 torrentFeedRepository = getOrNull(),
             )
         }
@@ -36,7 +35,6 @@ val subjectModule =
                 authRepository = get(),
                 settingsRepository = get(),
                 failureStore = get(),
-                mikanRepository = getOrNull(),
                 torrentFeedRepository = getOrNull(),
             )
         }

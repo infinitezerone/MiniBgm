@@ -88,7 +88,6 @@ private val SITE_RESOLVERS: Map<String, Pair<String, (String) -> String>> =
         "ani_one" to ("羚邦" to { "https://www.youtube.com/playlist?list=$it" }),
         "ani_one_asia" to ("羚邦" to { "https://www.youtube.com/playlist?list=$it" }),
         "nicovideo" to ("NicoNico" to { "https://ch.nicovideo.jp/$it" }),
-        "mikan" to ("蜜柑计划" to { "https://mikanani.me/Home/Bangumi/$it" }),
         // kitsu 是元数据站而非播放渠道：进 sitesJson 供 Stremio 规则做 bgmId→kitsuId 确定性映射，
         // 展示侧由 toModel 过滤（见下），不混入播放渠道推荐
         "kitsu" to ("Kitsu" to { "https://kitsu.io/anime/$it" }),

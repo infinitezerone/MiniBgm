@@ -8,7 +8,6 @@ import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
-import com.infinitezerone.minibgm.core.data.repository.MikanRepository
 import com.infinitezerone.minibgm.core.data.repository.SearchRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
@@ -17,7 +16,6 @@ import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
-import com.infinitezerone.minibgm.core.model.MikanTorrentResource
 import com.infinitezerone.minibgm.core.model.PersonDetail
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
@@ -136,8 +134,6 @@ data class SubjectDetailUiState(
     val totalEpisodes: Int = 0,
     val torrentResources: List<TorrentMediaResource> = emptyList(),
     val isTorrentLoading: Boolean = false,
-    val mikanResources: List<MikanTorrentResource> = emptyList(),
-    val isMikanLoading: Boolean = false,
 )
 
 /** 条目/分集/收藏仓库流投影的中间态（私有于 [SubjectDetailViewModel]） */
@@ -196,7 +192,6 @@ class SubjectDetailViewModel(
     private val settingsRepository: SettingsRepository? = null,
     private val failureStore: PlaybackFailureStore? = null,
     private val searchRepository: SearchRepository? = null,
-    private val mikanRepository: MikanRepository? = null,
     private val torrentFeedRepository: TorrentFeedRepository? = null,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SubjectDetailUiState())
@@ -246,8 +241,6 @@ class SubjectDetailViewModel(
                 it.copy(
                     torrentResources = emptyList(),
                     isTorrentLoading = false,
-                    mikanResources = emptyList(),
-                    isMikanLoading = false,
                 )
             }
             return
@@ -263,7 +256,7 @@ class SubjectDetailViewModel(
                 ) + subject.titleAliases
             ).distinct()
 
-        _uiState.update { it.copy(isTorrentLoading = true, isMikanLoading = true) }
+        _uiState.update { it.copy(isTorrentLoading = true) }
         viewModelScope.launch {
             val allResources = mutableListOf<TorrentMediaResource>()
             val feedRepo = torrentFeedRepository
@@ -285,15 +278,10 @@ class SubjectDetailViewModel(
                 it.copy(
                     torrentResources = deduplicated,
                     isTorrentLoading = false,
-                    mikanResources = deduplicated,
-                    isMikanLoading = false,
                 )
             }
         }
     }
-
-    /** 兼容旧调用的方法 */
-    fun loadMikanResources(episode: Episode? = null) = loadTorrentResources(episode)
 
     /** 计算「下一待看」分集：按打卡进度与续看位置推断，无匹配时回退第一集 */
     fun nextEpisodeToWatch(): Episode? {

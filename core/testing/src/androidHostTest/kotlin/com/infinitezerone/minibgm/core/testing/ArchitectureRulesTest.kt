@@ -1203,6 +1203,34 @@ class ArchitectureRulesTest {
         )
     }
 
+    @Test
+    fun core_data_and_feature_subject_sources_must_not_hardcode_proprietary_torrent_domains() {
+        val violations = mutableListOf<String>()
+        val checkedDirs = listOf("core/data", "core/network", "feature/subject")
+        val forbiddenDomain = "mikanani.me"
+
+        checkedDirs.forEach { dirPath ->
+            val dir = File(projectRoot, dirPath)
+            if (!dir.isDirectory) return@forEach
+            dir
+                .walkTopDown()
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                .filter { it.isFile && it.extension == "kt" }
+                .forEach { file ->
+                    val text = file.readText()
+                    if (text.contains(forbiddenDomain)) {
+                        violations.add(
+                            "${file.relativeTo(projectRoot).path} 违规硬编码专用种子站点域名 $forbiddenDomain，必须使用通用的 TorrentFeedRepository 与规则驱动体系",
+                        )
+                    }
+                }
+        }
+        assertTrue(
+            violations.isEmpty(),
+            "违反 P2P 种子协议中立性红线（核心数据层与详情层严禁硬编码特定第三方站点域名）：\n" + violations.joinToString("\n"),
+        )
+    }
+
     private companion object {
         /** 红线只约束生产源码：build 产物与各测试源集目录一律不下钻 */
         val NON_SOURCE_DIR_NAMES =

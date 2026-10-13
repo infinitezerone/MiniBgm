@@ -77,8 +77,6 @@ internal fun SubjectDetailOverlays(
     failedSourceReasons: Map<String, String>,
     torrentResources: List<com.infinitezerone.minibgm.core.model.TorrentMediaResource> = emptyList(),
     isTorrentLoading: Boolean = false,
-    mikanResources: List<com.infinitezerone.minibgm.core.model.MikanTorrentResource> = emptyList(),
-    isMikanLoading: Boolean = false,
 ) {
     if (showLoginPromptDialog) {
         BgmLoginPromptDialog(
@@ -203,10 +201,8 @@ internal fun SubjectDetailOverlays(
                 },
             playbackRules = playbackRules,
             failedSourceReasons = failedSourceReasons,
-            torrentResources = torrentResources.ifEmpty { mikanResources },
-            isTorrentLoading = isTorrentLoading || isMikanLoading,
-            mikanResources = mikanResources,
-            isMikanLoading = isMikanLoading,
+            torrentResources = torrentResources,
+            isTorrentLoading = isTorrentLoading,
         )
     }
 }

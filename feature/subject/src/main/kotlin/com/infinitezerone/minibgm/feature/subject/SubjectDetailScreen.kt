@@ -769,8 +769,6 @@ fun SubjectDetailScreen(
         failedSourceReasons = uiState.failedSourceReasons,
         torrentResources = uiState.torrentResources,
         isTorrentLoading = uiState.isTorrentLoading,
-        mikanResources = uiState.mikanResources,
-        isMikanLoading = uiState.isMikanLoading,
     )
 
     if (activeTagForAction != null) {
