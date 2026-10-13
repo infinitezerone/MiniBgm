@@ -4,6 +4,7 @@ import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -113,24 +114,41 @@ class EpisodeStreamResolver(
             val fastTrack = queryTitles.take(2)
             if (fastTrack.size == 2) {
                 onProgress(1, queryTitles.size)
-                val fastResult: Pair<String, List<PlayableSource>>? =
+                data class FastHit(
+                    val title: String,
+                    val sources: List<PlayableSource>,
+                    val attemptIndex: Int,
+                )
+                val fastResult: FastHit? =
                     coroutineScope {
-                        val channel = kotlinx.coroutines.channels.Channel<Pair<String, List<PlayableSource>>>(2)
+                        val channel = kotlinx.coroutines.channels.Channel<FastHit>(2)
                         val job1 =
                             this.launch {
-                                val c = resolveCandidate(fastTrack[0])
-                                val p = findPlayableCandidate(c)
-                                if (p != null) channel.send(fastTrack[0] to (listOf(p) + c.filter { it != p }))
+                                try {
+                                    val c = resolveCandidate(fastTrack[0])
+                                    val p = findPlayableCandidate(c)
+                                    if (p != null) channel.send(FastHit(fastTrack[0], listOf(p) + c.filter { it != p }, 1))
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (_: Throwable) {
+                                    // 异常隔离：单个候选网络或解析异常不破坏竞速兄弟协程
+                                }
                             }
                         val job2 =
                             this.launch {
-                                val c = resolveCandidate(fastTrack[1])
-                                val p = findPlayableCandidate(c)
-                                if (p != null) channel.send(fastTrack[1] to (listOf(p) + c.filter { it != p }))
+                                try {
+                                    val c = resolveCandidate(fastTrack[1])
+                                    val p = findPlayableCandidate(c)
+                                    if (p != null) channel.send(FastHit(fastTrack[1], listOf(p) + c.filter { it != p }, 2))
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (_: Throwable) {
+                                    // 异常隔离：单个候选网络或解析异常不破坏竞速兄弟协程
+                                }
                             }
 
                         // 并发竞速：只要任一分支找到可用直链，立即返回并取消未完成任务
-                        var winner: Pair<String, List<PlayableSource>>? = null
+                        var winner: FastHit? = null
                         val completionWatcher =
                             this.launch {
                                 job1.join()
@@ -151,9 +169,9 @@ class EpisodeStreamResolver(
                 if (fastResult != null) {
                     return@withTimeoutOrNull ProbeOutcome(
                         rule = rule,
-                        sources = fastResult.second,
-                        matchedTitle = fastResult.first,
-                        attempted = 2,
+                        sources = fastResult.sources,
+                        matchedTitle = fastResult.title,
+                        attempted = fastResult.attemptIndex,
                         attemptTotal = queryTitles.size,
                         timedOut = false,
                     )

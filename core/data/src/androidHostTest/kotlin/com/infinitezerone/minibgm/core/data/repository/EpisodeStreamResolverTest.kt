@@ -325,4 +325,84 @@ class EpisodeStreamResolverTest {
             assertEquals("快速命中", outcome.matchedTitle)
             assertEquals("https://cdn.example.tv/fast.m3u8", outcome.directSource?.url)
         }
+
+    @Test
+    fun probeRule_fastTrackFirstCandidateHit_reportsAttemptedOne() =
+        runTest {
+            val stub =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> =
+                        if (title == "第一候选") {
+                            listOf(direct("https://cdn.example.tv/hit1.m3u8"))
+                        } else {
+                            emptyList()
+                        }
+                }
+
+            val outcome =
+                EpisodeStreamResolver(stub).probeRule(
+                    rule = sourceRule(),
+                    baseTitles = listOf("第一候选", "第二候选"),
+                    epSort = 0f,
+                    subjectId = 1001L,
+                )
+
+            assertNotNull(outcome)
+            assertEquals("第一候选", outcome.matchedTitle)
+            assertEquals(1, outcome.attempted)
+        }
+
+    @Test
+    fun probeRule_fastTrackChildException_doesNotCancelSibling() =
+        runTest {
+            val stub =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> =
+                        if (title == "异常候选") {
+                            throw IllegalStateException("站点崩毁")
+                        } else if (title == "正常候选") {
+                            listOf(direct("https://cdn.example.tv/survivor.m3u8"))
+                        } else {
+                            emptyList()
+                        }
+                }
+
+            val outcome =
+                EpisodeStreamResolver(stub).probeRule(
+                    rule = sourceRule(),
+                    baseTitles = listOf("异常候选", "正常候选"),
+                    epSort = 0f,
+                    subjectId = 1001L,
+                )
+
+            assertNotNull(outcome)
+            assertEquals("正常候选", outcome.matchedTitle)
+            assertEquals("https://cdn.example.tv/survivor.m3u8", outcome.directSource?.url)
+        }
 }
