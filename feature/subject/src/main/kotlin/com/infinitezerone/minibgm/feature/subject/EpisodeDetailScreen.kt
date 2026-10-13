@@ -145,7 +145,7 @@ fun EpisodeDetailScreen(
 
     LaunchedEffect(showSourcesSheet) {
         if (showSourcesSheet) {
-            viewModel.loadMikanResources(uiState.episode)
+            viewModel.loadTorrentResources(uiState.episode)
         }
     }
 
@@ -798,6 +798,8 @@ fun EpisodeDetailScreen(
                 },
             playbackRules = uiState.playbackRules,
             failedSourceReasons = uiState.failedSourceReasons,
+            torrentResources = uiState.torrentResources,
+            isTorrentLoading = uiState.isTorrentLoading,
             mikanResources = uiState.mikanResources,
             isMikanLoading = uiState.isMikanLoading,
         )

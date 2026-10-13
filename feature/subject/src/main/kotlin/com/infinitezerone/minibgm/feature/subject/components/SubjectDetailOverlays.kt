@@ -75,6 +75,8 @@ internal fun SubjectDetailOverlays(
     onManageRules: (() -> Unit)?,
     playbackRules: List<PlaybackSourceRule>,
     failedSourceReasons: Map<String, String>,
+    torrentResources: List<com.infinitezerone.minibgm.core.model.TorrentMediaResource> = emptyList(),
+    isTorrentLoading: Boolean = false,
     mikanResources: List<com.infinitezerone.minibgm.core.model.MikanTorrentResource> = emptyList(),
     isMikanLoading: Boolean = false,
 ) {
@@ -201,6 +203,8 @@ internal fun SubjectDetailOverlays(
                 },
             playbackRules = playbackRules,
             failedSourceReasons = failedSourceReasons,
+            torrentResources = torrentResources.ifEmpty { mikanResources },
+            isTorrentLoading = isTorrentLoading || isMikanLoading,
             mikanResources = mikanResources,
             isMikanLoading = isMikanLoading,
         )

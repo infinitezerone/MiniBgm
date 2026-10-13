@@ -50,6 +50,7 @@ import com.infinitezerone.minibgm.core.model.MikanTorrentResource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
+import com.infinitezerone.minibgm.core.model.TorrentMediaResource
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.StreamingAppLauncher
 import com.infinitezerone.minibgm.core.navigation.launchExternalPlayer
@@ -79,6 +80,8 @@ fun SubjectSourcesBottomSheet(
     onManageRules: (() -> Unit)? = null,
     playbackRules: List<PlaybackSourceRule> = emptyList(),
     failedSourceReasons: Map<String, String> = emptyMap(),
+    torrentResources: List<TorrentMediaResource> = emptyList(),
+    isTorrentLoading: Boolean = false,
     mikanResources: List<MikanTorrentResource> = emptyList(),
     isMikanLoading: Boolean = false,
 ) {
@@ -92,6 +95,14 @@ fun SubjectSourcesBottomSheet(
                 displayName
             }
         }
+
+    val effectiveTorrentResources = remember(torrentResources, mikanResources) {
+        torrentResources.ifEmpty { mikanResources }
+    }
+    val effectiveIsTorrentLoading = isTorrentLoading || isMikanLoading
+    val enabledRules = remember(playbackRules) { playbackRules.filter { it.isEnabled } }
+    val torrentRules = remember(enabledRules) { enabledRules.filter { it.kind == PlaybackRuleKind.TORRENT } }
+    val onlineRules = remember(enabledRules) { enabledRules.filter { it.kind != PlaybackRuleKind.TORRENT } }
 
     BgmSourcesBottomSheet(
         title = sheetTitle,
@@ -125,6 +136,21 @@ fun SubjectSourcesBottomSheet(
                             onInternalPlayClick(route)
                         }
                     },
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // P2P 种子与字幕组资源（仅在存在启用规则或已加载出资源时渲染）
+            val shouldShowTorrentSection = torrentRules.isNotEmpty() || effectiveTorrentResources.isNotEmpty() || effectiveIsTorrentLoading
+            if (shouldShowTorrentSection) {
+                TorrentMediaResourcesSection(
+                    isTorrentLoading = effectiveIsTorrentLoading,
+                    torrentResources = effectiveTorrentResources,
+                    context = context,
+                    subject = subject,
+                    episode = null,
+                    onInternalPlayClick = onInternalPlayClick,
+                    onDismissAndRun = runAfterDismiss,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
             }
@@ -172,19 +198,8 @@ fun SubjectSourcesBottomSheet(
                     }
                 },
             )
-
-            MikanResourcesSection(
-                isMikanLoading = isMikanLoading,
-                mikanResources = mikanResources,
-                context = context,
-                subject = subject,
-                episode = null,
-                onInternalPlayClick = onInternalPlayClick,
-                onDismissAndRun = runAfterDismiss,
-            )
         } else {
             // ==================== 分集级 ====================
-            val enabledRules = remember(playbackRules) { playbackRules.filter { it.isEnabled } }
             val epLabel = remember(episode) { episode.guideLabel }
 
             val bilibiliTarget =
@@ -192,12 +207,10 @@ fun SubjectSourcesBottomSheet(
                     StreamingIntentResolver.buildBilibiliSearchTarget("$displayName $epLabel")
                 }
 
-            // 外部播放器直链候选：解析为媒体直链的播放规则
+            // 外部播放器直链候选：解析为媒体直链的在线播放规则
             val externalPlayerStreamUrl =
-                remember(enabledRules, displayName, episode, subject.id) {
-                    // 外部播放器无法携带 Referer/Cookie 等自定义请求头，带请求头的直链不提供；
-                    // kind = SOURCE 的规则地址是取源接口而非流地址，同样排除
-                    enabledRules.firstNotNullOfOrNull { rule ->
+                remember(onlineRules, displayName, episode, subject.id) {
+                    onlineRules.firstNotNullOfOrNull { rule ->
                         if (rule.kind == PlaybackRuleKind.SOURCE) return@firstNotNullOfOrNull null
                         val epStr = if (episode.isMain) episode.formattedNumber else episode.episodeInt.toString()
                         val resolvedUrl =
@@ -223,12 +236,45 @@ fun SubjectSourcesBottomSheet(
                         .mapTo(mutableSetOf()) { it.packageName }
                 }
 
-            // 内部播放
-            BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_internal_playback))
+            // 1. 核心操作：立即起播
+            if (onInternalPlayClick != null) {
+                BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_internal_playback))
+                BgmSourceActionCard(
+                    title = stringResource(R.string.feature_subject_source_play_immediately),
+                    subtitle = stringResource(R.string.feature_subject_source_play_immediately_desc),
+                    iconVector = BgmIcons.PlayCircle,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    trailingContent = {
+                        Icon(
+                            imageVector = BgmIcons.KeyboardArrowRight,
+                            contentDescription = stringResource(R.string.feature_subject_source_start_play),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    },
+                    onClick = {
+                        runAfterDismiss {
+                            val route =
+                                PlayerRoute(
+                                    subjectId = subject.id,
+                                    episodeId = episode.id,
+                                    streamUrl = "",
+                                    episodeName = episode.nameCn.ifBlank { episode.name },
+                                    subjectName = displayName,
+                                    episodeSort = episode.episodeNumber,
+                                    episodeType = episode.type,
+                                )
+                            onInternalPlayClick(route)
+                        }
+                    },
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
 
-            if (enabledRules.isNotEmpty()) {
-                // 渲染已启用的自定义播放规则
-                for (rule in enabledRules) {
+            // 2. 在线播放线路
+            if (onlineRules.isNotEmpty()) {
+                BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_online_routes))
+                for (rule in onlineRules) {
                     val epStr = if (episode.isMain) episode.formattedNumber else episode.episodeInt.toString()
                     val resolvedUrl =
                         remember(rule, displayName, epStr, subject.id, episode.id) {
@@ -310,34 +356,69 @@ fun SubjectSourcesBottomSheet(
                         },
                     )
                 }
-            } else if (onInternalPlayClick != null) {
-                // 无已启用自定义规则时的默认内置播放入口
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // 3. P2P 种子与字幕组资源（仅在存在启用规则或已加载出资源时渲染）
+            val shouldShowTorrentSection = torrentRules.isNotEmpty() || effectiveTorrentResources.isNotEmpty() || effectiveIsTorrentLoading
+            if (shouldShowTorrentSection) {
+                TorrentMediaResourcesSection(
+                    isTorrentLoading = effectiveIsTorrentLoading,
+                    torrentResources = effectiveTorrentResources,
+                    context = context,
+                    subject = subject,
+                    episode = episode,
+                    onInternalPlayClick = onInternalPlayClick,
+                    onDismissAndRun = runAfterDismiss,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+
+            // 4. 辅助工具与外部跳转
+            BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_external_nav))
+
+            if (onAiSourceSearch != null) {
                 BgmSourceActionCard(
-                    title = stringResource(R.string.feature_subject_source_internal_player),
-                    subtitle = stringResource(R.string.feature_subject_source_try_internal_play),
-                    iconVector = BgmIcons.PlayCircle,
+                    title = stringResource(R.string.feature_subject_source_ai_search_desc),
+                    subtitle = stringResource(R.string.feature_subject_source_ai_search_hint),
+                    iconVector = BgmIcons.AutoAwesome,
                     iconTint = MaterialTheme.colorScheme.primary,
-                    trailingContent = {
-                        Icon(
-                            imageVector = BgmIcons.KeyboardArrowRight,
-                            contentDescription = stringResource(R.string.feature_subject_source_start_play),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            modifier = Modifier.size(20.dp),
-                        )
-                    },
+                    onClick = { runAfterDismiss(onAiSourceSearch) },
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+            }
+
+            BgmSourceActionCard(
+                title = stringResource(R.string.feature_subject_source_bilibili),
+                subtitle = stringResource(R.string.feature_subject_source_bilibili_ep_desc),
+                iconVector = BgmIcons.Tv,
+                onClick = {
+                    runAfterDismiss {
+                        onOpenUrl(bilibiliTarget.deepLinkUri ?: bilibiliTarget.webFallbackUrl)
+                    }
+                },
+            )
+
+            for (target in externalPlayerTargets) {
+                val installed = target.packageName in installedExternalPlayerPackages
+                BgmSourceActionCard(
+                    title = stringResource(R.string.feature_subject_source_open_with_app, target.appName),
+                    subtitle =
+                        if (installed) {
+                            stringResource(R.string.feature_subject_source_open_with_app_hint, target.appName)
+                        } else {
+                            stringResource(R.string.feature_subject_source_app_not_detected, target.appName)
+                        },
+                    iconVector = BgmIcons.PlayCircle,
+                    iconTint =
+                        if (installed) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                     onClick = {
                         runAfterDismiss {
-                            val route =
-                                PlayerRoute(
-                                    subjectId = subject.id,
-                                    episodeId = episode.id,
-                                    streamUrl = "",
-                                    episodeName = episode.nameCn.ifBlank { episode.name },
-                                    subjectName = displayName,
-                                    episodeSort = episode.episodeNumber,
-                                    episodeType = episode.type,
-                                )
-                            onInternalPlayClick(route)
+                            context.launchExternalPlayer(target)
                         }
                     },
                 )
@@ -364,71 +445,6 @@ fun SubjectSourcesBottomSheet(
                     },
                 )
             }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // 分组 1.5：AI 找源——解析可播放地址，检索在助手会话中显式触发
-            if (onAiSourceSearch != null) {
-                BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_ai_search))
-                BgmSourceActionCard(
-                    title = stringResource(R.string.feature_subject_source_ai_search_desc),
-                    subtitle = stringResource(R.string.feature_subject_source_ai_search_hint),
-                    iconVector = BgmIcons.AutoAwesome,
-                    iconTint = MaterialTheme.colorScheme.primary,
-                    onClick = { runAfterDismiss(onAiSourceSearch) },
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-            }
-
-            // 分组 2：外部跳转
-            BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_external_nav))
-            BgmSourceActionCard(
-                title = stringResource(R.string.feature_subject_source_bilibili),
-                subtitle = stringResource(R.string.feature_subject_source_bilibili_ep_desc),
-                iconVector = BgmIcons.Tv,
-                onClick = {
-                    runAfterDismiss {
-                        onOpenUrl(bilibiliTarget.deepLinkUri ?: bilibiliTarget.webFallbackUrl)
-                    }
-                },
-            )
-
-            // 外部播放器（mpv / VLC）：仅流媒体直链可交给系统 ACTION_VIEW 唤起，
-            // 外部播放器无法携带 Referer 等自定义请求头，未安装时在副标题给出降级提示
-            for (target in externalPlayerTargets) {
-                val installed = target.packageName in installedExternalPlayerPackages
-                BgmSourceActionCard(
-                    title = stringResource(R.string.feature_subject_source_open_with_app, target.appName),
-                    subtitle =
-                        if (installed) {
-                            stringResource(R.string.feature_subject_source_open_with_app_hint, target.appName)
-                        } else {
-                            stringResource(R.string.feature_subject_source_app_not_detected, target.appName)
-                        },
-                    iconVector = BgmIcons.PlayCircle,
-                    iconTint =
-                        if (installed) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    onClick = {
-                        runAfterDismiss {
-                            context.launchExternalPlayer(target)
-                        }
-                    },
-                )
-            }
-
-            MikanResourcesSection(
-                isMikanLoading = isMikanLoading,
-                mikanResources = mikanResources,
-                context = context,
-                subject = subject,
-                episode = episode,
-                onInternalPlayClick = onInternalPlayClick,
-                onDismissAndRun = runAfterDismiss,
-            )
         }
     }
 }
@@ -498,9 +514,9 @@ fun isLikelyMediaStream(
 }
 
 @Composable
-private fun MikanResourcesSection(
-    isMikanLoading: Boolean,
-    mikanResources: List<MikanTorrentResource>,
+fun TorrentMediaResourcesSection(
+    isTorrentLoading: Boolean,
+    torrentResources: List<TorrentMediaResource>,
     context: Context,
     subject: Subject,
     episode: Episode?,
@@ -514,25 +530,25 @@ private fun MikanResourcesSection(
     var expandedIndex by remember { mutableStateOf<Int?>(-1) }
 
     Spacer(modifier = Modifier.height(4.dp))
-    BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_mikan_fansub_section))
-    if (isMikanLoading) {
+    BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_torrent_fansub_section))
+    if (isTorrentLoading) {
         Text(
-            text = stringResource(R.string.feature_subject_source_mikan_loading),
+            text = stringResource(R.string.feature_subject_source_torrent_loading),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
         )
-    } else if (mikanResources.isEmpty()) {
+    } else if (torrentResources.isEmpty()) {
         Text(
-            text = stringResource(R.string.feature_subject_source_mikan_empty),
+            text = stringResource(R.string.feature_subject_source_torrent_empty),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
         )
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            mikanResources.take(15).forEachIndexed { index, resource ->
-                MikanTorrentCard(
+            torrentResources.take(15).forEachIndexed { index, resource ->
+                TorrentMediaResourceCard(
                     resource = resource,
                     isExpanded = expandedIndex == index,
                     onToggleExpand = {
@@ -588,7 +604,7 @@ private fun MikanResourcesSection(
                                 Toast
                                     .makeText(
                                         context,
-                                        context.getString(R.string.feature_subject_source_mikan_stream_buffering),
+                                        context.getString(R.string.feature_subject_source_torrent_stream_buffering),
                                         Toast.LENGTH_SHORT,
                                     ).show()
                             }
@@ -629,7 +645,7 @@ private fun MikanResourcesSection(
                                         Toast
                                             .makeText(
                                                 context,
-                                                err.message ?: context.getString(R.string.feature_subject_source_mikan_stream_failed),
+                                                err.message ?: context.getString(R.string.feature_subject_source_torrent_stream_failed),
                                                 Toast.LENGTH_SHORT,
                                             ).show()
                                     }
@@ -658,7 +674,7 @@ private fun MikanResourcesSection(
                                 Toast
                                     .makeText(
                                         context,
-                                        context.getString(R.string.feature_subject_source_mikan_download_started),
+                                        context.getString(R.string.feature_subject_source_torrent_download_started),
                                         Toast.LENGTH_SHORT,
                                     ).show()
                             }
@@ -679,7 +695,7 @@ private fun MikanResourcesSection(
                                             Toast
                                                 .makeText(
                                                     context,
-                                                    context.getString(R.string.feature_subject_source_mikan_torrent_downloaded),
+                                                    context.getString(R.string.feature_subject_source_torrent_torrent_downloaded),
                                                     Toast.LENGTH_SHORT,
                                                 ).show()
                                             torrentIntentDispatcher.launchTorrentFile(path)
@@ -687,7 +703,7 @@ private fun MikanResourcesSection(
                                             Toast
                                                 .makeText(
                                                     context,
-                                                    context.getString(R.string.feature_subject_source_mikan_torrent_failed),
+                                                    context.getString(R.string.feature_subject_source_torrent_torrent_failed),
                                                     Toast.LENGTH_SHORT,
                                                 ).show()
                                         }
@@ -702,7 +718,7 @@ private fun MikanResourcesSection(
                         Toast
                             .makeText(
                                 context,
-                                context.getString(R.string.feature_subject_source_mikan_copied_magnet),
+                                context.getString(R.string.feature_subject_source_torrent_copied_magnet),
                                 Toast.LENGTH_SHORT,
                             ).show()
                     },
@@ -716,9 +732,31 @@ private fun MikanResourcesSection(
     }
 }
 
+/** 兼容旧调用的包装函数 */
 @Composable
-private fun MikanTorrentCard(
-    resource: MikanTorrentResource,
+private fun MikanResourcesSection(
+    isMikanLoading: Boolean,
+    mikanResources: List<MikanTorrentResource>,
+    context: Context,
+    subject: Subject,
+    episode: Episode?,
+    onInternalPlayClick: ((PlayerRoute) -> Unit)? = null,
+    onDismissAndRun: (() -> Unit) -> Unit,
+) {
+    TorrentMediaResourcesSection(
+        isTorrentLoading = isMikanLoading,
+        torrentResources = mikanResources,
+        context = context,
+        subject = subject,
+        episode = episode,
+        onInternalPlayClick = onInternalPlayClick,
+        onDismissAndRun = onDismissAndRun,
+    )
+}
+
+@Composable
+fun TorrentMediaResourceCard(
+    resource: TorrentMediaResource,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
     onStreamPlay: () -> Unit,
@@ -800,8 +838,8 @@ private fun MikanTorrentCard(
                     Spacer(modifier = Modifier.height(10.dp))
 
                     // 边下边播 (Hero 强调主操作)
-                    MikanActionButton(
-                        text = stringResource(R.string.feature_subject_source_mikan_stream_play),
+                    TorrentActionButton(
+                        text = stringResource(R.string.feature_subject_source_torrent_stream_play),
                         icon = BgmIcons.PlayCircle,
                         isPrimary = true,
                         onClick = onStreamPlay,
@@ -814,15 +852,15 @@ private fun MikanTorrentCard(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        MikanActionButton(
-                            text = stringResource(R.string.feature_subject_source_mikan_in_app_download),
+                        TorrentActionButton(
+                            text = stringResource(R.string.feature_subject_source_torrent_in_app_download),
                             icon = BgmIcons.Download,
                             isPrimary = false,
                             onClick = onInAppDownload,
                             modifier = Modifier.weight(1f),
                         )
-                        MikanActionButton(
-                            text = stringResource(R.string.feature_subject_source_mikan_external_app),
+                        TorrentActionButton(
+                            text = stringResource(R.string.feature_subject_source_torrent_external_app),
                             icon = BgmIcons.OpenInNew,
                             isPrimary = false,
                             onClick = onExternalLaunch,
@@ -834,15 +872,15 @@ private fun MikanTorrentCard(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        MikanActionButton(
-                            text = stringResource(R.string.feature_subject_source_mikan_download_torrent),
+                        TorrentActionButton(
+                            text = stringResource(R.string.feature_subject_source_torrent_download_torrent),
                             icon = BgmIcons.FolderOpen,
                             isPrimary = false,
                             onClick = onDownloadTorrent,
                             modifier = Modifier.weight(1f),
                         )
-                        MikanActionButton(
-                            text = stringResource(R.string.feature_subject_source_mikan_copy_magnet),
+                        TorrentActionButton(
+                            text = stringResource(R.string.feature_subject_source_torrent_copy_magnet),
                             icon = BgmIcons.ContentCopy,
                             isPrimary = false,
                             onClick = onCopyMagnet,
@@ -856,7 +894,7 @@ private fun MikanTorrentCard(
 }
 
 @Composable
-private fun MikanActionButton(
+private fun TorrentActionButton(
     text: String,
     icon: ImageVector,
     isPrimary: Boolean,
@@ -918,9 +956,9 @@ private suspend fun ensureTorrentPluginInstalled(
     val confirmed =
         overlayHostState.await(
             ConfirmDialogAction(
-                title = context.getString(R.string.feature_subject_source_mikan_plugin_dialog_title),
-                message = context.getString(R.string.feature_subject_source_mikan_plugin_dialog_message),
-                confirmText = context.getString(R.string.feature_subject_source_mikan_plugin_install_btn),
+                title = context.getString(R.string.feature_subject_source_torrent_plugin_dialog_title),
+                message = context.getString(R.string.feature_subject_source_torrent_plugin_dialog_message),
+                confirmText = context.getString(R.string.feature_subject_source_torrent_plugin_install_btn),
                 dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
                 isPrimary = true,
             ),
@@ -932,7 +970,7 @@ private suspend fun ensureTorrentPluginInstalled(
         Toast
             .makeText(
                 context,
-                context.getString(R.string.feature_subject_source_mikan_plugin_installing),
+                context.getString(R.string.feature_subject_source_torrent_plugin_installing),
                 Toast.LENGTH_SHORT,
             ).show()
     }
@@ -942,7 +980,7 @@ private suspend fun ensureTorrentPluginInstalled(
             Toast
                 .makeText(
                     context,
-                    context.getString(R.string.feature_subject_source_mikan_plugin_install_failed),
+                    context.getString(R.string.feature_subject_source_torrent_plugin_install_failed),
                     Toast.LENGTH_SHORT,
                 ).show()
         }
@@ -950,3 +988,4 @@ private suspend fun ensureTorrentPluginInstalled(
     }
     return true
 }
+

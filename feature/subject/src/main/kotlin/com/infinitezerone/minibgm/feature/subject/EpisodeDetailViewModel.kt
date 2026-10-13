@@ -12,14 +12,17 @@ import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.MikanRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
+import com.infinitezerone.minibgm.core.data.repository.TorrentFeedRepository
 import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeParser
 import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.MikanTorrentResource
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
+import com.infinitezerone.minibgm.core.model.TorrentMediaResource
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.R
@@ -68,6 +71,8 @@ data class EpisodeDetailUiState(
     val playbackRules: List<PlaybackSourceRule> = emptyList(),
     /** 近期播放失败归因：key = 播放地址，value = 可读原因（来源显示"打不开"） */
     val failedSourceReasons: Map<String, String> = emptyMap(),
+    val torrentResources: List<TorrentMediaResource> = emptyList(),
+    val isTorrentLoading: Boolean = false,
     val mikanResources: List<MikanTorrentResource> = emptyList(),
     val isMikanLoading: Boolean = false,
 )
@@ -137,6 +142,8 @@ private data class SessionData(
     val sortOrder: CommentSortOrder,
     val showLoginPromptDialog: Boolean,
     val actionError: String?,
+    val torrentResources: List<TorrentMediaResource> = emptyList(),
+    val isTorrentLoading: Boolean = false,
     val mikanResources: List<MikanTorrentResource> = emptyList(),
     val isMikanLoading: Boolean = false,
 )
@@ -169,6 +176,7 @@ class EpisodeDetailViewModel(
     private val settingsRepository: SettingsRepository? = null,
     private val failureStore: PlaybackFailureStore? = null,
     private val mikanRepository: MikanRepository? = null,
+    private val torrentFeedRepository: TorrentFeedRepository? = null,
     private val defaultDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     // ── 缓存预热基线：投影在各路仓库流未命中时的回落值，保证进页首帧即有数据 ──
@@ -244,6 +252,8 @@ class EpisodeDetailViewModel(
                     sortOrder = sortOrder,
                     showLoginPromptDialog = prompt,
                     actionError = error,
+                    torrentResources = mikan.first,
+                    isTorrentLoading = mikan.second,
                     mikanResources = mikan.first,
                     isMikanLoading = mikan.second,
                 )
@@ -267,6 +277,8 @@ class EpisodeDetailViewModel(
                 subject = identity.subject,
                 playbackRules = playback.playbackRules,
                 failedSourceReasons = playback.failedSourceReasons,
+                torrentResources = session.torrentResources,
+                isTorrentLoading = session.isTorrentLoading,
                 mikanResources = session.mikanResources,
                 isMikanLoading = session.isMikanLoading,
             )
@@ -375,15 +387,22 @@ class EpisodeDetailViewModel(
         }
     }
 
-    /** 检索蜜柑原画字幕组 BT 种子与磁力链接资源 */
-    fun loadMikanResources(episode: Episode? = null) {
+    /**
+     * 检索通用 P2P 种子与磁力链接资源。
+     * 遵循 100% 协议中立：仅当用户启用了 [PlaybackRuleKind.TORRENT] 规则时按需检索，
+     * 未启用或规则为空时零网络请求。
+     */
+    fun loadTorrentResources(episode: Episode? = null) {
         val targetEpisode = episode ?: uiState.value.episode
         val subject = uiState.value.subject ?: return
+        val activeTorrentRules = uiState.value.playbackRules.filter { it.isEnabled && it.kind == PlaybackRuleKind.TORRENT }
+        if (activeTorrentRules.isEmpty()) {
+            mikanState.value = Pair(emptyList(), false)
+            return
+        }
+
         val title = subject.displayName
         val primaryEpSort = targetEpisode?.let { if (it.sort > 0f) it.sort else it.episodeNumber }
-        val altEpSort = targetEpisode?.ep?.takeIf { it > 0f && it != primaryEpSort }
-        val isSplitContinuation =
-            targetEpisode != null && targetEpisode.isMain && targetEpisode.sort > targetEpisode.ep && targetEpisode.ep > 0f
         val altTitles =
             (
                 listOfNotNull(
@@ -391,33 +410,31 @@ class EpisodeDetailViewModel(
                     subject.nameCn.takeIf { it.isNotBlank() && it != title },
                 ) + subject.titleAliases
             ).distinct()
-        mikanState.value = mikanState.value.copy(second = true)
+
+        mikanState.value = Pair(mikanState.value.first, true)
         viewModelScope.launch {
-            val prequelIds =
-                if (isSplitContinuation) {
-                    (subjectRepository.fetchRelations(subjectId) as? AppResult.Success)
-                        ?.data
-                        .orEmpty()
-                        .filter { it.relation == "前传" }
-                        .map { it.id }
-                        .distinct()
-                } else {
-                    emptyList()
+            val allResources = mutableListOf<TorrentMediaResource>()
+            val feedRepo = torrentFeedRepository
+            if (feedRepo != null) {
+                for (rule in activeTorrentRules) {
+                    val res =
+                        feedRepo.getTorrentResources(
+                            title = title,
+                            episodeSort = primaryEpSort,
+                            alternativeTitles = altTitles,
+                            subjectId = subjectId,
+                            rule = rule,
+                        )
+                    allResources.addAll(res)
                 }
-            val resources =
-                mikanRepository
-                    ?.getTorrentResources(
-                        title = title,
-                        mikanId = null,
-                        episodeSort = primaryEpSort,
-                        alternativeTitles = altTitles,
-                        subjectId = subjectId,
-                        relatedSubjectIds = prequelIds,
-                        alternativeEpisodeSort = altEpSort,
-                    ).orEmpty()
-            mikanState.value = Pair(resources, false)
+            }
+            val deduplicated = allResources.distinctBy { it.infoHash.ifBlank { it.magnetUrl } }
+            mikanState.value = Pair(deduplicated, false)
         }
     }
+
+    /** 兼容旧调用的方法 */
+    fun loadMikanResources(episode: Episode? = null) = loadTorrentResources(episode)
 
     /** 为当前分集组装播放器路由（组装逻辑见 [buildEpisodePlayerRoute]） */
     fun buildPlayerRoute(episode: Episode): PlayerRoute =

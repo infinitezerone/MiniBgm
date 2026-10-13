@@ -388,7 +388,7 @@ fun SubjectDetailScreen(
 
     androidx.compose.runtime.LaunchedEffect(showSourcesBottomSheet, selectedEpisodeForSources) {
         if (showSourcesBottomSheet) {
-            viewModel.loadMikanResources(selectedEpisodeForSources)
+            viewModel.loadTorrentResources(selectedEpisodeForSources)
         }
     }
 
@@ -767,6 +767,8 @@ fun SubjectDetailScreen(
         onManageRules = onManageRules,
         playbackRules = uiState.playbackRules,
         failedSourceReasons = uiState.failedSourceReasons,
+        torrentResources = uiState.torrentResources,
+        isTorrentLoading = uiState.isTorrentLoading,
         mikanResources = uiState.mikanResources,
         isMikanLoading = uiState.isMikanLoading,
     )
