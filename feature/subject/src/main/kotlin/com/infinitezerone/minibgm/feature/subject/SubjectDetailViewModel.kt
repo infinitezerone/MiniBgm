@@ -20,13 +20,13 @@ import com.infinitezerone.minibgm.core.model.PersonDetail
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RelatedWork
-import com.infinitezerone.minibgm.core.model.TorrentMediaResource
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
 import com.infinitezerone.minibgm.core.model.SubjectTopic
+import com.infinitezerone.minibgm.core.model.TorrentMediaResource
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute

@@ -98,7 +98,7 @@ class TorrentFeedRepositoryImpl(
         return filtered.sortedWith(
             compareByDescending<TorrentMediaResource> { it.resolution == "1080P" }
                 .thenByDescending { it.resolution == "4K" }
-                .thenByDescending { it.contentLength }
+                .thenByDescending { it.contentLength },
         )
     }
 }

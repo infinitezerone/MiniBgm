@@ -725,7 +725,6 @@ fun TorrentMediaResourcesSection(
     }
 }
 
-
 @Composable
 fun TorrentMediaResourceCard(
     resource: TorrentMediaResource,
@@ -960,4 +959,3 @@ private suspend fun ensureTorrentPluginInstalled(
     }
     return true
 }
-

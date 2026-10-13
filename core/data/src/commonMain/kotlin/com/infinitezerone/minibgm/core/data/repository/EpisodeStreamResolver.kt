@@ -114,6 +114,7 @@ class EpisodeStreamResolver(
             val fastTrack = queryTitles.take(2)
             if (fastTrack.size == 2) {
                 onProgress(1, queryTitles.size)
+
                 data class FastHit(
                     val title: String,
                     val sources: List<PlayableSource>,
