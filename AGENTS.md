@@ -20,6 +20,8 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 ```
 
 - 目标按改动自动推断（工作副本 `@` → 最近提交 `@-`）；触及底层基础层（`:core:model/data/network/database/datastore`、`build-logic`、根配置）自动提升为全量。日常提交不跑 release；编码中间态秒级红线自检使用 `.\tools\quick-check.ps1`。
+- **本机减负开关（两处都显式、都不静默，且会在 jgate 输出里标注）**：① 纯 `*.md` / `docs/` / `.agents/` / `.github/` / LICENSE 改动会自动跳过装配门 `:app:assembleDebug`（架构红线照跑）——这是**显式白名单**而非"没落到模块目录就跳"，`native/`、`tools/`、`crates/` 等真能影响产物的路径仍照常跑装配门；② `bash tools/jgate --fast`（等价 `-Pminibgm.skipScreenshots=true`）跳过截图测试，实测省掉占单测耗时 **43%（59s/137s，仅 15 例）** 的 Roborazzi/Robolectric NATIVE 冷启动开销，但**本机绿 != CI 绿**，提交前必须复跑一次不带 `--fast` 的。
+- 单元测试配置（测试 JVM=21、`-Proborazzi.record`、`-Pminibgm.skipScreenshots`）的唯一真源是 `build-logic` 的 `configureAndroidUnitTests()`：带 Robolectric/Roborazzi 的模块直接调用，禁止再各自手抄 `tasks.withType<Test>` 块（历史上三份副本各自漂移）。
 - 素材体积门：图片单张 > 200 KB 或合计 > 1 MB 硬拦（必须压为 800px WebP）。jj 不运行 git 钩子，门禁由 jgate 兜底。
 - 模块依赖变化后跑 `./gradlew graphUpdate` 重建依赖图；Android Lint 增量基线在各模块 `lint-baseline.xml`。
 - Rust 原生库（`crates/minibgm-ech` + `crates/minibgm-torrent`）：构建解耦，统一由 `tools/build-native`（内置源码 SHA-256 指纹缓存）调用 `cargo-ndk` 产出 `.so`；Gradle 绝不跨界调度 Cargo / NDK，仅通过 `registerPrebuiltJniLibs` 挂载产物并在缺库时硬失败，禁止静默回退。目标 ABI 集合的唯一真源是 `native/abis.txt`——构建脚本、release workflow、`ProjectExtensions` 的产物校验与客户端 `SUPPORTED_ABIS`（`NativeAbiContractTest` 强制）全部与它对齐，改 ABI 只改这一处。`libminibgm_torrent.so` 在 release 中被 `configureOnDemandNativePackaging` 排除出 APK，改由 GitHub Release 资产按需动态下载装载。
@@ -65,3 +67,5 @@ AI 协同流水线（机械执行，严禁甩锅排错）：
 ## 发布
 
 tag 是版本唯一真源：推 `vX.Y.Z` 经 `-Pminibgm.versionName/-Pminibgm.versionCode` 注入构建；发布门禁在 release.yml（缺签名密钥直接失败）。勿为发版手改 build-logic 的默认版本——那是 v0.2.8 事故的根源。
+
+ABI 分包：debug/日常构建**只产 1 个 APK**（`app/build.gradle.kts` 的 `enableAbiSplits` 默认 `false`——开启时 debug 要打 2 个 ABI 包 + 1 个 universal 包，实测 363MB 写盘，是每次 `assembleDebug` 都在付的重复开销）。发版必须产出分 ABI + universal 产物，由 release.yml 传 `-Pminibgm.abiSplits=true` 开启，并有产物断言步骤判死；**勿把仓库默认值改回 `true`**。

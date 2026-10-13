@@ -83,8 +83,11 @@ description: >-
 * **提交前唯一门禁（物理锁死）**：
   ```powershell
   .\tools\jgate.ps1                # 完整门禁（素材体积、Spotless、红线、模块测试、XML校验、assembleDebug）
+  .\tools\jgate.ps1 --fast         # 跳过截图测试（本机减负；提交前必须复跑不带 --fast 的一次）
   ```
-- **UI 自查无需设备（Roborazzi + Robolectric）**：改 Compose 面板/控制层后写截图测试自查，输出到 `src/test/snapshots/images/` 再读图检查。要点：模块需接 roborazzi 四件套 + `testOptions.unitTests.isIncludeAndroidResources` + Test 任务 `roborazzi.test.record=true` 与 JDK 21 launcher（参照 `core/designsystem/build.gradle.kts` 与 `feature/subject/PlayerPanelsScreenshotTest.kt`）；`@Config(qualifiers = "w420dp-h1600dp")` 控制视口尺寸（默认窗口仅 320dp 宽，横排按钮会溢出"消失"）；深色背景模拟视频底，否则白色控制图标"隐形"；LazyColumn 跨分组 items key 必须唯一。
+  两处减负都是**自动或显式**且会在输出里标注，绝不静默：纯 `*.md`/`docs/`/`.agents/`/`.github/` 改动会自动跳过 `:app:assembleDebug`（架构红线照跑，装配门对这类改动零信息量；`native/`、`tools/` 仍跑），`--fast` 才会跳过截图测试。截图测试实测占单测耗时 43%（59s/137s，15 例），省的是 Robolectric NATIVE 图形栈每个类的冷启动。
+* **单测配置的单一真源**：带 Robolectric/Roborazzi 的模块一律调用 build-logic 的 `configureAndroidUnitTests()`（Java 21 launcher + `-Proborazzi.record=true` 录制 + `-Pminibgm.skipScreenshots` 跳过），禁止再各自手抄 `tasks.withType<Test>` 块——三份副本曾是各自漂移的温床。
+- **UI 自查无需设备（Roborazzi + Robolectric）**：改 Compose 面板/控制层后写截图测试自查，输出到 `src/test/snapshots/images/` 再读图检查。要点：模块需接 roborazzi 四件套 + `testOptions.unitTests.isIncludeAndroidResources` + Test 任务 `roborazzi.test.record=true` 与 JDK 21 launcher 由 `configureAndroidUnitTests()` 统一提供（模块侧只写这一行，实现在 `build-logic/convention/.../AndroidUnitTest.kt`；测试写法参照 `feature/subject/PlayerPanelsScreenshotTest.kt`）；`@Config(qualifiers = "w420dp-h1600dp")` 控制视口尺寸（默认窗口仅 320dp 宽，横排按钮会溢出"消失"）；深色背景模拟视频底，否则白色控制图标"隐形"；LazyColumn 跨分组 items key 必须唯一。
 
 ---
 
@@ -104,7 +107,9 @@ description: >-
    * 接口有没有端点、是否强制验证码、是否支持原生发帖（如 P-005 Turnstile 阻塞），必须查验 OpenAPI 或实测返回，不盲信模型搜索猜测。
 8. **整体覆盖式状态重置会静默吞掉引擎侧偏好**：
    * 用"整体覆盖"重置媒体态（`_state.value = PlaybackState(...)`）时，任何没被显式带过去的字段都等于被悄悄改回默认值。单集循环 `isLooping` 由引擎 `repeatMode` 持有、UI 只持状态副本，于是出现"面板显示已关闭、视频仍在循环"的幽灵态（开关要点两次才关得掉）。正确形态：重置只覆盖媒体相关字段，偏好类字段显式保留并与引擎保持一致——`PlayerController.setMedia` 里 `val looping = _state.value.isLooping`，且 URL 变化、URL 清空两条路径都要覆盖；新增"重置媒体态"的写法时先问一句"哪些字段是引擎/用户偏好、删了会变行为"。
-9. **续播点属于"分集"而不是"上一个地址"**：
+9. **AGP 的 `splits` 是全局 DSL，没有"按变体开关"的公开 API（9.3.2 的 `Splits` 只在 `com.android.build.api.dsl`）**：
+   * 所以"debug 单包 / release 分包"只能靠**项目属性 + 工作流保证**：`app/build.gradle.kts` 里 `val enableAbiSplits = (project.findProperty("minibgm.abiSplits") as? String)?.toBoolean() ?: false`，发版时由 `release.yml` 传 `-Pminibgm.abiSplits=true`。改这类"默认关、发版开"的开关时，**必须在发版链路补产物断言**（缺包直接 exit 1），否则一改就静默退化成 fat APK，下游的分 ABI 资产与 universal 别名全部变形。
+10. **续播点属于"分集"而不是"上一个地址"**：
    * 任何换集入口都必须显式按新分集查表下发 `resumePositionMs`。直链换集时新地址当下可知，当场查表；规则源换集时旧画面被故意保留、新地址要等嗅探结果，只能把查表推迟到解析成功那一刻一次性消费（`consumePendingResumePositionForNewEpisode`），而同分集内换线路必须沿用当前进度（不可消费）。只靠"`resumePositionMs == 0` 才回填"的仓库快照回填会漏掉换集路径，把上一集进度当成新分集续播点下发，导致新分集跳到旧分集时间轴、短集瞬间播完并连播空跳。新增换集入口时，同步补一条"换集后 `resumePositionMs` 等于新分集自己的记录"的回归单测。
 
 ---
