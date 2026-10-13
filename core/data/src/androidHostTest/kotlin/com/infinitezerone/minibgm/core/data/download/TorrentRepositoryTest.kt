@@ -344,4 +344,109 @@ class TorrentRepositoryTest {
                 tempRoot.deleteRecursively()
             }
         }
+
+    @Test
+    fun androidTorrentRepository_peerConnectTimeout_transitionsToErrorAndAdvancesQueue() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_torrent_timeout_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ): DownloadState {
+                            File(destinationPath).apply {
+                                parentFile?.mkdirs()
+                                writeBytes(ByteArray(64) { 0x22 })
+                            }
+                            return DownloadState.Completed(destinationPath, 64L)
+                        }
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val streamService =
+                    object : AssetDownloadService {
+                        override suspend fun streamAsset(
+                            url: String,
+                            rangeStart: Long,
+                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                        ): Long = 0L
+                    }
+
+                val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
+                val nativeMkvFile = File(downloadDir, "[BlackClover] 171.mkv")
+
+                val streamEngine =
+                    FakeTorrentStreamEngine(initialInstalled = true).apply {
+                        mockTargetFilePath = nativeMkvFile.absolutePath
+                    }
+
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                        peerConnectTimeoutMs = 5_000L,
+                    )
+
+                val deadTaskId =
+                    repo.startDownload(
+                        title = "[BlackClover] 171",
+                        magnetUrl = "magnet:?xt=urn:btih:032a25341d0df0b2263419fc18c975acaf8eb8e6",
+                        torrentUrl = "https://mikanani.me/Download/171.torrent",
+                        totalBytes = 750_000_000L,
+                    )
+                val nextTaskId =
+                    repo.startDownload(
+                        title = "[BlackClover] 172",
+                        magnetUrl = "magnet:?xt=urn:btih:1111111111111111111111111111111111111111",
+                        torrentUrl = null,
+                        totalBytes = 750_000_000L,
+                    )
+
+                assertEquals(
+                    TorrentTaskStatus.DOWNLOADING,
+                    repo.tasks.value
+                        .single { it.id == deadTaskId }
+                        .status,
+                )
+                assertEquals(
+                    TorrentTaskStatus.QUEUED,
+                    repo.tasks.value
+                        .single { it.id == nextTaskId }
+                        .status,
+                )
+
+                // Advance virtual time past peerConnectTimeoutMs (5_000L) while 0 peers & 0 speed
+                testScheduler.advanceTimeBy(5_100L)
+                testScheduler.runCurrent()
+
+                val failedTask = repo.tasks.value.single { it.id == deadTaskId }
+                assertEquals(TorrentTaskStatus.ERROR, failedTask.status)
+                assertEquals(AndroidTorrentRepository.PEER_CONNECT_TIMEOUT_MESSAGE, failedTask.errorMessage)
+
+                // Next queued task automatically starts downloading
+                val dequeuedTask = repo.tasks.value.single { it.id == nextTaskId }
+                assertEquals(TorrentTaskStatus.DOWNLOADING, dequeuedTask.status)
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
 }

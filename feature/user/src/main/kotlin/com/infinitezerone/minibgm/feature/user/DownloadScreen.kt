@@ -56,7 +56,22 @@ fun DownloadScreen(
     viewModel: DownloadViewModel = koinViewModel(),
 ) {
     val downloadGroups by viewModel.downloadGroups.collectAsStateWithLifecycle()
+    DownloadScreenContent(
+        downloadGroups = downloadGroups,
+        onBackClick = onBackClick,
+        onSubjectClick = onSubjectClick,
+        modifier = modifier,
+    )
+}
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun DownloadScreenContent(
+    downloadGroups: List<SubjectDownloadGroup>,
+    onBackClick: () -> Unit,
+    onSubjectClick: (Long, String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Scaffold(
         topBar = {
             BgmTopAppBar(
@@ -152,13 +167,29 @@ private fun DownloadSummaryBanner(
     groups: List<SubjectDownloadGroup>,
     modifier: Modifier = Modifier,
 ) {
-    val activeCount = groups.sumOf { it.downloadingCount }
+    val activeCount = groups.sumOf { it.downloadingCount + it.resolvingCount }
+    val errorCount = groups.sumOf { it.errorCount }
+    val pausedCount = groups.sumOf { it.pausedCount }
     val totalSpeed = groups.sumOf { it.totalSpeedBytesPerSec }
     val formattedSpeed =
         when {
             totalSpeed <= 0L -> "0 KB/s"
             totalSpeed >= 1024 * 1024 -> "%.1f MB/s".format(totalSpeed / (1024.0 * 1024.0))
             else -> "%d KB/s".format(totalSpeed / 1024)
+        }
+
+    val summaryText =
+        when {
+            activeCount > 0 -> "正在下载 $activeCount 集 · 总速度 $formattedSpeed"
+            errorCount > 0 -> stringResource(R.string.feature_user_downloads_summary_error, errorCount)
+            pausedCount > 0 -> stringResource(R.string.feature_user_downloads_summary_paused, pausedCount)
+            else -> "全部任务已就绪"
+        }
+    val summaryColor =
+        when {
+            activeCount > 0 -> MaterialTheme.colorScheme.primary
+            errorCount > 0 -> MaterialTheme.colorScheme.error
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
         }
 
     Surface(
@@ -171,7 +202,7 @@ private fun DownloadSummaryBanner(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "共 ${groups.size} 部番剧离线合集",
                     style = MaterialTheme.typography.titleSmall,
@@ -179,12 +210,15 @@ private fun DownloadSummaryBanner(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = if (activeCount > 0) "正在下载 $activeCount 集 · 总速度 $formattedSpeed" else "全部任务已就绪",
+                    text = summaryText,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (activeCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = summaryColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             if (activeCount > 0) {
+                Spacer(modifier = Modifier.width(8.dp))
                 Surface(
                     shape = BgmShapes.small,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
@@ -271,44 +305,103 @@ private fun SubjectDownloadCard(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    if (group.downloadingCount > 0) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
+                    when {
+                        group.downloadingCount > 0 -> {
+                            val isConnectingPeers =
+                                group.totalSpeedBytesPerSec <= 0L &&
+                                    group.tasks.none {
+                                        it.status == com.infinitezerone.minibgm.core.model.TorrentTaskStatus.DOWNLOADING &&
+                                            it.connectedPeers > 0
+                                    }
+                            val statusLabel =
+                                if (isConnectingPeers) {
+                                    "正在下载 ${group.downloadingCount} 集 · ${stringResource(
+                                        R.string.feature_user_downloads_status_connecting_peers,
+                                    )}"
+                                } else {
+                                    "正在下载 ${group.downloadingCount} 集 · ${group.formattedTotalSpeed}"
+                                }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    text = statusLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "${group.percentage}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(3.dp))
+                            LinearProgressIndicator(
+                                progress = { group.progress },
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(BgmShapes.small),
+                            )
+                        }
+
+                        group.resolvingCount > 0 -> {
                             Text(
-                                text = "正在下载 ${group.downloadingCount} 集 · ${group.formattedTotalSpeed}",
+                                text = stringResource(R.string.feature_user_downloads_status_resolving),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary,
                             )
-                            Text(
-                                text = "${group.percentage}%",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
+                            Spacer(modifier = Modifier.height(3.dp))
+                            LinearProgressIndicator(
+                                progress = { group.progress },
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(BgmShapes.small),
                             )
                         }
-                        Spacer(modifier = Modifier.height(3.dp))
-                        LinearProgressIndicator(
-                            progress = { group.progress },
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(4.dp)
-                                    .clip(BgmShapes.small),
-                        )
-                    } else {
-                        Text(
-                            text =
-                                if (group.activeTaskCount > 0) {
-                                    stringResource(R.string.feature_user_downloads_status_queued)
-                                } else {
-                                    stringResource(R.string.feature_user_downloads_status_paused)
-                                },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+
+                        group.queuedCount > 0 -> {
+                            Text(
+                                text = stringResource(R.string.feature_user_downloads_status_queued),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+
+                        group.errorCount > 0 -> {
+                            Text(
+                                text =
+                                    stringResource(
+                                        R.string.feature_user_downloads_group_error_format,
+                                        group.errorCount,
+                                        group.firstErrorMessage ?: stringResource(R.string.feature_user_downloads_status_error),
+                                    ),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.error,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+
+                        else -> {
+                            Text(
+                                text = stringResource(R.string.feature_user_downloads_status_paused),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

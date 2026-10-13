@@ -1050,6 +1050,11 @@ class ArchitectureRulesTest {
                 "AndroidTorrentRepository.kt 缺少串行队列调度 scheduleNextIfIdle 或会话保护 setDownloadSessionProtected，多任务或退出播放器将互相掐断",
             )
         }
+        if (!repoContent.contains("peerConnectTimeoutMs") || !repoContent.contains("PEER_CONNECT_TIMEOUT_MESSAGE")) {
+            violations.add(
+                "AndroidTorrentRepository.kt 缺少做种节点连接超时熔断守卫 peerConnectTimeoutMs / PEER_CONNECT_TIMEOUT_MESSAGE，死种或 UDP NAT 阻断将永久卡死串行队列",
+            )
+        }
 
         val streamEngineFile =
             File(

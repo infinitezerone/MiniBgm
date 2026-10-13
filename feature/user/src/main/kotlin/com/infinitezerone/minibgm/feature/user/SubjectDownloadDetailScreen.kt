@@ -67,13 +67,54 @@ fun SubjectDownloadDetailScreen(
 ) {
     val downloadGroups by viewModel.downloadGroups.collectAsStateWithLifecycle()
     val group = downloadGroups.firstOrNull { it.subjectId == subjectId }
+    SubjectDownloadDetailContent(
+        subjectId = subjectId,
+        subjectName = subjectName,
+        group = group,
+        onBackClick = onBackClick,
+        onPlayEpisode = onPlayEpisode,
+        onPauseTask = viewModel::pauseTask,
+        onResumeTask = viewModel::resumeTask,
+        onDeleteTask = viewModel::deleteTask,
+        onPauseAll = { viewModel.pauseAllForSubject(subjectId) },
+        onResumeAll = { viewModel.resumeAllForSubject(subjectId) },
+        onDeleteAll = { viewModel.deleteAllForSubject(subjectId) },
+        modifier = modifier,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SubjectDownloadDetailContent(
+    subjectId: Long,
+    subjectName: String,
+    group: com.infinitezerone.minibgm.core.model.SubjectDownloadGroup?,
+    onBackClick: () -> Unit,
+    onPlayEpisode: (PlayerRoute) -> Unit,
+    onPauseTask: (String) -> Unit,
+    onResumeTask: (String) -> Unit,
+    onDeleteTask: (String) -> Unit,
+    onPauseAll: () -> Unit,
+    onResumeAll: () -> Unit,
+    onDeleteAll: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val tasks = group?.sortedTasks ?: emptyList()
     val overlayHostState = rememberOverlayHostState()
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    val hasDownloading = tasks.any { it.status == TorrentTaskStatus.DOWNLOADING }
-    val hasPaused = tasks.any { it.status == TorrentTaskStatus.PAUSED }
+    val hasActive =
+        tasks.any {
+            it.status == TorrentTaskStatus.DOWNLOADING ||
+                it.status == TorrentTaskStatus.RESOLVING ||
+                it.status == TorrentTaskStatus.QUEUED
+        }
+    val hasResumable =
+        tasks.any {
+            it.status == TorrentTaskStatus.PAUSED ||
+                it.status == TorrentTaskStatus.ERROR
+        }
 
     Scaffold(
         topBar = {
@@ -94,15 +135,15 @@ fun SubjectDownloadDetailScreen(
                     }
                 },
                 actions = {
-                    if (hasDownloading) {
-                        IconButton(onClick = { viewModel.pauseAllForSubject(subjectId) }) {
+                    if (hasActive) {
+                        IconButton(onClick = onPauseAll) {
                             Icon(
                                 imageVector = BgmIcons.Pause,
                                 contentDescription = stringResource(R.string.feature_user_downloads_all_pause),
                             )
                         }
-                    } else if (hasPaused) {
-                        IconButton(onClick = { viewModel.resumeAllForSubject(subjectId) }) {
+                    } else if (hasResumable) {
+                        IconButton(onClick = onResumeAll) {
                             Icon(
                                 imageVector = BgmIcons.PlayArrow,
                                 contentDescription = stringResource(R.string.feature_user_downloads_all_resume),
@@ -129,7 +170,7 @@ fun SubjectDownloadDetailScreen(
                                             ),
                                         )
                                     if (confirmed) {
-                                        viewModel.deleteAllForSubject(subjectId)
+                                        onDeleteAll()
                                         onBackClick()
                                     }
                                 }
@@ -192,18 +233,18 @@ fun SubjectDownloadDetailScreen(
                             if (playUrl.isNotBlank()) {
                                 val route =
                                     PlayerRoute(
-                                        subjectId = task.subjectId,
+                                        subjectId = task.subjectId.takeIf { it > 0L } ?: subjectId,
                                         episodeId = task.episodeId,
                                         streamUrl = playUrl,
                                         episodeName = task.episodeName.ifBlank { task.title },
-                                        subjectName = task.subjectName,
+                                        subjectName = task.subjectName.ifBlank { subjectName },
                                         episodeSort = task.episodeSort,
                                     )
                                 onPlayEpisode(route)
                             }
                         },
-                        onPause = { viewModel.pauseTask(task.id) },
-                        onResume = { viewModel.resumeTask(task.id) },
+                        onPause = { onPauseTask(task.id) },
+                        onResume = { onResumeTask(task.id) },
                         onDelete = {
                             coroutineScope.launch {
                                 val confirmed =
@@ -221,7 +262,7 @@ fun SubjectDownloadDetailScreen(
                                         ),
                                     )
                                 if (confirmed) {
-                                    viewModel.deleteTask(task.id)
+                                    onDeleteTask(task.id)
                                 }
                             }
                         },
@@ -279,7 +320,7 @@ private fun SubjectHeaderCard(
 }
 
 @Composable
-private fun EpisodeDownloadCard(
+internal fun EpisodeDownloadCard(
     task: TorrentTask,
     onPlay: () -> Unit,
     onPause: () -> Unit,
@@ -288,7 +329,12 @@ private fun EpisodeDownloadCard(
     modifier: Modifier = Modifier,
 ) {
     val isCompleted = task.status == TorrentTaskStatus.COMPLETED
-    val isPlayable = isCompleted || (task.status == TorrentTaskStatus.DOWNLOADING && task.streamUrl.isNotBlank())
+    val isError = task.status == TorrentTaskStatus.ERROR
+    val canStreamWhileDownloading =
+        task.status == TorrentTaskStatus.DOWNLOADING &&
+            task.streamUrl.isNotBlank() &&
+            (task.downloadedBytes > 0L || task.connectedPeers > 0)
+    val isPlayable = isCompleted || canStreamWhileDownloading
 
     Surface(
         onClick =
@@ -308,10 +354,10 @@ private fun EpisodeDownloadCard(
             Surface(
                 shape = BgmShapes.small,
                 color =
-                    if (isCompleted) {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerHighest
+                    when {
+                        isCompleted -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        isError -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                        else -> MaterialTheme.colorScheme.surfaceContainerHighest
                     },
             ) {
                 Text(
@@ -324,10 +370,10 @@ private fun EpisodeDownloadCard(
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color =
-                        if (isCompleted) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                        when {
+                            isCompleted -> MaterialTheme.colorScheme.primary
+                            isError -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
                         },
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                 )
@@ -359,7 +405,7 @@ private fun EpisodeDownloadCard(
                                 modifier = Modifier.size(13.dp),
                             )
                             Text(
-                                text = "已完成 · ${task.formattedProgress}",
+                                text = stringResource(R.string.feature_user_downloads_status_completed_detail, task.formattedProgress),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary,
                             )
@@ -367,25 +413,23 @@ private fun EpisodeDownloadCard(
                     }
 
                     TorrentTaskStatus.DOWNLOADING -> {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            val peerSuffix = if (task.connectedPeers > 0) " · ${task.connectedPeers} 节点" else ""
-                            Text(
-                                text = "${task.percentage}% · ${task.formattedDownloadSpeed}$peerSuffix",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Text(
-                                text = task.formattedProgress,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(3.dp))
+                        val isConnectingPeers = task.connectedPeers == 0 && task.downloadSpeedBytesPerSec <= 0L
+                        val statusText =
+                            if (isConnectingPeers) {
+                                "${task.percentage}% · ${stringResource(R.string.feature_user_downloads_status_connecting_peers)}"
+                            } else {
+                                val peerSuffix = if (task.connectedPeers > 0) " · ${task.connectedPeers} 节点" else ""
+                                "${task.percentage}% · ${task.formattedDownloadSpeed}$peerSuffix"
+                            }
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
                         LinearProgressIndicator(
                             progress = { task.progress },
                             modifier =
@@ -394,11 +438,17 @@ private fun EpisodeDownloadCard(
                                     .height(4.dp)
                                     .clip(BgmShapes.small),
                         )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = task.formattedProgress,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
 
                     TorrentTaskStatus.PAUSED -> {
                         Text(
-                            text = "已暂停 · ${task.formattedProgress}",
+                            text = stringResource(R.string.feature_user_downloads_status_paused_detail, task.formattedProgress),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -408,13 +458,33 @@ private fun EpisodeDownloadCard(
                         Text(
                             text = stringResource(R.string.feature_user_downloads_status_resolving),
                             style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { task.progress },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .clip(BgmShapes.small),
+                        )
+                        if (task.totalBytes > 0L) {
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = task.formattedProgress,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
 
                     TorrentTaskStatus.QUEUED -> {
                         Text(
-                            text = stringResource(R.string.feature_user_downloads_status_queued),
+                            text = stringResource(R.string.feature_user_downloads_status_queued_detail, task.formattedProgress),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -424,10 +494,19 @@ private fun EpisodeDownloadCard(
                         Text(
                             text = task.errorMessage ?: stringResource(R.string.feature_user_downloads_status_error),
                             style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.error,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        if (task.downloadedBytes > 0L || task.totalBytes > 0L) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = task.formattedProgress,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -450,7 +529,7 @@ private fun EpisodeDownloadCard(
                     }
 
                     TorrentTaskStatus.DOWNLOADING -> {
-                        if (task.streamUrl.isNotBlank()) {
+                        if (canStreamWhileDownloading) {
                             FilledTonalIconButton(
                                 onClick = onPlay,
                                 modifier = Modifier.size(36.dp),
@@ -475,6 +554,21 @@ private fun EpisodeDownloadCard(
                         }
                     }
 
+                    TorrentTaskStatus.RESOLVING,
+                    TorrentTaskStatus.QUEUED,
+                    -> {
+                        IconButton(
+                            onClick = onPause,
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.Pause,
+                                contentDescription = stringResource(R.string.feature_user_downloads_status_paused),
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+
                     TorrentTaskStatus.PAUSED,
                     TorrentTaskStatus.ERROR,
                     -> {
@@ -484,13 +578,22 @@ private fun EpisodeDownloadCard(
                         ) {
                             Icon(
                                 imageVector = BgmIcons.PlayArrow,
-                                contentDescription = stringResource(R.string.feature_user_downloads_all_resume),
+                                contentDescription =
+                                    if (isError) {
+                                        stringResource(R.string.feature_user_downloads_action_retry)
+                                    } else {
+                                        stringResource(R.string.feature_user_downloads_all_resume)
+                                    },
+                                tint =
+                                    if (isError) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
                                 modifier = Modifier.size(20.dp),
                             )
                         }
                     }
-
-                    else -> {}
                 }
 
                 IconButton(

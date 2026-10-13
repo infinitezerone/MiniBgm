@@ -113,6 +113,15 @@ data class SubjectDownloadGroup(
     val totalTasks: Int get() = tasks.size
     val completedCount: Int get() = tasks.count { it.isCompleted }
     val downloadingCount: Int get() = tasks.count { it.status == TorrentTaskStatus.DOWNLOADING }
+    val resolvingCount: Int get() = tasks.count { it.status == TorrentTaskStatus.RESOLVING }
+    val queuedCount: Int get() = tasks.count { it.status == TorrentTaskStatus.QUEUED }
+    val pausedCount: Int get() = tasks.count { it.status == TorrentTaskStatus.PAUSED }
+    val errorCount: Int get() = tasks.count { it.status == TorrentTaskStatus.ERROR }
+    val firstErrorMessage: String?
+        get() =
+            tasks
+                .firstOrNull { it.status == TorrentTaskStatus.ERROR && !it.errorMessage.isNullOrBlank() }
+                ?.errorMessage
     val isAllCompleted: Boolean get() = tasks.isNotEmpty() && tasks.all { it.isCompleted }
     val totalBytes: Long get() = tasks.sumOf { it.totalBytes }
     val downloadedBytes: Long get() = tasks.sumOf { it.downloadedBytes }

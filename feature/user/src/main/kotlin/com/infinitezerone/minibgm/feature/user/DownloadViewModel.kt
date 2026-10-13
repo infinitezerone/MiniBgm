@@ -68,14 +68,23 @@ class DownloadViewModel(
 
     fun pauseAllForSubject(subjectId: Long) {
         viewModelScope.launch {
-            val tasks = torrentRepository.tasks.value.filter { it.subjectId == subjectId && it.status == TorrentTaskStatus.DOWNLOADING }
-            tasks.forEach { torrentRepository.pauseDownload(it.id) }
+            val subjectTasks = torrentRepository.tasks.value.filter { it.subjectId == subjectId }
+            val queued = subjectTasks.filter { it.status == TorrentTaskStatus.QUEUED }
+            val active =
+                subjectTasks.filter {
+                    it.status == TorrentTaskStatus.DOWNLOADING || it.status == TorrentTaskStatus.RESOLVING
+                }
+            (queued + active).forEach { torrentRepository.pauseDownload(it.id) }
         }
     }
 
     fun resumeAllForSubject(subjectId: Long) {
         viewModelScope.launch {
-            val tasks = torrentRepository.tasks.value.filter { it.subjectId == subjectId && it.status == TorrentTaskStatus.PAUSED }
+            val tasks =
+                torrentRepository.tasks.value.filter {
+                    it.subjectId == subjectId &&
+                        (it.status == TorrentTaskStatus.PAUSED || it.status == TorrentTaskStatus.ERROR)
+                }
             tasks.forEach { torrentRepository.resumeDownload(it.id) }
         }
     }

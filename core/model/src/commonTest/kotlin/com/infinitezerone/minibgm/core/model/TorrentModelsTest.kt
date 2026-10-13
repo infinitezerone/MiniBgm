@@ -77,4 +77,63 @@ class TorrentModelsTest {
         assertEquals("http://127.0.0.1:8899/stream", ready.streamUrl)
         assertEquals(5, ready.connectedPeers)
     }
+
+    @Test
+    fun subjectDownloadGroup_statusCountsAndErrorSummary_aggregatesCorrectly() {
+        val group =
+            SubjectDownloadGroup(
+                subjectId = 100L,
+                subjectName = "黑色五叶草",
+                subjectCoverUrl = "",
+                tasks =
+                    listOf(
+                        TorrentTask(
+                            id = "1",
+                            title = "EP 01",
+                            magnetUrl = "magnet:?xt=urn:btih:01",
+                            status = TorrentTaskStatus.COMPLETED,
+                            episodeSort = 1f,
+                        ),
+                        TorrentTask(
+                            id = "2",
+                            title = "EP 02",
+                            magnetUrl = "magnet:?xt=urn:btih:02",
+                            status = TorrentTaskStatus.RESOLVING,
+                            episodeSort = 2f,
+                        ),
+                        TorrentTask(
+                            id = "3",
+                            title = "EP 03",
+                            magnetUrl = "magnet:?xt=urn:btih:03",
+                            status = TorrentTaskStatus.ERROR,
+                            errorMessage = "连接做种节点超时（暂无可用源），请点击重试或更换其他资源",
+                            episodeSort = 3f,
+                        ),
+                        TorrentTask(
+                            id = "4",
+                            title = "EP 04",
+                            magnetUrl = "magnet:?xt=urn:btih:04",
+                            status = TorrentTaskStatus.QUEUED,
+                            episodeSort = 4f,
+                        ),
+                        TorrentTask(
+                            id = "5",
+                            title = "EP 05",
+                            magnetUrl = "magnet:?xt=urn:btih:05",
+                            status = TorrentTaskStatus.PAUSED,
+                            episodeSort = 5f,
+                        ),
+                    ),
+            )
+
+        assertEquals(5, group.totalTasks)
+        assertEquals(1, group.completedCount)
+        assertEquals(0, group.downloadingCount)
+        assertEquals(1, group.resolvingCount)
+        assertEquals(1, group.queuedCount)
+        assertEquals(1, group.pausedCount)
+        assertEquals(1, group.errorCount)
+        assertEquals(2, group.activeTaskCount)
+        assertEquals("连接做种节点超时（暂无可用源），请点击重试或更换其他资源", group.firstErrorMessage)
+    }
 }

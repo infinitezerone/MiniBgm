@@ -18,6 +18,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,6 +41,7 @@ class AndroidTorrentRepository(
     private val streamEngine: TorrentStreamEngine,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val startForegroundService: (Context, String, String) -> Unit = TorrentDownloadService::start,
+    private val peerConnectTimeoutMs: Long = DEFAULT_PEER_CONNECT_TIMEOUT_MS,
 ) : TorrentRepository {
     private val logger = bgmLogger("Bgm/TorrentRepository")
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -143,11 +147,17 @@ class AndroidTorrentRepository(
         val task = _tasks.value.firstOrNull { it.id == taskId } ?: return
         logger.i { "启动任务管线: $taskId - ${task.title}" }
 
-        // 1. 如果有种子直链，优先在后台下载种子文件
+        // 1. 进入元数据解析阶段（下载 .torrent 文件或等待磁力 DHT/Tracker 解析）
+        updateTask(taskId) {
+            it.copy(
+                status = TorrentTaskStatus.RESOLVING,
+                errorMessage = null,
+            )
+        }
+
         var localTorrentPath: String? = task.torrentFilePath
         val torrentUrl = task.torrentUrl
         if (localTorrentPath.isNullOrBlank() && !torrentUrl.isNullOrBlank()) {
-            updateTask(taskId) { it.copy(status = TorrentTaskStatus.RESOLVING) }
             val downloadResult = downloadTorrentFile(torrentUrl, task.title)
             if (downloadResult.isSuccess) {
                 localTorrentPath = downloadResult.getOrNull()
@@ -157,13 +167,6 @@ class AndroidTorrentRepository(
 
         // 2. 启动流媒体 P2P 引擎，将目标目录直接指向持久化下载目录（使 librqbit 直接落盘真实文件，杜绝二次 HTTP 拷贝）
         val downloadDir = resolveDownloadDir()
-        updateTask(taskId) {
-            it.copy(
-                status = TorrentTaskStatus.DOWNLOADING,
-                errorMessage = null,
-            )
-        }
-
         streamEngine.setDownloadSessionProtected(true)
         val streamResult =
             streamEngine.startStream(
@@ -182,6 +185,7 @@ class AndroidTorrentRepository(
                         status = TorrentTaskStatus.ERROR,
                         errorMessage = error.message ?: "启动 P2P 引擎失败",
                         downloadSpeedBytesPerSec = 0L,
+                        connectedPeers = 0,
                         streamUrl = "",
                     )
                 }
@@ -191,6 +195,8 @@ class AndroidTorrentRepository(
         val nativeTargetPath = streamEngine.getActiveTargetFilePath()?.takeIf { it.isNotBlank() }
         updateTask(taskId) {
             it.copy(
+                status = TorrentTaskStatus.DOWNLOADING,
+                errorMessage = null,
                 streamUrl = streamUrl,
                 savePath = nativeTargetPath ?: it.savePath,
             )
@@ -210,46 +216,84 @@ class AndroidTorrentRepository(
         taskId: String,
         targetFile: File,
     ) {
+        var timedOut = false
         try {
-            streamEngine.streamState.first { state ->
-                when (state) {
-                    is TorrentStreamState.Ready -> {
-                        if (state.totalBytes > 0L || state.connectedPeers > 0) {
-                            updateTask(taskId) {
-                                if (it.status == TorrentTaskStatus.DOWNLOADING) {
-                                    it.copy(
-                                        totalBytes = if (state.totalBytes > 0L) state.totalBytes else it.totalBytes,
-                                        connectedPeers = state.connectedPeers,
-                                    )
-                                } else {
-                                    it
+            coroutineScope {
+                val monitorScope = this
+                var timeoutJob: Job? = null
+                var lastBufferedBytes = _tasks.value.firstOrNull { it.id == taskId }?.downloadedBytes ?: 0L
+
+                fun updateStallWatchdog(isActiveProgress: Boolean) {
+                    if (isActiveProgress) {
+                        timeoutJob?.cancel()
+                        timeoutJob = null
+                    } else if (peerConnectTimeoutMs > 0L && timeoutJob?.isActive != true) {
+                        timeoutJob =
+                            launch {
+                                delay(peerConnectTimeoutMs)
+                                timedOut = true
+                                monitorScope.cancel(CancellationException(PEER_CONNECT_TIMEOUT_MESSAGE))
+                            }
+                    }
+                }
+
+                updateStallWatchdog(isActiveProgress = false)
+                try {
+                    streamEngine.streamState.first { state ->
+                        when (state) {
+                            is TorrentStreamState.Ready -> {
+                                updateStallWatchdog(isActiveProgress = state.connectedPeers > 0)
+                                if (state.totalBytes > 0L || state.connectedPeers > 0) {
+                                    updateTask(taskId) {
+                                        if (it.status == TorrentTaskStatus.DOWNLOADING) {
+                                            it.copy(
+                                                totalBytes = if (state.totalBytes > 0L) state.totalBytes else it.totalBytes,
+                                                connectedPeers = state.connectedPeers,
+                                            )
+                                        } else {
+                                            it
+                                        }
+                                    }
                                 }
+                                false
                             }
-                        }
-                        false
-                    }
 
-                    is TorrentStreamState.Buffering -> {
-                        updateTask(taskId) {
-                            if (it.status == TorrentTaskStatus.DOWNLOADING) {
-                                it.copy(
-                                    downloadedBytes = maxOf(it.downloadedBytes, state.bufferedBytes),
-                                    totalBytes = if (state.targetBytes > 0L) state.targetBytes else it.totalBytes,
-                                    downloadSpeedBytesPerSec = state.speedBytesPerSec,
-                                    connectedPeers = state.connectedPeers,
-                                )
-                            } else {
-                                it
+                            is TorrentStreamState.Buffering -> {
+                                val bytesAdvanced = state.bufferedBytes > lastBufferedBytes
+                                if (bytesAdvanced) {
+                                    lastBufferedBytes = state.bufferedBytes
+                                }
+                                val isCompleted = state.targetBytes > 0L && state.bufferedBytes >= state.targetBytes
+                                val hasActivity =
+                                    state.connectedPeers > 0 ||
+                                        state.speedBytesPerSec > 0L ||
+                                        bytesAdvanced ||
+                                        isCompleted
+                                updateStallWatchdog(isActiveProgress = hasActivity)
+                                updateTask(taskId) {
+                                    if (it.status == TorrentTaskStatus.DOWNLOADING) {
+                                        it.copy(
+                                            downloadedBytes = maxOf(it.downloadedBytes, state.bufferedBytes),
+                                            totalBytes = if (state.targetBytes > 0L) state.targetBytes else it.totalBytes,
+                                            downloadSpeedBytesPerSec = state.speedBytesPerSec,
+                                            connectedPeers = state.connectedPeers,
+                                        )
+                                    } else {
+                                        it
+                                    }
+                                }
+                                isCompleted
                             }
+
+                            is TorrentStreamState.Error -> {
+                                throw IOException(state.message)
+                            }
+
+                            else -> false
                         }
-                        state.targetBytes > 0L && state.bufferedBytes >= state.targetBytes
                     }
-
-                    is TorrentStreamState.Error -> {
-                        throw IOException(state.message)
-                    }
-
-                    else -> false
+                } finally {
+                    timeoutJob?.cancel()
                 }
             }
 
@@ -274,8 +318,21 @@ class AndroidTorrentRepository(
             }
             logger.i { "任务 $taskId 原生引擎直接落盘完成: ${targetFile.absolutePath} ($finalLength 字节)" }
         } catch (e: CancellationException) {
-            logger.i { "任务 $taskId 协程被取消（已暂停或被移除）" }
-            throw e
+            if (timedOut) {
+                logger.w { "任务 $taskId 连接做种节点超时（${peerConnectTimeoutMs}ms 无可用源）" }
+                updateTask(taskId) {
+                    it.copy(
+                        status = TorrentTaskStatus.ERROR,
+                        errorMessage = PEER_CONNECT_TIMEOUT_MESSAGE,
+                        downloadSpeedBytesPerSec = 0L,
+                        connectedPeers = 0,
+                        streamUrl = "",
+                    )
+                }
+            } else {
+                logger.i { "任务 $taskId 协程被取消（已暂停或被移除）" }
+                throw e
+            }
         } catch (e: Exception) {
             logger.e(e) { "任务 $taskId 原生下载异常: ${e.message}" }
             updateTask(taskId) {
@@ -624,5 +681,10 @@ class AndroidTorrentRepository(
     private fun extractInfoHash(magnetUrl: String): String {
         val xt = magnetUrl.substringAfter("xt=urn:btih:", "")
         return if (xt.isNotBlank()) xt.substringBefore("&") else ""
+    }
+
+    companion object {
+        const val DEFAULT_PEER_CONNECT_TIMEOUT_MS = 45_000L
+        const val PEER_CONNECT_TIMEOUT_MESSAGE = "连接做种节点超时（暂无可用源），请点击重试或更换其他资源"
     }
 }

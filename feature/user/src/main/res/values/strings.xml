@@ -361,11 +361,19 @@
     <string name="feature_user_downloads_delete_all_subject_title">清空该番剧下载</string>
     <string name="feature_user_downloads_delete_all_subject_message">确定删除「%1$s」的所有分集下载记录并清理本地文件吗？</string>
     <string name="feature_user_downloads_play_offline">离线播放</string>
-    <string name="feature_user_downloads_status_queued">排队中</string>
+    <string name="feature_user_downloads_action_retry">重试下载</string>
+    <string name="feature_user_downloads_status_queued">排队等待下载…</string>
+    <string name="feature_user_downloads_status_queued_detail">排队等待下载… · %1$s</string>
     <string name="feature_user_downloads_status_paused">已暂停</string>
-    <string name="feature_user_downloads_status_error">下载失败</string>
-    <string name="feature_user_downloads_status_resolving">解析元数据…</string>
+    <string name="feature_user_downloads_status_paused_detail">已暂停 · %1$s</string>
+    <string name="feature_user_downloads_status_error">下载失败，请点击右侧重试</string>
+    <string name="feature_user_downloads_status_resolving">正在解析种子元数据…</string>
+    <string name="feature_user_downloads_status_connecting_peers">正在连接做种节点…</string>
     <string name="feature_user_downloads_status_completed">已完成</string>
+    <string name="feature_user_downloads_status_completed_detail">已完成 · %1$s</string>
+    <string name="feature_user_downloads_summary_error">%1$d 个任务连接超时或异常，点击查看重试</string>
+    <string name="feature_user_downloads_summary_paused">共 %1$d 个任务已暂停</string>
+    <string name="feature_user_downloads_group_error_format">%1$d 集异常 · %2$s</string>
     <string name="feature_user_downloads_card_summary">%1$d 个任务下载中 · %2$s</string>
     <string name="feature_user_downloads_card_all_done">%1$d 部番剧已离线</string>
 
