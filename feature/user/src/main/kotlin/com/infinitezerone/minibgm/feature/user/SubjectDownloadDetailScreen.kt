@@ -413,9 +413,8 @@ internal fun EpisodeDownloadCard(
                     }
 
                     TorrentTaskStatus.DOWNLOADING -> {
-                        val isConnectingPeers = task.connectedPeers == 0 && task.downloadSpeedBytesPerSec <= 0L
                         val statusText =
-                            if (isConnectingPeers) {
+                            if (task.isConnectingPeers) {
                                 "${task.percentage}% · ${stringResource(R.string.feature_user_downloads_status_connecting_peers)}"
                             } else {
                                 val peerSuffix = if (task.connectedPeers > 0) " · ${task.connectedPeers} 节点" else ""

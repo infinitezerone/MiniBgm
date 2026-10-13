@@ -98,6 +98,10 @@ data class TorrentTask(
                 -1L
             }
         }
+
+    /** 是否处于连上做种节点前（无速率且无节点）的寻道状态 */
+    val isConnectingPeers: Boolean
+        get() = status == TorrentTaskStatus.DOWNLOADING && connectedPeers == 0 && downloadSpeedBytesPerSec <= 0L
 }
 
 /**
@@ -136,6 +140,11 @@ data class SubjectDownloadGroup(
     val sortedTasks: List<TorrentTask> get() = tasks.sortedBy { it.episodeSort }
     val progress: Float get() = if (totalBytes > 0L) (downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f) else 0f
     val percentage: Int get() = (progress * 100).toInt()
+    val isConnectingPeers: Boolean
+        get() =
+            downloadingCount > 0 &&
+                totalSpeedBytesPerSec <= 0L &&
+                tasks.none { it.status == TorrentTaskStatus.DOWNLOADING && it.connectedPeers > 0 }
 
     val formattedTotalSpeed: String
         get() =

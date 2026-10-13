@@ -12,6 +12,7 @@ import com.infinitezerone.minibgm.core.database.entity.AssistantMessageEntity
 import com.infinitezerone.minibgm.core.database.entity.AssistantSessionEntity
 import com.infinitezerone.minibgm.core.database.entity.BangumiDataMonthEtagEntity
 import com.infinitezerone.minibgm.core.database.entity.DanmakuEpisodeOverrideEntity
+import com.infinitezerone.minibgm.core.database.entity.TorrentTaskEntity
 import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -296,4 +297,34 @@ interface DanmakuOverrideDao {
 
     @Query("DELETE FROM danmaku_episode_override WHERE episodeId = :episodeId")
     suspend fun deleteOverride(episodeId: Long)
+}
+
+/**
+ * 磁力/BT 下载任务本地持久化 DAO。
+ */
+@Dao
+interface TorrentTaskDao {
+    @Query("SELECT * FROM torrent_tasks ORDER BY createdTimestamp ASC")
+    fun observeAllTasks(): Flow<List<TorrentTaskEntity>>
+
+    @Query("SELECT * FROM torrent_tasks ORDER BY createdTimestamp ASC")
+    suspend fun getAllTasks(): List<TorrentTaskEntity>
+
+    @Query("SELECT * FROM torrent_tasks WHERE id = :taskId")
+    suspend fun getTaskById(taskId: String): TorrentTaskEntity?
+
+    @Query("SELECT * FROM torrent_tasks WHERE magnetUrl = :magnetUrl LIMIT 1")
+    suspend fun getTaskByMagnetUrl(magnetUrl: String): TorrentTaskEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertTask(task: TorrentTaskEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertTasks(tasks: List<TorrentTaskEntity>)
+
+    @Query("DELETE FROM torrent_tasks WHERE id = :taskId")
+    suspend fun deleteTask(taskId: String)
+
+    @Query("DELETE FROM torrent_tasks")
+    suspend fun clearAllTasks()
 }

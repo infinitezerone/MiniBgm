@@ -24,4 +24,16 @@
     <string name="app_in_app_web_title_token">访问令牌</string>
     <string name="app_subject_fallback_title">当前条目</string>
     <string name="app_ai_search_prompt">帮我找《%1$s》的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 %2$d）</string>
+
+    <!-- 后台下载通知 (Download Notification) -->
+    <string name="app_download_notification_channel_name">磁力与视频下载</string>
+    <string name="app_download_notification_channel_desc">展示后台磁力与视频文件下载进度</string>
+    <string name="app_download_notification_initial_title">正在下载资源</string>
+    <string name="app_download_notification_preparing">准备下载…</string>
+    <string name="app_download_notification_resolving">正在解析磁力元数据…</string>
+    <string name="app_download_notification_queued">排队中…</string>
+    <string name="app_download_notification_progress">%1$d%% · %2$s</string>
+    <string name="app_download_notification_completed_title">下载完成</string>
+    <string name="app_download_notification_action_pause">暂停</string>
+    <string name="app_download_notification_action_cancel">取消</string>
 </resources>

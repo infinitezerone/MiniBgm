@@ -56,8 +56,15 @@ class TorrentDownloadService :
 
         when (action) {
             ACTION_START -> {
-                val initialTitle = intent.getStringExtra(EXTRA_TITLE) ?: "正在下载资源"
-                val initialNotification = buildProgressNotification(initialTitle, "准备下载…", 0, 0L, taskId)
+                val initialTitle = intent.getStringExtra(EXTRA_TITLE) ?: resolveString("app_download_notification_initial_title", "正在下载资源")
+                val initialNotification =
+                    buildProgressNotification(
+                        title = initialTitle,
+                        statusText = resolveString("app_download_notification_preparing", "准备下载…"),
+                        percentage = 0,
+                        speedBytesPerSec = 0L,
+                        taskId = taskId,
+                    )
                 val foregroundType =
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
@@ -104,9 +111,15 @@ class TorrentDownloadService :
                 if (activeTask != null) {
                     val statusText =
                         when (activeTask.status) {
-                            TorrentTaskStatus.RESOLVING -> "正在解析磁力元数据…"
-                            TorrentTaskStatus.QUEUED -> "排队中…"
-                            else -> "${activeTask.percentage}% · ${activeTask.formattedDownloadSpeed}"
+                            TorrentTaskStatus.RESOLVING -> resolveString("app_download_notification_resolving", "正在解析磁力元数据…")
+                            TorrentTaskStatus.QUEUED -> resolveString("app_download_notification_queued", "排队中…")
+                            else ->
+                                resolveString(
+                                    "app_download_notification_progress",
+                                    "%1\$d%% · %2\$s",
+                                    activeTask.percentage,
+                                    activeTask.formattedDownloadSpeed,
+                                )
                         }
                     val notification =
                         buildProgressNotification(
@@ -136,10 +149,10 @@ class TorrentDownloadService :
             val channel =
                 NotificationChannel(
                     CHANNEL_ID,
-                    "磁力与视频下载",
+                    resolveString("app_download_notification_channel_name", "磁力与视频下载"),
                     NotificationManager.IMPORTANCE_LOW,
                 ).apply {
-                    description = "展示后台磁力与视频文件下载进度"
+                    description = resolveString("app_download_notification_channel_desc", "展示后台磁力与视频文件下载进度")
                     setShowBadge(false)
                 }
             notificationManager.createNotificationChannel(channel)
@@ -152,54 +165,102 @@ class TorrentDownloadService :
         percentage: Int,
         speedBytesPerSec: Long,
         taskId: String?,
-    ) = NotificationCompat
-        .Builder(this, CHANNEL_ID)
-        .setSmallIcon(android.R.drawable.stat_sys_download)
-        .setContentTitle(title)
-        .setContentText(statusText)
-        .setProgress(100, percentage, percentage <= 0)
-        .setOngoing(true)
-        .setOnlyAlertOnce(true)
-        .apply {
-            if (!taskId.isNullOrBlank()) {
-                val pauseIntent =
-                    Intent(this@TorrentDownloadService, TorrentDownloadService::class.java).apply {
-                        action = ACTION_PAUSE
-                        putExtra(EXTRA_TASK_ID, taskId)
-                    }
-                val pausePendingIntent =
-                    PendingIntent.getService(
-                        this@TorrentDownloadService,
-                        1,
-                        pauseIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                    )
-                addAction(android.R.drawable.ic_media_pause, "暂停", pausePendingIntent)
-
-                val cancelIntent =
-                    Intent(this@TorrentDownloadService, TorrentDownloadService::class.java).apply {
-                        action = ACTION_CANCEL
-                        putExtra(EXTRA_TASK_ID, taskId)
-                    }
-                val cancelPendingIntent =
-                    PendingIntent.getService(
-                        this@TorrentDownloadService,
-                        2,
-                        cancelIntent,
-                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                    )
-                addAction(android.R.drawable.ic_menu_close_clear_cancel, "取消", cancelPendingIntent)
+    ): android.app.Notification {
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        val contentPendingIntent =
+            launchIntent?.let {
+                PendingIntent.getActivity(
+                    this,
+                    0,
+                    it,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
             }
-        }.build()
 
-    private fun buildCompleteNotification(task: TorrentTask) =
-        NotificationCompat
+        return NotificationCompat
+            .Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle(title)
+            .setContentText(statusText)
+            .setContentIntent(contentPendingIntent)
+            .setProgress(100, percentage, percentage <= 0)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .apply {
+                if (!taskId.isNullOrBlank()) {
+                    val pauseIntent =
+                        Intent(this@TorrentDownloadService, TorrentDownloadService::class.java).apply {
+                            action = ACTION_PAUSE
+                            putExtra(EXTRA_TASK_ID, taskId)
+                        }
+                    val pausePendingIntent =
+                        PendingIntent.getService(
+                            this@TorrentDownloadService,
+                            1,
+                            pauseIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                        )
+                    addAction(
+                        android.R.drawable.ic_media_pause,
+                        resolveString("app_download_notification_action_pause", "暂停"),
+                        pausePendingIntent,
+                    )
+
+                    val cancelIntent =
+                        Intent(this@TorrentDownloadService, TorrentDownloadService::class.java).apply {
+                            action = ACTION_CANCEL
+                            putExtra(EXTRA_TASK_ID, taskId)
+                        }
+                    val cancelPendingIntent =
+                        PendingIntent.getService(
+                            this@TorrentDownloadService,
+                            2,
+                            cancelIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                        )
+                    addAction(
+                        android.R.drawable.ic_menu_close_clear_cancel,
+                        resolveString("app_download_notification_action_cancel", "取消"),
+                        cancelPendingIntent,
+                    )
+                }
+            }.build()
+    }
+
+    private fun buildCompleteNotification(task: TorrentTask): android.app.Notification {
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        val contentPendingIntent =
+            launchIntent?.let {
+                PendingIntent.getActivity(
+                    this,
+                    0,
+                    it,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            }
+
+        return NotificationCompat
             .Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setContentTitle("下载完成")
+            .setContentTitle(resolveString("app_download_notification_completed_title", "下载完成"))
             .setContentText(task.title)
+            .setContentIntent(contentPendingIntent)
             .setAutoCancel(true)
             .build()
+    }
+
+    private fun resolveString(
+        key: String,
+        fallback: String,
+        vararg args: Any,
+    ): String {
+        val resId = resources.getIdentifier(key, "string", packageName)
+        return if (resId != 0) {
+            if (args.isNotEmpty()) getString(resId, *args) else getString(resId)
+        } else {
+            if (args.isNotEmpty()) String.format(fallback, *args) else fallback
+        }
+    }
 
     companion object {
         const val CHANNEL_ID = "minibgm_torrent_downloads"

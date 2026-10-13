@@ -344,10 +344,10 @@ for m in "${modules[@]+"${modules[@]}"}"; do
     failures=$(echo "$counts" | sed -n 's/.*failures="\([0-9]*\)".*/\1/p')
     errors=$(echo "$counts" | sed -n 's/.*errors="\([0-9]*\)".*/\1/p')
     if [ "${failures:-0}" != "0" ] || [ "${errors:-0}" != "0" ]; then
-      echo "[jgate] ❌ $xml：failures=$failures errors=$errors"
+      echo "[jgate] ❌ ${xml}: failures=${failures:-0} errors=${errors:-0}"
       fail=1
     elif [ "${tests:-0}" = "0" ]; then
-      echo "[jgate] ❌ $xml：tests=0（空跑/测试源集未收集）"
+      echo "[jgate] ❌ ${xml}: tests=0（空跑/测试源集未收集）"
       fail=1
     fi
   done < <(find "$m" -path "*/build/test-results/*" -name "TEST-*.xml" -newer "$stamp" 2>/dev/null)

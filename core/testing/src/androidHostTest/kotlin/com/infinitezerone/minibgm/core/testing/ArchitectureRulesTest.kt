@@ -1060,6 +1060,11 @@ class ArchitectureRulesTest {
                 "AndroidTorrentRepository.kt 缺少抢占互斥状态守卫 isPreempting 或起播获取超时守卫 withTimeout，并发抢占将发生会话掐断或死种永久挂起",
             )
         }
+        if (!repoContent.contains("torrentTaskDao") || !repoContent.contains("TorrentTaskDao")) {
+            violations.add(
+                "AndroidTorrentRepository.kt 必须依赖 TorrentTaskDao 进行 ACID 任务持久化，严禁裸文件 tasks_manifest.json 覆写作为主存储",
+            )
+        }
 
         val streamEngineFile =
             File(

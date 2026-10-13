@@ -307,20 +307,18 @@ private fun SubjectDownloadCard(
 
                     when {
                         group.downloadingCount > 0 -> {
-                            val isConnectingPeers =
-                                group.totalSpeedBytesPerSec <= 0L &&
-                                    group.tasks.none {
-                                        it.status == com.infinitezerone.minibgm.core.model.TorrentTaskStatus.DOWNLOADING &&
-                                            it.connectedPeers > 0
-                                    }
-                            val statusLabel =
-                                if (isConnectingPeers) {
-                                    "正在下载 ${group.downloadingCount} 集 · ${stringResource(
-                                        R.string.feature_user_downloads_status_connecting_peers,
-                                    )}"
+                            val detailText =
+                                if (group.isConnectingPeers) {
+                                    stringResource(R.string.feature_user_downloads_status_connecting_peers)
                                 } else {
-                                    "正在下载 ${group.downloadingCount} 集 · ${group.formattedTotalSpeed}"
+                                    group.formattedTotalSpeed
                                 }
+                            val statusLabel =
+                                stringResource(
+                                    R.string.feature_user_downloads_status_downloading_count,
+                                    group.downloadingCount,
+                                    detailText,
+                                )
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,

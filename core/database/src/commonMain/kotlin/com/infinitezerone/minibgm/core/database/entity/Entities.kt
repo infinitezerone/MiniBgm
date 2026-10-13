@@ -185,3 +185,43 @@ data class DanmakuEpisodeOverrideEntity(
     val dandanEpisodeTitle: String,
     val updatedAt: Long,
 )
+
+/**
+ * 磁力/BT 下载任务本地持久化实体。
+ *
+ * 替代旧有的 tasks_manifest.json 裸文本全量覆写反模式，
+ * 提供 ACID 事务级原子读写保证，并通过 Room Flow 响应式驱动上层下载状态流。
+ */
+@Entity(
+    tableName = "torrent_tasks",
+    indices = [
+        Index(value = ["status"]),
+        Index(value = ["subjectId"]),
+        Index(value = ["createdTimestamp"]),
+    ],
+)
+data class TorrentTaskEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val magnetUrl: String,
+    val torrentUrl: String? = null,
+    val torrentFilePath: String? = null,
+    val status: String,
+    val totalBytes: Long = 0L,
+    val downloadedBytes: Long = 0L,
+    val downloadSpeedBytesPerSec: Long = 0L,
+    val uploadSpeedBytesPerSec: Long = 0L,
+    val connectedPeers: Int = 0,
+    val connectedSeeds: Int = 0,
+    val savePath: String = "",
+    val streamUrl: String = "",
+    val errorMessage: String? = null,
+    val createdTimestamp: Long = 0L,
+    val completionTimestamp: Long? = null,
+    val subjectId: Long = 0L,
+    val subjectName: String = "",
+    val subjectCoverUrl: String = "",
+    val episodeId: Long = 0L,
+    val episodeSort: Float = 0f,
+    val episodeName: String = "",
+)

@@ -193,7 +193,7 @@ build_one() {
 
   # 清理历史遗留在 src/ 下的旧 jniLibs 目录（防止 AGP 重复打包或触发 core:testing 隐式输入报错）
   local legacy_dir
-  legacy_dir="$(dirname "$(dirname "$out_dir")")/src/androidMain/jniLibs"
+  legacy_dir="$(dirname "$(dirname "$(dirname "$out_dir")")")/src/androidMain/jniLibs"
   if [ -d "$legacy_dir" ]; then
     rm -rf "$legacy_dir"
   fi

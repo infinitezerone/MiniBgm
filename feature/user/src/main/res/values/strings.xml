@@ -373,6 +373,7 @@
     <string name="feature_user_downloads_status_completed_detail">已完成 · %1$s</string>
     <string name="feature_user_downloads_summary_error">%1$d 个任务连接超时或异常，点击查看重试</string>
     <string name="feature_user_downloads_summary_paused">共 %1$d 个任务已暂停</string>
+    <string name="feature_user_downloads_status_downloading_count">正在下载 %1$d 集 · %2$s</string>
     <string name="feature_user_downloads_group_error_format">%1$d 集异常 · %2$s</string>
     <string name="feature_user_downloads_card_summary">%1$d 个任务下载中 · %2$s</string>
     <string name="feature_user_downloads_card_all_done">%1$d 部番剧已离线</string>

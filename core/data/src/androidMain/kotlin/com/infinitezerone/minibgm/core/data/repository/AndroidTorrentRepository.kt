@@ -3,8 +3,11 @@ package com.infinitezerone.minibgm.core.data.repository
 import android.content.Context
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.download.AssetDownloader
+import com.infinitezerone.minibgm.core.data.download.DOWNLOAD_TEMP_SUFFIX
 import com.infinitezerone.minibgm.core.data.download.TorrentDownloadService
 import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
+import com.infinitezerone.minibgm.core.database.dao.TorrentTaskDao
+import com.infinitezerone.minibgm.core.database.entity.TorrentTaskEntity
 import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.TorrentStreamState
 import com.infinitezerone.minibgm.core.model.TorrentTask
@@ -42,6 +45,7 @@ class AndroidTorrentRepository(
     private val assetDownloader: AssetDownloader,
     private val assetDownloadService: AssetDownloadService,
     private val streamEngine: TorrentStreamEngine,
+    private val torrentTaskDao: TorrentTaskDao? = null,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val startForegroundService: (Context, String, String) -> Unit = TorrentDownloadService::start,
     private val peerConnectTimeoutMs: Long = DEFAULT_PEER_CONNECT_TIMEOUT_MS,
@@ -61,7 +65,9 @@ class AndroidTorrentRepository(
     private var isPreempting = false
 
     init {
-        restorePersistedTasks()
+        scope.launch {
+            restorePersistedTasks()
+        }
     }
 
     override suspend fun startDownload(
@@ -493,7 +499,7 @@ class AndroidTorrentRepository(
         streamUrl: String,
         targetFile: File,
     ) {
-        val tempFile = File("${targetFile.absolutePath}.tmp")
+        val tempFile = File("${targetFile.absolutePath}$DOWNLOAD_TEMP_SUFFIX")
         tempFile.parentFile?.mkdirs()
         val existingBytes = if (tempFile.exists()) tempFile.length() else 0L
 
@@ -725,11 +731,17 @@ class AndroidTorrentRepository(
         if (deleteFiles && task != null) {
             runCatching {
                 File(task.savePath).delete()
-                File("${task.savePath}.tmp").delete()
+                File("${task.savePath}$DOWNLOAD_TEMP_SUFFIX").delete()
                 task.torrentFilePath?.let { File(it).delete() }
             }
         }
         _tasks.update { list -> list.filterNot { it.id == taskId } }
+        val dao = torrentTaskDao
+        if (dao != null) {
+            scope.launch {
+                runCatching { dao.deleteTask(taskId) }
+            }
+        }
         persistTasksSnapshot()
         if (wasRunning) {
             scheduleNextIfIdle()
@@ -779,56 +791,155 @@ class AndroidTorrentRepository(
 
     private fun resolveDownloadDir(): File = File(context.getExternalFilesDir(null) ?: context.filesDir, "downloads").apply { mkdirs() }
 
-    private fun resolveManifestFile(): File = File(context.filesDir, "downloads/tasks_manifest.json").apply { parentFile?.mkdirs() }
+    private fun resolveManifestFile(): File = File(resolveDownloadDir(), "tasks_manifest.json")
 
-    private fun restorePersistedTasks() {
-        runCatching {
-            val manifest = resolveManifestFile()
-            if (!manifest.isFile || manifest.length() == 0L) return@runCatching
-            val decoded = BgmHttpClient.jsonConfig.decodeFromString<List<TorrentTask>>(manifest.readText())
-            val normalized =
-                decoded.map { task ->
-                    when (task.status) {
-                        TorrentTaskStatus.DOWNLOADING,
-                        TorrentTaskStatus.RESOLVING,
-                        TorrentTaskStatus.QUEUED,
-                        ->
-                            task.copy(
-                                status = TorrentTaskStatus.PAUSED,
-                                downloadSpeedBytesPerSec = 0L,
-                                connectedPeers = 0,
-                                streamUrl = "",
-                            )
-
-                        TorrentTaskStatus.COMPLETED -> {
-                            val file = File(task.savePath)
-                            if (task.savePath.isNotBlank() && file.exists() && file.length() > 0L) {
-                                task.copy(downloadSpeedBytesPerSec = 0L, connectedPeers = 0, streamUrl = "")
-                            } else {
-                                task.copy(
-                                    status = TorrentTaskStatus.PAUSED,
-                                    downloadedBytes = 0L,
-                                    downloadSpeedBytesPerSec = 0L,
-                                    connectedPeers = 0,
-                                    streamUrl = "",
-                                )
-                            }
-                        }
-
-                        else -> task.copy(downloadSpeedBytesPerSec = 0L, connectedPeers = 0, streamUrl = "")
-                    }
-                }
-            _tasks.value = normalized
+    private suspend fun restorePersistedTasks() {
+        val dao = torrentTaskDao
+        if (dao != null) {
+            val entities = dao.getAllTasks()
+            if (entities.isNotEmpty()) {
+                val normalized = entities.map { it.toDomain().normalizeOnStartup() }
+                _tasks.value = normalized
+                dao.upsertTasks(normalized.map { it.toEntity() })
+                return
+            }
+            // 若数据库为空，尝试从存量 tasks_manifest.json 单次迁移数据入库
+            val legacyTasks = loadLegacyJsonTasks()
+            if (legacyTasks.isNotEmpty()) {
+                val normalized = legacyTasks.map { it.normalizeOnStartup() }
+                _tasks.value = normalized
+                dao.upsertTasks(normalized.map { it.toEntity() })
+                runCatching { resolveManifestFile().delete() }
+                return
+            }
+        } else {
+            val legacyTasks = loadLegacyJsonTasks()
+            if (legacyTasks.isNotEmpty()) {
+                _tasks.value = legacyTasks.map { it.normalizeOnStartup() }
+            }
         }
     }
+
+    private fun loadLegacyJsonTasks(): List<TorrentTask> =
+        runCatching {
+            val manifest = resolveManifestFile()
+            val oldManifest = File(context.filesDir, "downloads/tasks_manifest.json")
+            val target = if (manifest.isFile && manifest.length() > 0L) manifest else oldManifest
+            if (!target.isFile || target.length() == 0L) return emptyList()
+            BgmHttpClient.jsonConfig.decodeFromString<List<TorrentTask>>(target.readText())
+        }.getOrDefault(emptyList())
+
+    private fun TorrentTask.normalizeOnStartup(): TorrentTask =
+        when (status) {
+            TorrentTaskStatus.DOWNLOADING,
+            TorrentTaskStatus.RESOLVING,
+            TorrentTaskStatus.QUEUED,
+            ->
+                copy(
+                    status = TorrentTaskStatus.PAUSED,
+                    downloadSpeedBytesPerSec = 0L,
+                    connectedPeers = 0,
+                    streamUrl = "",
+                )
+
+            TorrentTaskStatus.COMPLETED -> {
+                val file = File(savePath)
+                if (savePath.isNotBlank() && file.exists() && file.length() > 0L) {
+                    copy(downloadSpeedBytesPerSec = 0L, connectedPeers = 0, streamUrl = "")
+                } else {
+                    copy(
+                        status = TorrentTaskStatus.PAUSED,
+                        downloadedBytes = 0L,
+                        downloadSpeedBytesPerSec = 0L,
+                        connectedPeers = 0,
+                        streamUrl = "",
+                    )
+                }
+            }
+
+            else -> copy(downloadSpeedBytesPerSec = 0L, connectedPeers = 0, streamUrl = "")
+        }
 
     private fun persistTasksSnapshot() {
-        runCatching {
-            val manifest = resolveManifestFile()
-            val payload = BgmHttpClient.jsonConfig.encodeToString(_tasks.value)
-            manifest.writeText(payload)
+        val current = _tasks.value
+        val dao = torrentTaskDao
+        if (dao != null) {
+            scope.launch {
+                runCatching {
+                    dao.upsertTasks(current.map { it.toEntity() })
+                }.onFailure { e ->
+                    logger.e(e) { "持久化 Torrent 任务至 Room 数据库失败" }
+                }
+            }
+        } else {
+            runCatching {
+                val manifest = resolveManifestFile()
+                val tempFile = File(manifest.parentFile, "${manifest.name}.tmp")
+                val payload = BgmHttpClient.jsonConfig.encodeToString(current)
+                tempFile.writeText(payload)
+                if (!tempFile.renameTo(manifest)) {
+                    manifest.writeText(payload)
+                    tempFile.delete()
+                }
+            }.onFailure { e ->
+                logger.e(e) { "持久化 Torrent 任务快照至本地文件失败" }
+            }
         }
     }
+
+    private fun TorrentTask.toEntity(): TorrentTaskEntity =
+        TorrentTaskEntity(
+            id = id,
+            title = title,
+            magnetUrl = magnetUrl,
+            torrentUrl = torrentUrl,
+            torrentFilePath = torrentFilePath,
+            status = status.name,
+            totalBytes = totalBytes,
+            downloadedBytes = downloadedBytes,
+            downloadSpeedBytesPerSec = downloadSpeedBytesPerSec,
+            uploadSpeedBytesPerSec = uploadSpeedBytesPerSec,
+            connectedPeers = connectedPeers,
+            connectedSeeds = connectedSeeds,
+            savePath = savePath,
+            streamUrl = streamUrl,
+            errorMessage = errorMessage,
+            createdTimestamp = createdTimestamp,
+            completionTimestamp = completionTimestamp,
+            subjectId = subjectId,
+            subjectName = subjectName,
+            subjectCoverUrl = subjectCoverUrl,
+            episodeId = episodeId,
+            episodeSort = episodeSort,
+            episodeName = episodeName,
+        )
+
+    private fun TorrentTaskEntity.toDomain(): TorrentTask =
+        TorrentTask(
+            id = id,
+            title = title,
+            magnetUrl = magnetUrl,
+            torrentUrl = torrentUrl,
+            torrentFilePath = torrentFilePath,
+            status = runCatching { TorrentTaskStatus.valueOf(status) }.getOrDefault(TorrentTaskStatus.PAUSED),
+            totalBytes = totalBytes,
+            downloadedBytes = downloadedBytes,
+            downloadSpeedBytesPerSec = downloadSpeedBytesPerSec,
+            uploadSpeedBytesPerSec = uploadSpeedBytesPerSec,
+            connectedPeers = connectedPeers,
+            connectedSeeds = connectedSeeds,
+            savePath = savePath,
+            streamUrl = streamUrl,
+            errorMessage = errorMessage,
+            createdTimestamp = createdTimestamp,
+            completionTimestamp = completionTimestamp,
+            subjectId = subjectId,
+            subjectName = subjectName,
+            subjectCoverUrl = subjectCoverUrl,
+            episodeId = episodeId,
+            episodeSort = episodeSort,
+            episodeName = episodeName,
+        )
 
     private fun extractInfoHash(magnetUrl: String): String {
         val xt = magnetUrl.substringAfter("xt=urn:btih:", "")

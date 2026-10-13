@@ -35,5 +35,10 @@ tasks.withType<Test>().configureEach {
             languageVersion.set(JavaLanguageVersion.of(21))
         },
     )
-    systemProperty("roborazzi.test.record", "true")
+    val isRecord =
+        providers.gradleProperty("roborazzi.record").orNull == "true" ||
+            providers.gradleProperty("roborazzi.test.record").orNull == "true"
+    if (isRecord) {
+        systemProperty("roborazzi.test.record", "true")
+    }
 }
