@@ -1,4 +1,5 @@
 import com.infinitezerone.minibgm.androidLibrary
+import com.infinitezerone.minibgm.configureAndroidUnitTests
 
 plugins {
     alias(libs.plugins.minibgm.android.feature)
@@ -31,17 +32,5 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
-tasks.withType<Test>().configureEach {
-    val javaToolchains = project.extensions.getByType<JavaToolchainService>()
-    javaLauncher.set(
-        javaToolchains.launcherFor {
-            languageVersion.set(JavaLanguageVersion.of(21))
-        },
-    )
-    val isRecord =
-        providers.gradleProperty("roborazzi.record").orNull == "true" ||
-            providers.gradleProperty("roborazzi.test.record").orNull == "true"
-    if (isRecord) {
-        systemProperty("roborazzi.test.record", "true")
-    }
-}
+// 测试 JVM / Roborazzi 录制 / 截图测试跳过开关的单一真源（build-logic 的 AndroidUnitTest.kt）
+configureAndroidUnitTests()

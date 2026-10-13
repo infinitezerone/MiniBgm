@@ -1204,6 +1204,40 @@ class ArchitectureRulesTest {
     }
 
     @Test
+    fun screenshot_test_modules_must_use_shared_unit_test_convention() {
+        val includeRe = Regex("""^include\(":(.+)"\)$""")
+        val violations = mutableListOf<String>()
+
+        File(projectRoot, "settings.gradle.kts").readLines().forEach { line ->
+            val module =
+                includeRe
+                    .find(line)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.replace(':', '/') ?: return@forEach
+            val script = File(projectRoot, "$module/build.gradle.kts")
+            if (!script.isFile) return@forEach
+            val text = script.readText()
+            if (!text.contains("roborazzi")) return@forEach
+            // 截图测试模块的"测试 JVM / roborazzi.record / -Pminibgm.skipScreenshots"只能来自
+            // build-logic 的 configureAndroidUnitTests()。历史上 core/designsystem、feature/subject、
+            // feature/user 各抄了一份相同的 tasks.withType<Test> 块——副本漂移后会出现
+            // "跳过开关只对部分模块生效"这类无法察觉的静默不一致，故机械拦截。
+            if (!text.contains("configureAndroidUnitTests()")) {
+                violations += "$module/build.gradle.kts：含截图测试但未调用 configureAndroidUnitTests()"
+            }
+            if (text.contains("javaLauncher.set(")) {
+                violations += "$module/build.gradle.kts：禁止手写 Test javaLauncher，改用 configureAndroidUnitTests()"
+            }
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反单测配置单一真源（build-logic/convention/.../AndroidUnitTest.kt）：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    @Test
     fun core_data_and_feature_subject_sources_must_not_hardcode_proprietary_torrent_domains() {
         val violations = mutableListOf<String>()
         val checkedDirs = listOf("core/data", "core/network", "feature/subject")

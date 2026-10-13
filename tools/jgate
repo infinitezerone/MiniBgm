@@ -3,6 +3,8 @@
 # 流程：素材体积 → Rust 门禁（触及 crates/ 时：fmt/clippy/test，与 CI 逐字一致）→
 #       spotlessApply（触及模块）→ 架构红线 + 触及模块测试（含 :app 单测）+ :app:assembleDebug → 测试结果真实性校验
 # "绿≠测过"由最后的 XML 校验机械保证：tests>0 且 failures==0 且 errors==0，否则退出非零。
+# 两处**显式**减负（都会在输出里标注，不静默）：纯 md/docs/.agents 改动跳过装配门；
+# `--fast` 跳过截图测试（本机绿 != CI 绿，提交前需复跑）。
 #
 # 验证目标是"改动"，不是"全仓库"：
 #   ① 工作副本 @ 有改动   → 验证工作副本（主路径：改完就跑）
@@ -18,6 +20,9 @@ usage() {
 
 选项：
   -a, --all     强制验证全部模块（跨切面改动、PR 前）
+  -f, --fast    跳过截图测试（等价 -Pminibgm.skipScreenshots=true）。本机省掉实测占单测耗时
+                43% 的 Roborazzi/Robolectric NATIVE 开销；⚠️ 本机绿 != CI 绿，仅用于开发
+                中间态，提交前请不带 --fast 复跑一次
   -n, --plan    只打印本次验证目标与将要执行的 gradle 任务，不执行任何命令（别名 --dry-run）
   -h, --help    显示本帮助
 
@@ -30,10 +35,12 @@ USAGE
 plan_only=0
 force_all=0
 explicit_all=0
+fast_mode=0
 cli_modules=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -a|--all) force_all=1; explicit_all=1 ;;
+    -f|--fast) fast_mode=1 ;;
     -n|--plan|--dry-run) plan_only=1 ;;
     -h|--help) usage; exit 0 ;;
     --) shift; while [ "$#" -gt 0 ]; do cli_modules+=("$1"); shift; done; break ;;
@@ -42,6 +49,13 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+# --fast 只做一件事：把跳过截图测试的属性透给 gradle。默认不加，且最终汇总行会显式标注
+# "截图测试已跳过"，避免"少测了"被读成"全绿"。
+gradle_extra=()
+if [ "$fast_mode" = "1" ]; then
+  gradle_extra+=("-Pminibgm.skipScreenshots=true")
+fi
 
 # 自愈：确保本 clone 的 git 钩子已接线（其他机器 clone 后无需人工记得跑 setup.sh）
 if [ "$(git config core.hooksPath || true)" != "tools/githooks" ]; then
@@ -107,6 +121,16 @@ elif [ -n "$paths" ] && printf '%s\n' "$paths" | grep -qE '^(crates/|Cargo\.toml
   need_rust=1
 fi
 
+# ---- 2c. 纯文档/元数据改动 → 连装配门一起跳过 --------------------------------
+# assembleDebug 是 jgate 里最贵的一步（编译 + 资源 + dex + 打包）。只有"不可能参与编译"的
+# 文件才允许跳过：这是**显式白名单**，而不是"没落到模块目录就跳"——后者会漏掉 native/、
+# tools/build-native 这些真能影响产物的路径（它们仍照常跑装配门）。
+doc_only_re='^(docs/|\.agents/|\.github/|LICENSE$|\.gitignore$|\.gitattributes$|.*\.md$)'
+docs_only=0
+if [ "$force_all" != "1" ] && [ -n "$paths" ] && ! printf '%s\n' "$paths" | grep -qvE "$doc_only_re"; then
+  docs_only=1
+fi
+
 # ---- 3. 解析模块集合 ----------------------------------------------------------
 modules=()
 if [ "$force_all" = "1" ]; then
@@ -153,7 +177,9 @@ append_task() {
 }
 append_task ":core:testing:testAndroid"
 for t in "${test_tasks[@]+"${test_tasks[@]}"}"; do append_task "$t"; done
-append_task ":app:assembleDebug"
+if [ "$docs_only" != "1" ]; then
+  append_task ":app:assembleDebug"
+fi
 if [ "$explicit_all" = "1" ]; then
   # 显式全量验证（--all）时与 CI 完全对齐：加入 R8 混淆验证与 CRAP 代码风险度量
   append_task ":app:assembleRelease"
@@ -162,7 +188,13 @@ fi
 
 echo "[jgate] 验证目标：$target_desc"
 if [ "${#modules[@]}" -eq 0 ]; then
-  echo "[jgate] ⚠️ 改动不触及任何 Gradle 模块（如只改了 docs/、tools/）→ 跳过 spotless 与模块测试，只跑架构红线 + 装配门"
+  echo "[jgate] ⚠️ 改动不触及任何 Gradle 模块（如只改了 docs/、tools/）→ 跳过 spotless 与模块测试，只跑架构红线"
+fi
+if [ "$docs_only" = "1" ]; then
+  echo "[jgate] ⚠️ 纯文档/元数据改动 → 装配门 :app:assembleDebug 一并跳过（架构红线仍然执行）"
+fi
+if [ "$fast_mode" = "1" ]; then
+  echo "[jgate] ⚠️ --fast：本轮跳过截图测试（Roborazzi 视觉回归未覆盖，提交前请复跑一次不带 --fast 的）"
 fi
 echo "[jgate] 模块 ${#modules[@]} 个：${modules[*]:-（无）}"
 echo "[jgate] 将执行：${gradle_tasks[*]}"
@@ -180,9 +212,13 @@ stamp=$(mktemp)
 touch "$stamp"
 
 run_gradle() {
-  echo "[jgate] gradle $*"
+  echo "[jgate] gradle $* ${gradle_extra[*]:-}"
   local start=$SECONDS
-  ./gradlew "$@" --console=plain || { echo "[jgate] ❌ gradle $* 失败"; fail=1; return 1; }
+  ./gradlew "$@" ${gradle_extra[@]+"${gradle_extra[@]}"} --console=plain || {
+    echo "[jgate] ❌ gradle $* 失败"
+    fail=1
+    return 1
+  }
   echo "[jgate]   ↳ $((SECONDS - start))s"
 }
 
@@ -324,7 +360,11 @@ else
   echo "[jgate] 触及路径均不在模块内，跳过 spotless"
 fi
 
-echo "[jgate] 4/5 架构红线 + 触及模块测试 + 装配门"
+if [ "$docs_only" = "1" ]; then
+  echo "[jgate] 4/5 架构红线 + 触及模块测试（纯文档改动：装配门已跳过）"
+else
+  echo "[jgate] 4/5 架构红线 + 触及模块测试 + 装配门"
+fi
 # 确保预构建原生库（.so）就绪且与 crates/ 源码指纹一致（命中缓存时毫秒级返回）
 bash tools/build-native || { echo "[jgate] ❌ 原生库构建/校验未通过"; exit 1; }
 # 三项合并到同一次 gradle 调用，省去一次 daemon/配置缓存往返；任务间无依赖，顺序无关。
@@ -377,10 +417,18 @@ rust_note=""
 if [ "$need_rust" = "1" ] && [ "${rust_ran:-0}" = "1" ]; then
   rust_note="Rust / "
 fi
+gate_note="装配"
+if [ "$docs_only" = "1" ]; then
+  gate_note="跳过装配（纯文档）"
+fi
+fast_note=""
+if [ "$fast_mode" = "1" ]; then
+  fast_note="；⚠️ 截图测试已跳过"
+fi
 if [ "$checked" = "0" ]; then
-  echo "[jgate] ✅ 验证门通过（素材 / ${rust_note}spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配）— 本轮 0 份新增结果，任务全部 UP-TO-DATE，沿用上次结果"
+  echo "[jgate] ✅ 验证门通过（素材 / ${rust_note}spotless / 红线 / ${#test_tasks[@]} 个模块测试 / ${gate_note}${fast_note}）— 本轮 0 份新增结果，任务全部 UP-TO-DATE，沿用上次结果"
 else
-  echo "[jgate] ✅ 验证门通过（素材 / ${rust_note}spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配 / $checked 份结果校验）"
+  echo "[jgate] ✅ 验证门通过（素材 / ${rust_note}spotless / 红线 / ${#test_tasks[@]} 个模块测试 / ${gate_note}${fast_note} / $checked 份结果校验）"
 fi
 
 if ! echo "$paths" | grep -qE '(ArchitectureRulesTest\.kt|minibgm-playbooks/SKILL\.md)'; then
