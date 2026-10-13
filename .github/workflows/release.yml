@@ -122,10 +122,24 @@ jobs:
       - name: Build APK
         run: |
           ARGS=(assembleRelease --stacktrace)
+          # ABI 分包默认关闭（debug 只打 1 个包以省掉重复打包），发版必须显式开启
+          ARGS+=("-Pminibgm.abiSplits=true")
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             ARGS+=("-Pminibgm.versionName=${{ steps.version.outputs.versionName }}" "-Pminibgm.versionCode=${{ steps.version.outputs.versionCode }}")
           fi
           ./gradlew "${ARGS[@]}"
+
+      # 发版产物断言：ABI 分包若没生效，release 会静默退化成单个 fat APK，
+      # 下游的分 ABI 资产与 universal 别名会全部变形——这里直接判死，不让它流到发布步骤
+      - name: Verify ABI split artifacts
+        run: |
+          ls -1 app/build/outputs/apk/release/*.apk
+          for abi in arm64-v8a x86_64 universal; do
+            if [ ! -f "app/build/outputs/apk/release/app-$abi-release.apk" ]; then
+              echo "::error::缺少 app-$abi-release.apk：ABI 分包未生效，检查 assembleRelease 是否传了 -Pminibgm.abiSplits=true"
+              exit 1
+            fi
+          done
 
       - name: Collect artifacts
         run: |

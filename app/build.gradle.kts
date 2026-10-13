@@ -25,6 +25,12 @@ val enablePlayer = (project.findProperty("minibgm.enablePlayer") as? String)?.to
 // 原生库 ABI 唯一真源（native/abis.txt）：ndk.abiFilters 与 splits.abi 均由此派生
 val nativeLibAbis = nativeAbis()
 
+// ABI 分包默认**关闭**：debug / 日常构建只产出 1 个 APK。
+// 开启时 AGP 会为每个 ABI（native/abis.txt：arm64-v8a + x86_64）再各打一个包外加 universal 包，
+// 实测 debug 产出 3 个 APK 共 363MB 写盘——这是每次 assembleDebug（含每次 jgate）都在付的重复开销。
+// 发版必须产出分 ABI 产物，由 .github/workflows/release.yml 显式传 -Pminibgm.abiSplits=true 开启。
+val enableAbiSplits = (project.findProperty("minibgm.abiSplits") as? String)?.toBoolean() ?: false
+
 androidApplication {
     namespace = "com.infinitezerone.minibgm"
 
@@ -71,7 +77,7 @@ androidApplication {
 
     splits {
         abi {
-            isEnable = true
+            isEnable = enableAbiSplits
             reset()
             include(*nativeLibAbis.toTypedArray())
             isUniversalApk = true
