@@ -22,6 +22,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionReposito
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeTorrentStreamEngine
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
@@ -1418,5 +1419,45 @@ class PlayerViewModelTest {
 
             val event = vm.events.first()
             assertTrue(event is PlayerUiEvent.ShowSnackbar && event.messageRes == R.string.feature_subject_player_danmaku_empty_hint)
+        }
+
+    @Test
+    fun streamUrl_dynamicallyUpdatesTorrentPlayerSessionActive() =
+        runTest {
+            val fakeTorrentEngine = FakeTorrentStreamEngine()
+            val queue =
+                listOf(
+                    PlayerQueueEntry(streamUrl = "http://127.0.0.1:8080/ep1", episodeSort = 1f, episodeId = 101L),
+                    PlayerQueueEntry(streamUrl = "https://cdn.example.com/ep2.m3u8", episodeSort = 2f, episodeId = 102L),
+                    PlayerQueueEntry(streamUrl = "http://127.0.0.1:8080/ep3", episodeSort = 3f, episodeId = 103L),
+                )
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = 101L,
+                            streamUrl = "http://127.0.0.1:8080/ep1",
+                            queue = queue,
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = FakeSettingsRepository(),
+                    torrentStreamEngine = fakeTorrentEngine,
+                )
+            advanceUntilIdle()
+
+            // 1. 初始为 127.0.0.1 流，引擎应激活播放器会话
+            assertTrue("初始 127.0.0.1 流应激活 playerSessionActive", fakeTorrentEngine.isPlayerSessionActive())
+
+            // 2. 切到普通网络流（ep2），引擎应释放活跃标记
+            vm.switchTo(1)
+            advanceUntilIdle()
+            assertFalse("切到在线 CDN 流应释放 playerSessionActive", fakeTorrentEngine.isPlayerSessionActive())
+
+            // 3. 切回 127.0.0.1 流（ep3），引擎应重新激活
+            vm.switchTo(2)
+            advanceUntilIdle()
+            assertTrue("切回 127.0.0.1 流应重新激活 playerSessionActive", fakeTorrentEngine.isPlayerSessionActive())
         }
 }

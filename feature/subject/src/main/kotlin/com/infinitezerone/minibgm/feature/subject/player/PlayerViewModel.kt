@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -585,8 +586,14 @@ class PlayerViewModel(
         if (route.episodeId > 0) {
             loadComments()
         }
-        if (route.streamUrl.startsWith("http://127.0.0.1")) {
-            torrentStreamEngine?.setPlayerSessionActive(true)
+        viewModelScope.launch {
+            _uiState
+                .map { it.streamUrl }
+                .distinctUntilChanged()
+                .collect { url ->
+                    val isTorrentLocal = url.startsWith("http://127.0.0.1")
+                    torrentStreamEngine?.setPlayerSessionActive(isTorrentLocal)
+                }
         }
         loadDanmaku()
     }
