@@ -1055,6 +1055,11 @@ class ArchitectureRulesTest {
                 "AndroidTorrentRepository.kt 缺少做种节点连接超时熔断守卫 peerConnectTimeoutMs / PEER_CONNECT_TIMEOUT_MESSAGE，死种或 UDP NAT 阻断将永久卡死串行队列",
             )
         }
+        if (!repoContent.contains("isPreempting") || !repoContent.contains("withTimeout")) {
+            violations.add(
+                "AndroidTorrentRepository.kt 缺少抢占互斥状态守卫 isPreempting 或起播获取超时守卫 withTimeout，并发抢占将发生会话掐断或死种永久挂起",
+            )
+        }
 
         val streamEngineFile =
             File(
@@ -1077,10 +1082,11 @@ class ArchitectureRulesTest {
         if (sourcesSheetFile.isFile) {
             val sheetContent = KotlinSourceScanner.sanitize(sourcesSheetFile.readText())
             if (sheetContent.contains("torrentStreamEngine.startStream(") ||
+                sheetContent.contains("torrentStreamEngine.") ||
                 !sheetContent.contains("torrentRepository.startStreamDownload(")
             ) {
                 violations.add(
-                    "SubjectSourcesBottomSheet.kt 必须通过 torrentRepository.startStreamDownload( 统一调度边下边播，严禁直接调用 torrentStreamEngine.startStream( 抢占后台下载会话",
+                    "SubjectSourcesBottomSheet.kt 必须完全面向 torrentRepository 调度边下边播与插件校验，严禁直接引用或调用 torrentStreamEngine.*",
                 )
             }
         }
