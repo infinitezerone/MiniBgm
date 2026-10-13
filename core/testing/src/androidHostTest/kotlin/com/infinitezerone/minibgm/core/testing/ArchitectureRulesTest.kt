@@ -1184,6 +1184,25 @@ class ArchitectureRulesTest {
         )
     }
 
+    @Test
+    fun player_media_state_reset_must_preserve_engine_side_preferences() {
+        val controllerFile =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerController.kt",
+            )
+        if (!controllerFile.isFile) return
+
+        val text = controllerFile.readText()
+        // 单集循环（isLooping）由引擎的 repeatMode 持有、且是用户级偏好：换源/换集只允许重置媒体相关字段。
+        // 一旦退回 `_state.value = PlaybackState()` 这种无参整体重置，界面会显示"已关闭"而引擎仍在循环，
+        // 用户要点两次开关才关得掉（换集续播点属同一类"整体覆盖静默丢字段"陷阱）。
+        assertTrue(
+            !text.contains("_state.value = PlaybackState()"),
+            "PlayerController 禁止用 PlaybackState() 无参整体重置媒体态，必须显式保留 isLooping 等引擎侧偏好",
+        )
+    }
+
     private companion object {
         /** 红线只约束生产源码：build 产物与各测试源集目录一律不下钻 */
         val NON_SOURCE_DIR_NAMES =

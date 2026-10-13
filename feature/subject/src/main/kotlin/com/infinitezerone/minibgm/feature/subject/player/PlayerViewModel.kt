@@ -291,6 +291,15 @@ private class PlaybackSession(
 
     /** 到达列表末尾且后端仍有更多分集时，等待续拉完成后自动连播下一集的意图标记 */
     var pendingAutoNextOnMoreLoaded: Boolean = false
+
+    /**
+     * 换集后「按新地址查续播点」的待办标记。
+     *
+     * 直链换集时新地址当下可知，当场查表下发；规则源换集时旧画面被故意保留、新地址要等嗅探结果，
+     * 只能把查表推迟到解析成功那一刻一次性消费——否则会把上一集的进度当成新分集的续播点下发，
+     * 让新分集直接跳到旧分集的时间轴（短集会因此瞬间播完并触发连播空跳）。
+     */
+    var pendingResumeLookupForNewEpisode: Boolean = false
 }
 
 /**
@@ -789,6 +798,19 @@ class PlayerViewModel(
     }
 
     /**
+     * 换集后一次性消费「按新地址查续播点」的待办：换集时新地址尚不可知（规则源要等嗅探结果），
+     * 在真实地址落定的那一刻查表下发。未换集的路径（重试 / 换源）返回 null，
+     * 保持「同一分集内换线路沿用当前进度」的原语义不变。
+     *
+     * @return 新分集自己的续播点（0 表示无记录）；null 表示本次不是换集，调用方不应改动续播点
+     */
+    private fun consumePendingResumePositionForNewEpisode(url: String): Long? {
+        if (!session.pendingResumeLookupForNewEpisode) return null
+        session.pendingResumeLookupForNewEpisode = false
+        return session.positionsMap[url] ?: 0L
+    }
+
+    /**
      * 显式续拉下一屏分集
      */
     fun loadMoreEpisodes() {
@@ -903,6 +925,7 @@ class PlayerViewModel(
         session.progressTicksSinceSave = 0
         session.hasTriggeredAutoMark = false
         session.pendingAutoNextOnMoreLoaded = false
+        session.pendingResumeLookupForNewEpisode = false
         session.currentIndex = index
         val entry = queue[index]
         val currentEp =
@@ -977,6 +1000,8 @@ class PlayerViewModel(
         val isDirect = state.currentSource?.isDirect == true
         val directEntry = if (isDirect && queueIndex >= 0) queue[queueIndex] else null
         val directMissing = isDirect && directEntry == null
+        // 规则源此刻还拿不到新分集地址（旧画面被故意保留），续播点查表推迟到嗅探出地址那一刻
+        session.pendingResumeLookupForNewEpisode = state.currentSource?.isDirect == false
         val currentEp =
             state.episodes.firstOrNull {
                 (episode.id > 0 && it.id == episode.id) ||
@@ -1011,6 +1036,9 @@ class PlayerViewModel(
                         directMissing -> emptyMap()
                         else -> it.requestHeaders
                     },
+                // 续播点属于"分集"而不是"上一个地址"：换集必须按新分集自己的记录下发，
+                // 绝不能沿用上一集的进度（规则源的地址稍后由 consumePendingResumePositionForNewEpisode 补上）
+                resumePositionMs = directEntry?.let { session.positionsMap[it.streamUrl] ?: 0L } ?: 0L,
                 error = if (directMissing) "直链列表中没有该分集，请切换到其他播放源" else null,
             )
         }
@@ -1236,12 +1264,14 @@ class PlayerViewModel(
                         (it.episodeSort > 0 && it.episodeSort == state.episodeSort)
                 }
             if (matchingEntry != null && matchingEntry.streamUrl.isNotBlank()) {
+                val resumeForNewEpisode = consumePendingResumePositionForNewEpisode(matchingEntry.streamUrl)
                 _uiState.update {
                     it.copy(
                         streamUrl = matchingEntry.streamUrl,
                         requestHeaders = matchingEntry.requestHeaders,
                         isResolvingSource = false,
                         error = null,
+                        resumePositionMs = resumeForNewEpisode ?: it.resumePositionMs,
                     )
                 }
             } else {
@@ -1313,6 +1343,8 @@ class PlayerViewModel(
                     val playable = outcome?.directSource
 
                     if (playable != null) {
+                        // 换集到此才拿到新分集的真实地址，续播点在此刻按新地址查表下发
+                        val resumeForNewEpisode = consumePendingResumePositionForNewEpisode(playable.url)
                         _uiState.update {
                             it.copy(
                                 streamUrl = playable.url,
@@ -1322,6 +1354,7 @@ class PlayerViewModel(
                                 resolveAttempt = 0,
                                 resolveAttemptTotal = 0,
                                 error = null,
+                                resumePositionMs = resumeForNewEpisode ?: it.resumePositionMs,
                             )
                         }
                     } else {

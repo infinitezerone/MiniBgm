@@ -177,18 +177,27 @@ class PlayerController(
         requestHeaders: Map<String, String>,
     ) {
         engine.setRequestHeaders(requestHeaders)
+        // 单集循环由引擎的 repeatMode 持有、且是用户级偏好：换源/换集只重置媒体相关字段，
+        // 必须把 isLooping 一并带过去，否则界面显示"已关闭"而引擎仍在循环（开关要点两次才关得掉）。
+        val looping = _state.value.isLooping
         if (url.isBlank()) {
             stopPositionPolling()
             engine.clear()
             _positionMs.value = 0L
             _bufferedPositionMs.value = 0L
-            _state.value = PlaybackState()
+            _state.value = PlaybackState(isLooping = looping)
             return
         }
         if (url == _state.value.mediaUrl) return
         _positionMs.value = 0L
         _bufferedPositionMs.value = 0L
-        _state.value = PlaybackState(mediaUrl = url, isBuffering = true, playWhenReady = engine.playWhenReady)
+        _state.value =
+            PlaybackState(
+                mediaUrl = url,
+                isBuffering = true,
+                playWhenReady = engine.playWhenReady,
+                isLooping = looping,
+            )
         engine.load(url, requestHeaders)
     }
 

@@ -427,4 +427,27 @@ class PlayerControllerTest {
             assertFalse(engine.loopEnabled)
             assertFalse(controller.state.value.isLooping)
         }
+
+    @Test
+    fun setMedia_switchingUrl_keepsLoopingStateInSyncWithEngine() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+
+            controller.setMedia("https://cdn/ep1.m3u8", emptyMap())
+            controller.setLooping(true)
+
+            // 换集：URL 变化会整体重建媒体态，但单集循环是引擎持有的用户偏好，必须原样带过去
+            controller.setMedia("https://cdn/ep2.m3u8", emptyMap())
+
+            assertEquals(2, engine.loadCalls)
+            assertTrue("换集后界面必须仍显示单集循环已开启", controller.state.value.isLooping)
+            assertTrue("引擎 repeatMode 与界面状态必须一致", engine.loopEnabled)
+
+            // 清空媒体（无片源）同样不得把偏好转成"已关闭"
+            controller.setMedia("", emptyMap())
+
+            assertEquals(1, engine.clearCalls)
+            assertTrue("无片源时单集循环偏好仍需保留", controller.state.value.isLooping)
+        }
 }

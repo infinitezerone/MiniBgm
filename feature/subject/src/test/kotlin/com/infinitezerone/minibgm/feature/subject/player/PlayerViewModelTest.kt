@@ -399,6 +399,93 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun selectEpisode_doesNotCarryPreviousEpisodeResumePosition() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            settings.setPlaybackPositions(
+                mapOf(
+                    "https://example.com/ep1.m3u8" to 300_000L,
+                    "https://example.com/ep2.m3u8" to 90_000L,
+                ),
+            )
+            val viewModel =
+                viewModel(
+                    route =
+                        route(
+                            queue = queueOf("https://example.com/ep1.m3u8", "https://example.com/ep2.m3u8"),
+                        ),
+                    settingsRepository = settings,
+                )
+            advanceUntilIdle()
+            assertEquals(300_000L, viewModel.uiState.value.resumePositionMs)
+
+            viewModel.selectEpisode(PlayerEpisodeItem(id = 0L, sort = 2f, name = "第二话"))
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals("https://example.com/ep2.m3u8", state.streamUrl)
+            assertEquals("换集必须下发新分集自己的续播点，不得沿用上一集进度", 90_000L, state.resumePositionMs)
+        }
+
+    @Test
+    fun selectEpisode_onRuleSource_appliesNewEpisodeResumePositionAfterSniffing() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            // 新分集此前看过一部分：换集后必须恢复到它自己的位置
+            settings.setPlaybackPositions(mapOf("https://cdn.example.com/ep2.m3u8" to 60_000L))
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule1",
+                    name = "TestRule",
+                    urlTemplate = "https://example.com/watch?t={title}&ep={ep}",
+                    isEnabled = true,
+                )
+            settings.importPlaybackRules(listOf(rule))
+
+            val fakeResolver =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> =
+                        listOf(
+                            PlayableSource(
+                                url = "https://cdn.example.com/ep${epNumber.toInt()}.m3u8",
+                                kind = PlaylistEntryKind.DIRECT,
+                            ),
+                        )
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+                }
+
+            val viewModel =
+                PlayerViewModel(
+                    route = route(streamUrl = ""),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = fakeResolver,
+                )
+            advanceUntilIdle()
+            assertEquals("https://cdn.example.com/ep1.m3u8", viewModel.uiState.value.streamUrl)
+
+            viewModel.selectEpisode(PlayerEpisodeItem(id = 0L, sort = 2f, name = "第二话"))
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals("https://cdn.example.com/ep2.m3u8", state.streamUrl)
+            assertEquals("规则源换集要在嗅探出地址后用新分集自己的续播点", 60_000L, state.resumePositionMs)
+        }
+
+    @Test
     fun onPlaybackEnded_clearsSavedResumePosition() =
         runTest {
             val settings = FakeSettingsRepository()

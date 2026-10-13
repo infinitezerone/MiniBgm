@@ -305,4 +305,3 @@ internal fun formatSourceDisplayName(
         stringResource(R.string.feature_subject_player_source_fallback_format, index + 1)
     }
 }
-
