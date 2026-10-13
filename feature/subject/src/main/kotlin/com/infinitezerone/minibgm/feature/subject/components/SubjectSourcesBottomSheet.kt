@@ -594,10 +594,17 @@ private fun MikanResourcesSection(
                                     ).show()
                             }
                             val streamResult =
-                                torrentStreamEngine.startStream(
+                                torrentRepository.startStreamDownload(
                                     title = resource.title,
                                     magnetUrl = resource.magnetUrl,
                                     torrentUrl = resource.torrentUrl.ifBlank { null },
+                                    totalBytes = resource.contentLength,
+                                    subjectId = subject.id,
+                                    subjectName = subject.displayName,
+                                    subjectCoverUrl = subject.images?.bestImage.orEmpty(),
+                                    episodeId = episode?.id ?: 0L,
+                                    episodeSort = episode?.episodeNumber ?: 1f,
+                                    episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
                                 )
                             streamResult
                                 .onSuccess { streamUrl ->

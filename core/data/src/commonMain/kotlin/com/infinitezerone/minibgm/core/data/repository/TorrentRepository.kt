@@ -35,6 +35,26 @@ interface TorrentRepository {
     ): String
 
     /**
+     * 启动（或复用）下载任务并挂起等待可播放地址就绪（统一收口“边下边播”与“应用内下载”）。
+     *
+     * - 若任务已离线完成且本地文件存在，直接返回 `file://` 路径；
+     * - 若任务正在下载且本地流服务已就绪，直接复用当前 `streamUrl`；
+     * - 若任务处于排队/暂停/异常或尚未创建，优先调度该任务启动，并在流服务就绪后返回 `streamUrl`。
+     */
+    suspend fun startStreamDownload(
+        title: String,
+        magnetUrl: String,
+        torrentUrl: String? = null,
+        totalBytes: Long = 0L,
+        subjectId: Long = 0L,
+        subjectName: String = "",
+        subjectCoverUrl: String = "",
+        episodeId: Long = 0L,
+        episodeSort: Float = 0f,
+        episodeName: String = "",
+    ): Result<String>
+
+    /**
      * 暂停指定任务。
      */
     suspend fun pauseDownload(taskId: String)

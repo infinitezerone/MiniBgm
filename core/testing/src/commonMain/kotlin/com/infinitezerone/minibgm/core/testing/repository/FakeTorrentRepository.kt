@@ -58,6 +58,42 @@ class FakeTorrentRepository : TorrentRepository {
         return taskId
     }
 
+    override suspend fun startStreamDownload(
+        title: String,
+        magnetUrl: String,
+        torrentUrl: String?,
+        totalBytes: Long,
+        subjectId: Long,
+        subjectName: String,
+        subjectCoverUrl: String,
+        episodeId: Long,
+        episodeSort: Float,
+        episodeName: String,
+    ): Result<String> {
+        val existing = mutableTasks.value.firstOrNull { it.magnetUrl == magnetUrl }
+        if (existing != null && existing.isCompleted && existing.savePath.isNotBlank()) {
+            return Result.success("file://${existing.savePath}")
+        }
+        val taskId =
+            startDownload(
+                title = title,
+                magnetUrl = magnetUrl,
+                torrentUrl = torrentUrl,
+                totalBytes = totalBytes,
+                subjectId = subjectId,
+                subjectName = subjectName,
+                subjectCoverUrl = subjectCoverUrl,
+                episodeId = episodeId,
+                episodeSort = episodeSort,
+                episodeName = episodeName,
+            )
+        val streamUrl = "http://127.0.0.1:18080/torrents/0/stream/0"
+        mutableTasks.update { list ->
+            list.map { if (it.id == taskId) it.copy(streamUrl = streamUrl) else it }
+        }
+        return Result.success(streamUrl)
+    }
+
     override suspend fun pauseDownload(taskId: String) {
         pauseDownloadCallCount++
         mutableTasks.update { list ->

@@ -1069,6 +1069,22 @@ class ArchitectureRulesTest {
             )
         }
 
+        val sourcesSheetFile =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectSourcesBottomSheet.kt",
+            )
+        if (sourcesSheetFile.isFile) {
+            val sheetContent = KotlinSourceScanner.sanitize(sourcesSheetFile.readText())
+            if (sheetContent.contains("torrentStreamEngine.startStream(") ||
+                !sheetContent.contains("torrentRepository.startStreamDownload(")
+            ) {
+                violations.add(
+                    "SubjectSourcesBottomSheet.kt 必须通过 torrentRepository.startStreamDownload( 统一调度边下边播，严禁直接调用 torrentStreamEngine.startStream( 抢占后台下载会话",
+                )
+            }
+        }
+
         assertTrue(
             violations.isEmpty(),
             "违反 ECH 优选池防污染与 BT 流播/下载单盘协同红线：\n" + violations.joinToString("\n"),

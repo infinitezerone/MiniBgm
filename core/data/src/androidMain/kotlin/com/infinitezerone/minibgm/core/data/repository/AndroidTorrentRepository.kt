@@ -19,12 +19,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -78,8 +80,23 @@ class AndroidTorrentRepository(
             }
 
         if (existingTask != null) {
-            if (existingTask.status == TorrentTaskStatus.PAUSED || existingTask.status == TorrentTaskStatus.ERROR) {
-                resumeDownload(existingTask.id)
+            val completedFileMissing =
+                existingTask.status == TorrentTaskStatus.COMPLETED &&
+                    (existingTask.savePath.isBlank() || !File(existingTask.savePath).exists())
+            if (existingTask.status == TorrentTaskStatus.PAUSED ||
+                existingTask.status == TorrentTaskStatus.ERROR ||
+                completedFileMissing
+            ) {
+                updateTask(existingTask.id) {
+                    it.copy(
+                        status = TorrentTaskStatus.QUEUED,
+                        errorMessage = null,
+                        streamUrl = "",
+                        downloadedBytes = if (completedFileMissing) 0L else it.downloadedBytes,
+                    )
+                }
+                startForegroundService(context, existingTask.id, existingTask.title)
+                scheduleNextIfIdle()
             }
             return existingTask.id
         }
@@ -115,6 +132,111 @@ class AndroidTorrentRepository(
         scheduleNextIfIdle()
 
         return taskId
+    }
+
+    override suspend fun startStreamDownload(
+        title: String,
+        magnetUrl: String,
+        torrentUrl: String?,
+        totalBytes: Long,
+        subjectId: Long,
+        subjectName: String,
+        subjectCoverUrl: String,
+        episodeId: Long,
+        episodeSort: Float,
+        episodeName: String,
+    ): Result<String> =
+        runCatching {
+            val taskId =
+                startDownload(
+                    title = title,
+                    magnetUrl = magnetUrl,
+                    torrentUrl = torrentUrl,
+                    totalBytes = totalBytes,
+                    subjectId = subjectId,
+                    subjectName = subjectName,
+                    subjectCoverUrl = subjectCoverUrl,
+                    episodeId = episodeId,
+                    episodeSort = episodeSort,
+                    episodeName = episodeName,
+                )
+
+            val currentSnapshot = _tasks.value.firstOrNull { it.id == taskId }
+            if (currentSnapshot != null) {
+                if (currentSnapshot.isCompleted && currentSnapshot.savePath.isNotBlank() && File(currentSnapshot.savePath).exists()) {
+                    return@runCatching "file://${currentSnapshot.savePath}"
+                }
+                if (currentSnapshot.status == TorrentTaskStatus.DOWNLOADING && currentSnapshot.streamUrl.isNotBlank()) {
+                    return@runCatching currentSnapshot.streamUrl
+                }
+            }
+
+            // 若当前有其他任务占用了单实例 P2P 会话，将原活跃任务礼让退回 QUEUED，优先启动用户正在点击“边下边播”的任务
+            preemptAndPrioritizeTask(taskId)
+
+            _tasks
+                .mapNotNull { list ->
+                    val task =
+                        list.firstOrNull { it.id == taskId }
+                            ?: return@mapNotNull Result.failure<String>(CancellationException("下载任务已取消"))
+                    when {
+                        task.isCompleted && task.savePath.isNotBlank() ->
+                            Result.success("file://${task.savePath}")
+                        task.status == TorrentTaskStatus.DOWNLOADING && task.streamUrl.isNotBlank() ->
+                            Result.success(task.streamUrl)
+                        task.status == TorrentTaskStatus.ERROR ->
+                            Result.failure(IOException(task.errorMessage ?: "起播失败"))
+                        task.status == TorrentTaskStatus.PAUSED ->
+                            Result.failure(CancellationException("下载任务已暂停"))
+                        else -> null
+                    }
+                }.first()
+                .getOrThrow()
+        }
+
+    private suspend fun preemptAndPrioritizeTask(targetTaskId: String) {
+        val preemptedJob: Job?
+        val preemptedTaskId: String?
+        synchronized(this) {
+            val currentId = activeRunningTaskId
+            if (currentId != null && currentId != targetTaskId && activeJobs[currentId]?.isActive == true) {
+                preemptedTaskId = currentId
+                preemptedJob = activeJobs.remove(currentId)
+                activeRunningTaskId = null
+            } else {
+                preemptedTaskId = null
+                preemptedJob = null
+            }
+        }
+
+        if (preemptedTaskId != null) {
+            updateTask(preemptedTaskId) {
+                if (it.status == TorrentTaskStatus.DOWNLOADING || it.status == TorrentTaskStatus.RESOLVING) {
+                    it.copy(
+                        status = TorrentTaskStatus.QUEUED,
+                        downloadSpeedBytesPerSec = 0L,
+                        connectedPeers = 0,
+                        streamUrl = "",
+                    )
+                } else {
+                    it
+                }
+            }
+        }
+
+        // 将目标任务移至队列最前，确保 scheduleNextIfIdle 立即选中它
+        _tasks.update { list ->
+            val target = list.firstOrNull { it.id == targetTaskId } ?: return@update list
+            listOf(target) + list.filterNot { it.id == targetTaskId }
+        }
+        persistTasksSnapshot()
+
+        if (preemptedJob != null) {
+            preemptedJob.cancelAndJoin()
+            streamEngine.setDownloadSessionProtected(false)
+            streamEngine.stopStream(force = true)
+        }
+        scheduleNextIfIdle()
     }
 
     @Synchronized

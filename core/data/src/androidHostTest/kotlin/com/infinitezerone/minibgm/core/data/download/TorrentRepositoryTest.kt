@@ -449,4 +449,101 @@ class TorrentRepositoryTest {
                 tempRoot.deleteRecursively()
             }
         }
+
+    @Test
+    fun androidTorrentRepository_startStreamDownload_preemptsBackgroundAndReusesTask() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_stream_download_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ): DownloadState = DownloadState.Completed(destinationPath, 64L)
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val streamService =
+                    object : AssetDownloadService {
+                        override suspend fun streamAsset(
+                            url: String,
+                            rangeStart: Long,
+                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                        ): Long = 0L
+                    }
+
+                val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
+                val streamEngine =
+                    FakeTorrentStreamEngine(initialInstalled = true).apply {
+                        mockTargetFilePath = File(downloadDir, "episode.mkv").absolutePath
+                    }
+
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                        peerConnectTimeoutMs = 0L,
+                    )
+
+                // 1. 先启动一个后台下载任务 Ep 01
+                val bgTaskId =
+                    repo.startDownload(
+                        title = "Ep 01",
+                        magnetUrl = "magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                        totalBytes = 1000L,
+                    )
+                assertEquals(
+                    TorrentTaskStatus.DOWNLOADING,
+                    repo.tasks.value
+                        .single { it.id == bgTaskId }
+                        .status,
+                )
+
+                // 2. 用户在选源面板点击 Ep 02 的“边下边播” (startStreamDownload)
+                //    Ep 01 应礼让退回 QUEUED，Ep 02 立即进入 DOWNLOADING 并返回可播放 streamUrl
+                val streamResult =
+                    repo.startStreamDownload(
+                        title = "Ep 02",
+                        magnetUrl = "magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        totalBytes = 1000L,
+                    )
+                assertTrue(streamResult.isSuccess)
+                assertEquals("http://127.0.0.1:8899/stream?hash=fake", streamResult.getOrNull())
+
+                val bgTaskAfterPreempt = repo.tasks.value.single { it.id == bgTaskId }
+                val streamTask = repo.tasks.value.single { it.title == "Ep 02" }
+                assertEquals(TorrentTaskStatus.QUEUED, bgTaskAfterPreempt.status)
+                assertEquals(TorrentTaskStatus.DOWNLOADING, streamTask.status)
+
+                // 3. 再次对正在下载的 Ep 02 调用 startStreamDownload，直接复用当前流而不重启
+                val reuseResult =
+                    repo.startStreamDownload(
+                        title = "Ep 02",
+                        magnetUrl = "magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                        totalBytes = 1000L,
+                    )
+                assertEquals("http://127.0.0.1:8899/stream?hash=fake", reuseResult.getOrNull())
+                assertEquals(2, repo.tasks.value.size)
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
 }
