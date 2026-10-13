@@ -193,10 +193,12 @@
     <string name="feature_subject_source_mikan_download_torrent">下载种子</string>
     <string name="feature_subject_source_mikan_stream_play">边下边播</string>
     <string name="feature_subject_source_mikan_plugin_dialog_title">需要安装 BT 流播扩展组件</string>
-    <string name="feature_subject_source_mikan_plugin_dialog_message">首次使用磁力边下边播需下载轻量流媒体组件（约 2.5MB），支持国内镜像高速下载，下载后即可在内置播放器中即时观看。</string>
+    <string name="feature_subject_source_mikan_plugin_dialog_message">首次使用磁力边下边播需下载轻量流媒体组件（约 10MB），支持国内镜像高速下载，下载后即可在内置播放器中即时观看。</string>
     <string name="feature_subject_source_mikan_plugin_install_btn">立即安装并起播</string>
     <string name="feature_subject_source_mikan_plugin_installing">正在通过镜像拉取流化组件…</string>
+    <string name="feature_subject_source_mikan_plugin_install_failed">组件安装失败，请检查网络</string>
     <string name="feature_subject_source_mikan_stream_buffering">正在解析种子元数据并预缓冲…</string>
+    <string name="feature_subject_source_mikan_stream_failed">起播失败</string>
     <string name="feature_subject_source_mikan_download_started">已加入下载队列，可在通知栏查看进度</string>
     <string name="feature_subject_source_mikan_torrent_downloaded">种子文件已就绪</string>
     <string name="feature_subject_source_mikan_torrent_failed">种子文件下载失败</string>

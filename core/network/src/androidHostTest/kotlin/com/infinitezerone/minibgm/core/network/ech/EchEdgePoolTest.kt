@@ -149,6 +149,19 @@ class EchEdgePoolTest {
         assertNull(EchEdgePool.normalizeIp("   "))
     }
 
+    @Test
+    fun absorb_skips_redundant_disk_rewrite_when_candidates_are_already_known() {
+        EchEdgePool.absorb(listOf("104.16.0.1", "104.16.0.2"), now)
+        EchEdgePool.flush()
+        val poolFile = File(cacheDir, POOL_FILE_NAME)
+        val initialContent = poolFile.readText()
+
+        // 10 秒后再次观测到相同候选集：不应刷新 lastObservedAtMillis 也不应重写落盘
+        EchEdgePool.absorb(listOf("104.16.0.1", "104.16.0.2"), now + 10_000L)
+        EchEdgePool.flush()
+        assertEquals(initialContent, poolFile.readText())
+    }
+
     companion object {
         /** 与 EchEdgePool 的落盘/容量契约对齐，改动时这里必须一起改。 */
         private const val POOL_FILE_NAME = "ech_edge_pool.txt"

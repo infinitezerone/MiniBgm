@@ -23,6 +23,7 @@ class TorrentModelsTest {
         assertEquals(50, task.percentage)
         assertFalse(task.isCompleted)
         assertEquals("2.0 MB/s", task.formattedDownloadSpeed)
+        assertEquals(250L, task.etaSeconds)
         assertTrue(task.formattedProgress.contains("500.0 MB / 1000.0 MB"))
     }
 
@@ -37,6 +38,7 @@ class TorrentModelsTest {
             )
 
         assertTrue(task.isCompleted)
+        assertEquals(-1L, task.etaSeconds)
     }
 
     @Test
@@ -59,16 +61,20 @@ class TorrentModelsTest {
                 bufferedBytes = 300L,
                 targetBytes = 1000L,
                 speedBytesPerSec = 1024L * 1024L,
+                connectedPeers = 12,
             )
         assertEquals(0.3f, buffering.progress)
         assertEquals(1024L * 1024L, buffering.speedBytesPerSec)
+        assertEquals(12, buffering.connectedPeers)
 
         val ready =
             TorrentStreamState.Ready(
                 streamUrl = "http://127.0.0.1:8899/stream",
                 title = "Episode 01",
                 totalBytes = 500_000_000L,
+                connectedPeers = 5,
             )
         assertEquals("http://127.0.0.1:8899/stream", ready.streamUrl)
+        assertEquals(5, ready.connectedPeers)
     }
 }

@@ -156,7 +156,12 @@ class EchHttpClientEngine(
                         echConfig = echConfig,
                     )
                 } catch (cancellation: CancellationException) {
-                    AdaptiveDnsResolver.recordFailure(host)
+                    val isRequestTimeout =
+                        cancellation is TimeoutCancellationException ||
+                            (deadlineNanos != Long.MAX_VALUE && remainingMillis(deadlineNanos) <= 0L)
+                    if (isRequestTimeout) {
+                        AdaptiveDnsResolver.recordFailure(host)
+                    }
                     throw cancellation
                 } catch (t: Throwable) {
                     AdaptiveDnsResolver.recordFailure(host)

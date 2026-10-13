@@ -380,7 +380,10 @@ class EpisodeDetailViewModel(
         val targetEpisode = episode ?: uiState.value.episode
         val subject = uiState.value.subject ?: return
         val title = subject.displayName
-        val epSort = targetEpisode?.episodeNumber
+        val primaryEpSort = targetEpisode?.let { if (it.sort > 0f) it.sort else it.episodeNumber }
+        val altEpSort = targetEpisode?.ep?.takeIf { it > 0f && it != primaryEpSort }
+        val isSplitContinuation =
+            targetEpisode != null && targetEpisode.isMain && targetEpisode.sort > targetEpisode.ep && targetEpisode.ep > 0f
         val altTitles =
             (
                 listOfNotNull(
@@ -390,13 +393,27 @@ class EpisodeDetailViewModel(
             ).distinct()
         mikanState.value = mikanState.value.copy(second = true)
         viewModelScope.launch {
+            val prequelIds =
+                if (isSplitContinuation) {
+                    (subjectRepository.fetchRelations(subjectId) as? AppResult.Success)
+                        ?.data
+                        .orEmpty()
+                        .filter { it.relation == "前传" }
+                        .map { it.id }
+                        .distinct()
+                } else {
+                    emptyList()
+                }
             val resources =
                 mikanRepository
                     ?.getTorrentResources(
                         title = title,
                         mikanId = null,
-                        episodeSort = epSort,
+                        episodeSort = primaryEpSort,
                         alternativeTitles = altTitles,
+                        subjectId = subjectId,
+                        relatedSubjectIds = prequelIds,
+                        alternativeEpisodeSort = altEpSort,
                     ).orEmpty()
             mikanState.value = Pair(resources, false)
         }

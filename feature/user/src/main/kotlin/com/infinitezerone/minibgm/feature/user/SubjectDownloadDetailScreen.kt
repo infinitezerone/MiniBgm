@@ -182,17 +182,25 @@ fun SubjectDownloadDetailScreen(
                     EpisodeDownloadCard(
                         task = task,
                         onPlay = {
-                            val playUrl = if (task.savePath.isNotBlank()) "file://${task.savePath}" else ""
-                            val route =
-                                PlayerRoute(
-                                    subjectId = task.subjectId,
-                                    episodeId = task.episodeId,
-                                    streamUrl = playUrl,
-                                    episodeName = task.episodeName.ifBlank { task.title },
-                                    subjectName = task.subjectName,
-                                    episodeSort = task.episodeSort,
-                                )
-                            onPlayEpisode(route)
+                            val playUrl =
+                                when {
+                                    task.isCompleted && task.savePath.isNotBlank() -> "file://${task.savePath}"
+                                    task.status == TorrentTaskStatus.DOWNLOADING && task.streamUrl.isNotBlank() -> task.streamUrl
+                                    task.savePath.isNotBlank() -> "file://${task.savePath}"
+                                    else -> ""
+                                }
+                            if (playUrl.isNotBlank()) {
+                                val route =
+                                    PlayerRoute(
+                                        subjectId = task.subjectId,
+                                        episodeId = task.episodeId,
+                                        streamUrl = playUrl,
+                                        episodeName = task.episodeName.ifBlank { task.title },
+                                        subjectName = task.subjectName,
+                                        episodeSort = task.episodeSort,
+                                    )
+                                onPlayEpisode(route)
+                            }
                         },
                         onPause = { viewModel.pauseTask(task.id) },
                         onResume = { viewModel.resumeTask(task.id) },
@@ -280,10 +288,11 @@ private fun EpisodeDownloadCard(
     modifier: Modifier = Modifier,
 ) {
     val isCompleted = task.status == TorrentTaskStatus.COMPLETED
+    val isPlayable = isCompleted || (task.status == TorrentTaskStatus.DOWNLOADING && task.streamUrl.isNotBlank())
 
     Surface(
         onClick =
-            if (isCompleted) {
+            if (isPlayable) {
                 onPlay
             } else {
                 {}
@@ -363,8 +372,9 @@ private fun EpisodeDownloadCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
+                            val peerSuffix = if (task.connectedPeers > 0) " · ${task.connectedPeers} 节点" else ""
                             Text(
-                                text = "${task.percentage}% · ${task.formattedDownloadSpeed}",
+                                text = "${task.percentage}% · ${task.formattedDownloadSpeed}$peerSuffix",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary,
@@ -440,6 +450,19 @@ private fun EpisodeDownloadCard(
                     }
 
                     TorrentTaskStatus.DOWNLOADING -> {
+                        if (task.streamUrl.isNotBlank()) {
+                            FilledTonalIconButton(
+                                onClick = onPlay,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.PlayArrow,
+                                    contentDescription = stringResource(R.string.feature_user_downloads_play_offline),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
                         IconButton(
                             onClick = onPause,
                             modifier = Modifier.size(36.dp),

@@ -62,6 +62,7 @@ val subjectModule =
                 playbackSourceVerifier = getOrNull(),
                 communityRepository = getOrNull(),
                 danmakuRepository = getOrNull(),
+                torrentStreamEngine = getOrNull(),
             )
         }
     }

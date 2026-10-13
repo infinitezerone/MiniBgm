@@ -78,6 +78,7 @@ struct EchConfigEntry {
 struct AttemptError {
     source: Box<dyn std::error::Error + Send + Sync>,
     request_possibly_sent: bool,
+    reachable_addr: Option<String>,
 }
 
 impl AttemptError {
@@ -86,6 +87,20 @@ impl AttemptError {
         Self {
             source: source.into(),
             request_possibly_sent: false,
+            reachable_addr: None,
+        }
+    }
+
+    /// 握手中明确收到了对端响应（如服务端返回 ECH retry_configs）：
+    /// 记录该已证明 TCP 可达的候选地址，以便自愈重试时直接优先连它，避免重跑前序死节点超时。
+    fn before_request_at(
+        source: impl Into<Box<dyn std::error::Error + Send + Sync>>,
+        reachable_addr: String,
+    ) -> Self {
+        Self {
+            source: source.into(),
+            request_possibly_sent: false,
+            reachable_addr: Some(reachable_addr),
         }
     }
 
@@ -94,8 +109,23 @@ impl AttemptError {
         Self {
             source: source.into(),
             request_possibly_sent: true,
+            reachable_addr: None,
         }
     }
+}
+
+fn prioritize_reachable_addr(addrs: &[String], reachable_addr: Option<&str>) -> Vec<String> {
+    let Some(preferred) = reachable_addr else {
+        return addrs.to_vec();
+    };
+    let mut ordered = Vec::with_capacity(addrs.len() + 1);
+    ordered.push(preferred.to_owned());
+    for addr in addrs {
+        if addr != preferred {
+            ordered.push(addr.clone());
+        }
+    }
+    ordered
 }
 
 impl std::fmt::Display for AttemptError {
@@ -653,6 +683,9 @@ impl EchHttpClient {
                     .into());
                 }
 
+                let retry_addrs =
+                    prioritize_reachable_addr(&addrs_to_try, error.reachable_addr.as_deref());
+
                 // retry_configs 只可能出现在"ECH 被服务端拒绝"的握手里，也就是请求必然尚未发出；
                 // 上面的守卫已保证这一点，这里再做一次显式确认式重试。
                 if let Some(Some(retry_configs)) = extract_retry_configs(&error) {
@@ -677,7 +710,7 @@ impl EchHttpClient {
                                 headers,
                                 body,
                                 timeout_ms,
-                                &addrs_to_try,
+                                &retry_addrs,
                                 stream,
                                 Some(new_ech_b64),
                                 Some(&self.h2_pool),
@@ -703,7 +736,7 @@ impl EchHttpClient {
                     headers,
                     body,
                     timeout_ms,
-                    &addrs_to_try,
+                    &retry_addrs,
                     stream,
                     None,
                     Some(&self.h2_pool),
@@ -938,8 +971,11 @@ async fn async_try_fetch_with_config(
                         // 服务端已明确拒绝当前 ECH 配置并下发了 retry_configs。
                         // 由于 Cloudflare 是 Anycast 架构，所有边缘使用同一套 ECHConfig，
                         // 继续尝试下一个 IP 依然会被拒绝且徒增 RTT / 耗尽超时，
-                        // 立即中断候选循环并返回该错误以触发自愈重试。
-                        return Err(AttemptError::before_request(error));
+                        // 立即中断候选循环并返回该错误（附带当前已证实可达的节点地址）以触发自愈重试。
+                        return Err(AttemptError::before_request_at(
+                            error,
+                            socket_addr.to_string(),
+                        ));
                     }
                     last_error = Some(error);
                 }
@@ -1308,5 +1344,23 @@ mod tests {
             port: 443,
             is_ech: true,
         }));
+    }
+
+    #[test]
+    fn test_prioritize_reachable_addr_moves_responsive_ip_to_front() {
+        let addrs = vec![
+            "104.21.48.209:443".to_owned(),
+            "172.67.192.203:443".to_owned(),
+            "172.64.89.0:443".to_owned(),
+        ];
+        let reordered = prioritize_reachable_addr(&addrs, Some("172.64.89.0:443"));
+        assert_eq!(
+            reordered,
+            vec![
+                "172.64.89.0:443".to_owned(),
+                "104.21.48.209:443".to_owned(),
+                "172.67.192.203:443".to_owned(),
+            ]
+        );
     }
 }

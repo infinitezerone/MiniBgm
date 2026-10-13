@@ -45,7 +45,7 @@ class AndroidAssetDownloader(
 
             val destFile = File(destinationPath)
             destFile.parentFile?.mkdirs()
-            val tempFile = File("$destinationPath.tmp")
+            val tempFile = File("$destinationPath$DOWNLOAD_TEMP_SUFFIX")
 
             var lastError: Throwable? = null
             var lastErrorMessage = ""

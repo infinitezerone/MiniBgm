@@ -1,12 +1,25 @@
 package com.infinitezerone.minibgm.core.data.download
 
+import android.content.ContextWrapper
+import com.infinitezerone.minibgm.core.data.repository.AndroidTorrentRepository
+import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
+import com.infinitezerone.minibgm.core.network.AssetDownloadService
 import com.infinitezerone.minibgm.core.testing.repository.FakeTorrentRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeTorrentStreamEngine
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import java.io.File
+import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class TorrentRepositoryTest {
     @Test
     fun fakeTorrentRepository_taskLifecycle_managesStateCorrectly() =
@@ -55,5 +68,280 @@ class TorrentRepositoryTest {
             repository.cancelDownload(taskId)
             assertEquals(1, repository.cancelDownloadCallCount)
             assertTrue(repository.tasks.value.isEmpty())
+        }
+
+    @Test
+    fun androidTorrentRepository_downloadsStreamToFile_andReusesCachedTorrentFile() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_torrent_repo_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val torrentDownloadCalls = AtomicInteger(0)
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ): DownloadState {
+                            torrentDownloadCalls.incrementAndGet()
+                            File(destinationPath).apply {
+                                parentFile?.mkdirs()
+                                writeBytes(ByteArray(128) { 0x42 })
+                            }
+                            return DownloadState.Completed(destinationPath, 128L)
+                        }
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val streamPayload = ByteArray(4096) { (it % 251).toByte() }
+                val streamService =
+                    object : AssetDownloadService {
+                        override suspend fun streamAsset(
+                            url: String,
+                            rangeStart: Long,
+                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                        ): Long {
+                            onChunk(streamPayload, streamPayload.size, streamPayload.size.toLong(), false)
+                            return streamPayload.size.toLong()
+                        }
+                    }
+
+                val streamEngine = FakeTorrentStreamEngine(initialInstalled = true)
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                    )
+
+                val taskId =
+                    repo.startDownload(
+                        title = "[Sakurato] Steel Ball Run [04]",
+                        magnetUrl = "magnet:?xt=urn:btih:0327ac7116411c81f53636b41710246754a503b5",
+                        torrentUrl = "https://mikanani.me/Download/04.torrent",
+                        totalBytes = 0L,
+                    )
+
+                val completedTask = repo.tasks.value.single { it.id == taskId }
+                assertEquals(TorrentTaskStatus.COMPLETED, completedTask.status)
+                assertEquals(streamPayload.size.toLong(), completedTask.downloadedBytes)
+                assertEquals(streamPayload.size.toLong(), completedTask.totalBytes)
+                assertTrue(File(completedTask.savePath).isFile)
+                assertEquals(streamPayload.size.toLong(), File(completedTask.savePath).length())
+                assertEquals(1, torrentDownloadCalls.get())
+
+                // Second call to downloadTorrentFile with same title must reuse cached .torrent without network request
+                val secondTorrent = repo.downloadTorrentFile("https://mikanani.me/Download/04.torrent", "[Sakurato] Steel Ball Run [04]")
+                assertTrue(secondTorrent.isSuccess)
+                assertEquals(1, torrentDownloadCalls.get())
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
+
+    @Test
+    fun androidTorrentRepository_directEngineDiskMode_skipsLoopbackCopy_protectsSession_queuesAndPersists() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_torrent_direct_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ): DownloadState {
+                            File(destinationPath).apply {
+                                parentFile?.mkdirs()
+                                writeBytes(ByteArray(64) { 0x11 })
+                            }
+                            return DownloadState.Completed(destinationPath, 64L)
+                        }
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val loopbackStreamCalls = AtomicInteger(0)
+                val streamService =
+                    object : AssetDownloadService {
+                        override suspend fun streamAsset(
+                            url: String,
+                            rangeStart: Long,
+                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                        ): Long {
+                            loopbackStreamCalls.incrementAndGet()
+                            return 0L
+                        }
+                    }
+
+                val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
+                val nativeMkvFile =
+                    File(downloadDir, "[Sakurato] Steel Ball Run [04][1080p].mkv").apply {
+                        writeBytes(ByteArray(8192) { 0x55 })
+                    }
+
+                val streamEngine =
+                    FakeTorrentStreamEngine(initialInstalled = true).apply {
+                        mockTargetFilePath = nativeMkvFile.absolutePath
+                    }
+
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                    )
+
+                // 1. Start task 1 -> enters DOWNLOADING, exposes streamUrl for play-while-downloading, and protects session
+                val taskId1 =
+                    repo.startDownload(
+                        title = "[Sakurato] Steel Ball Run [04]",
+                        magnetUrl = "magnet:?xt=urn:btih:0327ac7116411c81f53636b41710246754a503b5",
+                        torrentUrl = "https://mikanani.me/Download/04.torrent",
+                        totalBytes = 8192L,
+                    )
+
+                // Duplicate startDownload with same infoHash must deduplicate and return taskId1
+                val duplicateTaskId =
+                    repo.startDownload(
+                        title = "[Sakurato] Steel Ball Run [04] Dup",
+                        magnetUrl = "magnet:?xt=urn:btih:0327AC7116411C81F53636B41710246754A503B5&tr=udp://tracker",
+                        torrentUrl = null,
+                        totalBytes = 8192L,
+                    )
+                assertEquals(taskId1, duplicateTaskId)
+
+                val runningTask1 = repo.tasks.value.single { it.id == taskId1 }
+                assertEquals(TorrentTaskStatus.DOWNLOADING, runningTask1.status)
+                assertTrue(runningTask1.streamUrl.startsWith("http://127.0.0.1"))
+                assertTrue(runningTask1.savePath.endsWith(".mkv"), "Real container extension (.mkv) must be preserved")
+                assertTrue(streamEngine.isDownloadSessionProtected())
+
+                // 2. Starting a second distinct task while task 1 is DOWNLOADING must queue (QUEUED), not kill task 1
+                val taskId2 =
+                    repo.startDownload(
+                        title = "[Sakurato] Steel Ball Run [05]",
+                        magnetUrl = "magnet:?xt=urn:btih:9999999999999999999999999999999999999999",
+                        torrentUrl = null,
+                        totalBytes = 8192L,
+                    )
+                assertEquals(
+                    TorrentTaskStatus.DOWNLOADING,
+                    repo.tasks.value
+                        .single { it.id == taskId1 }
+                        .status,
+                )
+                assertEquals(
+                    TorrentTaskStatus.QUEUED,
+                    repo.tasks.value
+                        .single { it.id == taskId2 }
+                        .status,
+                )
+
+                // 3. Exiting player during play-while-downloading calls releasePlayerSession / stopStream(force = false),
+                //    which must NOT kill the protected background download
+                streamEngine.setPlayerSessionActive(true)
+                streamEngine.releasePlayerSession()
+                assertTrue(
+                    streamEngine.streamState.value !is com.infinitezerone.minibgm.core.model.TorrentStreamState.Idle,
+                    "Exiting player must not kill active background download session",
+                )
+
+                // 4. Native engine reports intermediate and 100% piece completion -> connectedPeers is propagated,
+                //    task 1 completes with zero HTTP loopback copy, and task 2 automatically dequeues into DOWNLOADING
+                streamEngine.emitStreamState(
+                    com.infinitezerone.minibgm.core.model.TorrentStreamState.Buffering(
+                        progress = 0.5f,
+                        bufferedBytes = 4096L,
+                        targetBytes = 8192L,
+                        speedBytesPerSec = 1024L,
+                        connectedPeers = 8,
+                    ),
+                )
+                assertEquals(
+                    8,
+                    repo.tasks.value
+                        .single { it.id == taskId1 }
+                        .connectedPeers,
+                )
+
+                streamEngine.emitStreamState(
+                    com.infinitezerone.minibgm.core.model.TorrentStreamState.Buffering(
+                        progress = 1f,
+                        bufferedBytes = 8192L,
+                        targetBytes = 8192L,
+                        speedBytesPerSec = 1024L,
+                        connectedPeers = 8,
+                    ),
+                )
+
+                assertEquals(0, loopbackStreamCalls.get(), "Direct engine disk mode must not copy video over HTTP loopback")
+                val completedTask1 = repo.tasks.value.single { it.id == taskId1 }
+                assertEquals(TorrentTaskStatus.COMPLETED, completedTask1.status)
+                assertEquals(8192L, completedTask1.downloadedBytes)
+                assertEquals(0, completedTask1.connectedPeers)
+                assertEquals(
+                    TorrentTaskStatus.DOWNLOADING,
+                    repo.tasks.value
+                        .single { it.id == taskId2 }
+                        .status,
+                )
+
+                // 5. Pause task 2 and verify tasks_manifest.json restores state in a new repository instance
+                repo.pauseDownload(taskId2)
+                val restoredRepo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                    )
+                assertEquals(2, restoredRepo.tasks.value.size)
+                assertEquals(
+                    TorrentTaskStatus.COMPLETED,
+                    restoredRepo.tasks.value
+                        .single { it.id == taskId1 }
+                        .status,
+                )
+                assertEquals(
+                    TorrentTaskStatus.PAUSED,
+                    restoredRepo.tasks.value
+                        .single { it.id == taskId2 }
+                        .status,
+                )
+            } finally {
+                tempRoot.deleteRecursively()
+            }
         }
 }

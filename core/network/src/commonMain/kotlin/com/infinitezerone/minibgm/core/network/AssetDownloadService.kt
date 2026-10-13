@@ -2,6 +2,8 @@ package com.infinitezerone.minibgm.core.network
 
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
@@ -33,24 +35,59 @@ interface AssetDownloadService {
     ): Long
 }
 
+internal fun isLoopbackHttpUrl(url: String): Boolean {
+    val normalized = url.trim().lowercase()
+    return normalized.startsWith("http://127.0.0.1:") ||
+        normalized.startsWith("http://127.0.0.1/") ||
+        normalized.startsWith("http://localhost:") ||
+        normalized.startsWith("http://localhost/") ||
+        normalized.startsWith("http://[::1]:") ||
+        normalized.startsWith("http://[::1]/")
+}
+
 internal class AssetDownloadServiceImpl(
     private val client: HttpClient,
+    private val loopbackClient: HttpClient? = null,
 ) : AssetDownloadService {
     private val logger = bgmLogger("Bgm/AssetDownloadService")
+
+    private val defaultLoopbackClient: HttpClient by lazy {
+        HttpClient(CIO) {
+            install(HttpTimeout)
+        }
+    }
 
     override suspend fun streamAsset(
         url: String,
         rangeStart: Long,
         onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-    ): Long =
-        client
+    ): Long {
+        val isLoopback = isLoopbackHttpUrl(url)
+        // 本地回环 HTTP 流（如 librqbit 本地流媒体服务 http://127.0.0.1:<port>/...）必须走纯流式 CIO 引擎：
+        // 1. EchHttpClientEngine 仅允许 https:// 外部请求，拒绝明文 http://；
+        // 2. EchHttpClientEngine 会在 JNI 层一次性聚合完整响应体，不适合 GB 级本地视频流；
+        // 3. 单测若显式注入 MockEngine 则保留给 MockEngine 拦截断言。
+        val activeClient =
+            if (isLoopback &&
+                !client.engine::class
+                    .simpleName
+                    .orEmpty()
+                    .contains("Mock")
+            ) {
+                loopbackClient ?: defaultLoopbackClient
+            } else {
+                client
+            }
+
+        return activeClient
             .prepareGet(url) {
                 if (rangeStart > 0L) {
                     header(HttpHeaders.Range, "bytes=$rangeStart-")
                 }
                 timeout {
                     requestTimeoutMillis = null
-                    socketTimeoutMillis = 30_000L
+                    // P2P 本地流在寻道/连接 Peer 阶段可能超过 30s 才产出首个顺序分片，放宽回环流读取超时至 120s
+                    socketTimeoutMillis = if (isLoopback) 120_000L else 30_000L
                     connectTimeoutMillis = 15_000L
                 }
             }.execute { response ->
@@ -89,4 +126,5 @@ internal class AssetDownloadServiceImpl(
 
                 totalStreamRead
             }
+    }
 }

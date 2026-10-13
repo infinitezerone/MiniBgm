@@ -4,6 +4,14 @@ import com.infinitezerone.minibgm.core.model.DownloadState
 import kotlinx.coroutines.flow.StateFlow
 
 /**
+ * 下载器在 [AssetDownloader.downloadAsset] 目标路径旁使用的中转文件后缀（`<destinationPath>.tmp`）。
+ *
+ * 该文件承载 HTTP Range 断点续传的已落盘字节。调用方若需要保证「重新开始」而非「续传」，
+ * 必须连同这个中转文件一起清理，否则上一轮的残缺字节会被拼接到新内容之前。
+ */
+const val DOWNLOAD_TEMP_SUFFIX: String = ".tmp"
+
+/**
  * 资产与安装包下载器契约。
  *
  * 负责 GitHub Release 产物的高速镜像分发、HTTP Range 断点探测与写入，

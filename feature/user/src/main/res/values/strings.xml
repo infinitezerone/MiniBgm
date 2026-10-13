@@ -368,5 +368,17 @@
     <string name="feature_user_downloads_status_completed">已完成</string>
     <string name="feature_user_downloads_card_summary">%1$d 个任务下载中 · %2$s</string>
     <string name="feature_user_downloads_card_all_done">%1$d 部番剧已离线</string>
+
+    <!-- 20. 开发者调试面板 (Debug) -->
+    <string name="feature_user_section_developer_debug">开发者调试面板 (Debug)</string>
+    <string name="feature_user_dev_simulate_torrent_uninstalled_title">模拟 BT 扩展未安装</string>
+    <string name="feature_user_dev_simulate_torrent_uninstalled_off">默认启用 APK 内置库，开启后将屏蔽内置库并强制走弹窗与云端下载</string>
+    <string name="feature_user_dev_simulate_torrent_uninstalled_on_ready">当前已通过云端动态下载装载（可点击下方重置再次测试下载）</string>
+    <string name="feature_user_dev_simulate_torrent_uninstalled_on_empty">当前处于未安装态，点击分集“边下边播”将触发安装确认弹窗</string>
+    <string name="feature_user_dev_reset_torrent_plugin_title">重置并清理已下载的动态扩展</string>
+    <string name="feature_user_dev_reset_torrent_plugin_desc">删除 filesDir/modules/torrent 下的 .so 并立即进入未安装模拟态</string>
+    <string name="feature_user_dev_torrent_simulated_uninstalled_toast">已清理动态扩展并切换为未安装模拟态</string>
+    <string name="feature_user_dev_torrent_restored_default_toast">已恢复默认 APK 内置扩展探测</string>
 </resources>
+
 

@@ -95,6 +95,7 @@ val dataModule =
         single<MikanRepository> {
             MikanRepositoryImpl(
                 pageFetchService = get<PageFetchService>(),
+                anilistMappingDao = getOrNull<AniListMappingDao>(),
             )
         }
         single<DanmakuRepository> {

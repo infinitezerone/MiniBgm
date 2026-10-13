@@ -16,8 +16,41 @@ class FakeTorrentStreamEngine(
     var shouldFailInstall: Boolean = false
     var shouldFailStream: Boolean = false
 
+    var mockTargetFilePath: String? = null
+    private var activeInfoHash: String? = null
+    private var downloadSessionProtected: Boolean = false
+    private var playerSessionActive: Boolean = false
+
     private val _streamState = MutableStateFlow<TorrentStreamState>(TorrentStreamState.Idle)
     override val streamState: StateFlow<TorrentStreamState> = _streamState.asStateFlow()
+
+    override fun getActiveTargetFilePath(): String? = mockTargetFilePath
+
+    override fun getActiveInfoHash(): String? = activeInfoHash
+
+    override fun setDownloadSessionProtected(protected: Boolean) {
+        downloadSessionProtected = protected
+    }
+
+    override fun isDownloadSessionProtected(): Boolean = downloadSessionProtected
+
+    override fun setPlayerSessionActive(active: Boolean) {
+        playerSessionActive = active
+    }
+
+    override fun isPlayerSessionActive(): Boolean = playerSessionActive
+
+    override fun releasePlayerSession() {
+        playerSessionActive = false
+        if (!downloadSessionProtected) {
+            activeInfoHash = null
+            _streamState.value = TorrentStreamState.Idle
+        }
+    }
+
+    fun emitStreamState(state: TorrentStreamState) {
+        _streamState.value = state
+    }
 
     override suspend fun isPluginInstalled(): Boolean = installed
 
@@ -36,6 +69,7 @@ class FakeTorrentStreamEngine(
         title: String,
         magnetUrl: String,
         torrentUrl: String?,
+        saveDirPath: String?,
     ): Result<String> {
         if (!installed) {
             _streamState.value = TorrentStreamState.PluginRequired()
@@ -45,6 +79,7 @@ class FakeTorrentStreamEngine(
             _streamState.value = TorrentStreamState.Error("Stream mock failed")
             return Result.failure(RuntimeException("Stream mock failed"))
         }
+        activeInfoHash = magnetUrl.substringAfter("xt=urn:btih:", "").substringBefore("&").ifBlank { null }
         val url = "http://127.0.0.1:8899/stream?hash=fake"
         _streamState.value =
             TorrentStreamState.Ready(
@@ -55,7 +90,27 @@ class FakeTorrentStreamEngine(
         return Result.success(url)
     }
 
-    override suspend fun stopStream() {
+    override suspend fun stopStream(force: Boolean) {
+        if (!force && (downloadSessionProtected || playerSessionActive)) {
+            return
+        }
+        downloadSessionProtected = false
+        playerSessionActive = false
+        activeInfoHash = null
         _streamState.value = TorrentStreamState.Idle
     }
+
+    private var simulateUninstalled: Boolean = false
+
+    override suspend fun setDebugSimulateUninstalled(simulateUninstalled: Boolean) {
+        this.simulateUninstalled = simulateUninstalled
+        if (simulateUninstalled) {
+            installed = false
+            downloadSessionProtected = false
+            activeInfoHash = null
+            _streamState.value = TorrentStreamState.Idle
+        }
+    }
+
+    override fun isDebugSimulateUninstalled(): Boolean = simulateUninstalled
 }

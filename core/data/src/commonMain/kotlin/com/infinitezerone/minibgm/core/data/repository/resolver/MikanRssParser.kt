@@ -33,6 +33,30 @@ object MikanRssParser {
             "&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce" +
             "&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce"
 
+    private val MIKAN_BANGUMI_ID_REGEX = Regex("""href=["']/Home/Bangumi/(\d+)["']""", RegexOption.IGNORE_CASE)
+    private val BGM_SUBJECT_ID_REGEX = Regex("""https?://(?:bgm\.tv|bangumi\.tv|chii\.in)/subject/(\d+)""", RegexOption.IGNORE_CASE)
+
+    /**
+     * 从 Mikan `/Home/Search` 搜索结果页 HTML 中提取候选的 Mikan 番剧词条 ID 列表（如 `["3887"]`）。
+     */
+    fun extractBangumiIdsFromSearchHtml(html: String): List<String> =
+        MIKAN_BANGUMI_ID_REGEX
+            .findAll(html)
+            .map { it.groupValues[1] }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
+
+    /**
+     * 从 Mikan `/Home/Bangumi/{id}` 番剧详情页 HTML 中提取其绑定的 Bangumi Subject ID（如 `551918L`）。
+     */
+    fun extractBgmSubjectIdFromBangumiHtml(html: String): Long? =
+        BGM_SUBJECT_ID_REGEX
+            .find(html)
+            ?.groupValues
+            ?.get(1)
+            ?.toLongOrNull()
+
     /**
      * 解析 Mikan RSS XML 文本为 [MikanTorrentResource] 列表。
      */
@@ -158,8 +182,8 @@ object MikanRssParser {
         if (BATCH_KEYWORDS.any { title.contains(it) }) return null
         if (BATCH_EP_RANGE_REGEX.containsMatchIn(title)) return null
 
-        // 形式 1: " - 25 " 或 " - 09"
-        val dashMatch = Regex("""\s+-\s+(\d{1,4}(?:\.\d)?)(?:\s+|\[|\(|$)""").find(title)
+        // 形式 1: " - 25 " / " - 09v2"
+        val dashMatch = Regex("""(?i)\s+-\s+(\d{1,4}(?:\.\d)?)(?:v\d+)?(?:\s+|\[|\(|$)""").find(title)
         if (dashMatch != null) {
             dashMatch.groupValues[1].toFloatOrNull()?.let { return it }
         }
@@ -170,19 +194,19 @@ object MikanRssParser {
             cnMatch.groupValues[1].toFloatOrNull()?.let { return it }
         }
 
-        // 形式 3: "[25]" / "【09】" (排除分辨率 720/1080/2160 等)
-        val bracketMatch = Regex("""[\[\(【]\s*(\d{1,3}(?:\.\d)?)\s*[\]\)】]""").find(title)
-        if (bracketMatch != null) {
-            val num = bracketMatch.groupValues[1].toFloatOrNull()
-            if (num != null && num !in listOf(720f, 1080f, 2160f, 540f, 480f)) {
-                return num
-            }
+        // 形式 3: "S01E03" / "S2E04" / "EP25" / "ep 08" / "E03"
+        val sEpMatch = Regex("""(?i)(?:\bs\d{1,2}\s*e|\b(?:ep|e)\s*\.?\s*)(\d{1,4}(?:\.\d)?)(?:v\d+)?\b""").find(title)
+        if (sEpMatch != null) {
+            sEpMatch.groupValues[1].toFloatOrNull()?.let { return it }
         }
 
-        // 形式 4: "EP25" / "ep 08" / "E03"
-        val epMatch = Regex("""(?i)\b(?:ep|e)\s*\.?\s*(\d{1,4}(?:\.\d)?)\b""").find(title)
-        if (epMatch != null) {
-            epMatch.groupValues[1].toFloatOrNull()?.let { return it }
+        // 形式 4: "[25]" / "【09】" / "[03v2]" (排除分辨率与编码 720/1080/2160/264/265 等)
+        val bracketMatches = Regex("""(?i)[\[\(【]\s*(\d{1,3}(?:\.\d)?)(?:v\d+)?\s*[\]\)】]""").findAll(title)
+        for (match in bracketMatches) {
+            val num = match.groupValues[1].toFloatOrNull()
+            if (num != null && num !in listOf(720f, 1080f, 2160f, 540f, 480f, 264f, 265f)) {
+                return num
+            }
         }
 
         return null

@@ -34,6 +34,7 @@ pub struct StreamStats {
 
 pub struct StreamServer {
     pub stream_url: String,
+    pub target_file_path: String,
     _session: Arc<Session>,
     handle: ManagedTorrentHandle,
     target_file_id: usize,
@@ -43,10 +44,24 @@ pub struct StreamServer {
 
 impl StreamServer {
     pub async fn start(config: StreamConfig) -> Result<Self> {
+        let cancel_token = CancellationToken::new();
+        match Self::start_with_token(config, cancel_token.clone()).await {
+            Ok(server) => Ok(server),
+            Err(err) => {
+                // 初始化中途失败时立即取消 Session 与本地 HTTP 监听协程，杜绝后台 DHT / UDP 端口泄漏
+                cancel_token.cancel();
+                Err(err)
+            }
+        }
+    }
+
+    async fn start_with_token(
+        config: StreamConfig,
+        cancel_token: CancellationToken,
+    ) -> Result<Self> {
         // 1. 初始化标准文件系统存储工厂（利用 OS Page Cache 高性能零拷贝，彻底杜绝 OOM）
         let storage_factory = FilesystemStorageFactory::default().boxed();
 
-        let cancel_token = CancellationToken::new();
         let session_opts = SessionOptions {
             default_storage_factory: Some(storage_factory),
             fastresume: false,
@@ -95,7 +110,8 @@ impl StreamServer {
             }
         });
 
-        // 3. 添加种子或磁力（前置正则过滤视频后缀，防止合集/BD包全部文件进队列造成内存爆炸）
+        // 3. 添加种子或磁力（前置正则过滤视频后缀，防止合集/BD包全部文件进队列造成内存爆炸；
+        // 开启 overwrite: true 允许复用/覆盖缓存目录中已存在的同名媒体文件，避免二次启动报 os error 17）
         let add = if let Some(path) = &config.torrent_path {
             let data = tokio::fs::read(path)
                 .await
@@ -107,6 +123,7 @@ impl StreamServer {
 
         let add_opts = AddTorrentOptions {
             paused: false,
+            overwrite: true,
             only_files_regex: Some(r"(?i)\.(mkv|mp4|webm|avi|flv|ts|m2ts)$".to_string()),
             ..Default::default()
         };
@@ -138,7 +155,7 @@ impl StreamServer {
             .api_torrent_details(TorrentIdOrHash::Id(torrent_id))
             .context("获取种子文件列表详情失败")?;
 
-        let (target_file_id, target_file_len) = details
+        let (target_file_id, target_file_len, target_components) = details
             .files
             .as_ref()
             .and_then(|files| {
@@ -149,13 +166,15 @@ impl StreamServer {
                     // 杜绝合集中体积更大的非视频文件（ISO/解压包/RAW原盘）夺取下载目标
                     .filter(|(_, f)| f.included && is_video_file(&f.name))
                     .max_by_key(|(_, f)| f.length)
-                    .map(|(idx, f)| (idx, f.length))
+                    .map(|(idx, f)| (idx, f.length, f.components.clone()))
             })
-            .unwrap_or((0, 0));
+            .unwrap_or((0, 0, Vec::new()));
 
         if target_file_len == 0 {
             bail!("种子中未发现有效的视频媒体文件");
         }
+
+        let target_file_path = resolve_target_file_path(&details.output_folder, &target_components);
 
         // 精确锁定仅下载该目标视频文件，彻底杜绝合集其他剧集占爆 RAM
         let only_single_file = HashSet::from([target_file_id]);
@@ -169,6 +188,7 @@ impl StreamServer {
 
         Ok(Self {
             stream_url,
+            target_file_path,
             _session: session,
             handle,
             target_file_id,
@@ -209,6 +229,14 @@ impl StreamServer {
     }
 }
 
+pub fn resolve_target_file_path(output_folder: &str, components: &[String]) -> String {
+    let mut target_file_path_buf = PathBuf::from(output_folder);
+    for comp in components {
+        target_file_path_buf.push(comp);
+    }
+    target_file_path_buf.to_string_lossy().into_owned()
+}
+
 pub fn is_video_file(name: &str) -> bool {
     let ext = name.rsplit('.').next().unwrap_or("");
     matches!(
@@ -230,5 +258,14 @@ mod tests {
         assert!(!is_video_file("Scans_Cover.png"));
         assert!(!is_video_file("Disc1.iso"));
         assert!(!is_video_file("Release.nfo"));
+    }
+
+    #[test]
+    fn test_resolve_target_file_path_joins_output_folder_and_components() {
+        let path = resolve_target_file_path(
+            "/data/user/0/pkg/files/downloads",
+            &["[Sakurato] Steel Ball Run [04].mkv".to_string()],
+        );
+        assert!(path.ends_with("[Sakurato] Steel Ball Run [04].mkv"));
     }
 }

@@ -228,9 +228,17 @@ class SubjectDetailViewModel(
 
     /** 检索蜜柑原画字幕组 BT 种子与磁力链接资源 */
     fun loadMikanResources(episode: Episode? = null) {
-        val subject = _uiState.value.subject ?: return
+        val state = _uiState.value
+        val subject = state.subject ?: return
         val title = subject.displayName
-        val epSort = episode?.episodeNumber
+        // 优先使用全剧总话数 sort（字幕组对分割季最常用的连续编号），季内相对话数 ep 作为备选回退
+        val primaryEpSort = episode?.let { if (it.sort > 0f) it.sort else it.episodeNumber }
+        val altEpSort = episode?.ep?.takeIf { it > 0f && it != primaryEpSort }
+        // 仅当本条目为分割放送的后续赛段/下半季（正片集数 sort 延续前作，即 sort > ep）时，
+        // 才允许回溯“前传”条目共享同一个 Mikan 词条，杜绝独立第 2 季误拿第 1 季的 Mikan ID
+        val isSplitContinuation =
+            (episode != null && episode.isMain && episode.sort > episode.ep && episode.ep > 0f) ||
+                state.episodes.any { it.isMain && it.sort > it.ep && it.ep > 0f }
         val altTitles =
             (
                 listOfNotNull(
@@ -240,13 +248,31 @@ class SubjectDetailViewModel(
             ).distinct()
         _uiState.update { it.copy(isMikanLoading = true) }
         viewModelScope.launch {
+            val relations =
+                if (isSplitContinuation && state.relations.isEmpty()) {
+                    (subjectRepository.fetchRelations(subjectId) as? AppResult.Success)?.data.orEmpty()
+                } else {
+                    state.relations
+                }
+            val prequelIds =
+                if (isSplitContinuation) {
+                    relations
+                        .filter { it.relation == "前传" }
+                        .map { it.id }
+                        .distinct()
+                } else {
+                    emptyList()
+                }
             val resources =
                 mikanRepository
                     ?.getTorrentResources(
                         title = title,
                         mikanId = null,
-                        episodeSort = epSort,
+                        episodeSort = primaryEpSort,
                         alternativeTitles = altTitles,
+                        subjectId = subjectId,
+                        relatedSubjectIds = prequelIds,
+                        alternativeEpisodeSort = altEpSort,
                     ).orEmpty()
             _uiState.update { it.copy(mikanResources = resources, isMikanLoading = false) }
         }

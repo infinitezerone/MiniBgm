@@ -173,3 +173,22 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
 
     array.into_raw()
 }
+
+#[no_mangle]
+pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_AndroidTorrentStreamEngine_nativeGetTargetFilePath(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let path = {
+        let server_guard = active_server().lock().unwrap();
+        server_guard
+            .as_ref()
+            .map(|s| s.target_file_path.clone())
+            .unwrap_or_default()
+    };
+
+    match env.new_string(path) {
+        Ok(s) => s.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}

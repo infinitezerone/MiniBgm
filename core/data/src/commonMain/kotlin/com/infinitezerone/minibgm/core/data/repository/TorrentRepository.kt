@@ -1,6 +1,5 @@
 package com.infinitezerone.minibgm.core.data.repository
 
-import com.infinitezerone.minibgm.core.model.TorrentEngineState
 import com.infinitezerone.minibgm.core.model.TorrentTask
 import kotlinx.coroutines.flow.StateFlow
 
@@ -12,11 +11,6 @@ interface TorrentRepository {
      * 当前所有磁力/BT 下载任务列表。
      */
     val tasks: StateFlow<List<TorrentTask>>
-
-    /**
-     * BT 引擎就绪状态。
-     */
-    val engineState: StateFlow<TorrentEngineState>
 
     /**
      * 创建并启动一个下载任务。
@@ -67,9 +61,4 @@ interface TorrentRepository {
         torrentUrl: String,
         fileName: String,
     ): Result<String>
-
-    /**
-     * 检查或安装动态 BT 引擎模块。
-     */
-    suspend fun checkOrInstallEngine(): TorrentEngineState
 }

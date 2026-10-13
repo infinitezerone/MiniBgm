@@ -44,6 +44,7 @@ data class TorrentTask(
     val connectedPeers: Int = 0,
     val connectedSeeds: Int = 0,
     val savePath: String = "",
+    val streamUrl: String = "",
     val errorMessage: String? = null,
     val createdTimestamp: Long = 0L,
     val completionTimestamp: Long? = null,
@@ -86,6 +87,17 @@ data class TorrentTask(
                 downloadSpeedBytesPerSec >= 1024 * 1024 -> "%.1f MB/s".format(downloadSpeedBytesPerSec / (1024.0 * 1024.0))
                 else -> "%d KB/s".format(downloadSpeedBytesPerSec / 1024)
             }
+
+    /** 预计剩余时间（秒），无有效速率或未知大小时返回 -1L */
+    val etaSeconds: Long
+        get() {
+            val remaining = totalBytes - downloadedBytes
+            return if (status == TorrentTaskStatus.DOWNLOADING && remaining > 0L && downloadSpeedBytesPerSec > 0L) {
+                (remaining / downloadSpeedBytesPerSec).coerceAtLeast(1L)
+            } else {
+                -1L
+            }
+        }
 }
 
 /**
@@ -146,23 +158,6 @@ data class TorrentAppInfo(
 )
 
 /**
- * BT 引擎就绪状态机。
- */
-sealed interface TorrentEngineState {
-    data object Ready : TorrentEngineState
-
-    data object NotInstalled : TorrentEngineState
-
-    data class Installing(
-        val progress: Float,
-    ) : TorrentEngineState
-
-    data class Failed(
-        val reason: String,
-    ) : TorrentEngineState
-}
-
-/**
  * 边下边播流状态机。
  */
 @Serializable
@@ -171,10 +166,10 @@ sealed interface TorrentStreamState {
     @Serializable
     data object Idle : TorrentStreamState
 
-    /** 插件未安装，需要用户确认后按需下载 */
+    /** 插件未安装，需要用户确认后按需下载（实测 arm64-v8a/x86_64 约 9.8MB~11MB） */
     @Serializable
     data class PluginRequired(
-        val estimatedSizeBytes: Long = 2_500_000L,
+        val estimatedSizeBytes: Long = 10_000_000L,
     ) : TorrentStreamState
 
     /** 正在按需安装 BT 流化插件 */
@@ -198,6 +193,7 @@ sealed interface TorrentStreamState {
         val bufferedBytes: Long,
         val targetBytes: Long,
         val speedBytesPerSec: Long = 0L,
+        val connectedPeers: Int = 0,
     ) : TorrentStreamState
 
     /**
@@ -208,6 +204,7 @@ sealed interface TorrentStreamState {
         val streamUrl: String,
         val title: String,
         val totalBytes: Long = 0L,
+        val connectedPeers: Int = 0,
     ) : TorrentStreamState
 
     /** 启动或播放失败 */

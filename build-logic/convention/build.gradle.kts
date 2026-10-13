@@ -51,13 +51,5 @@ gradlePlugin {
             id = "minibgm.module.boundary"
             implementationClass = "com.infinitezerone.minibgm.ModuleBoundaryConventionPlugin"
         }
-        register("echNative") {
-            id = "minibgm.ech.native"
-            implementationClass = "com.infinitezerone.minibgm.ech.EchNativePlugin"
-        }
-        register("torrentNative") {
-            id = "minibgm.torrent.native"
-            implementationClass = "com.infinitezerone.minibgm.torrent.TorrentNativePlugin"
-        }
     }
 }

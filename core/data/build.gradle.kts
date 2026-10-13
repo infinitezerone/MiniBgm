@@ -1,14 +1,19 @@
 import com.infinitezerone.minibgm.kmpAndroidLibrary
+import com.infinitezerone.minibgm.registerPrebuiltJniLibs
 
 plugins {
     alias(libs.plugins.minibgm.kmp.library)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.minibgm.torrent.native)
 }
 
 kmpAndroidLibrary {
     namespace = "com.infinitezerone.minibgm.core.data"
 }
+
+registerPrebuiltJniLibs(
+    buildSubPath = "torrent-native/jniLibs",
+    libraryFileName = "libminibgm_torrent.so",
+)
 
 kotlin {
     sourceSets {

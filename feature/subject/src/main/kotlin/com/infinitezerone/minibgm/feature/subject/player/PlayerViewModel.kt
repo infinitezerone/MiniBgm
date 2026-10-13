@@ -7,6 +7,7 @@ import com.infinitezerone.minibgm.core.common.ChineseConverter
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
+import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
 import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
@@ -321,6 +322,7 @@ class PlayerViewModel(
     private val playbackSourceVerifier: PlaybackSourceVerifier? = null,
     private val communityRepository: CommunityRepository? = null,
     private val danmakuRepository: DanmakuRepository? = null,
+    private val torrentStreamEngine: TorrentStreamEngine? = null,
 ) : ViewModel() {
     /** 播放队列：调用方给了分集队列就用之，否则退化为单集播放（兼容空直链占位启动） */
     private val queue: List<PlayerQueueEntry> =
@@ -582,6 +584,9 @@ class PlayerViewModel(
 
         if (route.episodeId > 0) {
             loadComments()
+        }
+        if (route.streamUrl.startsWith("http://127.0.0.1")) {
+            torrentStreamEngine?.setPlayerSessionActive(true)
         }
         loadDanmaku()
     }
@@ -1383,4 +1388,9 @@ class PlayerViewModel(
 
     /** 当前选中源的标识；拿不到就返回 null（计数只记到能认出来的源上） */
     private fun currentSourceId(): String? = _uiState.value.let { state -> state.sources.getOrNull(state.selectedSourceIndex)?.id }
+
+    override fun onCleared() {
+        super.onCleared()
+        torrentStreamEngine?.releasePlayerSession()
+    }
 }

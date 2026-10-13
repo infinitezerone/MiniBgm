@@ -30,6 +30,7 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             }
         }
         configureCoreLibraryDesugaring()
+        configureOnDemandNativePackaging()
         configureSpotless()
     }
 }

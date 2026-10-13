@@ -53,6 +53,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
@@ -76,6 +77,7 @@ import com.infinitezerone.minibgm.feature.user.components.DanmakuSettingsDialog
 import com.infinitezerone.minibgm.feature.user.util.BackgroundKeepAliveHelper
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
@@ -95,6 +97,7 @@ fun SettingsScreen(
     enableAiConfig: Boolean = true,
     onClearCache: suspend () -> Unit = {},
     viewModel: UserViewModel = koinViewModel(),
+    torrentStreamEngine: TorrentStreamEngine = koinInject(),
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -125,17 +128,33 @@ fun SettingsScreen(
         context.launchWebUrl(url)
     }
 
+    val isDebugBuild =
+        remember {
+            (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        }
     var hasNotificationPermission by remember { mutableStateOf(true) }
     var isIgnoringBatteryOptimizations by remember { mutableStateOf(false) }
+    var isSimulatingTorrentUninstalled by remember { mutableStateOf(false) }
+    var isTorrentPluginInstalled by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         hasNotificationPermission = NotificationManagerCompat.from(context).areNotificationsEnabled()
         isIgnoringBatteryOptimizations = BackgroundKeepAliveHelper.isIgnoringBatteryOptimizations(context)
+        if (isDebugBuild) {
+            isSimulatingTorrentUninstalled = torrentStreamEngine.isDebugSimulateUninstalled()
+            isTorrentPluginInstalled = torrentStreamEngine.isPluginInstalled()
+        }
     }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         hasNotificationPermission = NotificationManagerCompat.from(context).areNotificationsEnabled()
         isIgnoringBatteryOptimizations = BackgroundKeepAliveHelper.isIgnoringBatteryOptimizations(context)
+        if (isDebugBuild) {
+            isSimulatingTorrentUninstalled = torrentStreamEngine.isDebugSimulateUninstalled()
+            coroutineScope.launch {
+                isTorrentPluginInstalled = torrentStreamEngine.isPluginInstalled()
+            }
+        }
     }
 
     // 清理缓存期间行内置忙（onClick 置空防重入），结果按真实成败反馈
@@ -398,6 +417,37 @@ fun SettingsScreen(
         onLogoutAll = viewModel::logoutAll,
         onPlaybackRulesClick = onPlaybackRulesClick,
         enableAiConfig = enableAiConfig,
+        showDeveloperPanel = isDebugBuild,
+        isSimulatingTorrentUninstalled = isSimulatingTorrentUninstalled,
+        isTorrentPluginInstalled = isTorrentPluginInstalled,
+        onToggleSimulateTorrentUninstalled = { enabled ->
+            coroutineScope.launch {
+                torrentStreamEngine.setDebugSimulateUninstalled(enabled)
+                isSimulatingTorrentUninstalled = torrentStreamEngine.isDebugSimulateUninstalled()
+                isTorrentPluginInstalled = torrentStreamEngine.isPluginInstalled()
+                val toastRes =
+                    if (enabled) {
+                        R.string.feature_user_dev_torrent_simulated_uninstalled_toast
+                    } else {
+                        R.string.feature_user_dev_torrent_restored_default_toast
+                    }
+                snackbarHostState.showSnackbar(
+                    message = context.getString(toastRes),
+                    duration = SnackbarDuration.Short,
+                )
+            }
+        },
+        onResetTorrentPlugin = {
+            coroutineScope.launch {
+                torrentStreamEngine.setDebugSimulateUninstalled(true)
+                isSimulatingTorrentUninstalled = torrentStreamEngine.isDebugSimulateUninstalled()
+                isTorrentPluginInstalled = torrentStreamEngine.isPluginInstalled()
+                snackbarHostState.showSnackbar(
+                    message = context.getString(R.string.feature_user_dev_torrent_simulated_uninstalled_toast),
+                    duration = SnackbarDuration.Short,
+                )
+            }
+        },
         snackbarHostState = snackbarHostState,
         overlayHostState = overlayHostState,
         modifier = modifier,
@@ -557,6 +607,11 @@ fun SettingsScreenContent(
     modifier: Modifier = Modifier,
     onPlaybackRulesClick: (() -> Unit)? = null,
     enableAiConfig: Boolean = true,
+    showDeveloperPanel: Boolean = false,
+    isSimulatingTorrentUninstalled: Boolean = false,
+    isTorrentPluginInstalled: Boolean = true,
+    onToggleSimulateTorrentUninstalled: (Boolean) -> Unit = {},
+    onResetTorrentPlugin: () -> Unit = {},
     overlayHostState: OverlayHostState = rememberOverlayHostState(),
 ) {
     val context = LocalContext.current
@@ -694,6 +749,17 @@ fun SettingsScreenContent(
                     isClearingCache = isClearingCache,
                     onOpenCrashLog = onOpenCrashLog,
                 )
+            }
+
+            if (showDeveloperPanel) {
+                item(key = "settings_developer_debug") {
+                    DeveloperDebugSettingsCard(
+                        isSimulatingTorrentUninstalled = isSimulatingTorrentUninstalled,
+                        isTorrentPluginInstalled = isTorrentPluginInstalled,
+                        onToggleSimulateTorrentUninstalled = onToggleSimulateTorrentUninstalled,
+                        onResetTorrentPlugin = onResetTorrentPlugin,
+                    )
+                }
             }
 
             item(key = "settings_about_support") {

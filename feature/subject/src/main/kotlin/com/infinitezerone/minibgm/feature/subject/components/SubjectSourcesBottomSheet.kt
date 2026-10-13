@@ -42,6 +42,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmSourceActionCar
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourcesBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourcesSectionLabel
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
+import com.infinitezerone.minibgm.core.designsystem.component.OverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
@@ -541,35 +542,48 @@ private fun MikanResourcesSection(
                     },
                     onStreamPlay = {
                         coroutineScope.launch {
-                            if (!torrentStreamEngine.isPluginInstalled()) {
-                                val confirmed =
-                                    overlayHostState.await(
-                                        ConfirmDialogAction(
-                                            title = context.getString(R.string.feature_subject_source_mikan_plugin_dialog_title),
-                                            message = context.getString(R.string.feature_subject_source_mikan_plugin_dialog_message),
-                                            confirmText = context.getString(R.string.feature_subject_source_mikan_plugin_install_btn),
-                                            dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
-                                            isPrimary = true,
-                                        ),
-                                    )
-                                if (!confirmed) {
-                                    return@launch
+                            val resourceHash =
+                                resource.magnetUrl
+                                    .substringAfter("xt=urn:btih:", "")
+                                    .substringBefore("&")
+                            val completedTask =
+                                torrentRepository.tasks.value.firstOrNull { task ->
+                                    task.isCompleted &&
+                                        task.savePath.isNotBlank() &&
+                                        (
+                                            task.magnetUrl == resource.magnetUrl ||
+                                                (
+                                                    resourceHash.isNotBlank() &&
+                                                        task.magnetUrl
+                                                            .substringAfter("xt=urn:btih:", "")
+                                                            .substringBefore("&")
+                                                            .equals(resourceHash, ignoreCase = true)
+                                                )
+                                        )
                                 }
+                            if (completedTask != null) {
                                 withContext(Dispatchers.Main) {
-                                    Toast
-                                        .makeText(
-                                            context,
-                                            context.getString(R.string.feature_subject_source_mikan_plugin_installing),
-                                            Toast.LENGTH_SHORT,
-                                        ).show()
-                                }
-                                val installResult = torrentStreamEngine.installPlugin()
-                                if (installResult.isFailure) {
-                                    withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, "组件安装失败，请检查网络", Toast.LENGTH_SHORT).show()
+                                    onDismissAndRun {
+                                        if (onInternalPlayClick != null) {
+                                            val route =
+                                                PlayerRoute(
+                                                    subjectId = subject.id,
+                                                    episodeId = episode?.id ?: 0L,
+                                                    streamUrl = "file://${completedTask.savePath}",
+                                                    episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
+                                                    subjectName = subject.displayName,
+                                                    episodeSort = episode?.episodeNumber ?: 1f,
+                                                    episodeType = episode?.type ?: 0,
+                                                )
+                                            onInternalPlayClick(route)
+                                        }
                                     }
-                                    return@launch
                                 }
+                                return@launch
+                            }
+
+                            if (!ensureTorrentPluginInstalled(context, overlayHostState, torrentStreamEngine)) {
+                                return@launch
                             }
                             withContext(Dispatchers.Main) {
                                 Toast
@@ -606,13 +620,21 @@ private fun MikanResourcesSection(
                                     }
                                 }.onFailure { err ->
                                     withContext(Dispatchers.Main) {
-                                        Toast.makeText(context, err.message ?: "起播失败", Toast.LENGTH_SHORT).show()
+                                        Toast
+                                            .makeText(
+                                                context,
+                                                err.message ?: context.getString(R.string.feature_subject_source_mikan_stream_failed),
+                                                Toast.LENGTH_SHORT,
+                                            ).show()
                                     }
                                 }
                         }
                     },
                     onInAppDownload = {
                         coroutineScope.launch {
+                            if (!ensureTorrentPluginInstalled(context, overlayHostState, torrentStreamEngine)) {
+                                return@launch
+                            }
                             torrentRepository.startDownload(
                                 title = resource.title,
                                 magnetUrl = resource.magnetUrl,
@@ -876,4 +898,48 @@ private fun MikanActionButton(
             )
         }
     }
+}
+
+private suspend fun ensureTorrentPluginInstalled(
+    context: Context,
+    overlayHostState: OverlayHostState,
+    torrentStreamEngine: TorrentStreamEngine,
+): Boolean {
+    if (torrentStreamEngine.isPluginInstalled()) {
+        return true
+    }
+    val confirmed =
+        overlayHostState.await(
+            ConfirmDialogAction(
+                title = context.getString(R.string.feature_subject_source_mikan_plugin_dialog_title),
+                message = context.getString(R.string.feature_subject_source_mikan_plugin_dialog_message),
+                confirmText = context.getString(R.string.feature_subject_source_mikan_plugin_install_btn),
+                dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
+                isPrimary = true,
+            ),
+        )
+    if (!confirmed) {
+        return false
+    }
+    withContext(Dispatchers.Main) {
+        Toast
+            .makeText(
+                context,
+                context.getString(R.string.feature_subject_source_mikan_plugin_installing),
+                Toast.LENGTH_SHORT,
+            ).show()
+    }
+    val installResult = torrentStreamEngine.installPlugin()
+    if (installResult.isFailure) {
+        withContext(Dispatchers.Main) {
+            Toast
+                .makeText(
+                    context,
+                    context.getString(R.string.feature_subject_source_mikan_plugin_install_failed),
+                    Toast.LENGTH_SHORT,
+                ).show()
+        }
+        return false
+    }
+    return true
 }

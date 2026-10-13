@@ -325,6 +325,8 @@ else
 fi
 
 echo "[jgate] 4/5 架构红线 + 触及模块测试 + 装配门"
+# 确保预构建原生库（.so）就绪且与 crates/ 源码指纹一致（命中缓存时毫秒级返回）
+bash tools/build-native || { echo "[jgate] ❌ 原生库构建/校验未通过"; exit 1; }
 # 三项合并到同一次 gradle 调用，省去一次 daemon/配置缓存往返；任务间无依赖，顺序无关。
 run_gradle "${gradle_tasks[@]}"
 
@@ -380,3 +382,8 @@ if [ "$checked" = "0" ]; then
 else
   echo "[jgate] ✅ 验证门通过（素材 / ${rust_note}spotless / 红线 / ${#test_tasks[@]} 个模块测试 / 装配 / $checked 份结果校验）"
 fi
+
+if ! echo "$paths" | grep -qE '(ArchitectureRulesTest\.kt|minibgm-playbooks/SKILL\.md)'; then
+  echo "[jgate] 🛞 飞轮自检提示：本轮改动未触及 ArchitectureRulesTest 或 minibgm-playbooks。若本次属缺陷修复/审查整改/架构重构，请确认是否需执行《MiniBgm 飞轮协议》固化结构！"
+fi
+

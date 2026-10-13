@@ -1,4 +1,5 @@
 import com.infinitezerone.minibgm.androidApplication
+import com.infinitezerone.minibgm.nativeAbis
 import java.util.Properties
 
 // keystore.properties 不入库：本机没有该文件时 release 回退 debug 签名，保证任何人都能构建
@@ -21,6 +22,9 @@ val isPreview = tier == "preview"
 val enableAi = (project.findProperty("minibgm.enableAi") as? String)?.toBoolean() ?: true
 val enablePlayer = (project.findProperty("minibgm.enablePlayer") as? String)?.toBoolean() ?: true
 
+// 原生库 ABI 唯一真源（native/abis.txt）：ndk.abiFilters 与 splits.abi 均由此派生
+val nativeLibAbis = nativeAbis()
+
 androidApplication {
     namespace = "com.infinitezerone.minibgm"
 
@@ -30,7 +34,7 @@ androidApplication {
         buildConfigField("Boolean", "ENABLE_INTERNAL_PLAYER", enablePlayer.toString())
         buildConfigField("String", "BUILD_TIER", "\"$tier\"")
         ndk {
-            abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
+            abiFilters.addAll(nativeLibAbis)
         }
     }
 
@@ -69,7 +73,7 @@ androidApplication {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "x86_64")
+            include(*nativeLibAbis.toTypedArray())
             isUniversalApk = true
         }
     }

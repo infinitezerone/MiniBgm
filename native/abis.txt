@@ -1,0 +1,11 @@
+# 原生库 ABI 唯一真源（crates/minibgm-ech 与 crates/minibgm-torrent 共用）
+#
+# 修改本文件即同时生效，不要在别处再硬编码 ABI 列表。消费者：
+#   1. tools/build-native             —— 生成 cargo-ndk 的 -t 参数
+#   2. .github/workflows/release.yml  —— 收集 libminibgm_torrent-<abi>.so 发布资产
+#   3. build-logic registerPrebuiltJniLibs 的产物校验架构集
+#   4. AndroidTorrentStreamEngine.SUPPORTED_ABIS（由 NativeAbiContractTest 断言与本文件一致）
+#
+# 每行一个 ABI；'#' 起始为注释行，空行忽略。
+arm64-v8a
+x86_64

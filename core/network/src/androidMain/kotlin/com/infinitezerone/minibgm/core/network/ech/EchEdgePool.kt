@@ -96,6 +96,7 @@ internal object EchEdgePool {
         if (candidates.isEmpty()) return
         synchronized(lock) {
             var changed = false
+            var hasNewCandidate = false
             candidates.forEach { raw ->
                 val ip = admittedIp(raw) ?: return@forEach
                 val existing = nodes[ip]
@@ -108,14 +109,15 @@ internal object EchEdgePool {
                             consecutiveFailures = 0,
                         )
                     changed = true
-                } else if (existing.lastObservedAtMillis != now) {
+                    hasNewCandidate = true
+                } else if (now - existing.lastObservedAtMillis >= 60 * 60 * 1000L) {
                     nodes[ip] = existing.copy(lastObservedAtMillis = now)
                     changed = true
                 }
             }
             if (evictLocked(now)) changed = true
-            // 新候选是稀缺资源，吸收后立即落盘，不走节流
-            if (changed) persistLocked(now, force = true)
+            // 仅真正发现未知新候选时立即落盘，避免每次 DNS 命中都触发同步写盘与同级排序翻转
+            if (changed) persistLocked(now, force = hasNewCandidate)
         }
     }
 

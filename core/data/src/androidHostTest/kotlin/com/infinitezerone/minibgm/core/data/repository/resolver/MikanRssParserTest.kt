@@ -96,4 +96,53 @@ class MikanRssParserTest {
         assertEquals(3f, results[0].episodeSort)
         assertEquals("1080P", results[0].resolution)
     }
+
+    @Test
+    fun parse_handlesSteelBallRunFansubsAndRevisionAndSxxExxFormats() {
+        val xml =
+            """
+            <rss><channel>
+              <item>
+                <title>【悠哈璃羽字幕社】[JOJO的奇妙冒险 飙马野郎/JoJo's Bizarre Adventure: Steel Ball Run][03][1080p HEVC][CHS_JP][简日内嵌]</title>
+                <link>https://mikanani.me/Home/Episode/16cf7ce36a40333d76025c4a76ddfda5f6174781</link>
+              </item>
+              <item>
+                <title>[桜都字幕组] 飙马野郎 JOJO的奇妙冒险 / Steel Ball Run： JoJo no Kimyou na Bouken [04v2][1080P][简繁内封]</title>
+                <link>https://mikanani.me/Home/Episode/0327ac7116411c81f53636b41710246754a503b5</link>
+              </item>
+              <item>
+                <title>[WebRip] Steel Ball Run S01E02v2 2160p NF WEB-DL</title>
+                <link>https://mikanani.me/Home/Episode/534d4d025d103e1dedd5de956733a3c540328273</link>
+              </item>
+            </channel></rss>
+            """.trimIndent()
+        val results = MikanRssParser.parse(xml)
+        assertEquals(3, results.size)
+        assertEquals("悠哈璃羽字幕社", results[0].fansubName)
+        assertEquals(3f, results[0].episodeSort)
+        assertEquals("桜都字幕组", results[1].fansubName)
+        assertEquals(4f, results[1].episodeSort)
+        assertEquals(2f, results[2].episodeSort)
+        assertEquals("4K", results[2].resolution)
+    }
+
+    @Test
+    fun extractBangumiIdsAndBgmSubjectId_parsesMikanHtmlAccurately() {
+        val searchHtml =
+            """
+            <ul class="list-inline an-ul">
+              <li><a href="/Home/Bangumi/3887" target="_blank"><div class="an-text">飙马野郎</div></a></li>
+              <li><a href="/Home/Bangumi/3100" target="_blank"><div class="an-text">石之海</div></a></li>
+            </ul>
+            """.trimIndent()
+        val ids = MikanRssParser.extractBangumiIdsFromSearchHtml(searchHtml)
+        assertEquals(listOf("3887", "3100"), ids)
+
+        val bangumiHtml =
+            """
+            <p class="bangumi-info">Bangumi番组计划链接：<br />
+            <a class="w-other-c" target="_blank" href="https://bgm.tv/subject/551918">https://bgm.tv/subject/551918</a></p>
+            """.trimIndent()
+        assertEquals(551918L, MikanRssParser.extractBgmSubjectIdFromBangumiHtml(bangumiHtml))
+    }
 }

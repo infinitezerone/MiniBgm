@@ -1,15 +1,19 @@
 import com.infinitezerone.minibgm.kmpAndroidLibrary
+import com.infinitezerone.minibgm.registerPrebuiltJniLibs
 
 plugins {
     alias(libs.plugins.minibgm.kmp.library)
     alias(libs.plugins.kotlin.serialization)
-    // Rust ECH 协议栈（crates/minibgm-ech）的编译与产物校验，挂在 jniLibs 合并任务之前
-    alias(libs.plugins.minibgm.ech.native)
 }
 
 kmpAndroidLibrary {
     namespace = "com.infinitezerone.minibgm.core.network"
 }
+
+registerPrebuiltJniLibs(
+    buildSubPath = "ech-native/jniLibs",
+    libraryFileName = "libminibgm_ech.so",
+)
 
 kotlin {
     sourceSets {

@@ -903,6 +903,173 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 构建解耦红线（见 AGENTS.md 构建与验证）：
+     * `build-logic` 严禁直接调度 `cargo` 或 `cargo-ndk` 进程。
+     * Rust 原生库统一由独立脚本 `tools/build-native` 编译，Gradle 仅通过 `registerPrebuiltJniLibs` 挂载产物。
+     */
+    @Test
+    fun buildLogic_never_invokes_cargo_toolchain() {
+        val buildLogicDir = File(projectRoot, "build-logic")
+        if (!buildLogicDir.isDirectory) return
+
+        val violations = mutableListOf<String>()
+        val forbiddenTokens = listOf("cargo-ndk", "\"cargo\"", "'cargo'", "Cargo.toml")
+        buildLogicDir
+            .walkTopDown()
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES && !it.name.startsWith(".") }
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { file ->
+                val sanitized = KotlinSourceScanner.sanitize(file.readText())
+                val matched = forbiddenTokens.filter { sanitized.contains(it) }
+                if (matched.isNotEmpty()) {
+                    val relPath = file.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                    violations.add("$relPath 包含跨界 Cargo 调度特征: ${matched.joinToString()}")
+                }
+            }
+        assertTrue(
+            violations.isEmpty(),
+            "违反 Gradle/Rust 构建解耦红线（见 AGENTS.md 构建与验证）：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    /**
+     * 按需动态 `.so` 装载与确认红线（见 AGENTS.md 领域规则 & 剧本 8）：
+     * 1. 生产代码凡调用 `System.load(` 从私有目录加载动态库，同文件必须调用 `.setReadOnly()`（Android 10+ W^X 安全约束）、
+     *    使用 `Mutex` 防并发重入，并按应用版本隔离目录；
+     * 2. `TorrentRepository` 严禁暴露未经用户确认即静默下载组件的 `checkOrInstallEngine` 后门。
+     */
+    @Test
+    fun dynamic_so_loading_enforces_wx_version_isolation_and_no_silent_install() {
+        val violations = mutableListOf<String>()
+        var foundDynamicLoader = false
+
+        projectRoot
+            .walkTopDown()
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES && !it.name.startsWith(".") && it.name != "build-logic" }
+            .filter { it.isFile && it.extension == "kt" && !it.path.replace(File.separatorChar, '/').contains("/build/") }
+            .forEach { file ->
+                val relPath = file.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                val sanitized = KotlinSourceScanner.sanitize(file.readText())
+
+                if (sanitized.contains("fun checkOrInstallEngine")) {
+                    violations.add("$relPath 暴露了未确认静默下载入口 checkOrInstallEngine（违反扩展下载显式确认红线）")
+                }
+
+                if (sanitized.contains("System.load(")) {
+                    foundDynamicLoader = true
+                    if (!sanitized.contains(".setReadOnly()")) {
+                        violations.add("$relPath 调用了 System.load( 但缺少 .setReadOnly()（违反 Android 10+ W^X 只读安全约束）")
+                    }
+                    if (!sanitized.contains("Mutex()")) {
+                        violations.add("$relPath 调用了 System.load( 但缺少 Mutex() 并发下载互斥保护")
+                    }
+                    if (!sanitized.contains("cleanStalePluginDirs")) {
+                        violations.add("$relPath 调用了 System.load( 但缺少版本目录隔离与旧版本清理 cleanStalePluginDirs")
+                    }
+                }
+            }
+
+        assertTrue(foundDynamicLoader, "未找到包含 System.load( 的按需动态库加载实现")
+        assertTrue(
+            violations.isEmpty(),
+            "违反按需动态 .so 装载安全红线（见 AGENTS.md 领域规则 & 剧本 8）：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    /**
+     * ECH 边缘优选池防污染与本地回环流分流红线（见 AGENTS.md 领域规则 & 剧本 8）：
+     * 1. `EchHttpClientEngine` 捕获 `CancellationException` 时必须区分真实请求超时（`TimeoutCancellationException`）
+     *    与正常协程取消（如 Coil 列表滚动取消图片请求），严禁无条件调用 `recordFailure` 导致 `EchEdgePool` 黄金节点被误杀；
+     * 2. `AssetDownloadService` 必须将本地回环 HTTP 流（`isLoopbackHttpUrl`）分流至纯流式 `CIO` 引擎，
+     *    严禁将 `http://127.0.0.1` 的 P2P 视频流送入仅支持 `https://` 且全量内存缓冲的 `EchHttpClientEngine`；
+     * 3. `crates/minibgm-torrent/src/server.rs` 必须开启 `overwrite: true` 并在初始化异常时 `cancel_token.cancel()`。
+     */
+    @Test
+    fun ech_and_torrent_stream_boundaries_prevent_pool_poisoning_and_loopback_failures() {
+        val violations = mutableListOf<String>()
+
+        val echEngineFile =
+            File(
+                projectRoot,
+                "core/network/src/androidMain/kotlin/com/infinitezerone/minibgm/core/network/ech/EchHttpClientEngine.kt",
+            )
+        assertTrue(echEngineFile.isFile, "EchHttpClientEngine.kt 未找到")
+        val echContent = KotlinSourceScanner.sanitize(echEngineFile.readText())
+        if (!echContent.contains("TimeoutCancellationException")) {
+            violations.add(
+                "EchHttpClientEngine.kt 捕获 CancellationException 时未区分 TimeoutCancellationException，正常协程取消会误杀 EchEdgePool 节点",
+            )
+        }
+
+        val assetServiceFile =
+            File(
+                projectRoot,
+                "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/AssetDownloadService.kt",
+            )
+        assertTrue(assetServiceFile.isFile, "AssetDownloadService.kt 未找到")
+        val assetContent = KotlinSourceScanner.sanitize(assetServiceFile.readText())
+        if (!assetContent.contains("isLoopbackHttpUrl") || !assetContent.contains("HttpClient(CIO)")) {
+            violations.add(
+                "AssetDownloadService.kt 未对本地回环流 (http://127.0.0.1) 分流至流式 CIO 引擎，将导致本地 P2P 流被 EchHttpClientEngine 拦截失败",
+            )
+        }
+
+        val torrentServerFile = File(projectRoot, "crates/minibgm-torrent/src/server.rs")
+        if (torrentServerFile.isFile) {
+            val serverRs = torrentServerFile.readText()
+            if (!serverRs.contains("overwrite: true")) {
+                violations.add(
+                    "crates/minibgm-torrent/src/server.rs AddTorrentOptions 缺少 overwrite: true，二次播放/下载同一剧集将报 File exists (os error 17)",
+                )
+            }
+            if (!serverRs.contains("cancel_token.cancel()")) {
+                violations.add("crates/minibgm-torrent/src/server.rs 缺少 cancel_token.cancel() 清理守卫")
+            }
+            if (!serverRs.contains("resolve_target_file_path")) {
+                violations.add(
+                    "crates/minibgm-torrent/src/server.rs 未暴露真实落盘路径 resolve_target_file_path，将导致离线下载退化为双倍磁盘写入",
+                )
+            }
+        }
+
+        val torrentRepoFile =
+            File(
+                projectRoot,
+                "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/repository/AndroidTorrentRepository.kt",
+            )
+        assertTrue(torrentRepoFile.isFile, "AndroidTorrentRepository.kt 未找到")
+        val repoContent = KotlinSourceScanner.sanitize(torrentRepoFile.readText())
+        if (!repoContent.contains("getActiveTargetFilePath") || !repoContent.contains("monitorDirectEngineDownload")) {
+            violations.add(
+                "AndroidTorrentRepository.kt 未使用 getActiveTargetFilePath + monitorDirectEngineDownload 直接复用 librqbit 落盘文件（严禁走二次 HTTP 拷贝双写）",
+            )
+        }
+        if (!repoContent.contains("scheduleNextIfIdle") || !repoContent.contains("setDownloadSessionProtected")) {
+            violations.add(
+                "AndroidTorrentRepository.kt 缺少串行队列调度 scheduleNextIfIdle 或会话保护 setDownloadSessionProtected，多任务或退出播放器将互相掐断",
+            )
+        }
+
+        val streamEngineFile =
+            File(
+                projectRoot,
+                "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/download/AndroidTorrentStreamEngine.kt",
+            )
+        assertTrue(streamEngineFile.isFile, "AndroidTorrentStreamEngine.kt 未找到")
+        val engineContent = KotlinSourceScanner.sanitize(streamEngineFile.readText())
+        if (!engineContent.contains("downloadSessionProtected") || !engineContent.contains("playerSessionActive")) {
+            violations.add(
+                "AndroidTorrentStreamEngine.kt 缺少 downloadSessionProtected / playerSessionActive 双消费者生命周期协调守卫",
+            )
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反 ECH 优选池防污染与 BT 流播/下载单盘协同红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
     private companion object {
         /** 红线只约束生产源码：build 产物与各测试源集目录一律不下钻 */
         val NON_SOURCE_DIR_NAMES =
