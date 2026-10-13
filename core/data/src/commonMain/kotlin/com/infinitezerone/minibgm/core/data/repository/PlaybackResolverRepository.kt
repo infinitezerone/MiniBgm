@@ -244,6 +244,9 @@ internal class PlaybackResolverRepositoryImpl(
                     val url = rule.resolveUrl(title, epStr, subjectId, episodeId)
                     resolveTemplate(url, rule.headers, epNumber, rule.name, title)
                 }
+                RuleParserType.RSS_TORRENT -> {
+                    emptyList()
+                }
             }
         }
 

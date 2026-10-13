@@ -2,10 +2,11 @@ package com.infinitezerone.minibgm.core.model
 
 import kotlinx.serialization.Serializable
 
-/** 规则用途：PAGE = 生成给用户跳转的页面；SOURCE = 请求后从响应里取可播放地址 */
+/** 规则用途：PAGE = 生成给用户跳转的页面；SOURCE = 请求后从响应里取可播放地址；TORRENT = 从种子/磁力发布源取媒体资源 */
 enum class PlaybackRuleKind {
     PAGE,
     SOURCE,
+    TORRENT,
 }
 
 /** 规则解析器类型 */
@@ -15,6 +16,7 @@ enum class RuleParserType {
     MACCMS,
     STREMIO,
     PIPELINE,
+    RSS_TORRENT,
 }
 
 /** 流水线单步操作类型 */
@@ -132,6 +134,7 @@ data class PlaybackSourceRule(
     val isResolvable: Boolean
         get() =
             when {
+                kind == PlaybackRuleKind.TORRENT -> parserType == RuleParserType.RSS_TORRENT || parserType == RuleParserType.AUTO
                 pipeline.isNotEmpty() -> kind == PlaybackRuleKind.SOURCE && parserType == RuleParserType.PIPELINE
                 else -> parserType == RuleParserType.AUTO || kind == PlaybackRuleKind.SOURCE
             }
