@@ -86,25 +86,28 @@ internal fun PlaybackRuleCard(
                         Surface(
                             shape = BgmShapes.small,
                             color =
-                                if (rule.kind == PlaybackRuleKind.SOURCE) {
-                                    MaterialTheme.colorScheme.primaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainerHighest
+                                when (rule.kind) {
+                                    PlaybackRuleKind.SOURCE -> MaterialTheme.colorScheme.primaryContainer
+                                    PlaybackRuleKind.TORRENT -> MaterialTheme.colorScheme.tertiaryContainer
+                                    PlaybackRuleKind.PAGE -> MaterialTheme.colorScheme.surfaceContainerHighest
                                 },
                         ) {
                             Text(
                                 text =
-                                    if (rule.kind == PlaybackRuleKind.SOURCE) {
-                                        stringResource(R.string.feature_user_rule_kind_source_prefix, parserTypeLabel(rule.parserType))
-                                    } else {
-                                        stringResource(R.string.feature_user_rule_kind_page)
+                                    when (rule.kind) {
+                                        PlaybackRuleKind.SOURCE ->
+                                            stringResource(R.string.feature_user_rule_kind_source_prefix, parserTypeLabel(rule.parserType))
+                                        PlaybackRuleKind.TORRENT ->
+                                            stringResource(R.string.feature_user_rule_kind_torrent_prefix, parserTypeLabel(rule.parserType))
+                                        PlaybackRuleKind.PAGE ->
+                                            stringResource(R.string.feature_user_rule_kind_page)
                                     },
                                 style = MaterialTheme.typography.labelSmall,
                                 color =
-                                    if (rule.kind == PlaybackRuleKind.SOURCE) {
-                                        MaterialTheme.colorScheme.onPrimaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    when (rule.kind) {
+                                        PlaybackRuleKind.SOURCE -> MaterialTheme.colorScheme.onPrimaryContainer
+                                        PlaybackRuleKind.TORRENT -> MaterialTheme.colorScheme.onTertiaryContainer
+                                        PlaybackRuleKind.PAGE -> MaterialTheme.colorScheme.onSurfaceVariant
                                     },
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
@@ -589,7 +592,89 @@ internal fun parserTypeLabel(type: RuleParserType): String =
         RuleParserType.MACCMS -> "MacCMS"
         RuleParserType.STREMIO -> "Stremio"
         RuleParserType.PIPELINE -> stringResource(R.string.feature_user_parser_pipeline)
+        RuleParserType.RSS_TORRENT -> stringResource(R.string.feature_user_parser_rss_torrent)
     }
+
+/**
+ * 添加种子/磁力 RSS 规则对话框
+ */
+@Composable
+internal fun AddTorrentRuleDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, urlTemplate: String, description: String) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var urlTemplate by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.feature_user_rule_add_torrent_title)) },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text = stringResource(R.string.feature_user_rule_add_torrent_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.feature_user_rule_name_label)) },
+                    placeholder = { Text("例如：动漫字幕组 RSS") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = urlTemplate,
+                    onValueChange = { urlTemplate = it },
+                    label = { Text(stringResource(R.string.feature_user_rule_url_label)) },
+                    placeholder = { Text("https://example.com/rss?q={title}") },
+                    minLines = 2,
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(
+                        onClick = {
+                            if (name.isBlank()) name = "Mikan 动漫 RSS"
+                            urlTemplate = "https://mikanani.me/RSS/Search?searchstr={title}"
+                            if (description.isBlank()) description = "通用 Mikan 种子源"
+                        },
+                    ) {
+                        Text(stringResource(R.string.feature_user_rule_add_torrent_template_mikan))
+                    }
+                }
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text(stringResource(R.string.feature_user_rule_desc_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(name.trim(), urlTemplate.trim(), description.trim()) },
+                enabled = name.isNotBlank() && urlTemplate.isNotBlank(),
+            ) {
+                Text(stringResource(R.string.feature_user_probe_add_action))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
+            }
+        },
+    )
+}
 
 internal fun hostLabelOf(url: String): String = url.substringAfter("://", url).substringBefore('/').substringBefore('?')
 

@@ -51,6 +51,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.SingleChoiceDialog
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
+import com.infinitezerone.minibgm.feature.user.components.AddTorrentRuleDialog
 import com.infinitezerone.minibgm.feature.user.components.PlaybackRuleCard
 import com.infinitezerone.minibgm.feature.user.components.RuleImportDialog
 import com.infinitezerone.minibgm.feature.user.components.SiteProbeDialog
@@ -62,6 +63,7 @@ import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 private enum class RuleAddOption {
     SUBSCRIPTION,
     SITE_PROBE,
+    ADD_TORRENT,
     IMPORT_JSON,
     ;
 
@@ -69,6 +71,7 @@ private enum class RuleAddOption {
         when (this) {
             SUBSCRIPTION -> context.getString(R.string.feature_user_rule_choice_subscription)
             SITE_PROBE -> context.getString(R.string.feature_user_rule_choice_site_probe)
+            ADD_TORRENT -> context.getString(R.string.feature_user_rule_choice_add_torrent)
             IMPORT_JSON -> context.getString(R.string.feature_user_rule_choice_import_json)
         }
 }
@@ -94,6 +97,7 @@ fun PlaybackRulesScreen(
     val scope = rememberCoroutineScope()
 
     var isImportingRuleJson by remember { mutableStateOf(false) }
+    var isAddingTorrentRule by remember { mutableStateOf(false) }
     val overlayHostState = rememberOverlayHostState()
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -182,6 +186,7 @@ fun PlaybackRulesScreen(
                             when (choice) {
                                 RuleAddOption.SUBSCRIPTION -> viewModel.openSubscriptionImport()
                                 RuleAddOption.SITE_PROBE -> viewModel.openSiteProbe()
+                                RuleAddOption.ADD_TORRENT -> isAddingTorrentRule = true
                                 RuleAddOption.IMPORT_JSON -> isImportingRuleJson = true
                                 null -> {}
                             }
@@ -379,6 +384,17 @@ fun PlaybackRulesScreen(
             onConfirm = { json ->
                 viewModel.importRulesFromJson(json)
                 isImportingRuleJson = false
+            },
+        )
+    }
+
+    // 种子规则添加对话框
+    if (isAddingTorrentRule) {
+        AddTorrentRuleDialog(
+            onDismiss = { isAddingTorrentRule = false },
+            onConfirm = { name, urlTemplate, description ->
+                viewModel.addTorrentRule(name, urlTemplate, description)
+                isAddingTorrentRule = false
             },
         )
     }

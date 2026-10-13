@@ -178,6 +178,7 @@
     <string name="feature_user_rule_vars_title">支持的占位符变量</string>
     <string name="feature_user_rule_vars_desc">{title}: 番剧名称\n{ep}: 分集编号（如 1, 2）\n{subjectId}: 条目 ID\n{episodeId}: 分集 ID</string>
     <string name="feature_user_rule_kind_source_prefix">接口·%1$s</string>
+    <string name="feature_user_rule_kind_torrent_prefix">种子·%1$s</string>
     <string name="feature_user_rule_kind_page">页面</string>
     <string name="feature_user_rule_edit_title">编辑播放规则</string>
     <string name="feature_user_rule_add_title">添加播放规则</string>
@@ -218,6 +219,11 @@
     <string name="feature_user_position_cd_clear">清除该续播记录</string>
     <string name="feature_user_parser_auto">自动</string>
     <string name="feature_user_parser_pipeline">流水线</string>
+    <string name="feature_user_parser_rss_torrent">BT RSS</string>
+    <string name="feature_user_rule_choice_add_torrent">添加种子规则（BT / 磁力 RSS）</string>
+    <string name="feature_user_rule_add_torrent_title">添加种子源规则</string>
+    <string name="feature_user_rule_add_torrent_desc">配置通用的 BT / 磁力发布站 RSS 订阅链接，支持 {title} 占位符。在番剧详情页将自动拉取字幕组与下载项。</string>
+    <string name="feature_user_rule_add_torrent_template_mikan">填入 Mikan 模板</string>
 
     <!-- 11. 开播提醒时间 -->
     <string name="feature_user_timing_sheet_title">开播提醒时间</string>

@@ -225,6 +225,31 @@ class PlaybackRulesViewModel(
         }
     }
 
+    /**
+     * 添加种子/磁力 RSS 规则。
+     */
+    @OptIn(ExperimentalUuidApi::class)
+    fun addTorrentRule(
+        name: String,
+        urlTemplate: String,
+        description: String = "",
+    ) {
+        viewModelScope.launch {
+            val rule =
+                PlaybackSourceRule(
+                    id = Uuid.random().toString(),
+                    name = name,
+                    urlTemplate = urlTemplate,
+                    description = description,
+                    isEnabled = true,
+                    kind = PlaybackRuleKind.TORRENT,
+                    parserType = RuleParserType.RSS_TORRENT,
+                )
+            settingsRepository.addPlaybackRule(rule)
+            sendSnackbar("已添加种子规则：$name")
+        }
+    }
+
     /** 最近一次已提示或已处理的剪贴板候选 URL，防止重复打扰用户 */
     private var lastHandledClipboardCandidate: String? = null
 

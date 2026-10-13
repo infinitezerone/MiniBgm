@@ -516,4 +516,30 @@ class PlaybackRulesViewModelTest {
             assertTrue(state.report != null)
             assertEquals(setOf(0), state.selected)
         }
+
+    @Test
+    fun addTorrentRule_addsTorrentRuleWithRssTorrentParser() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            viewModel.addTorrentRule(
+                name = "动漫 BT RSS",
+                urlTemplate = "https://example.com/rss?q={title}",
+                description = "通用字幕组 RSS",
+            )
+            advanceUntilIdle()
+
+            val rules = fakeRepo.playbackRules.first()
+            assertEquals(1, rules.size)
+            val rule = rules.first()
+            assertEquals("动漫 BT RSS", rule.name)
+            assertEquals("https://example.com/rss?q={title}", rule.urlTemplate)
+            assertEquals("通用字幕组 RSS", rule.description)
+            assertEquals(PlaybackRuleKind.TORRENT, rule.kind)
+            assertEquals(RuleParserType.RSS_TORRENT, rule.parserType)
+            assertTrue(rule.isEnabled)
+            assertTrue(rule.isResolvable)
+            assertTrue(rule.isImportable)
+        }
 }
