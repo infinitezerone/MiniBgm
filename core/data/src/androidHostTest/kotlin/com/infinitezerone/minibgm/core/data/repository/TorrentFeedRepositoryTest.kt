@@ -37,11 +37,18 @@ class TorrentFeedRepositoryTest {
 
     private class FakeFeedFetchService(
         private val htmlToReturn: String? = null,
+        private val htmlForUrl: ((String) -> String?)? = null,
     ) : PageFetchService {
+        val requestedUrls = mutableListOf<String>()
+
         override suspend fun fetchHtml(
             url: String,
             requestHeaders: Map<String, String>,
-        ): FetchedPage? = htmlToReturn?.let { FetchedPage(url = url, html = it) }
+        ): FetchedPage? {
+            requestedUrls += url
+            val html = htmlForUrl?.invoke(url) ?: htmlToReturn
+            return html?.let { FetchedPage(url = url, html = it) }
+        }
 
         override suspend fun postForm(
             url: String,
@@ -122,5 +129,129 @@ class TorrentFeedRepositoryTest {
                     rule = disabledRule,
                 )
             assertTrue(results.isEmpty())
+        }
+
+    @Test
+    fun getTorrentResources_fallsBackToAlternativeTitlesWhenPrimarySearchIsEmpty() =
+        runTest {
+            val emptyRssXml = """<?xml version="1.0"?><rss version="2.0"><channel></channel></rss>"""
+            val fake =
+                FakeFeedFetchService(
+                    htmlForUrl = { url ->
+                        // 站点按日文原名索引：中文主标题检索为空，别名才命中
+                        if (url.contains("UnknownTitle12345")) emptyRssXml else sampleRssXml
+                    },
+                )
+            val repository = TorrentFeedRepositoryImpl(fake)
+            val rule =
+                PlaybackSourceRule(
+                    id = "test-torrent-rule",
+                    name = "Test Torrent Feed",
+                    urlTemplate = "https://feed.example.com/rss?keyword={title}",
+                    kind = PlaybackRuleKind.TORRENT,
+                    parserType = RuleParserType.RSS_TORRENT,
+                )
+
+            val results =
+                repository.getTorrentResources(
+                    title = "UnknownTitle12345",
+                    episodeSort = 3f,
+                    alternativeTitles = listOf("葬送的芙莉莲"),
+                    rule = rule,
+                )
+
+            // 主标题检索为空 → 回退别名后命中第 3 话
+            assertEquals(1, results.size)
+            assertEquals(3f, results.first().episodeSort)
+            assertEquals(2, fake.requestedUrls.size)
+            assertTrue(fake.requestedUrls.first().contains("UnknownTitle12345"))
+            assertTrue(fake.requestedUrls[0] != fake.requestedUrls[1])
+        }
+
+    @Test
+    fun getTorrentResources_neverQueriesAlternativeTitlesWhenPrimaryHits() =
+        runTest {
+            val fake = FakeFeedFetchService(sampleRssXml)
+            val repository = TorrentFeedRepositoryImpl(fake)
+            val rule =
+                PlaybackSourceRule(
+                    id = "test-torrent-rule",
+                    name = "Test Torrent Feed",
+                    urlTemplate = "https://feed.example.com/rss?keyword={title}",
+                    kind = PlaybackRuleKind.TORRENT,
+                    parserType = RuleParserType.RSS_TORRENT,
+                )
+
+            val results =
+                repository.getTorrentResources(
+                    title = "葬送的芙莉莲",
+                    episodeSort = 3f,
+                    alternativeTitles = listOf("Sousou no Frieren", "葬送のフリーレン"),
+                    rule = rule,
+                )
+
+            assertEquals(1, results.size)
+            // 主标题命中即返回，别名回退不得产生额外网络请求
+            assertEquals(1, fake.requestedUrls.size)
+        }
+
+    @Test
+    fun getTorrentResources_queriesFixedFeedUrlOnlyOnceAcrossTitleAliases() =
+        runTest {
+            val fake = FakeFeedFetchService(null)
+            val repository = TorrentFeedRepositoryImpl(fake)
+            val rule =
+                PlaybackSourceRule(
+                    id = "test-fixed-rule",
+                    name = "Fixed Torrent Feed",
+                    // 不含 {title} 占位符：所有候选标题都会解析成同一个 URL
+                    urlTemplate = "https://feed.example.com/rss",
+                    kind = PlaybackRuleKind.TORRENT,
+                    parserType = RuleParserType.RSS_TORRENT,
+                )
+
+            val results =
+                repository.getTorrentResources(
+                    title = "主标题",
+                    episodeSort = 1f,
+                    alternativeTitles = listOf("别名一", "别名二"),
+                    rule = rule,
+                )
+
+            assertTrue(results.isEmpty())
+            assertEquals(1, fake.requestedUrls.size)
+        }
+
+    @Test
+    fun getTorrentResources_evictsOldestEntryBeyondCacheCapacity() =
+        runTest {
+            val fake = FakeFeedFetchService(sampleRssXml)
+            val repository = TorrentFeedRepositoryImpl(fake)
+            val rule =
+                PlaybackSourceRule(
+                    id = "test-torrent-rule",
+                    name = "Test Torrent Feed",
+                    urlTemplate = "https://feed.example.com/rss?keyword={title}",
+                    kind = PlaybackRuleKind.TORRENT,
+                    parserType = RuleParserType.RSS_TORRENT,
+                )
+
+            // 缓存上限 32：写入 40 个不同关键词，最旧的 8 条必须被淘汰
+            repeat(40) { index ->
+                repository.getTorrentResources(
+                    title = "title-$index",
+                    episodeSort = 3f,
+                    rule = rule,
+                )
+            }
+            assertEquals(40, fake.requestedUrls.size)
+
+            // 最旧条目已淘汰 → 重新触网
+            repository.getTorrentResources(title = "title-0", episodeSort = 3f, rule = rule)
+            assertEquals(41, fake.requestedUrls.size)
+
+            // 最新条目仍在缓存 → 不触网
+            repository.getTorrentResources(title = "title-39", episodeSort = 3f, rule = rule)
+            assertEquals(41, fake.requestedUrls.size)
         }
 }

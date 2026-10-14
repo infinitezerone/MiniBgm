@@ -1322,6 +1322,66 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 仓库契约参数实现闭环红线：`TorrentFeedRepository.getTorrentResources` 的
+     * `alternativeTitles` 曾是死参数——接口声明、两个调用方都在传，实现体却从未读取。
+     * 迁移自旧专有实现时把别名回退检索与它的单测一起删掉了，只留下签名，
+     * 于是「站点按原名/别名索引、主标题检索为空」时用户看到的是稳定的空列表，
+     * 调用方传参被静默丢弃且全程无任何报错。
+     *
+     * 机械判据：接口声明的每个参数名，在实现体内必须至少出现两次
+     * （一次是 override 签名，一次是真实读取），杜绝只留签名不写实现的假契约。
+     */
+    @Test
+    fun repository_interface_parameters_must_be_read_in_implementation() {
+        val file =
+            File(
+                projectRoot,
+                "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/TorrentFeedRepository.kt",
+            )
+        assertTrue(file.isFile, "TorrentFeedRepository.kt 未找到")
+        val content = KotlinSourceScanner.sanitize(file.readText())
+
+        val violations = mutableListOf<String>()
+        val signature =
+            Regex("""suspend fun getTorrentResources\(([\s\S]*?)\)\s*:\s*List<TorrentMediaResource>""")
+                .find(content)
+                ?.groupValues
+                ?.get(1)
+        val implStart = content.indexOf("class TorrentFeedRepositoryImpl")
+        if (signature == null) {
+            violations.add("TorrentFeedRepository.getTorrentResources 接口签名锚点失效，请同步更新红线")
+        }
+        if (implStart < 0) {
+            violations.add("TorrentFeedRepositoryImpl 未找到，红线无法定位实现体")
+        }
+        if (signature != null && implStart >= 0) {
+            val implBody = content.substring(implStart)
+            val paramNames =
+                Regex("""(?m)^\s*(\w+)\s*:""")
+                    .findAll(signature)
+                    .map { it.groupValues[1] }
+                    .toList()
+            if (paramNames.isEmpty()) {
+                violations.add("未能从 getTorrentResources 签名解析出参数名，请同步更新红线")
+            }
+            paramNames.forEach { name ->
+                val reads = Regex("""\b${Regex.escape(name)}\b""").findAll(implBody).count()
+                if (reads < 2) {
+                    violations.add(
+                        "getTorrentResources 参数 `$name` 在 TorrentFeedRepositoryImpl 实现体中未被读取" +
+                            "（仅出现 $reads 次）：接口契约形同虚设，调用方传参会被静默丢弃",
+                    )
+                }
+            }
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反仓库契约参数实现闭环红线（见 AGENTS.md 领域规则）：\n" + violations.joinToString("\n"),
+        )
+    }
+
     @Test
     fun production_sources_never_use_reflection_getIdentifier() {
         val scanRoots =
