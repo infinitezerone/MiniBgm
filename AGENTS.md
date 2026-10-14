@@ -42,7 +42,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 - 排期真值只来自 AniList 已验证播出事件；禁止算术预测与合成剧集；bangumi-data 仅作元数据与平台映射，不得污染官方播出时间。
 - 复用 `BgmHttpClient.jsonConfig`，不手写 `Json {}`（模块内白名单见 ArchitectureRulesTest）。
 - Ktor 401 自动刷新；刷新彻底失败自动登出——调用方永远不会看到 401。
-- 播放器分集会话：续播点按**分集**维度重算——换集动作（`selectEpisode` / `switchTo`）必须按新分集自己的记录下发 `resumePositionMs`；规则源换集时新地址尚不可知，必须把查表推迟到嗅探出地址那一刻（`consumePendingResumePositionForNewEpisode`），同分集内换线路才沿用当前进度，绝不沿用上一集的时间轴（否则新分集跳到旧分集进度，短集会瞬间播完并连播空跳）。`PlayerController` 重置媒体态只允许重置媒体相关字段，必须显式保留引擎侧偏好（`isLooping` 由引擎 `repeatMode` 持有），严禁 `PlaybackState()` 无参整体重置（ArchitectureRulesTest 物理红线拦截）。
+- 播放器分集会话：续播点按**分集**维度重算——换集动作（`selectEpisode` / `switchTo`）必须按新分集自己的记录下发 `resumePositionMs`；规则源换集时新地址尚不可知，必须把查表推迟到嗅探出地址那一刻（`consumePendingResumePositionForNewEpisode`），同分集内换线路才沿用当前进度，绝不沿用上一集的时间轴（否则新分集跳到旧分集进度，短集会瞬间播完并连播空跳）。`PlayerController` 重置媒体态只允许重置媒体相关字段，必须显式保留引擎侧偏好（`isLooping` 由引擎 `repeatMode` 持有），严禁 `PlaybackState()` 无参整体重置（ArchitectureRulesTest 物理红线拦截）。ExoPlayer 引擎的 `DefaultMediaSourceFactory` 必须经 `DefaultDataSource.Factory(context, httpDataSourceFactory)` 包装以支持离线下载（`file://`）视频回放，严禁直传 `httpDataSourceFactory`（ArchitectureRulesTest 物理红线拦截）。播放器线路生成必须剔除 `PlaybackRuleKind.TORRENT`（BT 种子由离线下载面板承接，严禁作为在线流媒体线路呈现）。
 - 流媒体发流、P2P 引擎与 ECH 优选池：
   - **原生插件安全与生命周期**：严禁派发未就绪的空 Socket 伪地址；扩展下载与后台大任务严禁静默触发，必须经 `BgmOverlayHost` 显式确认（严禁暴露无确认的 `checkOrInstallEngine` 后门）；按需动态下载的 `.so` 必须按应用版本隔离目录并清理旧版残留、加 `Mutex` 互斥，且在 `System.load` 前调用 `setReadOnly()` 满足 Android 10+ W^X 安全约束（`ArchitectureRulesTest` 物理红线拦截）。
   - **librqbit 会话约束**：会话必须配置后缀过滤、单集锁定（`only_files`）、`overwrite: true`（防二次启动报 `os error 17`）、`resolve_target_file_path` 暴露真实扩展名落盘路径及异常初始化 `cancel_token.cancel()` 守卫；多视频文件种子必须依据请求剧集（`episodeHint`）精确匹配目标视频，未命中才回退单集最大文件；本地 HTTP API 严格置 `read_only: true`。

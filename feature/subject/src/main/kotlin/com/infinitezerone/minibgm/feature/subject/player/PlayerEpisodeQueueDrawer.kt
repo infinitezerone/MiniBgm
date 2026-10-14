@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.feature.subject.R
 
@@ -92,7 +93,7 @@ internal fun PlayerEpisodeQueueDrawer(
             }
         }
 
-    var selectedChunkIndex by remember(chunks) { mutableIntStateOf(initialChunkIndex) }
+    var selectedChunkIndex by remember(chunks, initialChunkIndex) { mutableIntStateOf(initialChunkIndex) }
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
@@ -203,7 +204,7 @@ internal fun PlayerEpisodeQueueDrawer(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
                             Text(
-                                text = ep.sort.toInt().toString(),
+                                text = ep.sort.toEpisodeLabel(),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                 color =

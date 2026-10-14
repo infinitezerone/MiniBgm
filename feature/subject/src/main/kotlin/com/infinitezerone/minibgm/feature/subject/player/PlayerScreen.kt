@@ -229,9 +229,9 @@ fun PlayerScreen(
 
     suspend fun resumeFromSavedPositionIfNeeded() {
         if (resumedForUrl == uiState.streamUrl) return
-        resumedForUrl = uiState.streamUrl
         val resume = uiState.resumePositionMs
         if (resume < MIN_RESUME_POSITION_MS) return
+        resumedForUrl = uiState.streamUrl
         val duration = playback.durationMs
         if (duration > 0L && resume >= duration * 0.95) return
         controller.seekTo(resume)

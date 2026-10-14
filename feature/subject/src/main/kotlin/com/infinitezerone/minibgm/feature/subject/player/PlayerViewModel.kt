@@ -26,6 +26,7 @@ import com.infinitezerone.minibgm.core.model.DanmakuMatch
 import com.infinitezerone.minibgm.core.model.DanmakuMatchState
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.UserCollection
@@ -392,7 +393,7 @@ class PlayerViewModel(
                 ),
             )
         }
-        rules.filter { it.isEnabled }.forEach { rule ->
+        rules.filter { it.isEnabled && it.kind != PlaybackRuleKind.TORRENT }.forEach { rule ->
             list.add(
                 PlayerSourceTab(
                     id = rule.id,
@@ -991,7 +992,7 @@ class PlayerViewModel(
         val queueIndex =
             queue.indexOfFirst {
                 (it.episodeId > 0 && it.episodeId == episode.id) ||
-                    (it.episodeSort > 0 && it.episodeSort == episode.sort)
+                    (it.episodeSort >= 0f && it.episodeSort == episode.sort)
             }
         if (queueIndex >= 0) {
             session.currentIndex = queueIndex
@@ -1261,7 +1262,7 @@ class PlayerViewModel(
             val matchingEntry =
                 state.queue.find {
                     (it.episodeId > 0 && it.episodeId == state.episodeId) ||
-                        (it.episodeSort > 0 && it.episodeSort == state.episodeSort)
+                        (it.episodeSort >= 0f && it.episodeSort == state.episodeSort)
                 }
             if (matchingEntry != null && matchingEntry.streamUrl.isNotBlank()) {
                 val resumeForNewEpisode = consumePendingResumePositionForNewEpisode(matchingEntry.streamUrl)

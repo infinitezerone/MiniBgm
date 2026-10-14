@@ -1547,4 +1547,78 @@ class PlayerViewModelTest {
             advanceUntilIdle()
             assertTrue("切回 127.0.0.1 流应重新激活 playerSessionActive", fakeTorrentEngine.isPlayerSessionActive())
         }
+
+    @Test
+    fun buildSources_filtersOutTorrentRules() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val onlineRule =
+                PlaybackSourceRule(
+                    id = "online1",
+                    name = "Online Source",
+                    urlTemplate = "https://example.com/play?t={title}",
+                    isEnabled = true,
+                    kind = PlaybackRuleKind.SOURCE,
+                )
+            val torrentRule =
+                PlaybackSourceRule(
+                    id = "torrent1",
+                    name = "Torrent Feed",
+                    urlTemplate = "https://example.com/rss?q={title}",
+                    isEnabled = true,
+                    kind = PlaybackRuleKind.TORRENT,
+                )
+            settings.importPlaybackRules(listOf(onlineRule, torrentRule))
+
+            val viewModel = viewModel(settingsRepository = settings)
+            advanceUntilIdle()
+
+            val sourceIds =
+                viewModel.uiState.value.sources
+                    .map { it.id }
+            assertTrue("在线规则应在播放器线路中", sourceIds.contains("online1"))
+            assertFalse("TORRENT 种子规则不得进入播放器在线线路列表", sourceIds.contains("torrent1"))
+        }
+
+    @Test
+    fun selectEpisode_matchingEpisodeZero_matchesSuccessfully() =
+        runTest {
+            val queue =
+                listOf(
+                    PlayerQueueEntry(
+                        streamUrl = "https://example.com/ep0.m3u8",
+                        label = "0",
+                        episodeSort = 0f,
+                        episodeId = 0L,
+                    ),
+                    PlayerQueueEntry(
+                        streamUrl = "https://example.com/ep1.m3u8",
+                        label = "1",
+                        episodeSort = 1f,
+                        episodeId = 0L,
+                    ),
+                )
+            val vm =
+                viewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = 0L,
+                            streamUrl = "https://example.com/ep1.m3u8",
+                            queue = queue,
+                            startIndex = 1,
+                        ),
+                )
+            advanceUntilIdle()
+            assertEquals("https://example.com/ep1.m3u8", vm.uiState.value.streamUrl)
+
+            // 选择第 0 话（序章）
+            vm.selectEpisode(PlayerEpisodeItem(id = 0L, sort = 0f, name = "第0话 序章"))
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertEquals("https://example.com/ep0.m3u8", state.streamUrl)
+            assertEquals(0, state.currentIndex)
+            assertEquals(null, state.error)
+        }
 }

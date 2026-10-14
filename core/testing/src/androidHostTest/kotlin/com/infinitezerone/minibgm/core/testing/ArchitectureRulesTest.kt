@@ -1204,6 +1204,42 @@ class ArchitectureRulesTest {
     }
 
     @Test
+    fun exoplayer_engine_media_source_factory_must_wrap_default_data_source() {
+        val engineFile =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt",
+            )
+        if (!engineFile.isFile) return
+
+        val text = engineFile.readText()
+        // Media3 的 DefaultMediaSourceFactory 若裸传 HttpDataSource.Factory，
+        // 播放本地 file://（如离线下载完成的视频）时会尝试强转 HttpURLConnection 导致 ClassCastException 崩溃。
+        // 必须通过 DefaultDataSource.Factory(context, httpDataSourceFactory) 包装以支持离线与本地资源回放。
+        assertTrue(
+            text.contains("DefaultDataSource.Factory(context, httpDataSourceFactory)"),
+            "ExoPlayerEngine 的 DefaultMediaSourceFactory 必须使用 DefaultDataSource.Factory 包装以支持离线 file:// 播放",
+        )
+    }
+
+    @Test
+    fun player_view_model_must_filter_out_torrent_rules_from_online_sources() {
+        val playerViewModelFile =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewModel.kt",
+            )
+        if (!playerViewModelFile.isFile) return
+
+        val text = playerViewModelFile.readText()
+        // 播放器线路必须排除 PlaybackRuleKind.TORRENT，P2P 种子由离线下载和详情页专门面板承接，不得作为在线直链嗅探源。
+        assertTrue(
+            text.contains("PlaybackRuleKind.TORRENT"),
+            "PlayerViewModel 必须处理并过滤 PlaybackRuleKind.TORRENT 种子规则",
+        )
+    }
+
+    @Test
     fun screenshot_test_modules_must_use_shared_unit_test_convention() {
         val includeRe = Regex("""^include\(":(.+)"\)$""")
         val violations = mutableListOf<String>()
