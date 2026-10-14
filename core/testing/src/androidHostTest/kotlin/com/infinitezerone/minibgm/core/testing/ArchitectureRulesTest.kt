@@ -1173,6 +1173,109 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 磁力分集隔离与种子载荷校验红线（见 AGENTS.md 领域规则 & 剧本 8）：
+     * 1. `AndroidTorrentRepository.startDownload` 去重必须同时比对分集身份键 `episodeKey`：
+     *    合集/BD 包内所有分集共用同一磁力，只比 infoHash 会让点第 N 集命中第 M 集的既有任务，
+     *    直接复用其 `streamUrl`（或已完成任务的 `file://` 落盘路径），静默播错集且全程无提示；
+     * 2. `AndroidTorrentStreamEngine.startStream` 会话复用必须比对 `activeEpisodeHint`：
+     *    同磁力换集必须重新解析目标文件，否则复用上一集的流与 `targetFile`；
+     * 3. `SubjectSourcesBottomSheet` 的已完成任务快捷复用必须同样比对 `episodeKey`；
+     * 4. 种子（`.torrent`）载荷必须经 `TorrentFileCache` 校验：镜像返回 HTTP 200 的 HTML 错误页时
+     *    `AssetDownloader` 只按字节数判成功，缓存命中若只看「文件名 + 非空」会让坏种子被永久复用
+     *    （离线下载还会把它写进 DB 的 `torrentFilePath`，重启后继续命中）；
+     * 5. 起播等待超时必须以 `Result.failure` 返回：`getOrThrow()` 抛出的 `CancellationException`
+     *    会连带取消调用方协程，UI 的 `onFailure` 永不执行，用户全程无任何提示。
+     */
+    @Test
+    fun torrent_episode_isolation_and_payload_validation_guards_are_enforced() {
+        val torrentRepoFile =
+            File(
+                projectRoot,
+                "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/repository/AndroidTorrentRepository.kt",
+            )
+        val streamEngineFile =
+            File(
+                projectRoot,
+                "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/download/AndroidTorrentStreamEngine.kt",
+            )
+        val sheetFile =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectSourcesBottomSheet.kt",
+            )
+        assertTrue(torrentRepoFile.isFile, "AndroidTorrentRepository.kt 未找到")
+        assertTrue(streamEngineFile.isFile, "AndroidTorrentStreamEngine.kt 未找到")
+        assertTrue(sheetFile.isFile, "SubjectSourcesBottomSheet.kt 未找到")
+
+        val repoContent = KotlinSourceScanner.sanitize(torrentRepoFile.readText())
+        val engineContent = KotlinSourceScanner.sanitize(streamEngineFile.readText())
+        val sheetContent = KotlinSourceScanner.sanitize(sheetFile.readText())
+
+        val violations = mutableListOf<String>()
+        if (!repoContent.contains("task.episodeKey == incomingEpisodeKey")) {
+            violations.add(
+                "AndroidTorrentRepository.startDownload 去重缺少分集身份键比对（episodeKey）：合集/BD 包内换集将复用上一集的 streamUrl 或 file:// 落盘路径，静默播错集",
+            )
+        }
+        if (!repoContent.contains("TorrentFileCache.isValidPayload(") ||
+            !repoContent.contains("TorrentFileCache.isUsableCachedFile(")
+        ) {
+            violations.add(
+                "AndroidTorrentRepository 下载/复用种子文件未经 TorrentFileCache 校验载荷：镜像 HTML 错误页会被当作成功种子永久复用",
+            )
+        }
+        // runTaskPipeline 从 DB 取回的 torrentFilePath 同样必须校验：坏种子一旦写进 DB，
+        // 每次启动都会把该路径直接喂给引擎，坏种子永久复现（用户只能清应用数据自救）。
+        val pipelineStart = repoContent.indexOf("private suspend fun runTaskPipeline")
+        val pipelineEnd = repoContent.indexOf("private suspend fun monitorDirectEngineDownload")
+        if (pipelineStart < 0 || pipelineEnd <= pipelineStart) {
+            violations.add(
+                "AndroidTorrentRepository.runTaskPipeline 结构锚点失效：红线无法定位种子路径复用逻辑，请同步更新红线",
+            )
+        } else if (!repoContent.substring(pipelineStart, pipelineEnd).contains("TorrentFileCache.isValidPayload(")) {
+            violations.add(
+                "AndroidTorrentRepository.runTaskPipeline 直接复用 DB 中的 torrentFilePath 而未校验载荷：失效或坏种子会被永久复用",
+            )
+        }
+        if (repoContent.contains("getOrThrow()")) {
+            violations.add(
+                "AndroidTorrentRepository 使用 getOrThrow() 表达业务失败：CancellationException 会连带取消调用方协程，UI onFailure 永不执行",
+            )
+        }
+        if (!repoContent.contains("catch (e: TimeoutCancellationException)") ||
+            !repoContent.contains("STREAM_ACQUISITION_TIMEOUT_MESSAGE")
+        ) {
+            violations.add(
+                "AndroidTorrentRepository.startStreamDownload 缺少起播等待超时守卫：死种将无界挂起或直接取消调用方协程",
+            )
+        }
+        // 用词边界锚定标识符本体：改名（activeEpisodeHintX）或只留注释都不得蒙混过关
+        if (Regex("\\bactiveEpisodeHint\\b").findAll(engineContent).count() < 4 ||
+            !engineContent.contains("activeEpisodeHint == normalizedEpisodeHint") ||
+            !engineContent.contains("activeEpisodeHint = null")
+        ) {
+            violations.add(
+                "AndroidTorrentStreamEngine 会话复用缺少 activeEpisodeHint 声明/比对/赋值/重置四处闭环：同磁力换集将复用上一集的会话与 targetFile",
+            )
+        }
+        if (!engineContent.contains("TorrentFileCache.isUsableCachedFile(")) {
+            violations.add(
+                "AndroidTorrentStreamEngine 预取/复用本地种子文件未经 TorrentFileCache 校验载荷，坏种子会随 DB 路径被永久复用",
+            )
+        }
+        if (!sheetContent.contains("task.episodeKey == requestedEpisodeKey")) {
+            violations.add(
+                "SubjectSourcesBottomSheet 已完成任务快捷复用缺少 episodeKey 比对：点第 N 集会直接播第 M 集已落盘的文件",
+            )
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反磁力分集隔离与种子载荷校验红线（见 AGENTS.md 领域规则 & 剧本 8）：\n" + violations.joinToString("\n"),
+        )
+    }
+
     @Test
     fun production_sources_never_use_reflection_getIdentifier() {
         val scanRoots =

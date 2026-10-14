@@ -96,6 +96,13 @@ class AndroidTorrentStreamEngine internal constructor(
     @Volatile
     private var activeSaveDir: String? = null
 
+    /**
+     * 已激活会话绑定的分集提示。合集/BD 包内多集共用同一 infoHash，
+     * 仅比对 infoHash 会把新分集错误复用到旧分集的解析结果（旧 targetFile / 旧流），静默播错集。
+     */
+    @Volatile
+    private var activeEpisodeHint: String? = null
+
     @Volatile
     private var downloadSessionProtected: Boolean = false
 
@@ -256,11 +263,14 @@ class AndroidTorrentStreamEngine internal constructor(
                         ?.let { File(it).apply { mkdirs() }.absolutePath }
                         ?: File(context.cacheDir, "torrent_stream").apply { mkdirs() }.absolutePath
 
+                val normalizedEpisodeHint = episodeHint?.trim().orEmpty()
+
                 val existingUrl = activeStreamUrl
                 if (infoHash != "unknown_hash" &&
                     activeInfoHash.equals(infoHash, ignoreCase = true) &&
                     !existingUrl.isNullOrBlank() &&
                     activeStreamJob?.isActive == true &&
+                    activeEpisodeHint == normalizedEpisodeHint &&
                     (saveDirPath == null || activeSaveDir == targetSaveDir)
                 ) {
                     logger.i { "复用已激活的原生 BT 流媒体会话: $infoHash -> $existingUrl" }
@@ -280,7 +290,7 @@ class AndroidTorrentStreamEngine internal constructor(
                         magnetUrl = magnetUrl,
                         torrentPath = torrentFilePath,
                         saveDir = targetSaveDir,
-                        episodeHint = episodeHint ?: "",
+                        episodeHint = normalizedEpisodeHint,
                     )
 
                 if (resultUrl.startsWith("ERROR:")) {
@@ -298,6 +308,7 @@ class AndroidTorrentStreamEngine internal constructor(
                 activeStreamUrl = resultUrl
                 activeTargetFilePath = resolvedTargetFile
                 activeSaveDir = targetSaveDir
+                activeEpisodeHint = normalizedEpisodeHint
 
                 logger.i { "原生流媒体服务就绪: $resultUrl (targetFile: $resolvedTargetFile)" }
 
@@ -366,14 +377,18 @@ class AndroidTorrentStreamEngine internal constructor(
         }
         val existingLocalFile = File(torrentUrl)
         if (existingLocalFile.isFile && existingLocalFile.length() > 0L) {
-            logger.i { "直接使用已落盘的本地种子文件: ${existingLocalFile.absolutePath}" }
-            return existingLocalFile.absolutePath
+            if (TorrentFileCache.isUsableCachedFile(existingLocalFile)) {
+                logger.i { "直接使用已落盘的本地种子文件: ${existingLocalFile.absolutePath}" }
+                return existingLocalFile.absolutePath
+            }
+            // 落盘路径可能已被写进 DB（torrentFilePath），坏种子必须就地删除，否则重启后永久命中
+            logger.w { "已落盘的本地种子文件内容非法（疑似镜像错误页），已删除并改为重新下载: ${existingLocalFile.absolutePath}" }
         }
         val downloader = assetDownloader ?: return ""
         val torrentsDir = File(context.cacheDir, "torrents").apply { mkdirs() }
-        val safeName = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
-        val targetTorrentFile = File(torrentsDir, "$safeName.torrent")
-        if (targetTorrentFile.exists() && targetTorrentFile.length() > 0L) {
+        val targetTorrentFile =
+            File(torrentsDir, "${TorrentFileCache.cacheKey(magnetUrl = "", torrentUrl = torrentUrl, title = title)}.torrent")
+        if (TorrentFileCache.isUsableCachedFile(targetTorrentFile)) {
             logger.i { "使用已缓存的种子文件: ${targetTorrentFile.absolutePath}" }
             return targetTorrentFile.absolutePath
         }
@@ -381,7 +396,8 @@ class AndroidTorrentStreamEngine internal constructor(
             runCatching {
                 downloader.downloadAsset(torrentUrl, targetTorrentFile.absolutePath)
             }.getOrNull()
-        return if (dlResult is DownloadState.Completed || (targetTorrentFile.exists() && targetTorrentFile.length() > 0L)) {
+        val downloaded = dlResult is DownloadState.Completed || (targetTorrentFile.exists() && targetTorrentFile.length() > 0L)
+        return if (downloaded && TorrentFileCache.isUsableCachedFile(targetTorrentFile)) {
             logger.i { "预取种子文件成功，直接装载种子: ${targetTorrentFile.absolutePath}" }
             targetTorrentFile.absolutePath
         } else {
@@ -411,6 +427,7 @@ class AndroidTorrentStreamEngine internal constructor(
         activeStreamUrl = null
         activeTargetFilePath = null
         activeSaveDir = null
+        activeEpisodeHint = null
         if (loadedVersion != null) {
             runCatching { nativeBridge.stopStream() }
         }

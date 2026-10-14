@@ -136,4 +136,51 @@ class TorrentModelsTest {
         assertEquals(2, group.activeTaskCount)
         assertEquals("连接做种节点超时（暂无可用源），请点击重试或更换其他资源", group.firstErrorMessage)
     }
+
+    @Test
+    fun torrentEpisodeKey_prefersEpisodeIdThenSortThenName() {
+        // id 最可靠（跨重启稳定），有 id 时忽略集数与分集名
+        assertEquals("id:12345", torrentEpisodeKey(episodeId = 12345L, episodeSort = 7f, episodeName = "第七话"))
+        // 无 id 退化到集数（保留半集/总集篇的小数字号）
+        assertEquals("sort:7.5", torrentEpisodeKey(episodeId = 0L, episodeSort = 7.5f, episodeName = "第七点五话"))
+        // 全无则退化到分集名（去空白）
+        assertEquals("name:第七话", torrentEpisodeKey(episodeId = 0L, episodeSort = 0f, episodeName = "  第七话  "))
+    }
+
+    @Test
+    fun torrentTask_episodeKey_isolatesEpisodesSharingOneMagnet() {
+        val sharedMagnet = "magnet:?xt=urn:btih:aaaabbbbccccdddd"
+        val first =
+            TorrentTask(
+                id = "1",
+                title = "合集 BD",
+                magnetUrl = sharedMagnet,
+                episodeId = 101L,
+                episodeSort = 1f,
+                episodeName = "第一话",
+            )
+        val second =
+            TorrentTask(
+                id = "2",
+                title = "合集 BD",
+                magnetUrl = sharedMagnet,
+                episodeId = 102L,
+                episodeSort = 2f,
+                episodeName = "第二话",
+            )
+        val sameEpisodeOtherTask =
+            TorrentTask(
+                id = "3",
+                title = "合集 BD",
+                magnetUrl = sharedMagnet,
+                episodeId = 101L,
+                episodeSort = 1f,
+                episodeName = "第一话",
+            )
+
+        assertEquals("id:101", first.episodeKey)
+        // 同一磁力（infoHash 相同）的不同分集必须是不同的键，否则会复用上一集已落盘的文件
+        assertTrue(first.episodeKey != second.episodeKey)
+        assertEquals(first.episodeKey, sameEpisodeOtherTask.episodeKey)
+    }
 }

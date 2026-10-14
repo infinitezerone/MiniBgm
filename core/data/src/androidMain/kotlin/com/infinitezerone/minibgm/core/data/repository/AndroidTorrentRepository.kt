@@ -5,6 +5,7 @@ import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.download.AssetDownloader
 import com.infinitezerone.minibgm.core.data.download.DOWNLOAD_TEMP_SUFFIX
 import com.infinitezerone.minibgm.core.data.download.TorrentDownloadService
+import com.infinitezerone.minibgm.core.data.download.TorrentFileCache
 import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
 import com.infinitezerone.minibgm.core.database.dao.TorrentTaskDao
 import com.infinitezerone.minibgm.core.database.entity.TorrentTaskEntity
@@ -12,6 +13,7 @@ import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.TorrentStreamState
 import com.infinitezerone.minibgm.core.model.TorrentTask
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
+import com.infinitezerone.minibgm.core.model.torrentEpisodeKey
 import com.infinitezerone.minibgm.core.network.AssetDownloadService
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import kotlinx.coroutines.CancellationException
@@ -22,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
@@ -113,10 +116,20 @@ class AndroidTorrentRepository(
     ): String {
         restoreDeferred.await()
         val incomingHash = extractInfoHash(magnetUrl)
+        val incomingEpisodeKey = torrentEpisodeKey(episodeId, episodeSort, episodeName)
+        // 分集隔离：合集/BD 包内所有分集共用同一磁力，去重必须同时比对分集身份键。
+        // 只比 magnet/infoHash 时，点第 N 集会命中第 M 集的既有任务，直接复用其
+        // streamUrl（或已完成任务的 file:// 落盘路径），静默播错集且全程无提示。
         val existingTask =
             _tasks.value.firstOrNull { task ->
-                task.magnetUrl == magnetUrl ||
-                    (incomingHash.isNotBlank() && extractInfoHash(task.magnetUrl).equals(incomingHash, ignoreCase = true))
+                task.episodeKey == incomingEpisodeKey &&
+                    (
+                        task.magnetUrl == magnetUrl ||
+                            (
+                                incomingHash.isNotBlank() &&
+                                    extractInfoHash(task.magnetUrl).equals(incomingHash, ignoreCase = true)
+                            )
+                    )
             }
 
         if (existingTask != null) {
@@ -193,14 +206,7 @@ class AndroidTorrentRepository(
                 )
 
             val currentSnapshot = _tasks.value.firstOrNull { it.id == taskId }
-            if (currentSnapshot != null) {
-                if (currentSnapshot.isCompleted && currentSnapshot.savePath.isNotBlank() && File(currentSnapshot.savePath).exists()) {
-                    return Result.success("file://${currentSnapshot.savePath}")
-                }
-                if (currentSnapshot.status == TorrentTaskStatus.DOWNLOADING && currentSnapshot.streamUrl.isNotBlank()) {
-                    return Result.success(currentSnapshot.streamUrl)
-                }
-            }
+            currentSnapshot?.localPlayableUri()?.let { return Result.success(it) }
 
             // 若当前有其他任务占用了单实例 P2P 会话，通过优先权抢占启动用户正在点击“边下边播”的任务
             preemptAndPrioritizeTask(taskId)
@@ -211,28 +217,36 @@ class AndroidTorrentRepository(
                         .mapNotNull { list ->
                             val task =
                                 list.firstOrNull { it.id == taskId }
-                                    ?: return@mapNotNull Result.failure<String>(CancellationException("下载任务已取消"))
-                            when {
-                                task.isCompleted && task.savePath.isNotBlank() && File(task.savePath).exists() ->
-                                    Result.success("file://${task.savePath}")
-                                task.status == TorrentTaskStatus.DOWNLOADING && task.streamUrl.isNotBlank() ->
-                                    Result.success(task.streamUrl)
-                                task.status == TorrentTaskStatus.ERROR ->
-                                    Result.failure(IOException(task.errorMessage ?: "起播失败"))
-                                task.status == TorrentTaskStatus.PAUSED ->
-                                    Result.failure(CancellationException("下载任务已暂停"))
-                                else -> null
-                            }
+                                    ?: throw IOException(TASK_CANCELLED_MESSAGE)
+                            task.localPlayableUri()
+                                ?: when (task.status) {
+                                    TorrentTaskStatus.ERROR ->
+                                        throw IOException(task.errorMessage ?: STREAM_ACQUISITION_FAILED_MESSAGE)
+                                    TorrentTaskStatus.PAUSED -> throw IOException(TASK_PAUSED_MESSAGE)
+                                    else -> null
+                                }
                         }.first()
-                        .getOrThrow()
                 }
             return Result.success(playUrl)
+        } catch (e: TimeoutCancellationException) {
+            // 业务失败必须走 Result，绝不能让它以 CancellationException 形式冒泡：
+            // 那会连带取消调用方协程，UI 的 onFailure 永不执行，用户全程无任何提示。
+            return Result.failure(IOException(STREAM_ACQUISITION_TIMEOUT_MESSAGE))
         } catch (e: CancellationException) {
+            // 真实协程取消（用户离开页面 / 上层 Job 取消）必须原样向上传播
             throw e
         } catch (e: Exception) {
             return Result.failure(e)
         }
     }
+
+    /** 已完成落盘文件或已就绪的本地流地址；两者都不可用时返回 null。 */
+    private fun TorrentTask.localPlayableUri(): String? =
+        when {
+            isCompleted && savePath.isNotBlank() && File(savePath).exists() -> "file://$savePath"
+            status == TorrentTaskStatus.DOWNLOADING && streamUrl.isNotBlank() -> streamUrl
+            else -> null
+        }
 
     private suspend fun preemptAndPrioritizeTask(targetTaskId: String) {
         val preemptedJob: Job?
@@ -332,6 +346,16 @@ class AndroidTorrentRepository(
 
         var localTorrentPath: String? = task.torrentFilePath
         val torrentUrl = task.torrentUrl
+        // DB 中记录的路径必须与缓存命中同一把尺子校验：路径失效（文件被清理）或载荷非法
+        // （镜像 HTTP 200 的 HTML 错误页）时若照旧喂给引擎，坏种子会随 DB 记录永久复现，
+        // 用户只能清应用数据自救。校验失败即删除并置空，改走下面的重新获取分支。
+        val stalePersistedTorrentPath =
+            localTorrentPath?.takeIf { it.isNotBlank() && !TorrentFileCache.isValidPayload(File(it)) }
+        if (stalePersistedTorrentPath != null) {
+            logger.w { "DB 记录的种子文件已失效（缺失或载荷非法），将重新获取: $stalePersistedTorrentPath" }
+            runCatching { File(stalePersistedTorrentPath).delete() }
+            localTorrentPath = null
+        }
         if (localTorrentPath.isNullOrBlank() && !torrentUrl.isNullOrBlank()) {
             val downloadResult = downloadTorrentFile(torrentUrl, task.title)
             if (downloadResult.isSuccess) {
@@ -800,28 +824,41 @@ class AndroidTorrentRepository(
         runCatching {
             val existingLocal = File(torrentUrl)
             if (existingLocal.isFile && existingLocal.length() > 0L) {
-                return@runCatching existingLocal.absolutePath
+                // 已落盘的本地种子同样要过载荷校验：坏种子就地删除交给后续重新获取，
+                // 杜绝"DB 里记着路径 → 每次启动都读到同一个坏种子"的永久复现。
+                if (TorrentFileCache.isValidPayload(existingLocal)) {
+                    return@runCatching existingLocal.absolutePath
+                }
+                logger.w { "本地种子载荷非法（非 bencode/无 info 键），已删除: ${existingLocal.absolutePath}" }
+                runCatching { existingLocal.delete() }
             }
             val torrentsDir = File(context.cacheDir, "torrents").apply { mkdirs() }
-            val safeName = fileName.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
-            val targetFile = File(torrentsDir, "$safeName.torrent")
-            if (targetFile.isFile && targetFile.length() > 0L) {
+            // 缓存键优先 infoHash / 种子直链指纹，严禁只按标题命名（同名不同种会永久互串）
+            val cacheKey = TorrentFileCache.cacheKey(magnetUrl = "", torrentUrl = torrentUrl, title = fileName)
+            val targetFile = File(torrentsDir, "$cacheKey.torrent")
+            if (TorrentFileCache.isUsableCachedFile(targetFile)) {
                 logger.i { "复用已缓存的种子文件: ${targetFile.absolutePath}" }
                 return@runCatching targetFile.absolutePath
             }
 
             val downloadState = assetDownloader.downloadAsset(torrentUrl, targetFile.absolutePath)
-            when (downloadState) {
-                is DownloadState.Completed -> targetFile.absolutePath
-                is DownloadState.Failed -> error(downloadState.message)
-                else -> {
-                    if (targetFile.exists() && targetFile.length() > 0L) {
-                        targetFile.absolutePath
-                    } else {
-                        error("种子文件下载未完成")
-                    }
+            val resolvedPath =
+                when (downloadState) {
+                    is DownloadState.Completed -> targetFile.absolutePath
+                    is DownloadState.Failed -> error(downloadState.message)
+                    else ->
+                        targetFile
+                            .takeIf { it.exists() && it.length() > 0L }
+                            ?.absolutePath
+                            ?: error("种子文件下载未完成")
                 }
+            if (!TorrentFileCache.isValidPayload(File(resolvedPath))) {
+                // 镜像返回 HTTP 200 的 HTML 错误页时 AssetDownloader 只按字节数判定成功，
+                // 必须在此拦下并删除，否则坏种子会随 DB 路径被永久复用。
+                runCatching { File(resolvedPath).delete() }
+                error("种子文件内容非法（疑似镜像错误页），请重试或更换其他资源")
             }
+            resolvedPath
         }
 
     private fun updateTask(
@@ -1020,5 +1057,9 @@ class AndroidTorrentRepository(
         const val DEFAULT_PEER_CONNECT_TIMEOUT_MS = 45_000L
         const val PEER_CONNECT_TIMEOUT_MESSAGE = "连接做种节点超时（暂无可用源），请点击重试或更换其他资源"
         const val STREAM_ACQUISITION_TIMEOUT_MS = 60_000L
+        const val STREAM_ACQUISITION_TIMEOUT_MESSAGE = "起播等待超时，未能取得可播放地址（可能是死种），请点击重试或更换其他资源"
+        const val STREAM_ACQUISITION_FAILED_MESSAGE = "起播失败"
+        const val TASK_PAUSED_MESSAGE = "下载任务已暂停"
+        const val TASK_CANCELLED_MESSAGE = "下载任务已取消"
     }
 }

@@ -103,7 +103,33 @@ data class TorrentTask(
     /** 是否处于连上做种节点前（无速率且无节点）的寻道状态 */
     val isConnectingPeers: Boolean
         get() = status == TorrentTaskStatus.DOWNLOADING && connectedPeers == 0 && downloadSpeedBytesPerSec <= 0L
+
+    /**
+     * 分集身份键：合集/BD 包内多个分集共用同一磁力，去重、会话复用与本地文件快捷复用都必须以此键隔离。
+     *
+     * 只按 magnet/infoHash 判定"同一资源"时，点第 N 集会命中第 M 集的既有任务，
+     * 直接复用第 M 集的 `streamUrl` 或 `file://` 落盘路径，静默播错集且全程无任何提示。
+     */
+    val episodeKey: String
+        get() = torrentEpisodeKey(episodeId, episodeSort, episodeName)
 }
+
+/**
+ * 由分集三元组派生稳定的分集身份键：优先 `episodeId`（跨重启最可靠），
+ * 退化到 `episodeSort`（半集/总集篇的小数字号得以保留），最后才用分集名。
+ *
+ * 禁止改成"有集数就比集数、否则整体相等"之类的模糊匹配：合集包内任意两集都必须是不同的键。
+ */
+fun torrentEpisodeKey(
+    episodeId: Long,
+    episodeSort: Float,
+    episodeName: String,
+): String =
+    when {
+        episodeId > 0L -> "id:$episodeId"
+        episodeSort > 0f -> "sort:$episodeSort"
+        else -> "name:${episodeName.trim()}"
+    }
 
 /**
  * 按番剧聚合的下载合集视图模型。

@@ -261,7 +261,110 @@ class TorrentStreamEngineTest {
                 }
             }
         }
+
+    @Test
+    fun androidEngine_startStream_switchingEpisode_reparsesInsteadOfReusingSession() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_torrent_episode_isolation").toFile()
+            try {
+                val context = StubDirContext(tempRoot)
+                val downloader =
+                    StubAssetDownloader { _, destinationPath ->
+                        File(destinationPath).apply {
+                            parentFile?.mkdirs()
+                            writeBytes(validTorrentBytes())
+                        }
+                        DownloadState.Completed(filePath = destinationPath, totalBytes = 64L)
+                    }
+                val bridge = RecordingNativeTorrentBridge()
+                val engine =
+                    AndroidTorrentStreamEngine(
+                        context = context,
+                        assetDownloader = downloader,
+                        pluginVersionProvider = { "0.2.8" },
+                        supportedAbisProvider = { arrayOf("arm64-v8a") },
+                        nativeBridge = bridge,
+                    )
+                val magnet = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"
+
+                assertTrue(engine.startStream(title = "合集 BD", magnetUrl = magnet, episodeHint = "1").isSuccess)
+                assertEquals(listOf("1"), bridge.startEpisodeHints)
+
+                // 同一分集重复请求：允许复用已激活会话（不得重复拉起原生会话）
+                assertTrue(engine.startStream(title = "合集 BD", magnetUrl = magnet, episodeHint = "1").isSuccess)
+                assertEquals(listOf("1"), bridge.startEpisodeHints)
+
+                // 换集（同 infoHash）：必须重新解析目标文件，绝不能复用上一集的会话与落盘路径
+                assertTrue(engine.startStream(title = "合集 BD", magnetUrl = magnet, episodeHint = "2").isSuccess)
+                assertEquals(listOf("1", "2"), bridge.startEpisodeHints)
+            } finally {
+                tempRoot.walkBottomUp().forEach {
+                    it.setWritable(true)
+                    it.delete()
+                }
+            }
+        }
+
+    @Test
+    fun androidEngine_prefetch_corruptCachedTorrent_isDeletedAndRedownloaded() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_torrent_payload_guard").toFile()
+            try {
+                val context = StubDirContext(tempRoot)
+                val torrentUrl = "https://example.com/collection.torrent"
+                // 预置镜像 HTML 错误页：旧实现只按「文件名 + 非空」判缓存命中，会永久复用坏种子
+                val corruptCached =
+                    File(
+                        context.cacheDir,
+                        "torrents/${TorrentFileCache.cacheKey(magnetUrl = "", torrentUrl = torrentUrl, title = "合集 BD")}.torrent",
+                    ).apply {
+                        parentFile?.mkdirs()
+                        writeText("<html><body>404 Not Found</body></html>")
+                    }
+                assertTrue(corruptCached.isFile)
+
+                var downloadCount = 0
+                val downloader =
+                    StubAssetDownloader { _, destinationPath ->
+                        downloadCount++
+                        File(destinationPath).apply {
+                            parentFile?.mkdirs()
+                            writeBytes(validTorrentBytes())
+                        }
+                        DownloadState.Completed(filePath = destinationPath, totalBytes = 64L)
+                    }
+                val bridge = RecordingNativeTorrentBridge()
+                val engine =
+                    AndroidTorrentStreamEngine(
+                        context = context,
+                        assetDownloader = downloader,
+                        pluginVersionProvider = { "0.2.8" },
+                        supportedAbisProvider = { arrayOf("arm64-v8a") },
+                        nativeBridge = bridge,
+                    )
+
+                val result =
+                    engine.startStream(
+                        title = "合集 BD",
+                        magnetUrl = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+                        torrentUrl = torrentUrl,
+                        episodeHint = "1",
+                    )
+
+                assertTrue(result.isSuccess)
+                assertEquals(1, downloadCount, "坏缓存必须被删除并重新下载")
+                assertFalse(corruptCached.readText().contains("404 Not Found"))
+                assertTrue(TorrentFileCache.isValidPayload(corruptCached))
+            } finally {
+                tempRoot.walkBottomUp().forEach {
+                    it.setWritable(true)
+                    it.delete()
+                }
+            }
+        }
 }
+
+private fun validTorrentBytes(): ByteArray = "d8:announce14:http://tracker4:infod6:lengthi1e4:name3:abcee".toByteArray(Charsets.ISO_8859_1)
 
 private class StubDirContext(
     private val rootDir: File,
@@ -325,6 +428,31 @@ private class StubNativeTorrentBridge(
         saveDir: String,
         episodeHint: String,
     ): String = "http://127.0.0.1:18080/stream/0"
+
+    override fun stopStream() = Unit
+
+    override fun getStreamStats(): LongArray = longArrayOf(0L, 100_000_000L, 512_000L, 4L, 2L)
+}
+
+/** 记录每次真正拉起原生会话时的 episodeHint，用于断言"换集必须重新解析而非复用会话"。 */
+private class RecordingNativeTorrentBridge : NativeTorrentBridge {
+    val startEpisodeHints = mutableListOf<String>()
+
+    override fun loadFromPath(absolutePath: String): Boolean = File(absolutePath).isFile
+
+    override fun loadEmbeddedLibrary(): Boolean = true
+
+    override fun isAvailable(): Boolean = true
+
+    override fun startStream(
+        magnetUrl: String,
+        torrentPath: String,
+        saveDir: String,
+        episodeHint: String,
+    ): String {
+        startEpisodeHints += episodeHint
+        return "http://127.0.0.1:18080/stream/${startEpisodeHints.size - 1}"
+    }
 
     override fun stopStream() = Unit
 

@@ -18,6 +18,7 @@ import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -96,11 +97,13 @@ class TorrentRepositoryTest {
                             customMirrorPrefix: String?,
                         ): DownloadState {
                             torrentDownloadCalls.incrementAndGet()
+                            // 必须是合法 bencode 载荷：坏种子会被 TorrentFileCache 拒收并重下
+                            val payload = validTorrentBytes()
                             File(destinationPath).apply {
                                 parentFile?.mkdirs()
-                                writeBytes(ByteArray(128) { 0x42 })
+                                writeBytes(payload)
                             }
-                            return DownloadState.Completed(destinationPath, 128L)
+                            return DownloadState.Completed(destinationPath, payload.size.toLong())
                         }
 
                         override fun cancelDownload() = Unit
@@ -151,6 +154,7 @@ class TorrentRepositoryTest {
                 val secondTorrent = repo.downloadTorrentFile("https://mikanani.me/Download/04.torrent", "[Sakurato] Steel Ball Run [04]")
                 assertTrue(secondTorrent.isSuccess)
                 assertEquals(1, torrentDownloadCalls.get())
+                assertTrue(TorrentFileCache.isValidPayload(File(secondTorrent.getOrThrow())))
             } finally {
                 tempRoot.deleteRecursively()
             }
@@ -837,4 +841,289 @@ class TorrentRepositoryTest {
                 tempRoot.deleteRecursively()
             }
         }
+
+    @Test
+    fun androidTorrentRepository_startDownload_sameMagnetDifferentEpisode_isNotDeduplicated() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_episode_isolation_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ): DownloadState = DownloadState.Completed(destinationPath, 64L)
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val streamService =
+                    object : AssetDownloadService {
+                        override suspend fun streamAsset(
+                            url: String,
+                            rangeStart: Long,
+                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                        ): Long = 0L
+                    }
+
+                val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
+                val streamEngine =
+                    FakeTorrentStreamEngine(initialInstalled = true).apply {
+                        mockTargetFilePath = File(downloadDir, "collection.mkv").absolutePath
+                    }
+
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        torrentTaskDao = FakeTorrentTaskDao(),
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                        peerConnectTimeoutMs = 0L,
+                    )
+
+                // 合集/BD 包：三集共用同一磁力（同一 infoHash）
+                val collectionMagnet = "magnet:?xt=urn:btih:cccccccccccccccccccccccccccccccccccccccc"
+                val ep1 =
+                    repo.startDownload(
+                        title = "合集 BD",
+                        magnetUrl = collectionMagnet,
+                        totalBytes = 4096L,
+                        episodeId = 101L,
+                        episodeSort = 1f,
+                        episodeName = "第一话",
+                    )
+                val ep2 =
+                    repo.startDownload(
+                        title = "合集 BD",
+                        magnetUrl = collectionMagnet,
+                        totalBytes = 4096L,
+                        episodeId = 102L,
+                        episodeSort = 2f,
+                        episodeName = "第二话",
+                    )
+
+                // 同磁力换集必须是两个独立任务，否则第 2 集会复用第 1 集的 streamUrl / 落盘路径
+                assertTrue(ep1 != ep2, "同一磁力的不同分集绝不能被去重合并")
+                assertEquals(2, repo.tasks.value.size)
+
+                // 同一分集重复请求仍然去重复用
+                val ep1Again =
+                    repo.startDownload(
+                        title = "合集 BD",
+                        magnetUrl = collectionMagnet,
+                        totalBytes = 4096L,
+                        episodeId = 101L,
+                        episodeSort = 1f,
+                        episodeName = "第一话",
+                    )
+                assertEquals(ep1, ep1Again)
+                assertEquals(2, repo.tasks.value.size)
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
+
+    @Test
+    fun androidTorrentRepository_startStreamDownload_streamNeverReady_returnsFailureInsteadOfThrowing() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_stream_timeout_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ): DownloadState = DownloadState.Completed(destinationPath, 64L)
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val streamService =
+                    object : AssetDownloadService {
+                        override suspend fun streamAsset(
+                            url: String,
+                            rangeStart: Long,
+                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                        ): Long = 0L
+                    }
+
+                // 起播永不就绪（死种）：任务停留在 RESOLVING，永远拿不到可播地址
+                val streamEngine =
+                    FakeTorrentStreamEngine(initialInstalled = true).apply {
+                        hangOnStartStream = true
+                    }
+
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        torrentTaskDao = FakeTorrentTaskDao(),
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                        peerConnectTimeoutMs = 0L,
+                    )
+
+                // 业务失败必须以 Result.failure 返回：一旦以 CancellationException 冒泡，
+                // 会连带取消调用方协程，UI 的 onFailure 永不执行，用户全程无提示。
+                val result =
+                    repo.startStreamDownload(
+                        title = "Ep 01",
+                        magnetUrl = "magnet:?xt=urn:btih:dddddddddddddddddddddddddddddddddddddddd",
+                        totalBytes = 1000L,
+                    )
+
+                assertTrue(result.isFailure)
+                assertEquals(
+                    AndroidTorrentRepository.STREAM_ACQUISITION_TIMEOUT_MESSAGE,
+                    result.exceptionOrNull()?.message,
+                )
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
+
+    @Test
+    fun androidTorrentRepository_pipeline_discardsStaleTorrentFilePathFromDbAndRefetches() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_stale_torrent_path_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val torrentDownloadCalls = AtomicInteger(0)
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ): DownloadState {
+                            torrentDownloadCalls.incrementAndGet()
+                            val payload = validTorrentBytes()
+                            File(destinationPath).apply {
+                                parentFile?.mkdirs()
+                                writeBytes(payload)
+                            }
+                            return DownloadState.Completed(destinationPath, payload.size.toLong())
+                        }
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val streamService =
+                    object : AssetDownloadService {
+                        override suspend fun streamAsset(
+                            url: String,
+                            rangeStart: Long,
+                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                        ): Long = 0L
+                    }
+
+                // DB 里留着一个「路径存在但载荷非法」的种子：镜像返回 HTTP 200 的 HTML 错误页，
+                // AssetDownloader 只按字节数判成功，历史上会被永久复用。
+                val staleTorrent =
+                    File(context.getCacheDir(), "torrents")
+                        .apply { mkdirs() }
+                        .resolve("url_deadbeef.torrent")
+                        .apply { writeText("<html><body>404 Not Found</body></html>") }
+
+                val fakeDao = FakeTorrentTaskDao()
+                fakeDao.upsertTask(
+                    com.infinitezerone.minibgm.core.database.entity.TorrentTaskEntity(
+                        id = "stale-torrent-task",
+                        title = "Stale Episode",
+                        magnetUrl = "magnet:?xt=urn:btih:5555555555555555555555555555555555555555",
+                        torrentUrl = "https://example.org/stale.torrent",
+                        torrentFilePath = staleTorrent.absolutePath,
+                        status = TorrentTaskStatus.PAUSED.name,
+                        totalBytes = 1000L,
+                        downloadedBytes = 0L,
+                        downloadSpeedBytesPerSec = 0L,
+                        uploadSpeedBytesPerSec = 0L,
+                        connectedPeers = 0,
+                        connectedSeeds = 0,
+                        savePath = File(context.getExternalFilesDir(null), "stale.mp4").absolutePath,
+                        streamUrl = "",
+                        errorMessage = null,
+                        createdTimestamp = 1000L,
+                        completionTimestamp = null,
+                        subjectId = 1L,
+                        subjectName = "Anime",
+                        subjectCoverUrl = "",
+                        episodeId = 1L,
+                        episodeSort = 1f,
+                        episodeName = "Ep 1",
+                    ),
+                )
+
+                val streamEngine = FakeTorrentStreamEngine(initialInstalled = true)
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        torrentTaskDao = fakeDao,
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                        peerConnectTimeoutMs = 0L,
+                    )
+
+                repo.resumeDownload("stale-torrent-task", resetDownloadedBytes = true)
+
+                // 坏路径必须被丢弃并重新获取：若照旧复用，引擎每次启动都拿到同一个坏种子，
+                // 用户只能清应用数据自救。
+                assertEquals(1, torrentDownloadCalls.get())
+                assertFalse(staleTorrent.exists(), "载荷非法的 DB 种子路径必须就地删除")
+                val refreshed =
+                    repo.tasks.value
+                        .single { it.id == "stale-torrent-task" }
+                        .torrentFilePath
+                assertTrue(
+                    refreshed != null && TorrentFileCache.isValidPayload(File(refreshed)),
+                    "重新获取的种子必须是合法载荷",
+                )
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
 }
+
+private fun validTorrentBytes(): ByteArray = "d8:announce14:http://tracker4:infod6:lengthi1e4:name3:abcee".toByteArray(Charsets.ISO_8859_1)

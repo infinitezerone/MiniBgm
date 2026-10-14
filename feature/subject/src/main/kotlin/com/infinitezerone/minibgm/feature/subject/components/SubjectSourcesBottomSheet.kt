@@ -50,6 +50,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.TorrentMediaResource
+import com.infinitezerone.minibgm.core.model.torrentEpisodeKey
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.StreamingAppLauncher
 import com.infinitezerone.minibgm.core.navigation.launchExternalPlayer
@@ -553,9 +554,19 @@ fun TorrentMediaResourcesSection(
                                 resource.magnetUrl
                                     .substringAfter("xt=urn:btih:", "")
                                     .substringBefore("&")
+                            val effectiveEpSort = episode?.let { if (it.sort > 0f) it.sort else it.episodeNumber } ?: 1f
+                            // 合集/BD 包内多集共用同一磁力：必须按分集身份键隔离，
+                            // 否则点第 N 集会直接复用第 M 集已落盘的文件，静默播错集。
+                            val requestedEpisodeKey =
+                                torrentEpisodeKey(
+                                    episodeId = episode?.id ?: 0L,
+                                    episodeSort = effectiveEpSort,
+                                    episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
+                                )
                             val completedTask =
                                 torrentRepository.tasks.value.firstOrNull { task ->
-                                    task.isCompleted &&
+                                    task.episodeKey == requestedEpisodeKey &&
+                                        task.isCompleted &&
                                         task.savePath.isNotBlank() &&
                                         (
                                             task.magnetUrl == resource.magnetUrl ||
@@ -568,7 +579,6 @@ fun TorrentMediaResourcesSection(
                                                 )
                                         )
                                 }
-                            val effectiveEpSort = episode?.let { if (it.sort > 0f) it.sort else it.episodeNumber } ?: 1f
                             if (completedTask != null) {
                                 withContext(Dispatchers.Main) {
                                     onDismissAndRun {
