@@ -94,4 +94,14 @@ interface TorrentRepository {
      * 安装原生 BT 流媒体引擎扩展插件。
      */
     suspend fun installPlugin(): Result<Unit>
+
+    /**
+     * 获取当前下载存储占用与可用存储空间。
+     */
+    suspend fun getStorageUsage(): com.infinitezerone.minibgm.core.model.DownloadStorageUsage
+
+    /**
+     * 校验已完成任务物理文件的存在性，更新任务的 isFileMissing 状态。
+     */
+    suspend fun verifyTaskFiles()
 }

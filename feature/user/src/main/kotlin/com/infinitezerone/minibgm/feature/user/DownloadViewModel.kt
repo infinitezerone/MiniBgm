@@ -3,10 +3,13 @@ package com.infinitezerone.minibgm.feature.user
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
+import com.infinitezerone.minibgm.core.model.DownloadStorageUsage
 import com.infinitezerone.minibgm.core.model.SubjectDownloadGroup
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -20,12 +23,23 @@ import kotlinx.coroutines.launch
 class DownloadViewModel(
     private val torrentRepository: TorrentRepository,
 ) : ViewModel() {
+    private val _storageUsage = MutableStateFlow(DownloadStorageUsage())
+    val storageUsage: StateFlow<DownloadStorageUsage> = _storageUsage.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            torrentRepository.verifyTaskFiles()
+            refreshStorageUsage()
+        }
+    }
+
     /**
      * 按番剧聚合的所有下载合集列表。
      */
     val downloadGroups: StateFlow<List<SubjectDownloadGroup>> =
         torrentRepository.tasks
             .map { tasks ->
+                viewModelScope.launch { refreshStorageUsage() }
                 tasks
                     .groupBy { it.subjectId }
                     .map { (subjectId, groupTasks) ->
@@ -44,6 +58,35 @@ class DownloadViewModel(
                 started = SharingStarted.WhileSubscribed(5_000),
                 initialValue = emptyList(),
             )
+
+    fun refreshStorageUsage() {
+        viewModelScope.launch {
+            _storageUsage.value = torrentRepository.getStorageUsage()
+        }
+    }
+
+    fun verifyFiles() {
+        viewModelScope.launch {
+            torrentRepository.verifyTaskFiles()
+            refreshStorageUsage()
+        }
+    }
+
+    fun redownloadTask(taskId: String) {
+        viewModelScope.launch {
+            torrentRepository.resumeDownload(taskId, resetDownloadedBytes = true)
+        }
+    }
+
+    fun deleteTasks(
+        taskIds: List<String>,
+        deleteFiles: Boolean = true,
+    ) {
+        viewModelScope.launch {
+            taskIds.forEach { torrentRepository.cancelDownload(it, deleteFiles) }
+            refreshStorageUsage()
+        }
+    }
 
     fun pauseTask(taskId: String) {
         viewModelScope.launch {

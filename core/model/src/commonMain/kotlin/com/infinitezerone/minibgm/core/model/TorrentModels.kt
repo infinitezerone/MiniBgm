@@ -54,6 +54,7 @@ data class TorrentTask(
     val episodeId: Long = 0L,
     val episodeSort: Float = 0f,
     val episodeName: String = "",
+    val isFileMissing: Boolean = false,
 ) {
     /** 下载进度百分比 (0.0f ~ 1.0f) */
     val progress: Float
@@ -230,4 +231,35 @@ sealed interface TorrentStreamState {
     data class Error(
         val message: String,
     ) : TorrentStreamState
+}
+
+/**
+ * 本地存储使用情况信息（离线占用与剩余可用）。
+ */
+@Serializable
+data class DownloadStorageUsage(
+    val downloadSizeBytes: Long = 0L,
+    val availableBytes: Long = 0L,
+) {
+    val formattedDownloadSize: String
+        get() = formatBytes(downloadSizeBytes)
+
+    val formattedAvailableSize: String
+        get() = formatBytes(availableBytes)
+
+    companion object {
+        fun formatBytes(bytes: Long): String {
+            if (bytes <= 0L) return "0 B"
+            val gb = bytes / (1024.0 * 1024.0 * 1024.0)
+            if (gb >= 1.0) {
+                return "%.1f GB".format(gb)
+            }
+            val mb = bytes / (1024.0 * 1024.0)
+            if (mb >= 1.0) {
+                return "%.1f MB".format(mb)
+            }
+            val kb = bytes / 1024.0
+            return "%.1f KB".format(kb)
+        }
+    }
 }

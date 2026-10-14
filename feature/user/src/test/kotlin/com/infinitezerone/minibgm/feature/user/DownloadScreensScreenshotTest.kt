@@ -244,7 +244,7 @@ class DownloadScreensScreenshotTest {
             .onNodeWithText("正在下载 1 集 · 正在连接做种节点…")
             .assertIsDisplayed()
         composeTestRule
-            .onNodeWithText("已完结离线 · 1 集 · 500.0 MB")
+            .onNodeWithText("已离线 1 集 · 500.0 MB")
             .assertIsDisplayed()
 
         composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/download_overview_states.png")

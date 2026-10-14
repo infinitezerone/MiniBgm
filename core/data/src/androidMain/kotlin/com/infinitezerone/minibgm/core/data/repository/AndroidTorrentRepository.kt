@@ -980,6 +980,42 @@ class AndroidTorrentRepository(
         return if (xt.isNotBlank()) xt.substringBefore("&") else ""
     }
 
+    override suspend fun getStorageUsage(): com.infinitezerone.minibgm.core.model.DownloadStorageUsage =
+        withContext(Dispatchers.IO) {
+            val downloadDir = resolveDownloadDir()
+            var totalDownloadBytes = 0L
+            runCatching {
+                downloadDir.walkTopDown().filter { it.isFile }.forEach {
+                    totalDownloadBytes += it.length()
+                }
+            }
+            val availableBytes =
+                runCatching {
+                    android.os.StatFs(downloadDir.absolutePath).availableBytes
+                }.getOrDefault(0L)
+
+            com.infinitezerone.minibgm.core.model.DownloadStorageUsage(
+                downloadSizeBytes = totalDownloadBytes,
+                availableBytes = availableBytes,
+            )
+        }
+
+    override suspend fun verifyTaskFiles() {
+        withContext(Dispatchers.IO) {
+            restoreDeferred.await()
+            _tasks.update { list ->
+                list.map { task ->
+                    if (task.status == TorrentTaskStatus.COMPLETED) {
+                        val fileExists = task.savePath.isNotBlank() && File(task.savePath).exists()
+                        task.copy(isFileMissing = !fileExists)
+                    } else {
+                        task
+                    }
+                }
+            }
+        }
+    }
+
     companion object {
         const val DEFAULT_PEER_CONNECT_TIMEOUT_MS = 45_000L
         const val PEER_CONNECT_TIMEOUT_MESSAGE = "连接做种节点超时（暂无可用源），请点击重试或更换其他资源"

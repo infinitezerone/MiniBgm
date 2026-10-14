@@ -46,6 +46,7 @@ fun EntryProviderScope<NavKey>.userEntry(
 fun EntryProviderScope<NavKey>.settingsEntry(
     onBackClick: () -> Unit = {},
     onPlaybackRulesClick: (() -> Unit)? = null,
+    onDownloadsClick: (() -> Unit)? = null,
     enableAiConfig: Boolean = true,
     onClearCache: suspend () -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
@@ -54,6 +55,7 @@ fun EntryProviderScope<NavKey>.settingsEntry(
         SettingsScreen(
             onBackClick = onBackClick,
             onPlaybackRulesClick = onPlaybackRulesClick,
+            onDownloadsClick = onDownloadsClick,
             enableAiConfig = enableAiConfig,
             onClearCache = onClearCache,
         )

@@ -147,4 +147,16 @@ class FakeTorrentRepository : TorrentRepository {
         isPluginInstalledResult = true
         return Result.success(Unit)
     }
+
+    var fakeStorageUsage =
+        com.infinitezerone.minibgm.core.model.DownloadStorageUsage(
+            downloadSizeBytes = 1024L * 1024L * 500L,
+            availableBytes = 1024L * 1024L * 1024L * 20L,
+        )
+
+    override suspend fun getStorageUsage(): com.infinitezerone.minibgm.core.model.DownloadStorageUsage = fakeStorageUsage
+
+    override suspend fun verifyTaskFiles() {
+        // no-op in fake
+    }
 }

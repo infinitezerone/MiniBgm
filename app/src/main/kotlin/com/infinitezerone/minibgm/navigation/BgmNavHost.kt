@@ -225,6 +225,7 @@ fun BgmNavHost(
                                     } else {
                                         null
                                     },
+                                onDownloadsClick = { navState.navigateTo(DownloadRoute) },
                                 enableAiConfig = isAiAssistantEnabled,
                                 onClearCache = {
                                     withContext(Dispatchers.IO) {

@@ -37,6 +37,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
+import com.infinitezerone.minibgm.core.model.DownloadStorageUsage
 import com.infinitezerone.minibgm.core.model.SubjectDownloadGroup
 import org.koin.androidx.compose.koinViewModel
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
@@ -56,8 +57,10 @@ fun DownloadScreen(
     viewModel: DownloadViewModel = koinViewModel(),
 ) {
     val downloadGroups by viewModel.downloadGroups.collectAsStateWithLifecycle()
+    val storageUsage by viewModel.storageUsage.collectAsStateWithLifecycle()
     DownloadScreenContent(
         downloadGroups = downloadGroups,
+        storageUsage = storageUsage,
         onBackClick = onBackClick,
         onSubjectClick = onSubjectClick,
         modifier = modifier,
@@ -68,6 +71,7 @@ fun DownloadScreen(
 @Composable
 internal fun DownloadScreenContent(
     downloadGroups: List<SubjectDownloadGroup>,
+    storageUsage: DownloadStorageUsage = DownloadStorageUsage(),
     onBackClick: () -> Unit,
     onSubjectClick: (Long, String) -> Unit,
     modifier: Modifier = Modifier,
@@ -105,7 +109,10 @@ internal fun DownloadScreenContent(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item(key = "downloads_header_summary") {
-                    DownloadSummaryBanner(groups = downloadGroups)
+                    DownloadSummaryBanner(
+                        groups = downloadGroups,
+                        storageUsage = storageUsage,
+                    )
                 }
 
                 items(
@@ -165,6 +172,7 @@ private fun EmptyDownloadView(modifier: Modifier = Modifier) {
 @Composable
 private fun DownloadSummaryBanner(
     groups: List<SubjectDownloadGroup>,
+    storageUsage: DownloadStorageUsage,
     modifier: Modifier = Modifier,
 ) {
     val activeCount = groups.sumOf { it.downloadingCount + it.resolvingCount }
@@ -178,14 +186,14 @@ private fun DownloadSummaryBanner(
             else -> "%d KB/s".format(totalSpeed / 1024)
         }
 
-    val summaryText =
+    val statusText =
         when {
-            activeCount > 0 -> "正在下载 $activeCount 集 · 总速度 $formattedSpeed"
+            activeCount > 0 -> stringResource(R.string.feature_user_downloads_active_summary, activeCount, formattedSpeed)
             errorCount > 0 -> stringResource(R.string.feature_user_downloads_summary_error, errorCount)
             pausedCount > 0 -> stringResource(R.string.feature_user_downloads_summary_paused, pausedCount)
-            else -> "全部任务已就绪"
+            else -> stringResource(R.string.feature_user_downloads_idle_summary)
         }
-    val summaryColor =
+    val statusColor =
         when {
             activeCount > 0 -> MaterialTheme.colorScheme.primary
             errorCount > 0 -> MaterialTheme.colorScheme.error
@@ -204,15 +212,25 @@ private fun DownloadSummaryBanner(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "共 ${groups.size} 部番剧离线合集",
+                    text = stringResource(R.string.feature_user_downloads_total_subjects, groups.size),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(modifier = Modifier.height(2.dp))
+                val storageText =
+                    if (storageUsage.downloadSizeBytes > 0L || storageUsage.availableBytes > 0L) {
+                        " · " + stringResource(
+                            R.string.feature_user_downloads_storage_info,
+                            storageUsage.formattedDownloadSize,
+                            storageUsage.formattedAvailableSize,
+                        )
+                    } else {
+                        ""
+                    }
                 Text(
-                    text = summaryText,
+                    text = "$statusText$storageText",
                     style = MaterialTheme.typography.bodySmall,
-                    color = summaryColor,
+                    color = statusColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -286,7 +304,11 @@ private fun SubjectDownloadCard(
                             modifier = Modifier.size(14.dp),
                         )
                         Text(
-                            text = "已完结离线 · ${group.totalTasks} 集 · ${group.formattedTotalSize}",
+                            text = stringResource(
+                                R.string.feature_user_downloads_finished_summary,
+                                group.totalTasks,
+                                group.formattedTotalSize,
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                         )

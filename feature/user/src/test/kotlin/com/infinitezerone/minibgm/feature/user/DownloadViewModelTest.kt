@@ -154,4 +154,49 @@ class DownloadViewModelTest {
             assertEquals(2, repository.cancelDownloadCallCount)
             assertTrue(repository.tasks.value.isEmpty())
         }
+
+    @Test
+    fun batchDeleteTasks_deletesSpecifiedTasks() =
+        runTest {
+            val repository = FakeTorrentRepository()
+            val viewModel = DownloadViewModel(repository)
+
+            val id1 = repository.startDownload(title = "T1", magnetUrl = "m1", totalBytes = 100L)
+            val id2 = repository.startDownload(title = "T2", magnetUrl = "m2", totalBytes = 200L)
+            val id3 = repository.startDownload(title = "T3", magnetUrl = "m3", totalBytes = 300L)
+
+            viewModel.deleteTasks(listOf(id1, id3))
+            advanceUntilIdle()
+
+            assertEquals(2, repository.cancelDownloadCallCount)
+            val remainingIds = repository.tasks.value.map { it.id }
+            assertEquals(listOf(id2), remainingIds)
+        }
+
+    @Test
+    fun redownloadTask_resetsDownloadedBytesAndResumes() =
+        runTest {
+            val repository = FakeTorrentRepository()
+            val viewModel = DownloadViewModel(repository)
+
+            val id = repository.startDownload(title = "T1", magnetUrl = "m1", totalBytes = 500L)
+            viewModel.redownloadTask(id)
+            advanceUntilIdle()
+
+            assertEquals(1, repository.resumeDownloadCallCount)
+            val task = repository.tasks.value.first { it.id == id }
+            assertEquals(0L, task.downloadedBytes)
+        }
+
+    @Test
+    fun storageUsage_isExposedCorrectly() =
+        runTest {
+            val repository = FakeTorrentRepository()
+            val viewModel = DownloadViewModel(repository)
+
+            advanceUntilIdle()
+            val usage = viewModel.storageUsage.value
+            assertEquals(500L * 1024L * 1024L, usage.downloadSizeBytes)
+            assertEquals(20L * 1024L * 1024L * 1024L, usage.availableBytes)
+        }
 }

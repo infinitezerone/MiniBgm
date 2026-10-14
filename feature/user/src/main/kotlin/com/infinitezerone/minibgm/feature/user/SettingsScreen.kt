@@ -97,6 +97,7 @@ fun SettingsScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
     onPlaybackRulesClick: (() -> Unit)? = null,
+    onDownloadsClick: (() -> Unit)? = null,
     enableAiConfig: Boolean = true,
     onClearCache: suspend () -> Unit = {},
     viewModel: UserViewModel = koinViewModel(),
@@ -475,6 +476,7 @@ fun SettingsScreen(
         onLogoutCurrent = viewModel::logout,
         onLogoutAll = viewModel::logoutAll,
         onPlaybackRulesClick = onPlaybackRulesClick,
+        onDownloadsClick = onDownloadsClick,
         enableAiConfig = enableAiConfig,
         isDeveloperModeActive = isDeveloperModeActive,
         onOpenDeveloperOptions = { showDeveloperOptionsSheet = true },
@@ -720,6 +722,7 @@ fun SettingsScreenContent(
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
     onPlaybackRulesClick: (() -> Unit)? = null,
+    onDownloadsClick: (() -> Unit)? = null,
     enableAiConfig: Boolean = true,
     isDeveloperModeActive: Boolean = false,
     onOpenDeveloperOptions: () -> Unit = {},
@@ -852,6 +855,7 @@ fun SettingsScreenContent(
                         },
                     onClearCache = onClearCache,
                     isClearingCache = isClearingCache,
+                    onOpenDownloads = onDownloadsClick,
                 )
             }
 

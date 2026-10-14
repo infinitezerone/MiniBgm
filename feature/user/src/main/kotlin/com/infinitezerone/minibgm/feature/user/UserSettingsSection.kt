@@ -99,6 +99,7 @@ internal fun SettingsSection(
     onToggleShowRestrictedContent: (Boolean) -> Unit = {},
     isCheckingUpdate: Boolean = false,
     onCheckForUpdate: () -> Unit = {},
+    onOpenDownloads: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     // 版本号取自 PackageManager，与 BuildConfig 保持一致；预览环境下取不到则留空
@@ -166,6 +167,7 @@ internal fun SettingsSection(
             onOpenAiSettingsDialog = onOpenAiSettingsDialog,
             onClearCache = onClearCache,
             isClearingCache = isClearingCache,
+            onOpenDownloads = onOpenDownloads,
         )
 
         AboutSettingsCard(
@@ -569,6 +571,7 @@ internal fun DataAndStorageSettingsCard(
     onOpenAiSettingsDialog: (() -> Unit)?,
     onClearCache: () -> Unit,
     isClearingCache: Boolean,
+    onOpenDownloads: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -587,6 +590,21 @@ internal fun DataAndStorageSettingsCard(
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
             )
+
+            if (onOpenDownloads != null) {
+                SettingsItemRow(
+                    icon = BgmIcons.Download,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = stringResource(R.string.feature_user_downloads_title),
+                    subtitle = null,
+                    onClick = onOpenDownloads,
+                )
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                )
+            }
 
             val providerDisplay =
                 when (aiConfig.provider) {
