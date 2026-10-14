@@ -240,6 +240,7 @@ fun BgmNavHost(
                                 playbackRulesEntry(
                                     onBackClick = { navState.goBack() },
                                     onAiSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
+                                    onPlayHistory = { route -> navState.navigateTo(route) },
                                     metadata = bgmExtraPane(),
                                 )
                             }

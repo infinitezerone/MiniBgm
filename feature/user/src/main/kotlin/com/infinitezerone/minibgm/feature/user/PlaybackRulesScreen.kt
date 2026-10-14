@@ -20,16 +20,20 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,11 +51,16 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
+import com.infinitezerone.minibgm.core.designsystem.component.OverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.component.SingleChoiceDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
+import com.infinitezerone.minibgm.core.model.PlaybackHistory
+import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.user.components.AddTorrentRuleDialog
+import com.infinitezerone.minibgm.feature.user.components.PlaybackHistoryCard
 import com.infinitezerone.minibgm.feature.user.components.PlaybackRuleCard
 import com.infinitezerone.minibgm.feature.user.components.RuleImportDialog
 import com.infinitezerone.minibgm.feature.user.components.SiteProbeDialog
@@ -76,6 +85,14 @@ private enum class RuleAddOption {
         }
 }
 
+/** 播放源管理页签：解析规则 / 观看记录 */
+private enum class PlaybackRulesTab(
+    val labelRes: Int,
+) {
+    RULES(R.string.feature_user_tab_rules),
+    HISTORY(R.string.feature_user_tab_history),
+}
+
 /**
  * 播放规则与源管理界面：
  * 全面聚焦远程规则订阅（TVBox/MiniBgm）、单站智能探测与规则导入。
@@ -86,6 +103,7 @@ fun PlaybackRulesScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
     onAiSourceSearch: (String) -> Unit = {},
+    onPlayHistory: (PlayerRoute) -> Unit = {},
     viewModel: PlaybackRulesViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -98,6 +116,7 @@ fun PlaybackRulesScreen(
 
     var isImportingRuleJson by remember { mutableStateOf(false) }
     var isAddingTorrentRule by remember { mutableStateOf(false) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(PlaybackRulesTab.RULES.ordinal) }
     val overlayHostState = rememberOverlayHostState()
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -120,7 +139,10 @@ fun PlaybackRulesScreen(
     ObserveAsEvents(viewModel.events) { event ->
         when (event) {
             is PlaybackRulesUiEvent.ShowSnackbar -> {
-                snackbarHostState.showSnackbar(event.message)
+                val text =
+                    event.message?.takeIf { it.isNotBlank() }
+                        ?: context.getString(event.messageRes)
+                snackbarHostState.showSnackbar(text)
             }
             is PlaybackRulesUiEvent.OpenAiSourceSearch -> {
                 onAiSourceSearch(event.prompt)
@@ -146,6 +168,8 @@ fun PlaybackRulesScreen(
         }
     }
 
+    val currentTab = PlaybackRulesTab.entries.getOrElse(selectedTab) { PlaybackRulesTab.RULES }
+
     Scaffold(
         topBar = {
             BgmTopAppBar(
@@ -159,18 +183,57 @@ fun PlaybackRulesScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.requestAiSourceSearch() }) {
-                        Icon(
-                            imageVector = BgmIcons.Assistant,
-                            contentDescription = stringResource(R.string.feature_user_cd_ai_source_search),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
+                    when (currentTab) {
+                        PlaybackRulesTab.RULES ->
+                            IconButton(onClick = { viewModel.requestAiSourceSearch() }) {
+                                Icon(
+                                    imageVector = BgmIcons.Assistant,
+                                    contentDescription = stringResource(R.string.feature_user_cd_ai_source_search),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        PlaybackRulesTab.HISTORY ->
+                            if (uiState.playbackHistory.isNotEmpty()) {
+                                IconButton(
+                                    onClick = {
+                                        scope.launch {
+                                            val confirmed =
+                                                overlayHostState.await(
+                                                    ConfirmDialogAction(
+                                                        title =
+                                                            context.getString(
+                                                                R.string.feature_user_history_clear_all_title,
+                                                            ),
+                                                        message =
+                                                            context.getString(
+                                                                R.string.feature_user_history_clear_all_message,
+                                                            ),
+                                                        confirmText =
+                                                            context.getString(
+                                                                R.string.feature_user_history_clear_all_action,
+                                                            ),
+                                                        isDestructive = true,
+                                                    ),
+                                                )
+                                            if (confirmed) {
+                                                viewModel.clearPlaybackHistory()
+                                            }
+                                        }
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = BgmIcons.CleaningServices,
+                                        contentDescription =
+                                            stringResource(R.string.feature_user_history_clear_all_action),
+                                    )
+                                }
+                            }
                     }
                 },
             )
         },
         floatingActionButton = {
-            if (!uiState.isLoading) {
+            if (currentTab == PlaybackRulesTab.RULES && !uiState.isLoading) {
                 ExtendedFloatingActionButton(
                     onClick = {
                         scope.launch {
@@ -206,6 +269,16 @@ fun PlaybackRulesScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
         ) {
+            PrimaryTabRow(selectedTabIndex = currentTab.ordinal) {
+                PlaybackRulesTab.entries.forEach { tab ->
+                    Tab(
+                        selected = tab == currentTab,
+                        onClick = { selectedTab = tab.ordinal },
+                        text = { Text(stringResource(tab.labelRes)) },
+                    )
+                }
+            }
+
             if (uiState.isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -214,164 +287,38 @@ fun PlaybackRulesScreen(
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             } else {
-                LazyColumn(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    if (uiState.subscriptionUrl.isNotBlank()) {
-                        item(key = "subscription_status") {
-                            Surface(
-                                shape = BgmShapes.medium,
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.CloudQueue,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = stringResource(R.string.feature_user_subscription_active_title),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                        )
-                                        Text(
-                                            text = uiState.subscriptionUrl,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
-                                    TextButton(
-                                        onClick = { viewModel.refreshSubscription() },
-                                        enabled = !uiState.isRefreshingSubscription,
-                                    ) {
-                                        if (uiState.isRefreshingSubscription) {
-                                            CircularProgressIndicator(
-                                                strokeWidth = 2.dp,
-                                                modifier = Modifier.size(14.dp),
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                stringResource(R.string.feature_user_subscription_syncing),
-                                                style = MaterialTheme.typography.labelSmall,
-                                            )
-                                        } else {
-                                            Text(
-                                                stringResource(R.string.feature_user_subscription_sync_action),
-                                                style = MaterialTheme.typography.labelSmall,
-                                            )
-                                        }
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            scope.launch {
-                                                val confirmed =
-                                                    overlayHostState.await(
-                                                        ConfirmDialogAction(
-                                                            title = context.getString(R.string.feature_user_subscription_clear_action),
-                                                            message = "确定要移除当前订阅源链接吗？已导入的本地规则将被保留。",
-                                                            confirmText =
-                                                                context.getString(
-                                                                    R.string.feature_user_subscription_clear_action,
-                                                                ),
-                                                            isDestructive = true,
-                                                        ),
-                                                    )
-                                                if (confirmed) {
-                                                    viewModel.clearSubscriptionUrl()
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.size(32.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.Close,
-                                            contentDescription = stringResource(R.string.feature_user_subscription_clear_action),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (uiState.rules.isEmpty()) {
-                        item(key = "rules_empty_hero") {
-                            Surface(
-                                shape = BgmShapes.medium,
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(20.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.PlayCircle,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(40.dp),
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.feature_user_rules_empty),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        TextButton(onClick = { viewModel.openSubscriptionImport() }) {
-                                            Text(stringResource(R.string.feature_user_subscription_title))
-                                        }
-                                        TextButton(onClick = { viewModel.openSiteProbe() }) {
-                                            Text(stringResource(R.string.feature_user_probe_title))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        items(uiState.rules, key = { it.id }) { rule ->
-                            PlaybackRuleCard(
-                                rule = rule,
-                                onToggle = { enabled -> viewModel.toggleRule(rule.id, enabled) },
-                                onDelete = {
-                                    scope.launch {
-                                        val confirmed =
-                                            overlayHostState.await(
-                                                ConfirmDialogAction(
-                                                    title = context.getString(R.string.feature_user_rules_delete_title),
-                                                    message =
-                                                        context.getString(
-                                                            R.string.feature_user_rules_delete_message,
-                                                            rule.name,
-                                                        ),
-                                                    confirmText = context.getString(R.string.feature_user_action_delete),
-                                                    isDestructive = true,
-                                                ),
-                                            )
-                                        if (confirmed) {
-                                            viewModel.deleteRule(rule.id)
-                                        }
-                                    }
-                                },
-                            )
-                        }
-                    }
+                when (currentTab) {
+                    PlaybackRulesTab.RULES ->
+                        RulesTabContent(
+                            rules = uiState.rules,
+                            subscriptionUrl = uiState.subscriptionUrl,
+                            isRefreshingSubscription = uiState.isRefreshingSubscription,
+                            onRefreshSubscription = viewModel::refreshSubscription,
+                            onClearSubscription = viewModel::clearSubscriptionUrl,
+                            onOpenSubscriptionImport = viewModel::openSubscriptionImport,
+                            onOpenSiteProbe = viewModel::openSiteProbe,
+                            onToggleRule = viewModel::toggleRule,
+                            onDeleteRule = viewModel::deleteRule,
+                            overlayHostState = overlayHostState,
+                        )
+                    PlaybackRulesTab.HISTORY ->
+                        HistoryTabContent(
+                            history = uiState.playbackHistory,
+                            onResume = { entry ->
+                                onPlayHistory(
+                                    PlayerRoute(
+                                        subjectId = entry.subjectId,
+                                        episodeId = entry.episodeId,
+                                        streamUrl = entry.streamUrl,
+                                        episodeName = entry.episodeName,
+                                        subjectName = entry.subjectName,
+                                        episodeSort = entry.episodeSort,
+                                    ),
+                                )
+                            },
+                            onDelete = viewModel::deleteHistory,
+                            overlayHostState = overlayHostState,
+                        )
                 }
             }
         }
@@ -425,5 +372,270 @@ fun PlaybackRulesScreen(
     BgmOverlayHost(hostState = overlayHostState) {
         confirmDialog()
         singleChoiceDialog()
+    }
+}
+
+/** 解析规则页签：订阅状态条 + 规则列表 + 空态引导 */
+@Composable
+private fun RulesTabContent(
+    rules: List<PlaybackSourceRule>,
+    subscriptionUrl: String,
+    isRefreshingSubscription: Boolean,
+    onRefreshSubscription: () -> Unit,
+    onClearSubscription: () -> Unit,
+    onOpenSubscriptionImport: () -> Unit,
+    onOpenSiteProbe: () -> Unit,
+    onToggleRule: (String, Boolean) -> Unit,
+    onDeleteRule: (String) -> Unit,
+    overlayHostState: OverlayHostState,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    LazyColumn(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (subscriptionUrl.isNotBlank()) {
+            item(key = "subscription_status") {
+                Surface(
+                    shape = BgmShapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.CloudQueue,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.feature_user_subscription_active_title),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = subscriptionUrl,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        TextButton(
+                            onClick = onRefreshSubscription,
+                            enabled = !isRefreshingSubscription,
+                        ) {
+                            if (isRefreshingSubscription) {
+                                CircularProgressIndicator(
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    stringResource(R.string.feature_user_subscription_syncing),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            } else {
+                                Text(
+                                    stringResource(R.string.feature_user_subscription_sync_action),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    val confirmed =
+                                        overlayHostState.await(
+                                            ConfirmDialogAction(
+                                                title = context.getString(R.string.feature_user_subscription_clear_action),
+                                                message = "确定要移除当前订阅源链接吗？已导入的本地规则将被保留。",
+                                                confirmText =
+                                                    context.getString(
+                                                        R.string.feature_user_subscription_clear_action,
+                                                    ),
+                                                isDestructive = true,
+                                            ),
+                                        )
+                                    if (confirmed) {
+                                        onClearSubscription()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.size(32.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.Close,
+                                contentDescription = stringResource(R.string.feature_user_subscription_clear_action),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (rules.isEmpty()) {
+            item(key = "rules_empty_hero") {
+                Surface(
+                    shape = BgmShapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.PlayCircle,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(40.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.feature_user_rules_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            TextButton(onClick = onOpenSubscriptionImport) {
+                                Text(stringResource(R.string.feature_user_subscription_title))
+                            }
+                            TextButton(onClick = onOpenSiteProbe) {
+                                Text(stringResource(R.string.feature_user_probe_title))
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            items(rules, key = { it.id }) { rule ->
+                PlaybackRuleCard(
+                    rule = rule,
+                    onToggle = { enabled -> onToggleRule(rule.id, enabled) },
+                    onDelete = {
+                        scope.launch {
+                            val confirmed =
+                                overlayHostState.await(
+                                    ConfirmDialogAction(
+                                        title = context.getString(R.string.feature_user_rules_delete_title),
+                                        message =
+                                            context.getString(
+                                                R.string.feature_user_rules_delete_message,
+                                                rule.name,
+                                            ),
+                                        confirmText = context.getString(R.string.feature_user_action_delete),
+                                        isDestructive = true,
+                                    ),
+                                )
+                            if (confirmed) {
+                                onDeleteRule(rule.id)
+                            }
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 观看记录页签：按分集粒度的历史列表，点击整卡即续播、删除走显式按钮 + 二次确认。
+ */
+@Composable
+private fun HistoryTabContent(
+    history: List<PlaybackHistory>,
+    onResume: (PlaybackHistory) -> Unit,
+    onDelete: (Long) -> Unit,
+    overlayHostState: OverlayHostState,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    if (history.isEmpty()) {
+        LazyColumn(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
+        ) {
+            item(key = "history_empty_hero") {
+                Surface(
+                    shape = BgmShapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.History,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(40.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.feature_user_history_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    LazyColumn(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(history, key = { it.episodeId }) { entry ->
+            PlaybackHistoryCard(
+                history = entry,
+                onResume = { onResume(entry) },
+                onDelete = {
+                    scope.launch {
+                        val confirmed =
+                            overlayHostState.await(
+                                ConfirmDialogAction(
+                                    title = context.getString(R.string.feature_user_history_delete_title),
+                                    message =
+                                        context.getString(
+                                            R.string.feature_user_history_delete_message,
+                                            entry.subjectName.ifBlank { entry.episodeName },
+                                        ),
+                                    confirmText = context.getString(R.string.feature_user_action_delete),
+                                    isDestructive = true,
+                                ),
+                            )
+                        if (confirmed) {
+                            onDelete(entry.episodeId)
+                        }
+                    }
+                },
+            )
+        }
     }
 }

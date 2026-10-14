@@ -1,11 +1,14 @@
 package com.infinitezerone.minibgm.feature.user
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.repository.PlaybackHistoryRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.MacCmsProbeResult
+import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RuleParserType
@@ -18,6 +21,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -25,14 +29,17 @@ import kotlinx.coroutines.launch
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
+/** 观看记录列表一次性拉取上限：与仓库侧 `keepCount = 200` 的修剪水位保持同量级 */
+private const val PLAYBACK_HISTORY_LIMIT = 100
+
 /**
  * 播放源管理界面状态：解析规则与订阅管理
  */
 data class PlaybackRulesUiState(
     val rules: List<PlaybackSourceRule> = emptyList(),
     val isLoading: Boolean = false,
-    /** 断点续播记录（key = 播放地址，value = 上次观看位置毫秒），按最近写入降序展示 */
-    val playbackPositions: Map<String, Long> = emptyMap(),
+    /** 观看记录（按最近观看降序），取代早期按播放地址投影的续播位置列表 */
+    val playbackHistory: List<PlaybackHistory> = emptyList(),
     /** 社区/外部规则订阅地址 */
     val subscriptionUrl: String = "",
     /** 是否正在一键刷新订阅规则 */
@@ -75,7 +82,10 @@ data class SubscriptionImportUiState(
  */
 sealed interface PlaybackRulesUiEvent {
     data class ShowSnackbar(
-        val message: String,
+        /** 运行时文本（服务端消息等非资源文案）；非空白时优先展示 */
+        val message: String? = null,
+        /** 资源文案；message 为空白时使用，UI 侧负责解析 */
+        @StringRes val messageRes: Int = 0,
     ) : PlaybackRulesUiEvent
 
     /** 请求打开助手会话并带上找源意图；导航由上层完成（feature 之间不互相依赖） */
@@ -90,15 +100,16 @@ sealed interface PlaybackRulesUiEvent {
 }
 
 /**
- * 播放源管理 ViewModel：规则订阅、智能探测与第三方解析规则的读写。
+ * 播放源管理 ViewModel：规则订阅、智能探测、第三方解析规则的读写与观看记录管理。
  *
- * 结构 = 「主列表投影 + 两个对话框会话态」：[uiState] 是仓库流（规则 / 续播位置）
+ * 结构 = 「主列表投影 + 两个对话框会话态」：[uiState] 是仓库流（规则 / 订阅地址 / 观看记录）
  * `combine` 出的只读投影；[siteProbe] 与 [subscriptionImport] 是两个对话框的局部会话态，
  * 按响应式 UDF 规范第 5 条保留为独立意图流（见各字段 KDoc），不并入主投影。
  */
 class PlaybackRulesViewModel(
     private val settingsRepository: SettingsRepository,
     private val playbackResolverRepository: PlaybackResolverRepository? = null,
+    private val playbackHistoryRepository: PlaybackHistoryRepository? = null,
 ) : ViewModel() {
     /**
      * 站点探测对话框的会话态（响应式 UDF 规范第 5 条：局部多步命令会话允许保留为独立意图流，
@@ -127,16 +138,25 @@ class PlaybackRulesViewModel(
 
     private val isRefreshingSubscriptionFlow = MutableStateFlow(false)
 
+    /**
+     * 观看记录流：未注入仓库（预览/降级场景）时给空流，主投影照常产出。
+     *
+     * 与规则列表共用同一份 `combine` —— 两个页签同屏共存，拆成两个 `stateIn`
+     * 只会多一次订阅重建，不会更快。
+     */
+    private val playbackHistoryFlow: Flow<List<PlaybackHistory>> =
+        playbackHistoryRepository?.observeRecentHistory(limit = PLAYBACK_HISTORY_LIMIT) ?: flowOf(emptyList())
+
     val uiState: StateFlow<PlaybackRulesUiState> =
         combine(
             settingsRepository.playbackRules,
-            settingsRepository.playbackPositions,
             settingsRepository.playbackSubscriptionUrl,
+            playbackHistoryFlow,
             isRefreshingSubscriptionFlow,
-        ) { rules, positions, subUrl, isRefreshing ->
+        ) { rules, subUrl, history, isRefreshing ->
             PlaybackRulesUiState(
                 rules = rules,
-                playbackPositions = positions,
+                playbackHistory = history,
                 subscriptionUrl = subUrl,
                 isRefreshingSubscription = isRefreshing,
                 isLoading = false,
@@ -147,11 +167,22 @@ class PlaybackRulesViewModel(
             initialValue = PlaybackRulesUiState(isLoading = true),
         )
 
-    /** 清除单条续播记录 */
-    fun clearPlaybackPosition(url: String) {
+    /** 删除单条观看记录（按分集维度） */
+    fun deleteHistory(episodeId: Long) {
+        val repository = playbackHistoryRepository
+        if (repository == null || episodeId <= 0L) return
         viewModelScope.launch {
-            settingsRepository.clearPlaybackPosition(url)
-            sendSnackbar("已清除该续播记录")
+            repository.deleteHistory(episodeId)
+            sendResSnackbar(R.string.feature_user_history_deleted)
+        }
+    }
+
+    /** 清空全部观看记录 */
+    fun clearPlaybackHistory() {
+        val repository = playbackHistoryRepository ?: return
+        viewModelScope.launch {
+            repository.clearAllHistory()
+            sendResSnackbar(R.string.feature_user_history_cleared)
         }
     }
 
@@ -467,7 +498,16 @@ class PlaybackRulesViewModel(
 
     private fun sendSnackbar(message: String) {
         viewModelScope.launch {
-            _events.send(PlaybackRulesUiEvent.ShowSnackbar(message))
+            _events.send(PlaybackRulesUiEvent.ShowSnackbar(message = message))
+        }
+    }
+
+    /** 资源化提示：文案随语言环境走资源体系，不在 ViewModel 里内联 */
+    private fun sendResSnackbar(
+        @StringRes messageRes: Int,
+    ) {
+        viewModelScope.launch {
+            _events.send(PlaybackRulesUiEvent.ShowSnackbar(messageRes = messageRes))
         }
     }
 }

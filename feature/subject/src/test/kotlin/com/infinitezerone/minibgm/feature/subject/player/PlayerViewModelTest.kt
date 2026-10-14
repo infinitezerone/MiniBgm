@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.model.DanmakuResult
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PlayableSource
+import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
@@ -20,6 +21,7 @@ import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakePlaybackHistoryRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeTorrentStreamEngine
@@ -77,6 +79,7 @@ class PlayerViewModelTest {
         settingsRepository: FakeSettingsRepository = FakeSettingsRepository(),
         subjectRepository: SubjectRepository? = null,
         communityRepository: FakeCommunityRepository? = null,
+        playbackHistoryRepository: FakePlaybackHistoryRepository? = null,
     ): PlayerViewModel =
         PlayerViewModel(
             route = route,
@@ -86,6 +89,7 @@ class PlayerViewModelTest {
             failureStore = failureStore,
             subjectRepository = subjectRepository,
             communityRepository = communityRepository,
+            playbackHistoryRepository = playbackHistoryRepository,
         )
 
     @Test
@@ -397,6 +401,69 @@ class PlayerViewModelTest {
             // 新分集没有已存位置，不恢复
             assertEquals(0L, viewModel.uiState.value.resumePositionMs)
         }
+
+    @Test
+    fun flushPlaybackPosition_writesHistoryWithEngineMeasuredDuration() =
+        runTest {
+            val historyRepo = FakePlaybackHistoryRepository()
+            val viewModel = viewModel(playbackHistoryRepository = historyRepo)
+
+            // 时长只能来自引擎实测；条目元数据里的字符串时长不能用来算进度
+            viewModel.onDurationChanged(240_000L)
+            viewModel.onProgressChanged(30_000L)
+            viewModel.flushPlaybackPosition()
+            advanceUntilIdle()
+
+            val entry = requireNotNull(historyRepo.getHistoryByEpisode(episodeId))
+            assertEquals(episodeId, entry.episodeId)
+            assertEquals(subjectId, entry.subjectId)
+            assertEquals(initialStreamUrl, entry.streamUrl)
+            assertEquals(30_000L, entry.positionMs)
+            assertEquals(240_000L, entry.durationMs)
+            assertEquals(0.125f, entry.progress)
+            assertEquals(false, entry.isCompleted)
+        }
+
+    @Test
+    fun unfinishedHistory_isRestoredAsResumePositionOnInit() =
+        runTest {
+            val historyRepo = FakePlaybackHistoryRepository()
+            historyRepo.saveHistory(historyEntry(positionMs = 62_000L, durationMs = 240_000L))
+
+            val viewModel = viewModel(playbackHistoryRepository = historyRepo)
+            advanceUntilIdle()
+
+            assertEquals(62_000L, viewModel.uiState.value.resumePositionMs)
+        }
+
+    @Test
+    fun completedHistory_doesNotRestoreResumePosition() =
+        runTest {
+            val historyRepo = FakePlaybackHistoryRepository()
+            // 进度 99%，按「已看完」处理：再进来应从头发车，而不是跳到片尾
+            historyRepo.saveHistory(historyEntry(positionMs = 238_000L, durationMs = 240_000L))
+
+            val viewModel = viewModel(playbackHistoryRepository = historyRepo)
+            advanceUntilIdle()
+
+            assertEquals(0L, viewModel.uiState.value.resumePositionMs)
+        }
+
+    private fun historyEntry(
+        positionMs: Long,
+        durationMs: Long,
+    ) = PlaybackHistory(
+        episodeId = episodeId,
+        subjectId = subjectId,
+        subjectName = "葬送的芙莉莲",
+        episodeName = "第 1 话",
+        episodeSort = 1f,
+        coverUrl = "https://example.com/cover.jpg",
+        streamUrl = initialStreamUrl,
+        positionMs = positionMs,
+        durationMs = durationMs,
+        updatedAt = 1_000L,
+    )
 
     @Test
     fun selectEpisode_doesNotCarryPreviousEpisodeResumePosition() =

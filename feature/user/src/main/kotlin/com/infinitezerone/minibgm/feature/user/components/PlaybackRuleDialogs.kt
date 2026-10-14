@@ -535,55 +535,6 @@ internal fun SubscriptionSourceRow(
     }
 }
 
-/** 续播记录单条：展示主机名与上次观看位置，可单条清除 */
-@Composable
-internal fun PlaybackPositionRow(
-    url: String,
-    positionMs: Long,
-    onClear: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        shape = BgmShapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = hostLabelOf(url),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = url,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Text(
-                text = stringResource(R.string.feature_user_position_seen, formatPlaybackPosition(positionMs)),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            IconButton(onClick = onClear) {
-                Icon(
-                    imageVector = BgmIcons.CloseBorder,
-                    contentDescription = stringResource(R.string.feature_user_position_cd_clear),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
 /** 解析器选项的短标签：四个 chip 要排在一行，长名字排不下 */
 @Composable
 internal fun parserTypeLabel(type: RuleParserType): String =
@@ -662,8 +613,7 @@ internal fun AddTorrentRuleDialog(
     )
 }
 
-internal fun hostLabelOf(url: String): String = url.substringAfter("://", url).substringBefore('/').substringBefore('?')
-
+/** 把毫秒时长格式化为 `mm:ss`（超过一小时给 `h:mm:ss`），供观看记录进度文案使用 */
 internal fun formatPlaybackPosition(ms: Long): String {
     val totalSeconds = ms / 1000
     val h = totalSeconds / 3600

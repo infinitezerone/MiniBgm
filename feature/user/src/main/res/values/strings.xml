@@ -137,25 +137,29 @@
 
     <!-- 8. 播放源管理页 -->
     <string name="feature_user_cd_ai_source_search">让 AI 助手找源</string>
-    <string name="feature_user_positions_section_title">续播记录</string>
-    <string name="feature_user_positions_section_desc">内置播放器自动记录各播放地址的观看位置，用于下次断点续播</string>
-    <string name="feature_user_positions_clear_all_title">清空全部续播记录</string>
-    <string name="feature_user_positions_clear_all_message">将删除所有播放地址的断点续播进度，再次播放将从头开始。此操作不可撤销。</string>
-    <string name="feature_user_positions_empty">暂无续播记录。播放器会在你观看时自动记录进度（保留最近 50 条）。</string>
-    <string name="feature_user_rules_section_title">解析规则与订阅</string>
-    <string name="feature_user_rules_section_desc_expanded">按占位符模板拼出解析地址，适合自定义第三方源</string>
-    <string name="feature_user_rules_section_desc_count">已配置 %1$d 条规则</string>
+    <string name="feature_user_tab_rules">解析规则</string>
+    <string name="feature_user_tab_history">观看记录</string>
     <string name="feature_user_rules_empty">暂无自定义播放规则，可点击「添加」或「导入」配置。</string>
     <string name="feature_user_rules_delete_title">确认删除规则</string>
     <string name="feature_user_rules_delete_message">确定要删除播放规则「%1$s」吗？</string>
-    <string name="feature_user_tab_rules">解析规则</string>
     <string name="feature_user_action_add_rule">添加规则 / 订阅</string>
     <string name="feature_user_rule_add_choice_title">添加播放源</string>
     <string name="feature_user_rule_choice_site_probe">站点探测（自动识别 MacCMS）</string>
     <string name="feature_user_rule_choice_subscription">订阅导入（TVBox 规则集）</string>
     <string name="feature_user_rule_choice_import_json">批量导入 JSON 规则</string>
-    <string name="feature_user_positions_toggle_title">断点续播进度记录</string>
-    <string name="feature_user_positions_toggle_subtitle">共 %1$d 条记录 · 播放器自动保留最近 50 条</string>
+    <string name="feature_user_history_empty">暂无观看记录。在内置播放器里播放过的番剧会自动出现在这里。</string>
+    <string name="feature_user_history_episode_label">第 %1$s 话</string>
+    <string name="feature_user_history_progress">看到 %1$s / %2$s</string>
+    <string name="feature_user_history_seen_only">看到 %1$s</string>
+    <string name="feature_user_history_completed">已看完</string>
+    <string name="feature_user_history_cd_delete">删除该观看记录</string>
+    <string name="feature_user_history_delete_title">确认删除观看记录</string>
+    <string name="feature_user_history_delete_message">确定要删除「%1$s」的这条观看记录吗？</string>
+    <string name="feature_user_history_clear_all_title">清空观看记录</string>
+    <string name="feature_user_history_clear_all_message">将删除全部观看记录与断点续播进度，再次播放将从头开始。此操作不可撤销。</string>
+    <string name="feature_user_history_clear_all_action">清空</string>
+    <string name="feature_user_history_deleted">已删除该观看记录</string>
+    <string name="feature_user_history_cleared">已清空观看记录</string>
 
     <!-- 9. 播放规则对话框 -->
     <string name="feature_user_rule_vars_title">支持的占位符变量</string>
@@ -198,8 +202,6 @@
     <string name="feature_user_clipboard_sub_detected_desc">检测到剪贴板中包含播放源订阅链接：\n%1$s\n\n是否立即开始端侧探活并导入？</string>
     <string name="feature_user_clipboard_sub_action_import">探活并导入</string>
     <string name="feature_user_clipboard_sub_action_ignore">忽略</string>
-    <string name="feature_user_position_seen">看到 %1$s</string>
-    <string name="feature_user_position_cd_clear">清除该续播记录</string>
     <string name="feature_user_parser_auto">自动</string>
     <string name="feature_user_parser_pipeline">流水线</string>
     <string name="feature_user_parser_rss_torrent">BT RSS</string>

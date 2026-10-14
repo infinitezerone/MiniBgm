@@ -14,6 +14,7 @@ import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.DanmakuRepository
 import com.infinitezerone.minibgm.core.data.repository.EpisodeStreamResolver
+import com.infinitezerone.minibgm.core.data.repository.PlaybackHistoryRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackSourceVerifier
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
@@ -26,6 +27,7 @@ import com.infinitezerone.minibgm.core.model.DanmakuMatch
 import com.infinitezerone.minibgm.core.model.DanmakuMatchState
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
+import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
@@ -278,6 +280,26 @@ private class PlaybackSession(
     /** 界面回报的当前播放位置（内存暂存，按 [POSITION_SAVE_TICKS] 节流落盘） */
     var latestPositionMs: Long = 0L
 
+    /**
+     * 界面回报的当前媒体总时长（内存暂存）。
+     *
+     * 观看记录的进度分母只能来自引擎实测时长——条目元数据里的时长是字符串、且常与实际片源不一致，
+     * 拿它算进度会把「看到 23:50 / 24:00」算成假的未看完。
+     */
+    var latestDurationMs: Long = 0L
+
+    /**
+     * 换集/结束时统一清空进度跟踪。
+     *
+     * 位置、时长与节流计数必须同时归零：只清位置会让新分集沿用上一集的总时长算进度，
+     * 短分集瞬间被判成「已看完」。
+     */
+    fun resetProgressTracking() {
+        latestPositionMs = 0L
+        latestDurationMs = 0L
+        progressTicksSinceSave = 0
+    }
+
     /** 距上次落盘累计的进度跳数 */
     var progressTicksSinceSave: Int = 0
 
@@ -334,6 +356,7 @@ class PlayerViewModel(
     private val communityRepository: CommunityRepository? = null,
     private val danmakuRepository: DanmakuRepository? = null,
     private val torrentStreamEngine: TorrentStreamEngine? = null,
+    private val playbackHistoryRepository: PlaybackHistoryRepository? = null,
 ) : ViewModel() {
     /** 播放队列：调用方给了分集队列就用之，否则退化为单集播放（兼容空直链占位启动） */
     private val queue: List<PlayerQueueEntry> =
@@ -595,6 +618,18 @@ class PlayerViewModel(
 
         if (route.episodeId > 0) {
             loadComments()
+            viewModelScope.launch {
+                val history = playbackHistoryRepository?.getHistoryByEpisode(route.episodeId)
+                if (history != null && history.positionMs > 0L && !history.isCompleted) {
+                    _uiState.update { current ->
+                        if (current.resumePositionMs == 0L) {
+                            current.copy(resumePositionMs = history.positionMs)
+                        } else {
+                            current
+                        }
+                    }
+                }
+            }
         }
         viewModelScope.launch {
             _uiState
@@ -787,15 +822,41 @@ class PlayerViewModel(
         }
     }
 
+    /** 界面回报当前媒体总时长（毫秒）：只看内存，落盘时随观看记录一并写入 */
+    fun onDurationChanged(durationMs: Long) {
+        if (durationMs <= 0L) return
+        session.latestDurationMs = durationMs
+    }
+
     /**
      * 把内存中的当前分集位置落盘（立即捕获 url/位置再异步写，换集时先于状态切换调用）。
      * 由节流循环与界面 ON_PAUSE 触发。
      */
     fun flushPlaybackPosition() {
-        val url = _uiState.value.streamUrl
+        val state = _uiState.value
+        val url = state.streamUrl
         val position = session.latestPositionMs
         if (url.isBlank() || position <= 0L) return
-        viewModelScope.launch { settingsRepository.savePlaybackPosition(url, position) }
+        viewModelScope.launch {
+            settingsRepository.savePlaybackPosition(url, position)
+            val epId = if (state.episodeId > 0L) state.episodeId else route.episodeId
+            if (epId > 0L) {
+                playbackHistoryRepository?.saveHistory(
+                    PlaybackHistory(
+                        episodeId = epId,
+                        subjectId = if (state.subjectId > 0L) state.subjectId else route.subjectId,
+                        subjectName = state.subjectName.ifBlank { route.subjectName },
+                        episodeName = state.episodeName.ifBlank { route.episodeName },
+                        episodeSort = state.episodeSort,
+                        coverUrl = state.subjectCoverUrl,
+                        streamUrl = url,
+                        positionMs = position,
+                        durationMs = session.latestDurationMs,
+                        updatedAt = System.currentTimeMillis(),
+                    ),
+                )
+            }
+        }
     }
 
     /**
@@ -883,8 +944,7 @@ class PlayerViewModel(
         val state = _uiState.value
         markWatched(state.episodeSort.toInt())
         val finishedUrl = state.streamUrl
-        session.latestPositionMs = 0L
-        session.progressTicksSinceSave = 0
+        session.resetProgressTracking()
         viewModelScope.launch { settingsRepository.clearPlaybackPosition(finishedUrl) }
         if (!state.autoNextEnabled) return false
 
@@ -922,8 +982,7 @@ class PlayerViewModel(
     fun switchTo(index: Int) {
         if (index !in queue.indices || index == _uiState.value.currentIndex) return
         flushPlaybackPosition()
-        session.latestPositionMs = 0L
-        session.progressTicksSinceSave = 0
+        session.resetProgressTracking()
         session.hasTriggeredAutoMark = false
         session.pendingAutoNextOnMoreLoaded = false
         session.pendingResumeLookupForNewEpisode = false
@@ -984,8 +1043,7 @@ class PlayerViewModel(
         val state = _uiState.value
         if (episode.sort == state.episodeSort && episode.id == state.episodeId && state.streamUrl.isNotBlank()) return
         flushPlaybackPosition()
-        session.latestPositionMs = 0L
-        session.progressTicksSinceSave = 0
+        session.resetProgressTracking()
         session.hasTriggeredAutoMark = false
         session.pendingAutoNextOnMoreLoaded = false
 

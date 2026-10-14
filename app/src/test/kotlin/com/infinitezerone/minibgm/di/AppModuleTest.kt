@@ -156,6 +156,10 @@ class AppModuleTest : KoinTest {
                         single<ScheduleRepository> { FakeScheduleRepository() }
                         single<CollectionRepository> { FakeCollectionRepository() }
                         single<SettingsRepository> { FakeSettingsRepository() }
+                        single<com.infinitezerone.minibgm.core.data.repository.PlaybackHistoryRepository> {
+                            com.infinitezerone.minibgm.core.testing.repository
+                                .FakePlaybackHistoryRepository()
+                        }
                         single<com.infinitezerone.minibgm.core.data.util.SyncManager> {
                             com.infinitezerone.minibgm.core.testing.repository
                                 .FakeSyncManager()

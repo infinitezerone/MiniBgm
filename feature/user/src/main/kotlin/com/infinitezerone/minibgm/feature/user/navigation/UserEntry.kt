@@ -5,6 +5,7 @@ import androidx.navigation3.runtime.NavKey
 import com.infinitezerone.minibgm.core.navigation.InAppLoginRoute
 import com.infinitezerone.minibgm.core.navigation.InAppWebRoute
 import com.infinitezerone.minibgm.core.navigation.PlaybackRulesRoute
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SettingsRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
@@ -66,12 +67,14 @@ fun EntryProviderScope<NavKey>.settingsEntry(
 fun EntryProviderScope<NavKey>.playbackRulesEntry(
     onBackClick: () -> Unit = {},
     onAiSourceSearch: (String) -> Unit = {},
+    onPlayHistory: (PlayerRoute) -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<PlaybackRulesRoute>(metadata = metadata) {
         PlaybackRulesScreen(
             onBackClick = onBackClick,
             onAiSourceSearch = onAiSourceSearch,
+            onPlayHistory = onPlayHistory,
         )
     }
 }

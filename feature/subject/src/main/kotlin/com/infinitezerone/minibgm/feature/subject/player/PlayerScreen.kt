@@ -387,6 +387,11 @@ fun PlayerScreen(
         controller.positionMs.collect { viewModel.onProgressChanged(it) }
     }
 
+    // 媒体总时长 → ViewModel：观看记录的进度分母，只能来自引擎实测
+    LaunchedEffect(playback.durationMs) {
+        viewModel.onDurationChanged(playback.durationMs)
+    }
+
     // 断点位置迟到时补发
     LaunchedEffect(uiState.resumePositionMs, uiState.streamUrl, playerReady) {
         if (playerReady && uiState.resumePositionMs >= MIN_RESUME_POSITION_MS) {
