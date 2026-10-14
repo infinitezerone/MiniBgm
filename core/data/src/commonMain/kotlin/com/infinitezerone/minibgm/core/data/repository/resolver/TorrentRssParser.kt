@@ -28,11 +28,6 @@ object TorrentRssParser {
     private val BATCH_EP_RANGE_REGEX =
         Regex("""(?i)(?:\[\s*(?:ep)?\s*\d{1,3}\s*[-~至到]\s*\d{1,3}\s*\]|\b(?:ep|e)\s*\d{1,3}\s*[-~至到]\s*\d{1,3}\b|0\d\s*[-~至到]\s*\d{1,3})""")
 
-    private const val DEFAULT_TRACKERS =
-        "&tr=http%3A%2F%2Ftr.cili001.com%3A8070%2Fannounce" +
-            "&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce" +
-            "&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce"
-
     /**
      * 解析任意标准动漫 BT RSS XML 文本为 [TorrentMediaResource] 列表。
      */
@@ -59,11 +54,14 @@ object TorrentRssParser {
                     .orEmpty()
 
             val infoHash = extractHash(link).ifBlank { extractHash(enclosureUrl) }
+            // 合成磁链只保留 infohash：严禁注入硬编码公共 Tracker（会把本机 IP 与
+            // infohash 广播给未知第三方，且域名存活期腐烂）。寻道交给 DHT，Feed 自带
+            // 磁链则原样透传其自身声明的 Tracker。
             val magnetUrl =
                 when {
                     link.startsWith("magnet:?", ignoreCase = true) -> link
                     enclosureUrl.startsWith("magnet:?", ignoreCase = true) -> enclosureUrl
-                    infoHash.isNotBlank() -> "magnet:?xt=urn:btih:${infoHash.lowercase()}$DEFAULT_TRACKERS"
+                    infoHash.isNotBlank() -> "magnet:?xt=urn:btih:${infoHash.lowercase()}"
                     else -> ""
                 }
 

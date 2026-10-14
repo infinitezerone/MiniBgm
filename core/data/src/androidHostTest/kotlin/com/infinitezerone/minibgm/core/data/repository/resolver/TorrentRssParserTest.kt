@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.data.repository.resolver
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -117,9 +118,29 @@ class TorrentRssParserTest {
         assertEquals(25f, item.episodeSort)
         assertEquals("1080P", item.resolution)
         assertEquals("0123456789abcdef0123456789abcdef01234567", item.infoHash)
-        assertTrue(item.magnetUrl.startsWith("magnet:?xt=urn:btih:"))
+        assertEquals(
+            "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+            item.magnetUrl,
+        )
         assertEquals("https://example.com/Download/20240101/0123456789abcdef0123456789abcdef01234567.torrent", item.torrentUrl)
         assertEquals("5.2 GB", item.formattedSize)
+    }
+
+    @Test
+    fun `parse 合成磁链只含 infohash 严禁注入公共 Tracker`() {
+        val xml =
+            """
+            <item>
+              <title>Anime - 01 [1080p]</title>
+              <link>https://example.com/0123456789abcdef0123456789abcdef01234567</link>
+            </item>
+            """.trimIndent()
+
+        val magnet = TorrentRssParser.parse(xml).first().magnetUrl
+
+        assertEquals("magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567", magnet)
+        assertFalse(magnet.contains("&tr="), "合成磁链严禁注入硬编码公共 Tracker：$magnet")
+        assertFalse(magnet.contains("announce"), "合成磁链严禁携带公共 Tracker 端点：$magnet")
     }
 
     @Test

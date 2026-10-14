@@ -1556,6 +1556,43 @@ class ArchitectureRulesTest {
         )
     }
 
+    @Test
+    fun production_sources_must_not_inject_hardcoded_public_trackers() {
+        val violations = mutableListOf<String>()
+        val checkedDirs = listOf("core", "feature", "app", "sync")
+        // 原始文本扫描：违规形态必然落在字符串字面量里（sanitize() 会抹掉字符串，此处不可用）。
+        val forbiddenTokens =
+            listOf(
+                "&tr=" to "磁链 Tracker 查询参数",
+                "/announce" to "Tracker announce 端点",
+            )
+
+        checkedDirs.forEach { dirPath ->
+            val dir = File(projectRoot, dirPath)
+            if (!dir.isDirectory) return@forEach
+            dir
+                .walkTopDown()
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                .filter { it.isFile && it.extension == "kt" }
+                .forEach { file ->
+                    val text = file.readText()
+                    forbiddenTokens.forEach { (token, label) ->
+                        if (text.contains(token)) {
+                            violations.add(
+                                "${file.relativeTo(projectRoot).path} 违规硬编码公共 $label（$token）",
+                            )
+                        }
+                    }
+                }
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反 P2P 零第三方广播红线（严禁硬编码公共 Tracker 注入请求，寻道只走磁链自带声明与 DHT）：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
     private companion object {
         /** 红线只约束生产源码：build 产物与各测试源集目录一律不下钻 */
         val NON_SOURCE_DIR_NAMES =
