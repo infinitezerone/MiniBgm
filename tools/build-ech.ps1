@@ -1,5 +1,11 @@
-# 兼容别名入口：转发至统一的独立原生构建脚本 tools/build-native.ps1
+# tools/build-ech.ps1 -- 仅编译 ECH 原生库 (Windows PowerShell)
 $ErrorActionPreference = "Stop"
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
-& (Join-Path $PSScriptRoot "build-native.ps1") ech @args
-exit $LASTEXITCODE
+Push-Location $repoRoot
+try {
+    & (Join-Path $PSScriptRoot "jgate.ps1") native ech @args
+    exit $LASTEXITCODE
+} finally {
+    Pop-Location
+}

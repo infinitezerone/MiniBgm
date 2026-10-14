@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
+# tools/build-ech.sh —— 仅编译 ECH 原生库（转调 jgate native ech）
 set -euo pipefail
-
-# 兼容别名入口：转发至统一的独立原生构建脚本 tools/build-native
 cd "$(dirname "$0")/.."
-exec bash tools/build-native ech "$@"
+exec bash tools/jgate native ech "$@"

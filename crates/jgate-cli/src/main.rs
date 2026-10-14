@@ -6,6 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 use std::time::Instant;
 
+mod native;
+
 #[derive(Debug, Clone)]
 struct CliOptions {
     force_all: bool,
@@ -197,7 +199,7 @@ fn parse_args() -> CliOptions {
 
 fn print_usage() {
     println!(
-        r#"用法：jgate [选项] [模块...] 或 jgate quick [模块...]
+        r#"用法：jgate [选项] [模块...] 或 jgate [子命令]
 
 选项：
   -s, --stack   验证当前本地变更栈（trunk()..@ 逐个提交格式与全栈改动汇总）
@@ -209,6 +211,7 @@ fn print_usage() {
 
 子命令 / 模式：
   quick         快速自检模式（秒级执行架构红线，可附加模块微验证）
+  native        原生库编译与指纹校验模式（编译 libminibgm_ech / libminibgm_torrent）
 
 示例：
   jgate                          # 按工作副本/最近提交自动推断门禁
@@ -216,8 +219,64 @@ fn print_usage() {
   jgate --fast                   # 跳过截图测试的轻量门禁
   jgate quick                    # 秒级架构红线自查（代替 quick-check）
   jgate quick core/network       # 红线 + network 模块单测微验证
+  jgate native                   # 编译/更新全部 Rust 原生库（支持指纹增量短路）
+  jgate native --check           # 校验原生库产物是否齐全且与源码一致
 "#
     );
+}
+
+fn handle_native_mode(root: &Path, args: &[String]) {
+    let mut force = false;
+    let mut check_only = false;
+    let mut targets = Vec::new();
+
+    for arg in args {
+        match arg.as_str() {
+            "-f" | "--force" => force = true,
+            "-c" | "--check" => check_only = true,
+            "-h" | "--help" => {
+                println!(
+                    r#"用法：jgate native [选项] [ech|torrent...]
+
+选项：
+  -f, --force   忽略源码指纹缓存，强制重新调用 cargo-ndk 编译
+  -c, --check   仅校验现有 .so 产物与当前源码指纹是否一致（不编译）
+  -h, --help    显示本帮助
+
+不指定目标时默认处理全部原生 crate（minibgm-ech 与 minibgm-torrent）。
+目标 ABI 集合来自 native/abis.txt（唯一真源）。
+"#
+                );
+                return;
+            }
+            "ech" | "minibgm-ech" => targets.push(native::TARGET_ECH),
+            "torrent" | "minibgm-torrent" => targets.push(native::TARGET_TORRENT),
+            _ => {
+                eprintln!("[jgate native] ❌ 未知参数：{}", arg);
+                std::process::exit(2);
+            }
+        }
+    }
+
+    if targets.is_empty() {
+        targets.push(native::TARGET_ECH);
+        targets.push(native::TARGET_TORRENT);
+    }
+
+    let abis = match native::load_abis(root) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("[jgate native] ❌ {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    for target in targets {
+        if let Err(e) = native::run_native_build(root, &target, &abis, force, check_only) {
+            eprintln!("[jgate native] ❌ {}", e);
+            std::process::exit(1);
+        }
+    }
 }
 
 fn run_command_capture(cmd: &str, args: &[&str]) -> Result<String, String> {
@@ -260,9 +319,16 @@ fn check_git_hooks() {
 }
 
 fn main() {
-    let start_time = Instant::now();
     let root = find_repo_root();
     std::env::set_current_dir(&root).expect("无法切换到工程根目录");
+
+    let raw_args: Vec<String> = std::env::args().skip(1).collect();
+    if !raw_args.is_empty() && raw_args[0] == "native" {
+        handle_native_mode(&root, &raw_args[1..]);
+        return;
+    }
+
+    let start_time = Instant::now();
     let opts = parse_args();
 
     // 自愈接线 git 钩子

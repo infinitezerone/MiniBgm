@@ -25,7 +25,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 - 单元测试配置（测试 JVM=21、`-Proborazzi.record`、`-Pminibgm.skipScreenshots`）的唯一真源是 `build-logic` 的 `configureAndroidUnitTests()`：带 Robolectric/Roborazzi 的模块直接调用，禁止再各自手抄 `tasks.withType<Test>` 块（历史上三份副本各自漂移）。
 - 素材体积门：图片单张 > 200 KB 或合计 > 1 MB 硬拦（必须压为 800px WebP）。jj 不运行 git 钩子，门禁由 jgate 兜底。
 - 模块依赖变化后跑 `./gradlew graphUpdate` 重建依赖图；Android Lint 增量基线在各模块 `lint-baseline.xml`。
-- Rust 原生库（`crates/minibgm-ech` + `crates/minibgm-torrent`）：构建解耦，统一由 `tools/build-native`（内置源码 SHA-256 指纹缓存）调用 `cargo-ndk` 产出 `.so`；Gradle 绝不跨界调度 Cargo / NDK，仅通过 `registerPrebuiltJniLibs` 挂载产物并在缺库时硬失败，禁止静默回退。目标 ABI 集合的唯一真源是 `native/abis.txt`——构建脚本、release workflow、`ProjectExtensions` 的产物校验与客户端 `SUPPORTED_ABIS`（`NativeAbiContractTest` 强制）全部与它对齐，改 ABI 只改这一处。`libminibgm_torrent.so` 在 release 中被 `configureOnDemandNativePackaging` 排除出 APK，改由 GitHub Release 资产按需动态下载装载。
+- Rust 原生库（`crates/minibgm-ech` + `crates/minibgm-torrent`）：构建解耦，底层由原生 CLI `jgate native`（`tools/build-native` 为跨平台薄壳转调）内置确定性 SHA-256 源码指纹缓存并跨平台调度 `cargo-ndk` 产出 `.so`，彻底消灭 Windows 借壳 Git Bash 的二级公民反模式；Gradle 绝不跨界调度 Cargo / NDK，仅通过 `registerPrebuiltJniLibs` 挂载产物并在缺库时硬失败，禁止静默回退。目标 ABI 集合的唯一真源是 `native/abis.txt`——构建脚本、release workflow、`ProjectExtensions` 的产物校验与客户端 `SUPPORTED_ABIS`（`NativeAbiContractTest` 强制）全部与它对齐，改 ABI 只改这一处。`libminibgm_torrent.so` 在 release 中被 `configureOnDemandNativePackaging` 排除出 APK，改由 GitHub Release 资产按需动态下载装载。
 
 ## 硬红线
 
