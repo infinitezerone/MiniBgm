@@ -68,6 +68,11 @@ class AppModuleTest : KoinTest {
 
             override fun getFilesDir(): File = cacheDir
 
+            // AndroidTorrentRepository.resolveDownloadDir() 会走 getExternalFilesDir(null)；
+            // 缺这个重写会在 JVM 上抛 "Method getExternalFilesDir in android.content.ContextWrapper
+            // not mocked"，让下载页在构造期直接击穿本测试的 Koin 装配红线。
+            override fun getExternalFilesDir(type: String?): File = File(cacheDir, "ext_files").apply { mkdirs() }
+
             override fun getApplicationContext(): Context = this
 
             override fun getPackageName(): String = "com.infinitezerone.minibgm"

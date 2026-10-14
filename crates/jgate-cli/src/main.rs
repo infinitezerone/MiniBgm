@@ -534,6 +534,13 @@ fn main() {
             gradle_tasks.push(t);
         }
     }
+    // app 模块住着 AppModuleTest（硬红线 20：真实 Koin 容器解析 platformDataModule 与各
+    // feature ViewModel）。它横跨全部模块，因此只要有任何模块代码改动就必须复跑；
+    // 只按"改动路径落在哪个模块"推导会漏掉它——feature/user 改动曾让 DownloadViewModel
+    // 构造期扫盘的回归静默通过门禁（该提交的门禁只跑了 :feature:user:testDebugUnitTest）。
+    if !modules.is_empty() && !gradle_tasks.iter().any(|t| t == ":app:testDebugUnitTest") {
+        gradle_tasks.push(":app:testDebugUnitTest".to_string());
+    }
     if !docs_only {
         gradle_tasks.push(":app:assembleDebug".to_string());
     }
