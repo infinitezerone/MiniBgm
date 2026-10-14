@@ -12,6 +12,7 @@ import com.infinitezerone.minibgm.core.database.entity.AssistantMessageEntity
 import com.infinitezerone.minibgm.core.database.entity.AssistantSessionEntity
 import com.infinitezerone.minibgm.core.database.entity.BangumiDataMonthEtagEntity
 import com.infinitezerone.minibgm.core.database.entity.DanmakuEpisodeOverrideEntity
+import com.infinitezerone.minibgm.core.database.entity.PlaybackHistoryEntity
 import com.infinitezerone.minibgm.core.database.entity.TorrentTaskEntity
 import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
 import kotlinx.coroutines.flow.Flow
@@ -315,4 +316,39 @@ interface TorrentTaskDao {
 
     @Query("DELETE FROM torrent_tasks WHERE id = :taskId")
     suspend fun deleteTask(taskId: String)
+}
+
+/**
+ * 观看记录本地持久化 DAO。
+ */
+@Dao
+interface PlaybackHistoryDao {
+    @Query("SELECT * FROM playback_history ORDER BY updatedAt DESC LIMIT :limit")
+    fun observeRecentHistory(limit: Int = 100): Flow<List<PlaybackHistoryEntity>>
+
+    @Query("SELECT * FROM playback_history WHERE episodeId = :episodeId")
+    suspend fun getByEpisodeId(episodeId: Long): PlaybackHistoryEntity?
+
+    @Query("SELECT * FROM playback_history WHERE subjectId = :subjectId ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun getLatestBySubjectId(subjectId: Long): PlaybackHistoryEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertHistory(history: PlaybackHistoryEntity)
+
+    @Query("DELETE FROM playback_history WHERE episodeId = :episodeId")
+    suspend fun deleteByEpisodeId(episodeId: Long)
+
+    @Query("DELETE FROM playback_history WHERE subjectId = :subjectId")
+    suspend fun deleteBySubjectId(subjectId: Long)
+
+    @Query("DELETE FROM playback_history")
+    suspend fun clearAllHistory()
+
+    /**
+     * 保持记录在上限内（如 200 条），清理过期的老记录
+     */
+    @Query(
+        "DELETE FROM playback_history WHERE episodeId NOT IN (SELECT episodeId FROM playback_history ORDER BY updatedAt DESC LIMIT :keepCount)",
+    )
+    suspend fun trimOldHistory(keepCount: Int = 200)
 }

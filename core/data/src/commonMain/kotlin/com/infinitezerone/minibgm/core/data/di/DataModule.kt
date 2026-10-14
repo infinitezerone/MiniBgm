@@ -10,6 +10,8 @@ import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.DanmakuRepository
 import com.infinitezerone.minibgm.core.data.repository.DanmakuRepositoryImpl
+import com.infinitezerone.minibgm.core.data.repository.PlaybackHistoryRepository
+import com.infinitezerone.minibgm.core.data.repository.PlaybackHistoryRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepositoryImpl
 import com.infinitezerone.minibgm.core.data.repository.PlaybackRuleSampleReplayer
@@ -121,12 +123,18 @@ val dataModule =
             com.infinitezerone.minibgm.core.data.playback
                 .PlaybackFailureStore()
         }
+        single<PlaybackHistoryRepository> {
+            PlaybackHistoryRepositoryImpl(
+                playbackHistoryDao = get(),
+            )
+        }
         single {
             UserDataCleaner(
                 clearables =
                     listOf(
                         get<UserPreferencesDataSource>(),
                         get<CollectionRepository>(),
+                        get<PlaybackHistoryRepository>(),
                     ),
             )
         }

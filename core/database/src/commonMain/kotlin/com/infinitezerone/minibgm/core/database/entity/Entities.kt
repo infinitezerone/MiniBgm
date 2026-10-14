@@ -225,3 +225,28 @@ data class TorrentTaskEntity(
     val episodeSort: Float = 0f,
     val episodeName: String = "",
 )
+
+/**
+ * 观看记录持久化实体。
+ *
+ * 以分集为粒度，记录播放断点、总时长及番剧展示元数据。
+ */
+@Entity(
+    tableName = "playback_history",
+    indices = [
+        Index(value = ["subjectId"]),
+        Index(value = ["updatedAt"]),
+    ],
+)
+data class PlaybackHistoryEntity(
+    @PrimaryKey val episodeId: Long,
+    val subjectId: Long,
+    val subjectName: String,
+    val episodeName: String,
+    val episodeSort: Float = 0f,
+    val coverUrl: String = "",
+    val streamUrl: String = "",
+    val positionMs: Long = 0L,
+    val durationMs: Long = 0L,
+    val updatedAt: Long = 0L,
+)

@@ -24,4 +24,5 @@ val databaseModule =
         single { get<BgmDatabase>().anilistMappingDao() }
         single { get<BgmDatabase>().danmakuOverrideDao() }
         single { get<BgmDatabase>().torrentTaskDao() }
+        single { get<BgmDatabase>().playbackHistoryDao() }
     }
