@@ -33,10 +33,10 @@ class AndroidAssetDownloader(
 
     private val pathLocks = ConcurrentHashMap<String, Mutex>()
 
-    private val _latestDownloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
+    private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
 
     @Deprecated("建议直接使用 download(...) 返回的独立 Flow，避免多任务共享状态流导致的互相覆写")
-    override val downloadState: StateFlow<DownloadState> = _latestDownloadState.asStateFlow()
+    override val downloadState: StateFlow<DownloadState> = _downloadState.asStateFlow()
 
     private fun getLockForPath(path: String): Mutex {
         val canonicalKey = runCatching { File(path).canonicalPath }.getOrDefault(File(path).absolutePath)
@@ -52,7 +52,7 @@ class AndroidAssetDownloader(
             val candidateUrls = ReleaseMirrorResolver.resolveCandidateUrls(rawUrl, customMirrorPrefix)
             if (candidateUrls.isEmpty()) {
                 val failure = DownloadState.Failed("无效的下载地址: $rawUrl")
-                _latestDownloadState.value = failure
+                _downloadState.value = failure
                 emit(failure)
                 return@flow
             }
@@ -127,7 +127,7 @@ class AndroidAssetDownloader(
                                                 speedBytesPerSec = currentSpeed,
                                             ),
                                         )
-                                    _latestDownloadState.value = progressState
+                                    _downloadState.value = progressState
                                     emit(progressState)
                                 }
                             }
@@ -153,7 +153,7 @@ class AndroidAssetDownloader(
                                 filePath = destFile.absolutePath,
                                 totalBytes = currentDownloaded,
                             )
-                        _latestDownloadState.value = successState
+                        _downloadState.value = successState
                         logger.i { "资产下载成功: ${destFile.absolutePath} ($currentDownloaded 字节)" }
                         emit(successState)
                         return@withLock
@@ -172,7 +172,7 @@ class AndroidAssetDownloader(
                         message = "所有加速镜像与官方直链均尝试失败: $lastErrorMessage",
                         error = lastError,
                     )
-                _latestDownloadState.value = finalFailure
+                _downloadState.value = finalFailure
                 emit(finalFailure)
             }
         }.flowOn(ioDispatcher)
@@ -190,6 +190,6 @@ class AndroidAssetDownloader(
 
     @Deprecated("建议通过取消 collect 所在的 CoroutineScope 终止下载，避免无参数全局取消误伤其他任务")
     override fun cancelDownload() {
-        _latestDownloadState.value = DownloadState.Idle
+        _downloadState.value = DownloadState.Idle
     }
 }

@@ -153,12 +153,15 @@ internal fun SubjectDownloadDetailContent(
                             }
                         },
                     ) {
+                        val navigationActionRes =
+                            if (isBatchMode) {
+                                DesignSystemR.string.core_designsystem_action_cancel
+                            } else {
+                                DesignSystemR.string.core_designsystem_action_back
+                            }
                         Icon(
                             imageVector = if (isBatchMode) BgmIcons.Close else BgmIcons.ArrowBack,
-                            contentDescription =
-                                stringResource(
-                                    if (isBatchMode) DesignSystemR.string.core_designsystem_action_cancel else DesignSystemR.string.core_designsystem_action_back,
-                                ),
+                            contentDescription = stringResource(navigationActionRes),
                         )
                     }
                 },
