@@ -31,6 +31,16 @@ class DownloadViewModel(
             torrentRepository.verifyTaskFiles()
             refreshStorageUsage()
         }
+        // 存储占用必须随下载进度刷新，但绝不能把刷新塞进 `downloadGroups` 的 map 里 launch：
+        // 任务流在下载期间每秒都会推送进度，每次发射都新起一个协程去做一次全量
+        // `walkTopDown` 扫盘，会无界并发堆积并反复遍历下载目录。
+        // 这里收敛为单条收集协程串行执行——StateFlow 自带 conflate，扫描期间的发射被丢弃，
+        // 扫完立刻取最新值，始终只有一个扫描在跑。
+        viewModelScope.launch {
+            torrentRepository.tasks.collect {
+                _storageUsage.value = torrentRepository.getStorageUsage()
+            }
+        }
     }
 
     /**
@@ -39,7 +49,6 @@ class DownloadViewModel(
     val downloadGroups: StateFlow<List<SubjectDownloadGroup>> =
         torrentRepository.tasks
             .map { tasks ->
-                viewModelScope.launch { refreshStorageUsage() }
                 tasks
                     .groupBy { it.subjectId }
                     .map { (subjectId, groupTasks) ->

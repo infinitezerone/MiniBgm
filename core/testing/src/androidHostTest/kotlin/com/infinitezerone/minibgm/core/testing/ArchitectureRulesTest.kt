@@ -1276,6 +1276,52 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * Flow 算子副作用收敛红线：`map` / `onEach` / `filter` / `transform` / `mapNotNull`
+     * 等算子的 lambda 内严禁 `launch` 协程。
+     *
+     * 任务流在下载期间每秒都会推送进度，把 `launch` 写进算子等于「每次发射都新起一个协程」：
+     * 无人等待、无界堆积，`DownloadViewModel` 曾因此在下载页每秒并发触发一次全量
+     * `walkTopDown` 扫盘。需要持续刷新时必须改为单条收集协程串行执行——StateFlow 自带
+     * conflate，扫描期间的发射会被丢弃，天然背压，始终只有一个任务在跑。
+     */
+    @Test
+    fun flow_operators_never_launch_side_effect_coroutines() {
+        val scanRoots =
+            listOf(
+                File(projectRoot, "core"),
+                File(projectRoot, "feature"),
+                File(projectRoot, "app"),
+                File(projectRoot, "sync"),
+            )
+        val launchInOperator =
+            Regex(
+                """\.(map|onEach|filter|transform|mapNotNull|mapLatest|transformLatest)\s*\{[^}]*\blaunch\s*[\{\(]""",
+            )
+        val violations = mutableListOf<String>()
+        scanRoots.forEach { dir ->
+            if (dir.isDirectory) {
+                dir
+                    .walkTopDown()
+                    .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                    .filter { it.isFile && it.extension == "kt" }
+                    .forEach { file ->
+                        val code = KotlinSourceScanner.sanitize(file.readText())
+                        val match = launchInOperator.find(code) ?: return@forEach
+                        val line = code.take(match.range.first).count { it == '\n' } + 1
+                        val rel = file.relativeTo(projectRoot).path
+                        violations.add(
+                            "$rel:$line 在 Flow 算子 lambda 内 launch 副作用协程：每次发射都会新起协程且无界堆积，请改为单条收集协程串行执行",
+                        )
+                    }
+            }
+        }
+        assertTrue(
+            violations.isEmpty(),
+            "违反 Flow 算子副作用收敛红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
     @Test
     fun production_sources_never_use_reflection_getIdentifier() {
         val scanRoots =

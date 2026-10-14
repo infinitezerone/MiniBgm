@@ -118,6 +118,10 @@ description: >-
    * ExoPlayer 引擎的 `DefaultMediaSourceFactory` 必须经 `DefaultDataSource.Factory(context, httpDataSourceFactory)` 包装。若裸传 `httpDataSourceFactory`，Media3 播放离线下载的 `file://` 视频时会强转为 `HttpURLConnection` 造成 `ClassCastException` 崩溃；
    * 播放器线路构建（`PlayerViewModel.buildSources`）必须过滤 `kind != PlaybackRuleKind.TORRENT`，避免将 BT 种子嗅探规则误暴露给播放器作为普通在线流；
    * 剧集队列匹配条件必须允许 `episodeSort >= 0f`（第 0 话序章），剧集标签展示需通过 `toEpisodeLabel()` 保留半集/总集篇小数字号（如 0.5、6.5）。
+12. **Flow 算子内 launch 副作用＝无界协程堆积**：
+   * `map` / `onEach` / `filter` / `transform` 这类算子的 lambda 是「每次发射都要跑一遍」的位置，在里面 `launch` 等于每次发射都新起一个无人等待的协程。`DownloadViewModel` 曾在 `tasks.map { }` 里 `launch { refreshStorageUsage() }`，而任务流在下载期间每秒推送进度、`getStorageUsage()` 又是全量 `walkTopDown()` 扫盘，于是下载页每秒并发堆积一次全盘遍历（还叠加 `refreshStorageUsage()` 内部再 `launch` 一层）。
+   * 正确形态：需要「随流持续刷新」时用**单条收集协程串行执行**（`viewModelScope.launch { tasks.collect { _storageUsage.value = repo.getStorageUsage() } }`）——StateFlow 自带 conflate，天然背压，扫描期间的发射被丢弃，始终只有一个任务在跑；只有 UI 动作触发的刷新才保留独立的 `refreshStorageUsage()`。
+   * 红线：`ArchitectureRulesTest#flow_operators_never_launch_side_effect_coroutines` 对 `core/`、`feature/`、`app/`、`sync/` 全量源码静态闭锁（词法脱敏后按 `算子 {` … `launch {` 跨行匹配）。
 
 ---
 
