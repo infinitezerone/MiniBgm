@@ -637,20 +637,6 @@ internal fun AddTorrentRuleDialog(
                     maxLines = 4,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(
-                        onClick = {
-                            if (name.isBlank()) name = "Mikan 动漫 RSS"
-                            urlTemplate = "https://mikanani.me/RSS/Search?searchstr={title}"
-                            if (description.isBlank()) description = "通用 Mikan 种子源"
-                        },
-                    ) {
-                        Text(stringResource(R.string.feature_user_rule_add_torrent_template_mikan))
-                    }
-                }
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },

@@ -167,12 +167,11 @@ fun DeveloperOptionsBottomSheet(
                 }
             }
 
-            // 分区 1：特性开关覆写 (Feature Toggles)
+            // 分区 1：特性开关覆写
             DevCategoryCard(title = stringResource(R.string.feature_user_dev_category_feature_toggles)) {
                 // AI 追番助手覆写
                 ThreeStateToggleRow(
                     title = stringResource(R.string.feature_user_dev_override_ai_title),
-                    subtitle = stringResource(R.string.feature_user_dev_override_ai_desc),
                     currentValue = developerSettings.enableAiOverride,
                     onSelect = onOverrideAi,
                 )
@@ -185,7 +184,6 @@ fun DeveloperOptionsBottomSheet(
                 // 内置播放器覆写
                 ThreeStateToggleRow(
                     title = stringResource(R.string.feature_user_dev_override_player_title),
-                    subtitle = stringResource(R.string.feature_user_dev_override_player_desc),
                     currentValue = developerSettings.enablePlayerOverride,
                     onSelect = onOverridePlayer,
                 )
@@ -201,23 +199,16 @@ fun DeveloperOptionsBottomSheet(
                         Modifier
                             .fillMaxWidth()
                             .clickable { onToggleVerboseLogging(!developerSettings.verboseLoggingEnabled) }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                        Text(
-                            text = stringResource(R.string.feature_user_dev_verbose_logging_title),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = stringResource(R.string.feature_user_dev_verbose_logging_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text(
+                        text = stringResource(R.string.feature_user_dev_verbose_logging_title),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                     Switch(
                         checked = developerSettings.verboseLoggingEnabled,
                         onCheckedChange = onToggleVerboseLogging,
@@ -225,12 +216,11 @@ fun DeveloperOptionsBottomSheet(
                 }
             }
 
-            // 分区 2：原生组件与离线流化引擎
+            // 分区 2：流媒体与离线引擎
             DevCategoryCard(title = stringResource(R.string.feature_user_dev_category_torrent)) {
                 val simulateSubtitle =
                     when {
-                        !isSimulatingTorrentUninstalled ->
-                            stringResource(R.string.feature_user_dev_simulate_torrent_uninstalled_off)
+                        !isSimulatingTorrentUninstalled -> ""
                         isTorrentPluginInstalled ->
                             stringResource(R.string.feature_user_dev_simulate_torrent_uninstalled_on_ready)
                         else ->
@@ -253,11 +243,13 @@ fun DeveloperOptionsBottomSheet(
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        Text(
-                            text = simulateSubtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        if (simulateSubtitle.isNotBlank()) {
+                            Text(
+                                text = simulateSubtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     Switch(
                         checked = isSimulatingTorrentUninstalled,
@@ -279,19 +271,12 @@ fun DeveloperOptionsBottomSheet(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                        Text(
-                            text = stringResource(R.string.feature_user_dev_reset_torrent_plugin_title),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = stringResource(R.string.feature_user_dev_reset_torrent_plugin_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text(
+                        text = stringResource(R.string.feature_user_dev_reset_torrent_plugin_title),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
                     Icon(
                         imageVector = BgmIcons.CleaningServices,
                         contentDescription = null,
@@ -301,7 +286,7 @@ fun DeveloperOptionsBottomSheet(
                 }
             }
 
-            // 分区 3：网络与镜像前缀
+            // 分区 3：网络与镜像
             DevCategoryCard(title = stringResource(R.string.feature_user_dev_category_network)) {
                 Column(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -312,11 +297,6 @@ fun DeveloperOptionsBottomSheet(
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = stringResource(R.string.feature_user_dev_custom_mirror_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     OutlinedTextField(
                         value = customMirrorInput,
@@ -475,10 +455,10 @@ private fun DevCategoryCard(
 @Composable
 private fun ThreeStateToggleRow(
     title: String,
-    subtitle: String,
     currentValue: Boolean?,
     onSelect: (Boolean?) -> Unit,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
 ) {
     Column(
         modifier = modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
@@ -490,11 +470,13 @@ private fun ThreeStateToggleRow(
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (!subtitle.isNullOrBlank()) {
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),

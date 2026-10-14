@@ -652,71 +652,6 @@ internal fun DataAndStorageSettingsCard(
     }
 }
 
-@Composable
-internal fun DeveloperDebugSettingsCard(
-    isSimulatingTorrentUninstalled: Boolean,
-    isTorrentPluginInstalled: Boolean,
-    onToggleSimulateTorrentUninstalled: (Boolean) -> Unit,
-    onResetTorrentPlugin: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        Column(modifier = Modifier.padding(vertical = 10.dp)) {
-            Text(
-                text = stringResource(R.string.feature_user_section_developer_debug),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-            )
-
-            val simulateSubtitle =
-                when {
-                    !isSimulatingTorrentUninstalled ->
-                        stringResource(R.string.feature_user_dev_simulate_torrent_uninstalled_off)
-                    isTorrentPluginInstalled ->
-                        stringResource(R.string.feature_user_dev_simulate_torrent_uninstalled_on_ready)
-                    else ->
-                        stringResource(R.string.feature_user_dev_simulate_torrent_uninstalled_on_empty)
-                }
-
-            SettingsItemRow(
-                icon = BgmIcons.BugReport,
-                iconTint = MaterialTheme.colorScheme.tertiary,
-                title = stringResource(R.string.feature_user_dev_simulate_torrent_uninstalled_title),
-                subtitle = simulateSubtitle,
-                onClick = { onToggleSimulateTorrentUninstalled(!isSimulatingTorrentUninstalled) },
-                trailing = {
-                    Switch(
-                        checked = isSimulatingTorrentUninstalled,
-                        onCheckedChange = onToggleSimulateTorrentUninstalled,
-                    )
-                },
-            )
-
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 18.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-            )
-
-            SettingsItemRow(
-                icon = BgmIcons.CleaningServices,
-                iconTint = MaterialTheme.colorScheme.secondary,
-                title = stringResource(R.string.feature_user_dev_reset_torrent_plugin_title),
-                subtitle = stringResource(R.string.feature_user_dev_reset_torrent_plugin_desc),
-                onClick = onResetTorrentPlugin,
-            )
-        }
-    }
-}
-
 /**
  * 现代开发者选项统一入口卡片（已激活开发者模式后在设置页展现）。
  */
@@ -735,7 +670,7 @@ internal fun DeveloperEntrySettingsCard(
     ) {
         Column(modifier = Modifier.padding(vertical = 10.dp)) {
             Text(
-                text = stringResource(R.string.feature_user_section_developer_debug),
+                text = stringResource(R.string.feature_user_section_developer),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,

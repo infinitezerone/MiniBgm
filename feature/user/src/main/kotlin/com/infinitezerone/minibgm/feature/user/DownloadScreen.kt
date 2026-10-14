@@ -219,11 +219,12 @@ private fun DownloadSummaryBanner(
                 Spacer(modifier = Modifier.height(2.dp))
                 val storageText =
                     if (storageUsage.downloadSizeBytes > 0L || storageUsage.availableBytes > 0L) {
-                        " · " + stringResource(
-                            R.string.feature_user_downloads_storage_info,
-                            storageUsage.formattedDownloadSize,
-                            storageUsage.formattedAvailableSize,
-                        )
+                        " · " +
+                            stringResource(
+                                R.string.feature_user_downloads_storage_info,
+                                storageUsage.formattedDownloadSize,
+                                storageUsage.formattedAvailableSize,
+                            )
                     } else {
                         ""
                     }
@@ -304,11 +305,12 @@ private fun SubjectDownloadCard(
                             modifier = Modifier.size(14.dp),
                         )
                         Text(
-                            text = stringResource(
-                                R.string.feature_user_downloads_finished_summary,
-                                group.totalTasks,
-                                group.formattedTotalSize,
-                            ),
+                            text =
+                                stringResource(
+                                    R.string.feature_user_downloads_finished_summary,
+                                    group.totalTasks,
+                                    group.formattedTotalSize,
+                                ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
