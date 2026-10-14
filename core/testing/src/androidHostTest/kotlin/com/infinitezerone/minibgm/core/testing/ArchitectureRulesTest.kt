@@ -1127,6 +1127,52 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 磁力文件挑选链路红线（见 AGENTS.md 领域规则 & 剧本 8）：
+     * 1. `server.rs` 必须以 `paused: true` 添加种子，并在锁定单集后调用 `session.unpause(&handle)`：
+     *    否则元数据阶段会先按整包视频选片再收敛单集，合集/BD 包会白下其他剧集的分片；
+     * 2. 视频扩展名白名单必须单一真源（`VIDEO_EXTENSIONS` 同时派生 `only_files_regex` 与 `is_video_file`），
+     *    严禁出现第二份硬编码扩展名清单；
+     * 3. 目标单集必须经 `select_target_video_file` 挑选，且多视频文件未命中集数时必须显式失败，
+     *    严禁静默回退体积最大文件（合集/BD 包会稳定挑错集且全程无提示）。
+     */
+    @Test
+    fun torrent_file_selection_locks_single_episode_before_starting_download() {
+        val torrentServerFile = File(projectRoot, "crates/minibgm-torrent/src/server.rs")
+        assertTrue(torrentServerFile.isFile, "crates/minibgm-torrent/src/server.rs 未找到")
+        val serverRs = torrentServerFile.readText()
+        // 单测里为锁定派生结果会显式写出期望正则字面量，漂移检查只看生产代码
+        val productionRs = serverRs.substringBefore("#[cfg(test)]")
+
+        val violations = mutableListOf<String>()
+        if (!productionRs.contains("paused: true")) {
+            violations.add(
+                "server.rs 未以 paused: true 添加种子：元数据阶段会先按整包视频选片，合集/BD 包将白下其他剧集分片",
+            )
+        }
+        if (!productionRs.contains(".unpause(&handle)")) {
+            violations.add(
+                "server.rs 锁定单集后未调用 session.unpause(&handle)，paused 添加将导致永不开始下载",
+            )
+        }
+        if (!productionRs.contains("VIDEO_EXTENSIONS")) {
+            violations.add("server.rs 视频扩展名白名单未收口到 VIDEO_EXTENSIONS 单一真源")
+        }
+        if (productionRs.contains("mkv|mp4|webm|avi|flv|ts|m2ts")) {
+            violations.add("server.rs 存在第二份硬编码视频扩展名清单，会与 VIDEO_EXTENSIONS 静默漂移")
+        }
+        if (!productionRs.contains("select_target_video_file") || !productionRs.contains("未能按集数")) {
+            violations.add(
+                "server.rs 必须经 select_target_video_file 挑选目标单集，并对多视频未命中集数显式失败（严禁静默回退体积最大文件）",
+            )
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反磁力文件挑选链路红线（见 AGENTS.md 领域规则 & 剧本 8）：\n" + violations.joinToString("\n"),
+        )
+    }
+
     @Test
     fun production_sources_never_use_reflection_getIdentifier() {
         val scanRoots =

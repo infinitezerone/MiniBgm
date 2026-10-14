@@ -128,7 +128,7 @@ description: >-
   * 流媒体引擎向播放器派发 `127.0.0.1:port` 地址前，本地 HTTP 守护服务必须已真实就绪，并严格支持 HTTP 206 Partial Content / Range 头部响应（满足播放器 moov/Seek 元数据探针需求）；
   * 若底层 Native 模块或资源未就绪，必须显式抛出异常或下发 `TorrentStreamState.Error` 阻断，绝不允许吞掉初始化超时派发不可达的伪地址导致播放器静默超时崩溃（`SocketTimeoutException`）。
 * **纯内存流播防 OOM 与接口安全（librqbit）**：
-  * **单集严格锁定与候选过滤**：番剧 BD/合集种子常含十几集几十 GB 文件，纯内存存储（`InMemoryExampleStorageFactory`）无自动 LRU 淘汰。添加种子时必须配置 `only_files_regex` 过滤视频，并在元数据就绪后，严格通过 `f.included && is_video_file(&f.name)` 双重白名单选取最大视频，绝不在全量文件中盲取最大（防止非视频 ISO/解压包夺占正片），再调用 `session.update_only_files(&handle, &HashSet::from([target_file_id]))` 锁定目标单集，杜绝全季文件同时进 RAM 导致 OOM；
+  * **单集严格锁定与候选过滤**：番剧 BD/合集种子常含十几集几十 GB 文件，纯内存存储（`InMemoryExampleStorageFactory`）无自动 LRU 淘汰。添加种子时必须配置 `only_files_regex`（由 `VIDEO_EXTENSIONS` 单一真源派生，严禁第二份硬编码扩展名清单），并必须以 `paused: true` 添加：元数据就绪后先经 `select_target_video_file` 纯函数在 `f.included && is_video_file(&f.name)` 双重白名单内按 `episodeHint` 精确命中目标集（防止非视频 ISO/解压包夺占正片），再调用 `session.update_only_files(&handle, &HashSet::from([target_file_id]))` 收敛单集，最后才 `session.unpause` 解冻开流，杜绝全季文件同时进 RAM 导致 OOM；若写成 `paused: false`，种子会在收敛前先按整包视频选片，合集/BD 包将白下其他剧集的分片；多视频文件未命中集数时必须显式失败（`该种子包含 N 个视频文件，未能按集数 X 定位目标文件`），严禁静默回退"体积最大文件"——那会稳定挑错集且全程无任何提示；集数后缀白名单必须覆盖 `04v2`/`01v2` 这类重制命名（漏 `v` 会让单集种子被误判为未命中）；librqbit 的 `only_files_regex` 在无任何文件匹配时会整体 `bail!`，必须识别并映射为可读提示，不得让用户只看到"添加种子至 Session 失败"；
   * **本地控制面封死**：本地 HTTP API 必须配置 `read_only: true` 与 `allow_create: false`，避免同一设备上其他恶意进程扫描回环端口向会话注入种子或篡改状态；
   * **禁止擅自注入公共 Tracker（零第三方广播泄露）**：严禁在代码中硬编码公共 Tracker 列表注入请求。公共 Tracker 会将用户本机 IP 与 infohash 广播给未知的第三方服务器，且域名存在存活期腐烂失效问题；严格只使用磁链自身声明的 Tracker 或纯经由分布式 DHT 网络寻道；
   * **进度分母真实性**：进度分母必须采用当前目标单集的真实字节大小（`target_file_len`），分子采用 `stats.file_progress[target_file_id]`，禁止使用全种子大小（会导致进度永远不到 100%）或写死假兜底分母；

@@ -135,7 +135,9 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
         }
         Err(e) => {
             log::error!("原生 BT 内存流化服务启动失败: {:?}", e);
-            env.new_string(format!("ERROR: 启动流服务失败: {e}"))
+            // 必须用 {e:#} 展开 anyhow 的 context 链：`{}` 只打印最外层 context，
+            // 会把"none of the filenames match..."这类真实原因吞掉，用户只看到笼统失败。
+            env.new_string(format!("ERROR: 启动流服务失败: {e:#}"))
                 .unwrap()
                 .into_raw()
         }
