@@ -202,3 +202,26 @@ description: >-
      * 进入下载执行前必须获取目标规范化路径（`canonicalPath`）对应的 `Mutex.withLock`，确保相同目标文件的写入天然串行化，杜绝 `RandomAccessFile` 并发冲突。
   3. **业务层自治状态与任务**：
      * 业务门面（如 `UpdateRepositoryImpl`）根据自身业务需要维护专属的 `_downloadState` 与 `downloadJob`，对自身任务的生命周期与取消负全责，不向底层基础设施转嫁业务状态。
+
+
+---
+
+## 剧本 13：现代内置开发面板与运行时调试收敛规范（Developer Panel & Runtime Debugging）
+* **规范先例**：`DeveloperSettings.kt`、`SettingsRepository.kt` 与 `DeveloperOptionsBottomSheet.kt`
+* **根因警示（来自静态 BuildConfig 与散落 FLAG_DEBUGGABLE 复盘）**：
+  * 将 AI 助手、内置播放器等业务特性开关写死在编译期 `BuildConfig`，导致测试人员在 Dogfooding 或内部体验包中无法自由切换功能，排查偶现 Bug 必须反复重新构建全量 APK；
+  * 各业务页随意读取 `FLAG_DEBUGGABLE` 内联展示调试按钮，破坏了界面的整洁度，且无法在非 Debuggable 环境复现底层原生异常。
+* **物理防线与操作规范**：
+  1. **触发与激活机制（Easter Egg & Persistence）**：
+     - 在设置页版本号连续点击 7 次激活开发者模式，并持久化到 `UserPreferences`；
+     - 激活后在设置页展现统一的「开发者选项」Row，点击唤起 `DeveloperOptionsBottomSheet`；
+     - 提供一键停用开发者模式与重置所有覆写的功能。
+  2. **状态响应式派生（Reactive StateFlow）**：
+     - 严禁在 Feature / NavHost 业务代码中直接硬编码 `BuildConfig.ENABLE_*` 进行静态短路；
+     - 必须通过 `SettingsRepository.isAiAssistantEnabled` / `isInternalPlayerEnabled` 等响应式只读流获取真值，优先消费开发者动态覆写值，未显式覆写时平滑回退到默认编译期配置。
+  3. **调试能力统一收敛（Unified Drawer）**：
+     - 特性开关覆写（AI / 播放器 / 详细网络与引擎日志）；
+     - 原生流化组件模拟（模拟 BT 扩展未安装、重置并清理已下载的动态 `.so`）；
+     - 加速镜像前缀覆写（GitHub Release 镜像代理动态调整）；
+     - 系统与硬件诊断信息一键导出（机型、ABI 集合、系统版本、Package Name、Version Code）；
+     - 最近崩溃日志（`CrashLog`）按需查看、复制、系统分享与清理。

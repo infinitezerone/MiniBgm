@@ -7,15 +7,18 @@ import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
 import androidx.compose.material3.adaptive.layout.ThreePaneScaffoldScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import coil3.ImageLoader
 import com.infinitezerone.minibgm.BuildConfig
 import com.infinitezerone.minibgm.R
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
@@ -75,6 +78,13 @@ fun BgmNavHost(
     val exploreScrollToTop = remember(navState) { navState.scrollToTopFor(ExploreRoute) }
     val userScrollToTop = remember(navState) { navState.scrollToTopFor(UserRoute) }
     val imageLoader = koinInject<ImageLoader>()
+    val settingsRepository = koinInject<SettingsRepository>()
+    val isAiAssistantEnabled by settingsRepository.isAiAssistantEnabled.collectAsStateWithLifecycle(
+        initialValue = BuildConfig.ENABLE_AI_ASSISTANT,
+    )
+    val isInternalPlayerEnabled by settingsRepository.isInternalPlayerEnabled.collectAsStateWithLifecycle(
+        initialValue = BuildConfig.ENABLE_INTERNAL_PLAYER,
+    )
 
     val directive = rememberBgmPaneDirective()
     val isSplitMode = directive.isSplitLayout
@@ -118,14 +128,14 @@ fun BgmNavHost(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSearchClick = { navState.navigateTo(SearchRoute()) },
                                 onAssistantClick =
-                                    if (BuildConfig.ENABLE_AI_ASSISTANT) {
+                                    if (isAiAssistantEnabled) {
                                         { navState.navigateTo(AssistantRoute()) }
                                     } else {
                                         null
                                     },
                                 onSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
                                 onPlayClick =
-                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                    if (isInternalPlayerEnabled) {
                                         { route -> navState.navigateTo(route) }
                                     } else {
                                         null
@@ -135,11 +145,11 @@ fun BgmNavHost(
                                 metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )
 
-                            if (BuildConfig.ENABLE_AI_ASSISTANT) {
+                            if (isAiAssistantEnabled) {
                                 assistantEntry(
                                     onSubjectClick = { route -> navState.navigateTo(route) },
                                     onPlaySource =
-                                        if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                        if (isInternalPlayerEnabled) {
                                             { route -> navState.navigateTo(route) }
                                         } else {
                                             { _ -> }
@@ -210,12 +220,12 @@ fun BgmNavHost(
                             settingsEntry(
                                 onBackClick = { navState.goBack() },
                                 onPlaybackRulesClick =
-                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                    if (isInternalPlayerEnabled) {
                                         { navState.navigateTo(PlaybackRulesRoute) }
                                     } else {
                                         null
                                     },
-                                enableAiConfig = BuildConfig.ENABLE_AI_ASSISTANT,
+                                enableAiConfig = isAiAssistantEnabled,
                                 onClearCache = {
                                     withContext(Dispatchers.IO) {
                                         imageLoader.memoryCache?.clear()
@@ -225,7 +235,7 @@ fun BgmNavHost(
                                 metadata = bgmListPane(detailPlaceholder),
                             )
 
-                            if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                            if (isInternalPlayerEnabled) {
                                 playbackRulesEntry(
                                     onBackClick = { navState.goBack() },
                                     onAiSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
@@ -241,7 +251,7 @@ fun BgmNavHost(
                                 },
                                 onEpisodeClick = { route -> navState.navigateTo(route) },
                                 onPlayClick =
-                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                    if (isInternalPlayerEnabled) {
                                         { route -> navState.navigateTo(route) }
                                     } else {
                                         null
@@ -253,13 +263,13 @@ fun BgmNavHost(
                                     navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
                                 onManageRules =
-                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                    if (isInternalPlayerEnabled) {
                                         { navState.navigateTo(PlaybackRulesRoute) }
                                     } else {
                                         null
                                     },
                                 onSourceSearch =
-                                    if (BuildConfig.ENABLE_AI_ASSISTANT) {
+                                    if (isAiAssistantEnabled) {
                                         { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) }
                                     } else {
                                         null
@@ -275,7 +285,7 @@ fun BgmNavHost(
                                 },
                                 onEpisodeClick = { route -> navState.navigateTo(route) },
                                 onPlayClick =
-                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                    if (isInternalPlayerEnabled) {
                                         { route -> navState.navigateTo(route) }
                                     } else {
                                         null
@@ -287,13 +297,13 @@ fun BgmNavHost(
                                     navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
                                 onManageRules =
-                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                    if (isInternalPlayerEnabled) {
                                         { navState.navigateTo(PlaybackRulesRoute) }
                                     } else {
                                         null
                                     },
                                 onSourceSearch =
-                                    if (BuildConfig.ENABLE_AI_ASSISTANT) {
+                                    if (isAiAssistantEnabled) {
                                         { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) }
                                     } else {
                                         null
@@ -320,19 +330,19 @@ fun BgmNavHost(
                                     navState.navigateTo(TopicDetailRoute(topicId = topicId, initialTitle = title))
                                 },
                                 onPlayClick =
-                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                    if (isInternalPlayerEnabled) {
                                         { route -> navState.navigateTo(route) }
                                     } else {
                                         null
                                     },
                                 onSourceSearch =
-                                    if (BuildConfig.ENABLE_AI_ASSISTANT) {
+                                    if (isAiAssistantEnabled) {
                                         { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) }
                                     } else {
                                         null
                                     },
                                 onManageRules =
-                                    if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                                    if (isInternalPlayerEnabled) {
                                         { navState.navigateTo(PlaybackRulesRoute) }
                                     } else {
                                         null
@@ -351,7 +361,7 @@ fun BgmNavHost(
                                 metadata = bgmExtraPane(),
                             )
 
-                            if (BuildConfig.ENABLE_INTERNAL_PLAYER) {
+                            if (isInternalPlayerEnabled) {
                                 playerEntry(
                                     onBackClick = { navState.goBack() },
                                     onSubjectClick = { subjectId ->

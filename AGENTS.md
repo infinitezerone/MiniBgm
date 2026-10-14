@@ -54,6 +54,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
   - **P2P 协议与种子源中立性**：核心应用保持 100% 协议与站点中立，严禁在 `:core:data`、`:core:network` 与 `:feature:subject` 中硬编码特定第三方未授权种子站点域名（如 `mikanani.me` 专有 API 抓取，`ArchitectureRulesTest` 物理红线拦截）；P2P 资源发现统一由用户配置的通用 `PlaybackRuleKind.TORRENT`（BT RSS 规则集）驱动，未配置或未启用任何种子规则时零网络请求。
 - 内置 WebView 与本地代理闭环：自定义 `WebChromeClient` 严禁忽略控制台日志，必须实现 `onConsoleMessage` 透传至 Logcat（ArchitectureRulesTest 物理红线拦截），消灭前端排查盲区；本地反向代理改写 HTML 资源时必须同步改写 `Content-Security-Policy` 响应头中的对应源，杜绝只改响应体导致浏览器安全策略阻断。
 - 资产下载与落盘互斥：通用资产下载契约（`AssetDownloader`）必须面向请求作用域冷流（`Flow<DownloadState>`）设计，严禁单例持有全局活跃下载状态或暴露无参全局 `cancelDownload` 误伤其他并发任务；调用方业务层（如 `UpdateRepository`）自行持有专有任务 `Job` 与 `StateFlow`；落盘同一 `destinationPath` 必须受路径级 `Mutex` 互斥保护，杜绝并发写入损坏中转文件（`.tmp`）。
+- 现代开发面板与运行时调试收敛：特性开关与调试状态严禁仅靠硬编码 `BuildConfig` 静态布尔判断；必须经由 `DeveloperSettings` 与 `SettingsRepository` 暴露响应式状态流，支持真机/发版预览时动态覆写（7 次连击彩蛋激活）。UI 调试入口收敛于统一抽屉（`DeveloperOptionsBottomSheet`），严禁在业务页面散落内联的调试状态开关。
 - 数据库版本策略（开发测试阶段）：`BgmDatabase.version` 固定为 **1**，**不写任何 Migration**，结构变更一律靠 `fallbackToDestructiveMigration(dropAllTables = true)` 整体重建；`exportSchema = false`（没有迁移就没有 schema 快照的用途）。**任何实体 / DAO 变更必须同步把 `version` 加一**——Room 在版本号未变而结构已变时会抛 `Room cannot verify the data integrity`，破坏性回退不兜这种情况。正式发布需要保全用户数据之前，先打开 `exportSchema` 从当前结构导出基线，再逐版本补 `Migration` 与防漂移 schema 测试。
 
 ## 规范先例与协同流

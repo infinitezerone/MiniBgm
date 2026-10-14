@@ -266,6 +266,45 @@ class FakeSettingsRepository(
         playbackSubscriptionUrlState.value = url.trim()
     }
 
+    private val developerSettingsState =
+        MutableStateFlow(
+            com.infinitezerone.minibgm.core.model
+                .DeveloperSettings(),
+        )
+    override val developerSettings: Flow<com.infinitezerone.minibgm.core.model.DeveloperSettings> = developerSettingsState
+
+    override val isAiAssistantEnabled: Flow<Boolean> = developerSettingsState.map { it.isAiAssistantEffective }
+
+    override val isInternalPlayerEnabled: Flow<Boolean> = developerSettingsState.map { it.isInternalPlayerEffective }
+
+    fun setDeveloperSettings(settings: com.infinitezerone.minibgm.core.model.DeveloperSettings) {
+        developerSettingsState.value = settings
+    }
+
+    override suspend fun setDeveloperModeEnabled(enabled: Boolean) {
+        developerSettingsState.value = developerSettingsState.value.copy(isDeveloperModeEnabled = enabled)
+    }
+
+    override suspend fun setDevOverrideEnableAi(enabled: Boolean?) {
+        developerSettingsState.value = developerSettingsState.value.copy(enableAiOverride = enabled)
+    }
+
+    override suspend fun setDevOverrideEnablePlayer(enabled: Boolean?) {
+        developerSettingsState.value = developerSettingsState.value.copy(enablePlayerOverride = enabled)
+    }
+
+    override suspend fun setDevVerboseLogging(enabled: Boolean) {
+        developerSettingsState.value = developerSettingsState.value.copy(verboseLoggingEnabled = enabled)
+    }
+
+    override suspend fun setDevSimulateTorrentUninstalled(enabled: Boolean) {
+        developerSettingsState.value = developerSettingsState.value.copy(simulateTorrentUninstalled = enabled)
+    }
+
+    override suspend fun setDevCustomMirrorPrefix(prefix: String) {
+        developerSettingsState.value = developerSettingsState.value.copy(customMirrorPrefixOverride = prefix.trim())
+    }
+
     override suspend fun refreshPlaybackSubscription(): AppResult<RuleImportSummary> {
         val url = playbackSubscriptionUrlState.value
         if (url.isBlank()) return AppResult.Error(IllegalStateException("尚未配置订阅地址"))

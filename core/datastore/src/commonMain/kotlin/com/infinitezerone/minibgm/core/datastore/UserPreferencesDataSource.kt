@@ -336,4 +336,40 @@ class UserPreferencesDataSource(
             current.copy(preferredQualityHeight = height)
         }
     }
+
+    suspend fun setDeveloperModeEnabled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(developerModeEnabled = enabled)
+        }
+    }
+
+    suspend fun setDevOverrideEnableAi(enabled: Boolean?) {
+        dataStore.updateData { current ->
+            current.copy(devOverrideEnableAi = enabled)
+        }
+    }
+
+    suspend fun setDevOverrideEnablePlayer(enabled: Boolean?) {
+        dataStore.updateData { current ->
+            current.copy(devOverrideEnablePlayer = enabled)
+        }
+    }
+
+    suspend fun setDevVerboseLogging(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(devVerboseLogging = enabled)
+        }
+    }
+
+    suspend fun setDevSimulateTorrentUninstalled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(devSimulateTorrentUninstalled = enabled)
+        }
+    }
+
+    suspend fun setDevCustomMirrorPrefix(prefix: String) {
+        dataStore.updateData { current ->
+            current.copy(devCustomMirrorPrefix = prefix.trim())
+        }
+    }
 }

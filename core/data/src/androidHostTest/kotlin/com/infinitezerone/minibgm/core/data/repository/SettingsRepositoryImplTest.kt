@@ -152,4 +152,43 @@ class SettingsRepositoryImplTest {
             repo.activateAiConfigProfile("不存在")
             assertEquals("", repo.activeAiProfileId.first())
         }
+
+    @Test
+    fun developerSettings_updateAndEffectiveFlags_reflectCorrectly() =
+        runTest {
+            val repo =
+                SettingsRepositoryImpl(createTestUserPreferencesDataSource(), FakeSecureSecretStore(), FakeCommunitySubscriptionService())
+
+            val defaultDev = repo.developerSettings.first()
+            assertEquals(false, defaultDev.isDeveloperModeEnabled)
+            assertEquals(null, defaultDev.enableAiOverride)
+            assertEquals(null, defaultDev.enablePlayerOverride)
+            assertEquals(false, defaultDev.verboseLoggingEnabled)
+            assertEquals(false, defaultDev.simulateTorrentUninstalled)
+            assertEquals("", defaultDev.customMirrorPrefixOverride)
+            assertTrue(repo.isAiAssistantEnabled.first())
+            assertTrue(repo.isInternalPlayerEnabled.first())
+
+            repo.setDeveloperModeEnabled(true)
+            repo.setDevOverrideEnableAi(false)
+            assertEquals(false, repo.isAiAssistantEnabled.first())
+
+            repo.setDevOverrideEnablePlayer(false)
+            assertEquals(false, repo.isInternalPlayerEnabled.first())
+
+            repo.setDevOverrideEnableAi(null)
+            assertTrue(repo.isAiAssistantEnabled.first())
+
+            repo.setDevVerboseLogging(true)
+            repo.setDevSimulateTorrentUninstalled(true)
+            repo.setDevCustomMirrorPrefix("https://mirror.example.com")
+
+            val updated = repo.developerSettings.first()
+            assertTrue(updated.isDeveloperModeEnabled)
+            assertEquals(null, updated.enableAiOverride)
+            assertEquals(false, updated.enablePlayerOverride)
+            assertTrue(updated.verboseLoggingEnabled)
+            assertTrue(updated.simulateTorrentUninstalled)
+            assertEquals("https://mirror.example.com", updated.customMirrorPrefixOverride)
+        }
 }

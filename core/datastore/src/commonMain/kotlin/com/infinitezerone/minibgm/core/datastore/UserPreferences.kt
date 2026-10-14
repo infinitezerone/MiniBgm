@@ -88,6 +88,18 @@ data class UserPreferences(
     val danmakuAppId: String = "",
     /** 清晰度选择记忆（0 = 自动自适应；>0 = 偏好视频高度，如 1080，下次起播自动匹配最接近档位） */
     val preferredQualityHeight: Int = 0,
+    /** 是否已激活开发者选项（连点版本号7次激活，或开发调试包默认激活） */
+    val developerModeEnabled: Boolean = false,
+    /** 开发者覆盖：AI 助手功能（null = 跟随默认，true = 强开，false = 强关） */
+    val devOverrideEnableAi: Boolean? = null,
+    /** 开发者覆盖：内置播放器功能（null = 跟随默认，true = 强开，false = 强关） */
+    val devOverrideEnablePlayer: Boolean? = null,
+    /** 开发者覆盖：详细网络与调试日志 */
+    val devVerboseLogging: Boolean = false,
+    /** 开发者覆盖：模拟未安装 BT 原生扩展组件 */
+    val devSimulateTorrentUninstalled: Boolean = false,
+    /** 开发者覆盖：加速镜像前缀 */
+    val devCustomMirrorPrefix: String = "",
 ) {
     val allProfiles: List<UserProfile>
         get() = savedProfiles.values.toList()

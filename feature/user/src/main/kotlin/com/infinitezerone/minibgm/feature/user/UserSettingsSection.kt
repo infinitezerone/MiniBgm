@@ -51,7 +51,7 @@ private const val BGM_HOME_URL = "https://bgm.tv"
 
 private const val BGM_WIKI_URL = "https://bgm.tv/wiki"
 
-private const val PROJECT_GITHUB_URL = "https://github.com/infinitezerone/MiniBgm"
+internal const val PROJECT_GITHUB_URL = "https://github.com/infinitezerone/MiniBgm"
 
 @Composable
 internal fun SettingsSection(
@@ -754,6 +754,50 @@ internal fun DeveloperDebugSettingsCard(
     }
 }
 
+/**
+ * 现代开发者选项统一入口卡片（已激活开发者模式后在设置页展现）。
+ */
+@Composable
+internal fun DeveloperEntrySettingsCard(
+    onOpenDeveloperOptions: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(vertical = 10.dp)) {
+            Text(
+                text = stringResource(R.string.feature_user_section_developer_debug),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+            )
+
+            SettingsItemRow(
+                icon = BgmIcons.BugReport,
+                iconTint = MaterialTheme.colorScheme.tertiary,
+                title = stringResource(R.string.feature_user_dev_options_title),
+                subtitle = stringResource(R.string.feature_user_dev_options_desc),
+                trailing = {
+                    Icon(
+                        imageVector = BgmIcons.KeyboardArrowRight,
+                        contentDescription = stringResource(R.string.feature_user_dev_options_title),
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                onClick = onOpenDeveloperOptions,
+            )
+        }
+    }
+}
+
 @Composable
 internal fun AboutAndSupportSettingsCard(
     isLoggedIn: Boolean,
@@ -765,6 +809,7 @@ internal fun AboutAndSupportSettingsCard(
     modifier: Modifier = Modifier,
     isCheckingUpdate: Boolean = false,
     onCheckForUpdate: () -> Unit = {},
+    onVersionClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val clientVersion =
@@ -804,7 +849,7 @@ internal fun AboutAndSupportSettingsCard(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
-                onClick = { onOpenWebUrl(PROJECT_GITHUB_URL) },
+                onClick = onVersionClick,
             )
 
             HorizontalDivider(

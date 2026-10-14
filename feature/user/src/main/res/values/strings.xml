@@ -394,6 +394,35 @@
     <string name="feature_user_dev_reset_torrent_plugin_desc">删除 filesDir/modules/torrent 下的 .so 并立即进入未安装模拟态</string>
     <string name="feature_user_dev_torrent_simulated_uninstalled_toast">已清理动态扩展并切换为未安装模拟态</string>
     <string name="feature_user_dev_torrent_restored_default_toast">已恢复默认 APK 内置扩展探测</string>
+
+    <!-- 21. 现代开发者选项面板 (In-App Developer Options) -->
+    <string name="feature_user_dev_options_title">开发者选项</string>
+    <string name="feature_user_dev_options_desc">特性开关覆写、原生组件模拟与运行时诊断</string>
+    <string name="feature_user_dev_easter_egg_step">还需点击 %1$d 次开启开发者选项</string>
+    <string name="feature_user_dev_mode_activated">开发者选项已激活</string>
+    <string name="feature_user_dev_mode_disabled">开发者选项已关闭</string>
+    <string name="feature_user_dev_category_feature_toggles">特性开关覆写 (Feature Toggles)</string>
+    <string name="feature_user_dev_override_ai_title">AI 追番助手</string>
+    <string name="feature_user_dev_override_ai_desc">覆写编译期开关，强制开启或关闭 AI 助手</string>
+    <string name="feature_user_dev_override_player_title">内置播放器</string>
+    <string name="feature_user_dev_override_player_desc">覆写编译期开关，强制开启或关闭内置播放器</string>
+    <string name="feature_user_dev_override_default">跟随默认</string>
+    <string name="feature_user_dev_override_enabled">强制开启</string>
+    <string name="feature_user_dev_override_disabled">强制关闭</string>
+    <string name="feature_user_dev_verbose_logging_title">详细调试日志</string>
+    <string name="feature_user_dev_verbose_logging_desc">输出详细的网络请求、响应体与原生组件内部调用日志</string>
+    <string name="feature_user_dev_category_torrent">原生流化与离线组件 (P2P Engine)</string>
+    <string name="feature_user_dev_category_network">网络与加速 (Network &amp; Mirror)</string>
+    <string name="feature_user_dev_custom_mirror_title">加速镜像前缀覆写</string>
+    <string name="feature_user_dev_custom_mirror_desc">覆写内置的 GitHub Release 加速前缀（留空使用默认源）</string>
+    <string name="feature_user_dev_custom_mirror_placeholder">https://mirror.example.com/</string>
+    <string name="feature_user_dev_category_diagnostics">系统与诊断 (Diagnostics &amp; Crash)</string>
+    <string name="feature_user_dev_diag_app_info">应用诊断信息</string>
+    <string name="feature_user_dev_diag_copied">诊断信息已复制到剪贴板</string>
+    <string name="feature_user_dev_crash_log_title">查看崩溃日志</string>
+    <string name="feature_user_dev_crash_log_none">暂无崩溃日志记录</string>
+    <string name="feature_user_dev_action_reset_overrides">恢复所有覆写为默认</string>
+    <string name="feature_user_dev_action_close_dev_mode">停用开发者选项</string>
 </resources>
 
 

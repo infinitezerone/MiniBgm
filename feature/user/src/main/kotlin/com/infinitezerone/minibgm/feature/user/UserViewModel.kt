@@ -17,6 +17,7 @@ import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AppUpdateInfo
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.DanmakuConfig
+import com.infinitezerone.minibgm.core.model.DeveloperSettings
 import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
@@ -478,6 +479,59 @@ class UserViewModel(
     fun logoutAll() {
         viewModelScope.launch {
             authRepository.logoutAll()
+        }
+    }
+
+    val developerSettings: StateFlow<DeveloperSettings> =
+        settingsRepository.developerSettings.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = DeveloperSettings(),
+        )
+
+    fun setDeveloperModeEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setDeveloperModeEnabled(enabled)
+        }
+    }
+
+    fun setDevOverrideEnableAi(enabled: Boolean?) {
+        viewModelScope.launch {
+            settingsRepository.setDevOverrideEnableAi(enabled)
+        }
+    }
+
+    fun setDevOverrideEnablePlayer(enabled: Boolean?) {
+        viewModelScope.launch {
+            settingsRepository.setDevOverrideEnablePlayer(enabled)
+        }
+    }
+
+    fun setDevVerboseLogging(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setDevVerboseLogging(enabled)
+        }
+    }
+
+    fun setDevSimulateTorrentUninstalled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setDevSimulateTorrentUninstalled(enabled)
+        }
+    }
+
+    fun setDevCustomMirrorPrefix(prefix: String) {
+        viewModelScope.launch {
+            settingsRepository.setDevCustomMirrorPrefix(prefix)
+        }
+    }
+
+    fun resetAllDevOverrides() {
+        viewModelScope.launch {
+            settingsRepository.setDevOverrideEnableAi(null)
+            settingsRepository.setDevOverrideEnablePlayer(null)
+            settingsRepository.setDevVerboseLogging(false)
+            settingsRepository.setDevSimulateTorrentUninstalled(false)
+            settingsRepository.setDevCustomMirrorPrefix("")
         }
     }
 }

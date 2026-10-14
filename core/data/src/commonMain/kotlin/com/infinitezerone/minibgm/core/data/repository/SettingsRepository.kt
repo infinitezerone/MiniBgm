@@ -6,6 +6,7 @@ import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AiConfigProfile
 import com.infinitezerone.minibgm.core.model.DanmakuConfig
+import com.infinitezerone.minibgm.core.model.DeveloperSettings
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
@@ -205,6 +206,33 @@ interface SettingsRepository {
     val danmakuConfig: Flow<DanmakuConfig>
 
     suspend fun setDanmakuConfig(config: DanmakuConfig)
+
+    /** 运行时开发者调试设置只读流 */
+    val developerSettings: Flow<DeveloperSettings>
+
+    /** 动态判断当前 AI 助手是否启用（结合编译期默认与开发者动态覆写） */
+    val isAiAssistantEnabled: Flow<Boolean>
+
+    /** 动态判断当前内置播放器是否启用（结合编译期默认与开发者动态覆写） */
+    val isInternalPlayerEnabled: Flow<Boolean>
+
+    /** 设置开发者模式激活状态 */
+    suspend fun setDeveloperModeEnabled(enabled: Boolean)
+
+    /** 设置 AI 助手功能开关覆写（null = 恢复默认） */
+    suspend fun setDevOverrideEnableAi(enabled: Boolean?)
+
+    /** 设置内置播放器开关覆写（null = 恢复默认） */
+    suspend fun setDevOverrideEnablePlayer(enabled: Boolean?)
+
+    /** 设置详细网络与调试日志开关 */
+    suspend fun setDevVerboseLogging(enabled: Boolean)
+
+    /** 设置模拟 BT 原生扩展组件未安装状态 */
+    suspend fun setDevSimulateTorrentUninstalled(enabled: Boolean)
+
+    /** 设置自定义加速镜像前缀覆写 */
+    suspend fun setDevCustomMirrorPrefix(prefix: String)
 }
 
 internal class SettingsRepositoryImpl(
@@ -619,6 +647,52 @@ internal class SettingsRepositoryImpl(
         } catch (e: Exception) {
             AppResult.Error(e, "刷新订阅失败：${e.message}")
         }
+
+    override val developerSettings: Flow<DeveloperSettings> =
+        userPreferences.userPreferences.map { prefs ->
+            DeveloperSettings(
+                isDeveloperModeEnabled = prefs.developerModeEnabled,
+                enableAiOverride = prefs.devOverrideEnableAi,
+                enablePlayerOverride = prefs.devOverrideEnablePlayer,
+                verboseLoggingEnabled = prefs.devVerboseLogging,
+                simulateTorrentUninstalled = prefs.devSimulateTorrentUninstalled,
+                customMirrorPrefixOverride = prefs.devCustomMirrorPrefix,
+            )
+        }
+
+    override val isAiAssistantEnabled: Flow<Boolean> =
+        userPreferences.userPreferences.map { prefs ->
+            prefs.devOverrideEnableAi ?: true
+        }
+
+    override val isInternalPlayerEnabled: Flow<Boolean> =
+        userPreferences.userPreferences.map { prefs ->
+            prefs.devOverrideEnablePlayer ?: true
+        }
+
+    override suspend fun setDeveloperModeEnabled(enabled: Boolean) {
+        userPreferences.setDeveloperModeEnabled(enabled)
+    }
+
+    override suspend fun setDevOverrideEnableAi(enabled: Boolean?) {
+        userPreferences.setDevOverrideEnableAi(enabled)
+    }
+
+    override suspend fun setDevOverrideEnablePlayer(enabled: Boolean?) {
+        userPreferences.setDevOverrideEnablePlayer(enabled)
+    }
+
+    override suspend fun setDevVerboseLogging(enabled: Boolean) {
+        userPreferences.setDevVerboseLogging(enabled)
+    }
+
+    override suspend fun setDevSimulateTorrentUninstalled(enabled: Boolean) {
+        userPreferences.setDevSimulateTorrentUninstalled(enabled)
+    }
+
+    override suspend fun setDevCustomMirrorPrefix(prefix: String) {
+        userPreferences.setDevCustomMirrorPrefix(prefix)
+    }
 
     companion object {
         const val MAX_PLAYBACK_POSITIONS = 50
