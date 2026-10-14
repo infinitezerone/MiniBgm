@@ -13,8 +13,7 @@ val databaseModule =
                     androidContext(),
                     BgmDatabase::class.java,
                     "minibgm.db",
-                ).addMigrations(MIGRATION_6_7, MIGRATION_8_9)
-                .fallbackToDestructiveMigration(dropAllTables = true)
+                ).fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
         }
         single { get<BgmDatabase>().airScheduleDao() }

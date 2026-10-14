@@ -32,14 +32,16 @@ import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
         DanmakuEpisodeOverrideEntity::class,
         TorrentTaskEntity::class,
     ],
-    // v11：磁力/BT 下载任务本地持久化表（TorrentTaskEntity）。现阶段暂不写迁移——破坏性回退（fallbackToDestructiveMigration）。
-    // v10：弹幕分集用户纠正覆盖表。不写迁移——破坏性回退（fallbackToDestructiveMigration）整体清空重建。
-    // v9：AniList↔bgm 映射缓存 + bangumi-data 月切片 ETag。
-    // v8：助手多会话（assistant_sessions 表 + messages.sessionId 列）。
-    version = 11,
-    // 导出 schema JSON 到 core/database/schemas（KmpRoomConventionPlugin 已配 schemaDirectory），
-    // 为后续 Migration 提供可审计的迁移历史
-    exportSchema = true,
+    // 开发测试阶段刻意不做迁移升级：表结构随迭代频繁变动，维护手写 Migration 的收益为负。
+    // 版本号已归零回初始值，schema 变更时直接 bump 该数字，由 fallbackToDestructiveMigration 整体重建。
+    //
+    // 两条硬约束：
+    // 1. 任何实体 / DAO 变更**必须**同时把 version 加一。Room 在版本号未变而结构已变时
+    //    会抛 "Room cannot verify the data integrity"，fallbackToDestructiveMigration 不兜这种情况。
+    // 2. exportSchema 已随之关闭——没有迁移就没有 schema 快照的用途。正式发布需要保全用户数据时，
+    //    先重新打开 exportSchema 从当前结构导出基线，再逐个补 Migration。
+    version = 1,
+    exportSchema = false,
 )
 abstract class BgmDatabase : RoomDatabase() {
     abstract fun airScheduleDao(): AirScheduleDao

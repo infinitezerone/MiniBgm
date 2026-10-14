@@ -52,6 +52,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
   - **网络分流与 ECH 边缘节点保护**：`AssetDownloadService` 必须将 `http://127.0.0.1` 本地回环流分流至流式 `CIO` 引擎（严禁走仅支持 `https://` 且全量内存缓冲的 `EchHttpClientEngine`）；`EchHttpClientEngine` 捕获 `CancellationException` 时仅限在真实请求超时（`TimeoutCancellationException`）下调用 `recordFailure`，严禁因常规协程取消误杀 `EchEdgePool` 黄金边缘节点。
   - **P2P 协议与种子源中立性**：核心应用保持 100% 协议与站点中立，严禁在 `:core:data`、`:core:network` 与 `:feature:subject` 中硬编码特定第三方未授权种子站点域名（如 `mikanani.me` 专有 API 抓取，`ArchitectureRulesTest` 物理红线拦截）；P2P 资源发现统一由用户配置的通用 `PlaybackRuleKind.TORRENT`（BT RSS 规则集）驱动，未配置或未启用任何种子规则时零网络请求。
 - 内置 WebView 与本地代理闭环：自定义 `WebChromeClient` 严禁忽略控制台日志，必须实现 `onConsoleMessage` 透传至 Logcat（ArchitectureRulesTest 物理红线拦截），消灭前端排查盲区；本地反向代理改写 HTML 资源时必须同步改写 `Content-Security-Policy` 响应头中的对应源，杜绝只改响应体导致浏览器安全策略阻断。
+- 数据库版本策略（开发测试阶段）：`BgmDatabase.version` 固定为 **1**，**不写任何 Migration**，结构变更一律靠 `fallbackToDestructiveMigration(dropAllTables = true)` 整体重建；`exportSchema = false`（没有迁移就没有 schema 快照的用途）。**任何实体 / DAO 变更必须同步把 `version` 加一**——Room 在版本号未变而结构已变时会抛 `Room cannot verify the data integrity`，破坏性回退不兜这种情况。正式发布需要保全用户数据之前，先打开 `exportSchema` 从当前结构导出基线，再逐版本补 `Migration` 与防漂移 schema 测试。
 
 ## 规范先例与协同流
 
