@@ -45,13 +45,18 @@ object TorrentRssParser {
             if (rawTitle.isBlank()) continue
 
             val title = unescapeXml(rawTitle)
-            val link = extractTagText(LINK_REGEX, itemBlock)
+            // Feed 的 link / enclosure 普遍把 & 转义成 &amp;，不还原则磁链自带的
+            // Tracker 声明（&amp;tr=...）会被下游当作无效参数丢弃，种子直链也会带着
+            // &amp; 去请求而必然取不到。
+            val link = unescapeXml(extractTagText(LINK_REGEX, itemBlock))
             val enclosureUrl =
-                ENCLOSURE_URL_REGEX
-                    .find(itemBlock)
-                    ?.groupValues
-                    ?.get(1)
-                    .orEmpty()
+                unescapeXml(
+                    ENCLOSURE_URL_REGEX
+                        .find(itemBlock)
+                        ?.groupValues
+                        ?.get(1)
+                        .orEmpty(),
+                )
 
             val infoHash = extractHash(link).ifBlank { extractHash(enclosureUrl) }
             // 合成磁链只保留 infohash：严禁注入硬编码公共 Tracker（会把本机 IP 与

@@ -144,6 +144,45 @@ class TorrentRssParserTest {
     }
 
     @Test
+    fun `parse 还原 Feed 自带磁链的 XML 实体并透传其 Tracker 声明`() {
+        val xml =
+            """
+            <item>
+              <title>Anime - 01 [1080p]</title>
+              <link>magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&amp;tr=udp%3A%2F%2Ffeed.example%3A1337%2Fannounce</link>
+            </item>
+            """.trimIndent()
+
+        val magnet = TorrentRssParser.parse(xml).first().magnetUrl
+
+        assertEquals(
+            "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567" +
+                "&tr=udp%3A%2F%2Ffeed.example%3A1337%2Fannounce",
+            magnet,
+        )
+        assertFalse(magnet.contains("&amp;"), "磁链严禁残留 XML 实体：$magnet")
+    }
+
+    @Test
+    fun `parse 还原种子直链里的 XML 实体`() {
+        val xml =
+            """
+            <item>
+              <title>Anime - 01 [1080p]</title>
+              <enclosure url="https://example.com/0123456789abcdef0123456789abcdef01234567.torrent?x=1&amp;y=2" length="1024" type="application/x-bittorrent" />
+            </item>
+            """.trimIndent()
+
+        val torrentUrl = TorrentRssParser.parse(xml).first().torrentUrl
+
+        assertEquals(
+            "https://example.com/0123456789abcdef0123456789abcdef01234567.torrent?x=1&y=2",
+            torrentUrl,
+        )
+        assertFalse(torrentUrl.contains("&amp;"), "种子直链严禁残留 XML 实体：$torrentUrl")
+    }
+
+    @Test
     fun `parse 对空与残缺输入 fail-open 返回空列表`() {
         assertTrue(TorrentRssParser.parse("").isEmpty())
         assertTrue(TorrentRssParser.parse("   ").isEmpty())

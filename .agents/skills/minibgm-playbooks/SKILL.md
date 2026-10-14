@@ -190,6 +190,7 @@ description: >-
      * 核心应用仅保留底层 P2P 流播与下载能力及通用的 RSS/XML 种子提取器，严禁在底层数据层与详情层写死特定域名；
      * P2P 种子资源发现由用户配置的通用 `PlaybackRuleKind.TORRENT`（`RuleParserType.RSS_TORRENT`）规则驱动；未启用种子源时零网络消耗；
      * `:core:testing:ArchitectureRulesTest` 设物理红线断言，拦截核心层硬编码特定域名。
+     * **RSS 提取出的 URL 必须还原标记实体（`TorrentRssParser` 复盘）**：`link` / `enclosure` 普遍把 `&` 写成 `&amp;`，不还原则磁链自带的 Tracker 声明（`&amp;tr=...`）会被下游当无效参数丢弃、种子直链带着 `&amp;` 去请求必然取不到——与 `MacCmsParser` / `ResolverMediaUrl` 同一教训。本类缺陷无法用词法红线表达（文件里存在 `unescapeXml` 不代表 URL 出站前真的调用过它，这正是本 bug 逃逸的原因），由 `TorrentRssParserTest` 的实体还原用例（精确断言还原后的磁链与直链）守住。
   2. **详情页起播抽屉（SubjectSourcesBottomSheet）现代分层布局**：
      * **顶部 Header**：分集标题与状态；
      * **主起播入口**：“立即起播”Hero 卡片；
