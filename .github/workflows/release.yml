@@ -17,12 +17,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v5
 
-      # 项目固定 JVM toolchain 25（Kotlin jvmTarget 25），CI JDK 必须对齐
-      - name: Set up JDK 25
+      # 项目固定 JVM toolchain 21（Java 21 LTS 工业标准），CI JDK 保持对齐
+      - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: '25'
+          java-version: '21'
 
       # 依赖 + 构建缓存（与 CI 同一套 actions 缓存）
       - name: Set up Gradle

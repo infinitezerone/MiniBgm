@@ -6,8 +6,10 @@ import com.infinitezerone.minibgm.core.model.TorrentStreamState
 import com.infinitezerone.minibgm.core.testing.repository.FakeTorrentStreamEngine
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
@@ -273,6 +275,15 @@ private class StubAssetDownloader(
     private val handler: suspend (url: String, destinationPath: String) -> DownloadState,
 ) : AssetDownloader {
     override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+    override fun download(
+        rawUrl: String,
+        destinationPath: String,
+        customMirrorPrefix: String?,
+    ): Flow<DownloadState> =
+        flow {
+            emit(handler(rawUrl, destinationPath))
+        }
 
     override suspend fun downloadAsset(
         rawUrl: String,

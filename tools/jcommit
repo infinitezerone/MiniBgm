@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# jcommit —— MiniBgm 门禁绑定提交入口 (Verification Harness Interceptor)
+# 在执行任何提交操作前强制通过 jgate 门禁，确保无脏提交
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+echo "[jcommit] 正在通过 jgate 验证当前工作副本..."
+bash tools/jgate
+
+echo "[jcommit] 门禁全绿，准备提交..."
+jj commit "$@"

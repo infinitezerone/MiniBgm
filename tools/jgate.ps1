@@ -1,61 +1,35 @@
-# tools/jgate.ps1 -- Windows PowerShell wrapper for tools/jgate
-# Automatically detects bash.exe from Scoop or Git for Windows and forwards arguments.
+# tools/jgate.ps1 -- Windows PowerShell launcher for native Rust jgate CLI
 $ErrorActionPreference = "Stop"
-
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
-# 1. Detect bash executable
-$bashExe = $null
-
-# Priority 1: bash in PATH
-$cmd = Get-Command bash -ErrorAction SilentlyContinue
-if ($cmd -and $cmd.Source) {
-    $bashExe = $cmd.Source
-}
-
-# Priority 2: Scoop Git
-if (-not $bashExe) {
-    $scoopGitBash = "D:\Applications\Scoop\apps\git\current\bin\bash.exe"
-    if (Test-Path $scoopGitBash) {
-        $bashExe = $scoopGitBash
-    }
-}
-
-# Priority 3: Common Git install paths
-if (-not $bashExe) {
-    $candidates = @(
-        "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe",
-        "$env:ProgramFiles\Git\bin\bash.exe",
-        "${env:ProgramFiles(x86)}\Git\bin\bash.exe"
-    )
-    foreach ($c in $candidates) {
-        if (Test-Path $c) {
-            $bashExe = $c
-            break
-        }
-    }
-}
-
-if (-not $bashExe) {
-    Write-Error "[jgate.ps1] bash.exe not found. Please ensure Git for Windows is installed or in PATH."
-    exit 1
-}
-
-# 2. Pre-check / build native libraries
-$buildNativePs1 = Join-Path $PSScriptRoot "build-native.ps1"
-if (Test-Path $buildNativePs1) {
-    Write-Host "[jgate.ps1] Ensuring native libraries are ready..." -ForegroundColor Cyan
-    & $buildNativePs1
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "[jgate.ps1] Prebuilt native libraries verification/build failed."
-        exit $LASTEXITCODE
-    }
-}
-
-# 3. Run tools/jgate
 Push-Location $repoRoot
 try {
-    & $bashExe tools/jgate @args
+    $bin = Join-Path $repoRoot "target\release\jgate.exe"
+    $needBuild = $false
+
+    if (-not (Test-Path $bin)) {
+        $needBuild = $true
+    } else {
+        $srcFiles = Get-ChildItem -Path (Join-Path $repoRoot "crates\jgate-cli") -Recurse -File -ErrorAction SilentlyContinue
+        $binTime = (Get-Item $bin).LastWriteTime
+        foreach ($f in $srcFiles) {
+            if ($f.LastWriteTime -gt $binTime) {
+                $needBuild = $true
+                break
+            }
+        }
+    }
+
+    if ($needBuild) {
+        Write-Host "[jgate.ps1] Building native jgate CLI..." -ForegroundColor Cyan
+        cargo build --release -p jgate --quiet
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "[jgate.ps1] Failed to compile jgate CLI."
+            exit $LASTEXITCODE
+        }
+    }
+
+    & $bin @args
     exit $LASTEXITCODE
 } finally {
     Pop-Location

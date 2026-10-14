@@ -12,14 +12,15 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 ## 构建与验证
 
-提交前唯一入口（含"绿≠测过"的 XML 真实性校验）：
+提交前唯一入口（含"绿≠测过"的 XML 真实性校验与提交拦截）：
 
 ```bash
-# Windows: .\tools\jgate.ps1  |  Linux/CI: bash tools/jgate
-# 流程：素材体积 → Rust 门禁 → spotlessApply → 架构红线 → 触及模块测试 → :app:assembleDebug → 结果校验
+# 门禁校验：Windows: .\tools\jgate.ps1  |  Linux/CI: bash tools/jgate
+# 门禁绑定提交（拦截器）：Windows: .\tools\jcommit.ps1  |  Linux/CI: bash tools/jcommit -m "feat: ..."
+# 流程：Conventional Commits 预检 → 素材体积 → Rust 门禁 → spotlessApply → 架构红线 → 触及模块测试 → :app:assembleDebug → 结果校验 → 结构化诊断
 ```
 
-- 目标按改动自动推断（工作副本 `@` → 最近提交 `@-`）；触及底层基础层（`:core:model/data/network/database/datastore`、`build-logic`、根配置）自动提升为全量。日常提交不跑 release；编码中间态秒级红线自检使用 `.\tools\quick-check.ps1`。
+- 目标按改动自动推断（工作副本 `@` → 最近提交 `@-`）；支持 `bash tools/jgate --stack`（`-s`）校验当前本地 JJ 变更栈（`trunk()..@`）；触及底层基础层（`:core:model/common/data/network/database/datastore/designsystem/navigation`、`build-logic`、根配置）自动提升为全量；门禁失败自动打印自愈诊断卡并输出结构化诊断报告（`build/reports/jgate/diagnostic.json`）辅助 Agent 自主自愈。日常提交不跑 release；编码中间态秒级红线自检与定向模块微验证（Micro-Eval）使用 `.\tools\quick-check.ps1`（支持传入模块如 `core/network`，`-o` 仅测目标）。推荐使用 `tools/jcommit` 提交代码，强制先验后提。
 - **本机减负开关（两处都显式、都不静默，且会在 jgate 输出里标注）**：① 纯 `*.md` / `docs/` / `.agents/` / `.github/` / LICENSE 改动会自动跳过装配门 `:app:assembleDebug`（架构红线照跑）——这是**显式白名单**而非"没落到模块目录就跳"，`native/`、`tools/`、`crates/` 等真能影响产物的路径仍照常跑装配门；② `bash tools/jgate --fast`（等价 `-Pminibgm.skipScreenshots=true`）跳过截图测试，实测省掉占单测耗时 **43%（59s/137s，仅 15 例）** 的 Roborazzi/Robolectric NATIVE 冷启动开销，但**本机绿 != CI 绿**，提交前必须复跑一次不带 `--fast` 的。
 - 单元测试配置（测试 JVM=21、`-Proborazzi.record`、`-Pminibgm.skipScreenshots`）的唯一真源是 `build-logic` 的 `configureAndroidUnitTests()`：带 Robolectric/Roborazzi 的模块直接调用，禁止再各自手抄 `tasks.withType<Test>` 块（历史上三份副本各自漂移）。
 - 素材体积门：图片单张 > 200 KB 或合计 > 1 MB 硬拦（必须压为 800px WebP）。jj 不运行 git 钩子，门禁由 jgate 兜底。
@@ -52,6 +53,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
   - **网络分流与 ECH 边缘节点保护**：`AssetDownloadService` 必须将 `http://127.0.0.1` 本地回环流分流至流式 `CIO` 引擎（严禁走仅支持 `https://` 且全量内存缓冲的 `EchHttpClientEngine`）；`EchHttpClientEngine` 捕获 `CancellationException` 时仅限在真实请求超时（`TimeoutCancellationException`）下调用 `recordFailure`，严禁因常规协程取消误杀 `EchEdgePool` 黄金边缘节点。
   - **P2P 协议与种子源中立性**：核心应用保持 100% 协议与站点中立，严禁在 `:core:data`、`:core:network` 与 `:feature:subject` 中硬编码特定第三方未授权种子站点域名（如 `mikanani.me` 专有 API 抓取，`ArchitectureRulesTest` 物理红线拦截）；P2P 资源发现统一由用户配置的通用 `PlaybackRuleKind.TORRENT`（BT RSS 规则集）驱动，未配置或未启用任何种子规则时零网络请求。
 - 内置 WebView 与本地代理闭环：自定义 `WebChromeClient` 严禁忽略控制台日志，必须实现 `onConsoleMessage` 透传至 Logcat（ArchitectureRulesTest 物理红线拦截），消灭前端排查盲区；本地反向代理改写 HTML 资源时必须同步改写 `Content-Security-Policy` 响应头中的对应源，杜绝只改响应体导致浏览器安全策略阻断。
+- 资产下载与落盘互斥：通用资产下载契约（`AssetDownloader`）必须面向请求作用域冷流（`Flow<DownloadState>`）设计，严禁单例持有全局活跃下载状态或暴露无参全局 `cancelDownload` 误伤其他并发任务；调用方业务层（如 `UpdateRepository`）自行持有专有任务 `Job` 与 `StateFlow`；落盘同一 `destinationPath` 必须受路径级 `Mutex` 互斥保护，杜绝并发写入损坏中转文件（`.tmp`）。
 - 数据库版本策略（开发测试阶段）：`BgmDatabase.version` 固定为 **1**，**不写任何 Migration**，结构变更一律靠 `fallbackToDestructiveMigration(dropAllTables = true)` 整体重建；`exportSchema = false`（没有迁移就没有 schema 快照的用途）。**任何实体 / DAO 变更必须同步把 `version` 加一**——Room 在版本号未变而结构已变时会抛 `Room cannot verify the data integrity`，破坏性回退不兜这种情况。正式发布需要保全用户数据之前，先打开 `exportSchema` 从当前结构导出基线，再逐版本补 `Migration` 与防漂移 schema 测试。
 
 ## 规范先例与协同流

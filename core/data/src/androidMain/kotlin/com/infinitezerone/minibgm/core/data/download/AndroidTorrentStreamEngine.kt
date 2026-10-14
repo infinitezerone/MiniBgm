@@ -11,6 +11,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -165,73 +168,69 @@ class AndroidTorrentStreamEngine internal constructor(
 
                 _streamState.value = TorrentStreamState.InstallingPlugin(0f)
 
-                val progressJob =
-                    scope.launch {
-                        downloader.downloadState.collect { state ->
-                            if (state is DownloadState.Downloading) {
-                                val total = state.progress.totalBytes
-                                val ratio =
-                                    if (total > 0L) {
-                                        (state.progress.bytesDownloaded.toFloat() / total.toFloat()).coerceIn(0f, 0.99f)
-                                    } else {
-                                        0f
+                var lastErrMsg = "BT 原生扩展下载未完成"
+                var downloaded = false
+
+                if (debugSimulateUninstalled && extractDebugBundledPlugin(abi, stagingFile)) {
+                    logger.i { "开发者调试模拟态：已从本地 APK 提取 BT 原生扩展 ($abi) 至动态装载目录" }
+                    downloaded = true
+                }
+
+                if (!downloaded) {
+                    for (downloadUrl in candidateReleaseUrls) {
+                        cleanStagingLeftovers(stagingFile)
+                        logger.i { "开始按需下载 BT 原生扩展 ($abi, v$currentVersion): $downloadUrl" }
+                        val dlState =
+                            downloader
+                                .download(downloadUrl, stagingFile.absolutePath)
+                                .onEach { state ->
+                                    if (state is DownloadState.Downloading) {
+                                        val total = state.progress.totalBytes
+                                        val ratio =
+                                            if (total > 0L) {
+                                                (state.progress.bytesDownloaded.toFloat() / total.toFloat()).coerceIn(0f, 0.99f)
+                                            } else {
+                                                0f
+                                            }
+                                        _streamState.value = TorrentStreamState.InstallingPlugin(ratio)
                                     }
-                                _streamState.value = TorrentStreamState.InstallingPlugin(ratio)
-                            }
+                                }.filter { it is DownloadState.Completed || it is DownloadState.Failed }
+                                .first()
+
+                        if (dlState is DownloadState.Completed && stagingFile.isFile && stagingFile.length() > 0L) {
+                            downloaded = true
+                            break
                         }
+                        lastErrMsg = (dlState as? DownloadState.Failed)?.message ?: lastErrMsg
                     }
+                }
 
-                try {
-                    var lastErrMsg = "BT 原生扩展下载未完成"
-                    var downloaded = false
+                if (!downloaded) {
+                    _streamState.value = TorrentStreamState.Error(lastErrMsg)
+                    return@withLock Result.failure(IllegalStateException(lastErrMsg))
+                }
 
-                    if (debugSimulateUninstalled && extractDebugBundledPlugin(abi, stagingFile)) {
-                        logger.i { "开发者调试模拟态：已从本地 APK 提取 BT 原生扩展 ($abi) 至动态装载目录" }
-                        downloaded = true
-                    }
+                if (targetSoFile.exists()) {
+                    targetSoFile.setWritable(true)
+                    targetSoFile.delete()
+                }
+                if (!stagingFile.renameTo(targetSoFile)) {
+                    stagingFile.copyTo(targetSoFile, overwrite = true)
+                    stagingFile.delete()
+                }
 
-                    if (!downloaded) {
-                        for (downloadUrl in candidateReleaseUrls) {
-                            cleanStagingLeftovers(stagingFile)
-                            logger.i { "开始按需下载 BT 原生扩展 ($abi, v$currentVersion): $downloadUrl" }
-                            val dlState = downloader.downloadAsset(downloadUrl, stagingFile.absolutePath)
-                            if (dlState is DownloadState.Completed && stagingFile.isFile && stagingFile.length() > 0L) {
-                                downloaded = true
-                                break
-                            }
-                            lastErrMsg = (dlState as? DownloadState.Failed)?.message ?: lastErrMsg
-                        }
-                    }
+                // Android 10+ (API 29+) W^X 安全约束：动态加载的私有目录 .so 必须标记为只读
+                targetSoFile.setReadOnly()
 
-                    if (!downloaded) {
-                        _streamState.value = TorrentStreamState.Error(lastErrMsg)
-                        return@withLock Result.failure(IllegalStateException(lastErrMsg))
-                    }
-
-                    if (targetSoFile.exists()) {
-                        targetSoFile.setWritable(true)
-                        targetSoFile.delete()
-                    }
-                    if (!stagingFile.renameTo(targetSoFile)) {
-                        stagingFile.copyTo(targetSoFile, overwrite = true)
-                        stagingFile.delete()
-                    }
-
-                    // Android 10+ (API 29+) W^X 安全约束：动态加载的私有目录 .so 必须标记为只读
-                    targetSoFile.setReadOnly()
-
-                    if (ensureVersionedPluginLoaded(currentVersion) &&
-                        runCatching { nativeBridge.isAvailable() }.getOrDefault(false)
-                    ) {
-                        _streamState.value = TorrentStreamState.Idle
-                        logger.i { "BT 原生扩展动态装载成功 (v$currentVersion): ${targetSoFile.absolutePath}" }
-                        Result.success(Unit)
-                    } else {
-                        _streamState.value = TorrentStreamState.Error("原生扩展校验或装载失败")
-                        Result.failure(IllegalStateException("BT 原生流化库装载失败"))
-                    }
-                } finally {
-                    progressJob.cancel()
+                if (ensureVersionedPluginLoaded(currentVersion) &&
+                    runCatching { nativeBridge.isAvailable() }.getOrDefault(false)
+                ) {
+                    _streamState.value = TorrentStreamState.Idle
+                    logger.i { "BT 原生扩展动态装载成功 (v$currentVersion): ${targetSoFile.absolutePath}" }
+                    Result.success(Unit)
+                } else {
+                    _streamState.value = TorrentStreamState.Error("原生扩展校验或装载失败")
+                    Result.failure(IllegalStateException("BT 原生流化库装载失败"))
                 }
             }
         }

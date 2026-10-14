@@ -75,17 +75,20 @@ description: >-
 ---
 
 ## 剧本 6：快速反馈与最终闭环（Verification Workflow）
-* **编码中间态快速自检（秒级）**：
+* **编码中间态快速自检与微验证（秒级 Micro-Eval）**：
   ```powershell
-  .\tools\quick-check.ps1          # 跑 17 条架构红线自动化断言
-  .\tools\quick-check.ps1 -Format  # 自动执行 spotlessApply 并查红线
+  .\tools\quick-check.ps1                        # 跑 20+ 条架构红线自动化断言
+  .\tools\quick-check.ps1 -Format                # 自动执行 spotlessApply 并查红线
+  .\tools\quick-check.ps1 -Modules core/network  # 跑红线 + network 模块定向单测（极速微验证）
+  .\tools\quick-check.ps1 -Only core/data        # 仅测目标模块（跳过红线，极限循环）
   ```
 * **提交前唯一门禁（物理锁死）**：
   ```powershell
-  .\tools\jgate.ps1                # 完整门禁（素材体积、Spotless、红线、模块测试、XML校验、assembleDebug）
-  .\tools\jgate.ps1 --fast         # 跳过截图测试（本机减负；提交前必须复跑不带 --fast 的一次）
+  .\tools\jgate.ps1                              # 完整门禁（CommitLint、素材、Spotless、红线、测试、XML校验、assembleDebug、结构化诊断）
+  .\tools\jgate.ps1 --stack                      # 验证本地变更栈（trunk()..@ 栈内逐个提交格式与全栈改动汇总）
+  .\tools\jgate.ps1 --fast                       # 跳过截图测试（本机减负；提交前必须复跑不带 --fast 的一次）
   ```
-  两处减负都是**自动或显式**且会在输出里标注，绝不静默：纯 `*.md`/`docs/`/`.agents/`/`.github/` 改动会自动跳过 `:app:assembleDebug`（架构红线照跑，装配门对这类改动零信息量；`native/`、`tools/` 仍跑），`--fast` 才会跳过截图测试。截图测试实测占单测耗时 43%（59s/137s，15 例），省的是 Robolectric NATIVE 图形栈每个类的冷启动。
+  两处减负都是**自动或显式**且会在输出里标注，绝不静默：纯 `*.md`/`docs/`/`.agents/`/`.github/` 改动会自动跳过 `:app:assembleDebug`（架构红线照跑，装配门对这类改动零信息量；`native/`、`tools/` 仍跑），`--fast` 才会跳过截图测试。截图测试实测占单测耗时 43%（59s/137s，15 例），省的是 Robolectric NATIVE 图形栈每个类的冷启动。门禁若有拦截，自动在 `build/reports/jgate/diagnostic.json` 产出结构化机器诊断供自愈。
 * **单测配置的单一真源**：带 Robolectric/Roborazzi 的模块一律调用 build-logic 的 `configureAndroidUnitTests()`（Java 21 launcher + `-Proborazzi.record=true` 录制 + `-Pminibgm.skipScreenshots` 跳过），禁止再各自手抄 `tasks.withType<Test>` 块——三份副本曾是各自漂移的温床。
 - **UI 自查无需设备（Roborazzi + Robolectric）**：改 Compose 面板/控制层后写截图测试自查，输出到 `src/test/snapshots/images/` 再读图检查。要点：模块需接 roborazzi 四件套 + `testOptions.unitTests.isIncludeAndroidResources` + Test 任务 `roborazzi.test.record=true` 与 JDK 21 launcher 由 `configureAndroidUnitTests()` 统一提供（模块侧只写这一行，实现在 `build-logic/convention/.../AndroidUnitTest.kt`；测试写法参照 `feature/subject/PlayerPanelsScreenshotTest.kt`）；`@Config(qualifiers = "w420dp-h1600dp")` 控制视口尺寸（默认窗口仅 320dp 宽，横排按钮会溢出"消失"）；深色背景模拟视频底，否则白色控制图标"隐形"；LazyColumn 跨分组 items key 必须唯一。
 
@@ -182,5 +185,20 @@ description: >-
      * **P2P 原画与字幕组资源**：按字幕组归类的种子资源卡片，支持“边下边播”与“离线缓存”；未配置规则时引导用户配置；
      * **辅助工具与外部跳转**：AI 找源、外部跳转与规则管理入口。
 
+---
 
-
+## 剧本 12：通用资产下载与落盘互斥规范（Asset Download & File Mutex）
+* **规范先例**：`AssetDownloader.kt`、`AndroidAssetDownloader.kt` 与 `UpdateRepository.kt`
+* **根因警示（来自共享单例 StateFlow 进度踩踏与 RandomAccessFile 冲突复盘）**：
+  * 单例模式下若在接口暴露全局 `StateFlow<DownloadState>`，所有通过该单例并发执行的下载（如更新 APK、BT 原生扩展 .so、Torrent 种子）会互相冲刷进度状态；
+  * 若提供无参数的全局 `cancelDownload()`，一处的取消调用会意外重置全局状态为 `Idle`，造成伪取消或误伤其他并发下载任务；
+  * 若多个并发协程指向相同的目标落盘路径，由于缺乏路径互斥控制，多个协程会同时打开相同的 `.tmp` 中转文件并发写入，导致文件被严重损坏。
+* **物理防线与操作规范**：
+  1. **请求作用域冷流（Request-scoped Cold Flow）**：
+     * `AssetDownloader.download(...)` 返回冷流 `Flow<DownloadState>`，调用方各取所需、天然隔离；
+     * 协程生命周期驱动取消：调用方 `Job` 取消时，Flow 管道触发 `finally` 自动关闭并释放底层的网络连接与文件句柄，无需脆弱的全局无参取消方法。
+  2. **路径级并发互斥锁（Path-Level Mutex）**：
+     * `AndroidAssetDownloader` 维护 `pathLocks = ConcurrentHashMap<String, Mutex>()`；
+     * 进入下载执行前必须获取目标规范化路径（`canonicalPath`）对应的 `Mutex.withLock`，确保相同目标文件的写入天然串行化，杜绝 `RandomAccessFile` 并发冲突。
+  3. **业务层自治状态与任务**：
+     * 业务门面（如 `UpdateRepositoryImpl`）根据自身业务需要维护专属的 `_downloadState` 与 `downloadJob`，对自身任务的生命周期与取消负全责，不向底层基础设施转嫁业务状态。

@@ -290,8 +290,10 @@ class DanmakuRepositoryImpl(
     /**
      * 番剧标题相似度：归一化后互为包含得满分，否则按字符集重合度粗略估。
      * 只用于多个集数相同候选之间的破平，不追求语义级精确。
+     *
+     * 可见性为 internal 而非 private：纯字符串运算、不依赖实例状态，便于单测直接钉住匹配算法。
      */
-    private fun titleSimilarity(
+    internal fun titleSimilarity(
         a: String,
         b: String,
     ): Double {
@@ -304,7 +306,10 @@ class DanmakuRepositoryImpl(
         return leftChars.intersect(rightChars).size.toDouble() / maxOf(leftChars.size, rightChars.size)
     }
 
-    private fun episodeNameBonus(
+    /**
+     * 分集名加成。同样为可测性放开为 internal。
+     */
+    internal fun episodeNameBonus(
         episodeTitle: String,
         episodeName: String?,
     ): Double {

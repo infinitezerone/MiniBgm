@@ -6,11 +6,17 @@ on:
     paths-ignore:
       - '**.md'
       - '.gitignore'
+      - '.gitattributes'
+      - 'docs/**'
+      - 'LICENSE'
   pull_request:
     branches: [ main, master ]
     paths-ignore:
       - '**.md'
       - '.gitignore'
+      - '.gitattributes'
+      - 'docs/**'
+      - 'LICENSE'
   workflow_dispatch:
 
 # 同分支新推送取消仍在跑的旧任务，避免排队浪费
@@ -27,12 +33,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v5
 
-      # 项目固定 JVM toolchain 25（Kotlin jvmTarget 25），CI JDK 必须对齐
-      - name: Set up JDK 25
+      # 项目固定 JVM toolchain 21（Java 21 LTS 工业标准），CI JDK 保持对齐
+      - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: '25'
+          java-version: '21'
 
       # 依赖 + 构建缓存（含 build-cache-1）：非 main 分支只读，避免 PR 污染缓存
       - name: Set up Gradle
@@ -131,11 +137,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v5
 
-      - name: Set up JDK 25
+      # 项目固定 JVM toolchain 21（Java 21 LTS 工业标准），CI JDK 保持对齐
+      - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: '25'
+          java-version: '21'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4

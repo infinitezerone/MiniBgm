@@ -431,4 +431,49 @@ class DanmakuRepositoryTest {
             val result = repo.get(title = "进击的巨人", episodeSort = 1f)
             assertTrue(result.items.isEmpty())
         }
+
+    // ---- 匹配算法：标题相似度与分集名加成 ----
+
+    @Test
+    fun `标题相似度对包含关系判定为完全匹配`() {
+        val repo = repoWith(FakeDanmakuPageFetchService(emptyMap()))
+
+        assertEquals(1.0, repo.titleSimilarity("葬送的芙莉莲", "葬送的芙莉莲"), 0.0)
+        assertEquals(1.0, repo.titleSimilarity("葬送的芙莉莲", "葬送的芙莉莲 第二季"), 0.0)
+        assertEquals(1.0, repo.titleSimilarity("葬送的芙莉莲 [1080p]", "葬送的芙莉莲"), 0.0)
+    }
+
+    @Test
+    fun `标题相似度遇到空串直接归零`() {
+        val repo = repoWith(FakeDanmakuPageFetchService(emptyMap()))
+
+        assertEquals(0.0, repo.titleSimilarity("", "葬送的芙莉莲"), 0.0)
+        assertEquals(0.0, repo.titleSimilarity("葬送的芙莉莲", "  "), 0.0)
+    }
+
+    @Test
+    fun `标题相似度在无包含关系时按字符交集比例计算`() {
+        val repo = repoWith(FakeDanmakuPageFetchService(emptyMap()))
+
+        // 归一化后 {a,b,c} 与 {a,d} → 交集 1 / 最大集合 3
+        assertEquals(1.0 / 3.0, repo.titleSimilarity("abc", "ad"), 1e-9)
+        assertEquals(0.0, repo.titleSimilarity("abc", "xyz"), 0.0)
+    }
+
+    @Test
+    fun `分集名加成仅在标题包含且名称足够长时生效`() {
+        val repo = repoWith(FakeDanmakuPageFetchService(emptyMap()))
+
+        assertEquals(0.5, repo.episodeNameBonus("第01话 结束与开始", "结束与开始"), 0.0)
+        assertEquals(0.5, repo.episodeNameBonus("第 01 话 结束与开始", " 结束与开始 "), 0.0)
+    }
+
+    @Test
+    fun `分集名缺失或过短时不给加成`() {
+        val repo = repoWith(FakeDanmakuPageFetchService(emptyMap()))
+
+        assertEquals(0.0, repo.episodeNameBonus("第01话 结束与开始", "不存在的分集名"), 0.0)
+        assertEquals(0.0, repo.episodeNameBonus("第01话 结束与开始", null), 0.0)
+        assertEquals(0.0, repo.episodeNameBonus("第01话 结束与开始", "1"), 0.0)
+    }
 }

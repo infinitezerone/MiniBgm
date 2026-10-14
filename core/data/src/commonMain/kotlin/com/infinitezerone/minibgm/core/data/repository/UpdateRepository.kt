@@ -6,8 +6,13 @@ import com.infinitezerone.minibgm.core.data.download.AssetDownloader
 import com.infinitezerone.minibgm.core.model.AppUpdateInfo
 import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.network.UpdateService
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.job
 
 interface UpdateRepository {
     /**
@@ -58,11 +63,11 @@ internal class UpdateRepositoryImpl(
     private val apkInstaller: ApkInstaller? = null,
     private val updatesDirectoryProvider: (() -> String)? = null,
 ) : UpdateRepository {
-    private val fallbackState = MutableStateFlow<DownloadState>(DownloadState.Idle)
+    private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
     private var lastCompletedApkPath: String? = null
+    private var downloadJob: Job? = null
 
-    override val downloadState: StateFlow<DownloadState>
-        get() = assetDownloader?.downloadState ?: fallbackState
+    override val downloadState: StateFlow<DownloadState> = _downloadState.asStateFlow()
 
     override suspend fun checkForUpdate(currentVersionName: String): AppResult<AppUpdateInfo> =
         runCatching {
@@ -113,20 +118,44 @@ internal class UpdateRepositoryImpl(
         val downloader = assetDownloader ?: return DownloadState.Failed("未配置下载器")
         val dir = updatesDirectoryProvider?.invoke() ?: ""
         val destinationPath = if (dir.isNotBlank()) "$dir/minibgm-v$targetVersion.apk" else "minibgm-v$targetVersion.apk"
-        val result =
-            downloader.downloadAsset(
-                rawUrl = downloadUrl,
-                destinationPath = destinationPath,
-                customMirrorPrefix = customMirrorPrefix,
-            )
-        if (result is DownloadState.Completed) {
-            lastCompletedApkPath = result.filePath
+
+        cancelDownload()
+
+        return coroutineScope {
+            val currentJob = coroutineContext.job
+            downloadJob = currentJob
+            try {
+                var finalState: DownloadState = DownloadState.Idle
+                downloader
+                    .download(
+                        rawUrl = downloadUrl,
+                        destinationPath = destinationPath,
+                        customMirrorPrefix = customMirrorPrefix,
+                    ).collect { state ->
+                        _downloadState.value = state
+                        if (state is DownloadState.Completed || state is DownloadState.Failed) {
+                            finalState = state
+                        }
+                    }
+                if (finalState is DownloadState.Completed) {
+                    lastCompletedApkPath = (finalState as DownloadState.Completed).filePath
+                }
+                finalState
+            } catch (e: CancellationException) {
+                _downloadState.value = DownloadState.Idle
+                throw e
+            } finally {
+                if (downloadJob == currentJob) {
+                    downloadJob = null
+                }
+            }
         }
-        return result
     }
 
     override fun cancelDownload() {
-        assetDownloader?.cancelDownload()
+        downloadJob?.cancel()
+        downloadJob = null
+        _downloadState.value = DownloadState.Idle
     }
 
     override fun canRequestPackageInstalls(): Boolean = apkInstaller?.canRequestPackageInstalls() ?: true
