@@ -8,12 +8,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -57,8 +54,8 @@ import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomS
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.DeveloperSettings
 import com.infinitezerone.minibgm.feature.user.R
-import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 import kotlinx.coroutines.launch
+import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
  * 现代应用内开发者调试抽屉（In-App Developer Panel / Debug Drawer）。

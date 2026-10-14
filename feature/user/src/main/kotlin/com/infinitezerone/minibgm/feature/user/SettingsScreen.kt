@@ -769,34 +769,12 @@ fun SettingsScreenContent(
                 )
             }
 
-            if (onPlaybackRulesClick != null) {
-                item(key = "settings_playback") {
-                    PlaybackSettingsCard(
-                        pipEnabled = pipEnabled,
-                        onTogglePipEnabled = onTogglePipEnabled,
-                        onOpenPlaybackRules = onPlaybackRulesClick,
-                        onOpenDanmakuSettings = { showDanmakuSettingsDialog = true },
-                        danmakuSummary =
-                            if (uiState.danmakuConfig.endpoint.isNotBlank()) {
-                                stringResource(R.string.feature_user_settings_danmaku_desc_custom, uiState.danmakuConfig.endpoint)
-                            } else if (uiState.danmakuConfig.appId.isNotBlank()) {
-                                stringResource(R.string.feature_user_settings_danmaku_desc_configured, uiState.danmakuConfig.appId)
-                            } else {
-                                stringResource(R.string.feature_user_settings_danmaku_desc_default)
-                            },
-                    )
-                }
-            }
-
-            item(key = "settings_preference") {
-                PreferenceSettingsCard(
+            item(key = "settings_playback_content") {
+                PlaybackAndContentSettingsCard(
+                    pipEnabled = pipEnabled,
+                    onTogglePipEnabled = onTogglePipEnabled,
                     showRestrictedContent = showRestrictedContent,
                     onToggleShowRestrictedContent = onToggleShowRestrictedContent,
-                )
-            }
-
-            item(key = "settings_sync_reminder") {
-                SyncAndReminderSettingsCard(
                     syncInterval = uiState.syncInterval,
                     onOpenSyncDialog = {
                         coroutineScope.launch {
@@ -814,6 +792,21 @@ fun SettingsScreenContent(
                             }
                         }
                     },
+                    onOpenPlaybackRules = onPlaybackRulesClick,
+                    onOpenDanmakuSettings = { showDanmakuSettingsDialog = true },
+                    danmakuSummary =
+                        if (uiState.danmakuConfig.endpoint.isNotBlank()) {
+                            uiState.danmakuConfig.endpoint
+                        } else if (uiState.danmakuConfig.appId.isNotBlank()) {
+                            stringResource(R.string.feature_user_settings_danmaku_desc_configured)
+                        } else {
+                            null
+                        },
+                )
+            }
+
+            item(key = "settings_reminder") {
+                ReminderSettingsCard(
                     airingReminderEnabled = uiState.airingReminderEnabled,
                     onToggleAiringReminder = onToggleAiringReminder,
                     hasNotificationPermission = hasNotificationPermission,
@@ -848,8 +841,8 @@ fun SettingsScreenContent(
                 )
             }
 
-            item(key = "settings_ai_storage") {
-                AiAndStorageSettingsCard(
+            item(key = "settings_data_storage") {
+                DataAndStorageSettingsCard(
                     aiConfig = uiState.aiConfig,
                     onOpenAiSettingsDialog =
                         if (enableAiConfig) {
@@ -859,7 +852,6 @@ fun SettingsScreenContent(
                         },
                     onClearCache = onClearCache,
                     isClearingCache = isClearingCache,
-                    onOpenCrashLog = onOpenCrashLog,
                 )
             }
 
@@ -871,65 +863,71 @@ fun SettingsScreenContent(
                 }
             }
 
-            item(key = "settings_about_support") {
-                AboutAndSupportSettingsCard(
-                    isLoggedIn = uiState.isLoggedIn,
-                    activeProfile = uiState.activeProfile,
-                    savedAccountsCount = uiState.savedAccounts.size,
+            item(key = "settings_about") {
+                AboutSettingsCard(
                     onOpenWebUrl = onOpenWebUrl,
                     isCheckingUpdate = uiState.isCheckingUpdate,
                     onCheckForUpdate = onCheckForUpdate,
                     onVersionClick = onVersionClick,
-                    onLogoutCurrentClick = {
-                        val currentProfile = uiState.activeProfile
-                        val message =
-                            if (currentProfile != null) {
-                                context.getString(
-                                    R.string.feature_user_logout_confirm_named,
-                                    currentProfile.displayName,
-                                    currentProfile.username,
-                                )
-                            } else {
-                                context.getString(R.string.feature_user_logout_current_confirm)
-                            }
-                        coroutineScope.launch {
-                            val confirmed =
-                                overlayHostState.await(
-                                    ConfirmDialogAction(
-                                        title = context.getString(R.string.feature_user_logout_current_title),
-                                        message = message,
-                                        confirmText = context.getString(R.string.feature_user_logout_action),
-                                        isDestructive = true,
-                                        icon = BgmIcons.Logout,
-                                    ),
-                                )
-                            if (confirmed) {
-                                onLogoutCurrent()
-                            }
-                        }
-                    },
-                    onLogoutAllClick = {
-                        coroutineScope.launch {
-                            val confirmed =
-                                overlayHostState.await(
-                                    ConfirmDialogAction(
-                                        title = context.getString(R.string.feature_user_logout_all_title),
-                                        message =
-                                            context.getString(
-                                                R.string.feature_user_logout_all_confirm,
-                                                uiState.savedAccounts.size,
-                                            ),
-                                        confirmText = context.getString(R.string.feature_user_logout_all_action),
-                                        isDestructive = true,
-                                        icon = BgmIcons.Delete,
-                                    ),
-                                )
-                            if (confirmed) {
-                                onLogoutAll()
-                            }
-                        }
-                    },
                 )
+            }
+
+            if (uiState.isLoggedIn) {
+                item(key = "settings_account") {
+                    AccountSettingsCard(
+                        activeProfile = uiState.activeProfile,
+                        savedAccountsCount = uiState.savedAccounts.size,
+                        onLogoutCurrentClick = {
+                            val currentProfile = uiState.activeProfile
+                            val message =
+                                if (currentProfile != null) {
+                                    context.getString(
+                                        R.string.feature_user_logout_confirm_named,
+                                        currentProfile.displayName,
+                                        currentProfile.username,
+                                    )
+                                } else {
+                                    context.getString(R.string.feature_user_logout_current_confirm)
+                                }
+                            coroutineScope.launch {
+                                val confirmed =
+                                    overlayHostState.await(
+                                        ConfirmDialogAction(
+                                            title = context.getString(R.string.feature_user_logout_current_title),
+                                            message = message,
+                                            confirmText = context.getString(R.string.feature_user_logout_action),
+                                            isDestructive = true,
+                                            icon = BgmIcons.Logout,
+                                        ),
+                                    )
+                                if (confirmed) {
+                                    onLogoutCurrent()
+                                }
+                            }
+                        },
+                        onLogoutAllClick = {
+                            coroutineScope.launch {
+                                val confirmed =
+                                    overlayHostState.await(
+                                        ConfirmDialogAction(
+                                            title = context.getString(R.string.feature_user_logout_all_title),
+                                            message =
+                                                context.getString(
+                                                    R.string.feature_user_logout_all_confirm,
+                                                    uiState.savedAccounts.size,
+                                                ),
+                                            confirmText = context.getString(R.string.feature_user_logout_all_action),
+                                            isDestructive = true,
+                                            icon = BgmIcons.Delete,
+                                        ),
+                                    )
+                                if (confirmed) {
+                                    onLogoutAll()
+                                }
+                            }
+                        },
+                    )
+                }
             }
         }
     }

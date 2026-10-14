@@ -70,39 +70,27 @@
 
     <!-- 5. 设置页：外观与播放 -->
     <string name="feature_user_section_appearance">外观显示</string>
-    <string name="feature_user_settings_dynamic_color_title">动态取色 (Material You)</string>
-    <string name="feature_user_settings_dynamic_color_desc">跟随系统壁纸配色生成主题</string>
-    <string name="feature_user_settings_amoled_title">AMOLED 纯黑模式</string>
-    <string name="feature_user_settings_amoled_desc">深色模式下使用纯黑表面，更省电更沉浸</string>
-    <string name="feature_user_section_playback">播放设置</string>
+    <string name="feature_user_settings_dynamic_color_title">动态取色</string>
+    <string name="feature_user_settings_amoled_title">AMOLED 纯黑</string>
+    <string name="feature_user_section_playback_content">播放与内容</string>
     <string name="feature_user_settings_pip_title">自动画中画</string>
-    <string name="feature_user_settings_pip_desc">播放视频切回桌面或切换应用时自动开启小窗</string>
-    <string name="feature_user_section_restricted">受限内容</string>
-    <string name="feature_user_settings_restricted_content_title">显示受限条目内容</string>
+    <string name="feature_user_settings_restricted_content_title">受限内容</string>
 
-    <!-- 6. 设置页：同步与提醒 -->
-    <string name="feature_user_section_sync_reminder">数据同步与提醒</string>
+    <!-- 6. 设置页：数据同步与提醒 -->
+    <string name="feature_user_section_sync_reminder">提醒设置</string>
     <string name="feature_user_settings_auto_sync_title">播放源自动同步</string>
-    <string name="feature_user_settings_sync_period">周期：%1$s</string>
-    <string name="feature_user_settings_playback_manage_desc">订阅播放规则、智能探测第三方源</string>
-    <string name="feature_user_settings_reminder_perm_subtitle">系统通知未开启，点击开启权限与每日推送</string>
-    <string name="feature_user_settings_reminder_active_subtitle">支持每日汇总清单与单集开播即时通知</string>
+    <string name="feature_user_settings_reminder_perm_subtitle">未开启系统通知权限</string>
     <string name="feature_user_settings_airing_reminder_title">追番更新提醒</string>
     <string name="feature_user_settings_daily_summary_title">每日更新汇总</string>
-    <string name="feature_user_settings_daily_summary_subtitle">每天 %1$s 推送今日更新</string>
     <string name="feature_user_settings_pre_air_title">新集开播提醒</string>
-    <string name="feature_user_settings_pre_air_desc">每集播出时单独通知</string>
     <string name="feature_user_settings_reminder_time_title">提醒时间</string>
     <string name="feature_user_settings_binge_finale_title">囤番完结提醒</string>
-    <string name="feature_user_settings_binge_finale_desc">标记为囤番的条目在全剧完结时提醒开追</string>
-    <string name="feature_user_settings_binge_finale_off">已关闭（囤番条目完全静默）</string>
-    <string name="feature_user_settings_system_notification_title">系统通知管理</string>
-    <string name="feature_user_settings_system_notification_desc">前往系统设置调整静音、振动与悬浮横幅权限</string>
-    <string name="feature_user_settings_keep_alive_title">后台运行与准时送达</string>
-    <string name="feature_user_settings_keep_alive_desc_active">已允许无限制后台运行，开播提醒可准时唤醒</string>
-    <string name="feature_user_settings_keep_alive_desc_inactive">若锁屏或未开 App 时无法收到提醒，请允许后台运行与自启动</string>
-    <string name="feature_user_keep_alive_dialog_title">后台保活与准时送达设置</string>
-    <string name="feature_user_keep_alive_dialog_message">由于各厂商系统（ColorOS / HyperOS / OriginOS 等）的深度待机与省电策略，若未加入白名单，定时开播提醒可能会被系统延迟或合并。\n\n为确保不打开应用时也能准时收到开播通知，建议开启：\n1.「允许完全后台行为 / 无限制」\n2.「允许应用自启动 / 后台自启动」\n3. 多任务任务栏卡片「加锁」</string>
+    <string name="feature_user_settings_system_notification_title">系统通知</string>
+    <string name="feature_user_settings_keep_alive_title">后台保活</string>
+    <string name="feature_user_settings_keep_alive_desc_active">已允许</string>
+    <string name="feature_user_settings_keep_alive_desc_inactive">未允许</string>
+    <string name="feature_user_keep_alive_dialog_title">后台保活设置</string>
+    <string name="feature_user_keep_alive_dialog_message">系统在息屏或待机时可能限制后台任务与定时提醒。如需准时接收开播提醒，建议开启后台运行并允许自启动。</string>
     <string name="feature_user_keep_alive_action_battery">忽略电池优化</string>
     <string name="feature_user_keep_alive_action_autostart">前往自启动设置</string>
     <string name="feature_user_notification_rationale_title">需要系统通知权限</string>
@@ -112,13 +100,11 @@
     <string name="feature_user_sync_interval_title">播放源自动同步频率</string>
     <string name="feature_user_reminder_hour_title">每日提醒时刻</string>
 
-    <!-- 7. 设置页：智能服务与关于 -->
-    <string name="feature_user_section_ai_storage">智能服务与存储</string>
-    <string name="feature_user_settings_ai_config_title">AI 追番助手配置</string>
-    <string name="feature_user_settings_clear_cache_title">清理本地缓存</string>
+    <!-- 7. 设置页：数据与存储 -->
+    <string name="feature_user_section_data_storage">数据与缓存</string>
+    <string name="feature_user_settings_ai_config_title">助手配置</string>
+    <string name="feature_user_settings_clear_cache_title">清理缓存</string>
     <string name="feature_user_settings_clearing">正在清理…</string>
-    <string name="feature_user_settings_clear_cache_desc">清理离线网络图片缓存</string>
-    <string name="feature_user_settings_crash_log_desc">崩溃时自动记录堆栈，可导出给开发者</string>
     <string name="feature_user_cache_cleared_toast">已清理图片缓存</string>
     <string name="feature_user_cache_clear_failed_toast">清理失败，请重试</string>
     <string name="feature_user_crash_none_toast">暂无崩溃记录</string>
@@ -127,21 +113,18 @@
     <string name="feature_user_crash_log_desc">贴进 Issue 或发给开发者，配合 release 页的 mapping 才能还原出崩溃位置。</string>
     <string name="feature_user_crash_report_subject">MiniBgm 崩溃报告</string>
     <string name="feature_user_crash_export_title">导出崩溃日志</string>
-    <string name="feature_user_section_about">关于与支持</string>
-    <string name="feature_user_settings_client_title">MiniBgm 客户端</string>
-    <string name="feature_user_settings_client_subtitle">v%1$s · MIT 开源协议</string>
+    <string name="feature_user_section_about">关于</string>
+    <string name="feature_user_section_account">账号管理</string>
+    <string name="feature_user_settings_client_title">应用版本</string>
+    <string name="feature_user_settings_client_subtitle">v%1$s</string>
     <string name="feature_user_settings_cd_open_github">打开开源主页</string>
     <string name="feature_user_settings_check_update_title">检查新版本</string>
     <string name="feature_user_settings_checking_update">正在检查更新…</string>
     <string name="feature_user_settings_current_version">当前版本 v%1$s</string>
-    <string name="feature_user_settings_bgm_site_title">访问 Bangumi 官网</string>
-    <string name="feature_user_settings_bgm_site_desc">bgm.tv · ACG 动漫数据库与社区</string>
+    <string name="feature_user_settings_bgm_site_title">官方网站</string>
     <string name="feature_user_settings_cd_open_web">打开网页</string>
-    <string name="feature_user_settings_wiki_title">Bangumi 维基协作指南</string>
-    <string name="feature_user_settings_wiki_desc">条目收录规范与编辑守则</string>
-    <string name="feature_user_settings_logout_subtitle">注销当前登录 (@%1$s)，保留其他已存账号</string>
-    <string name="feature_user_settings_logout_all_title">退出所有已存账号</string>
-    <string name="feature_user_settings_logout_all_desc">清除本机全部登录账号与本地缓存</string>
+    <string name="feature_user_settings_wiki_title">社区指南</string>
+    <string name="feature_user_settings_logout_all_title">退出所有账号</string>
     <string name="feature_user_logout_current_title">退出当前账号</string>
     <string name="feature_user_logout_current_confirm">退出当前账号？退出后需重新登录。</string>
     <string name="feature_user_logout_action">退出登录</string>
@@ -238,14 +221,14 @@
     <string name="feature_user_timing_advance_minutes">提前 %1$d 分钟</string>
     <string name="feature_user_timing_on_time">准点开播</string>
     <string name="feature_user_timing_delay_minutes">延后 %1$d 分钟</string>
-    <string name="feature_user_timing_delay_15_platform">延后 15 分钟（适配国内平台）</string>
+    <string name="feature_user_timing_delay_15_platform">延后 15 分钟</string>
     <string name="feature_user_timing_fine_tune">1 分钟微调</string>
     <string name="feature_user_timing_cd_minus">减少 1 分钟</string>
     <string name="feature_user_timing_cd_plus">增加 1 分钟</string>
     <string name="feature_user_timing_confirm">确认应用</string>
     <string name="feature_user_timing_cd_manual_input">手动输入精确分钟</string>
     <string name="feature_user_timing_hero_immediate">新集开播时立即推送</string>
-    <string name="feature_user_timing_hero_example_delay15">若 23:00 开播，将于 %1$s 推送（适配国内平台）</string>
+    <string name="feature_user_timing_hero_example_delay15">若 23:00 开播，将于 %1$s 推送</string>
     <string name="feature_user_timing_hero_example">若 23:00 开播，将于 %1$s 推送</string>
     <string name="feature_user_timing_custom_title">自定义时间</string>
     <string name="feature_user_timing_custom_prompt">设置提前或延后的分钟数：</string>
@@ -258,7 +241,7 @@
     <string name="feature_user_ai_provider_label">服务提供商</string>
     <string name="feature_user_ai_endpoint_label">Base URL / 端点</string>
     <string name="feature_user_ai_apikey_label">API Key / 访问密钥</string>
-    <string name="feature_user_ai_apikey_placeholder_ollama">Ollama 本地可留空</string>
+    <string name="feature_user_ai_apikey_placeholder_ollama">本地服务可留空</string>
     <string name="feature_user_ai_apikey_placeholder">输入 API Key</string>
     <string name="feature_user_ai_apikey_required">使用云端服务商需配置 API Key</string>
     <string name="feature_user_ai_apikey_hide">隐藏 API Key</string>
@@ -324,19 +307,19 @@
     <string name="feature_user_login_unavailable">当前网络环境无法在应用内完成登录</string>
 
     <!-- 17. 弹幕服务设置 -->
-    <string name="feature_user_settings_danmaku_title">弹幕服务配置</string>
-    <string name="feature_user_settings_danmaku_desc_default">弹弹play 官方端点（需填写 AppId/Secret 或自建代理）</string>
-    <string name="feature_user_settings_danmaku_desc_custom">自建代理端点：%1$s</string>
-    <string name="feature_user_settings_danmaku_desc_configured">已配置官方凭据（AppId: %1$s）</string>
+    <string name="feature_user_settings_danmaku_title">弹幕配置</string>
+    <string name="feature_user_settings_danmaku_desc_default">未配置</string>
+    <string name="feature_user_settings_danmaku_desc_custom">%1$s</string>
+    <string name="feature_user_settings_danmaku_desc_configured">已配置凭据</string>
     <string name="feature_user_danmaku_dialog_title">弹幕服务配置</string>
-    <string name="feature_user_danmaku_dialog_hint">MiniBgm 弹幕支持直连弹弹play 官方开放平台或自建 Cloudflare Worker 反向代理。</string>
-    <string name="feature_user_danmaku_endpoint_label">API 服务端点</string>
+    <string name="feature_user_danmaku_dialog_hint">弹幕服务支持连接开放平台或自建代理服务端点。</string>
+    <string name="feature_user_danmaku_endpoint_label">服务端点</string>
     <string name="feature_user_danmaku_endpoint_placeholder">https://api.dandanplay.net</string>
-    <string name="feature_user_danmaku_endpoint_hint">默认为官方端点。若部署了 Cloudflare Worker 代理，填入 Worker 地址即可免填下方的 AppId/Secret。</string>
-    <string name="feature_user_danmaku_appid_label">弹弹play AppId</string>
-    <string name="feature_user_danmaku_appid_placeholder">在 dev.dandanplay.com 申请</string>
-    <string name="feature_user_danmaku_appsecret_label">弹弹play AppSecret</string>
-    <string name="feature_user_danmaku_appsecret_placeholder">官方开发者应用密钥</string>
+    <string name="feature_user_danmaku_endpoint_hint">默认为官方端点。若填入代理地址，可免填下方 AppId/AppSecret。</string>
+    <string name="feature_user_danmaku_appid_label">AppId</string>
+    <string name="feature_user_danmaku_appid_placeholder">输入 AppId</string>
+    <string name="feature_user_danmaku_appsecret_label">AppSecret</string>
+    <string name="feature_user_danmaku_appsecret_placeholder">输入 AppSecret</string>
     <string name="feature_user_danmaku_appsecret_hide">隐藏密钥</string>
     <string name="feature_user_danmaku_appsecret_show">显示密钥</string>
     <string name="feature_user_danmaku_reset_default">恢复默认端点</string>

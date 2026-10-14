@@ -123,31 +123,26 @@ internal fun SettingsSection(
             onToggleAmoledDarkMode = onToggleAmoledDarkMode,
         )
 
-        if (onOpenPlaybackRules != null || onOpenDanmakuSettings != null) {
-            PlaybackSettingsCard(
-                pipEnabled = pipEnabled,
-                onTogglePipEnabled = onTogglePipEnabled,
-                onOpenPlaybackRules = onOpenPlaybackRules,
-                onOpenDanmakuSettings = onOpenDanmakuSettings,
-                danmakuSummary =
-                    if (danmakuConfig.endpoint.isNotBlank()) {
-                        stringResource(R.string.feature_user_settings_danmaku_desc_custom, danmakuConfig.endpoint)
-                    } else if (danmakuConfig.appId.isNotBlank()) {
-                        stringResource(R.string.feature_user_settings_danmaku_desc_configured, danmakuConfig.appId)
-                    } else {
-                        stringResource(R.string.feature_user_settings_danmaku_desc_default)
-                    },
-            )
-        }
-
-        PreferenceSettingsCard(
+        PlaybackAndContentSettingsCard(
+            pipEnabled = pipEnabled,
+            onTogglePipEnabled = onTogglePipEnabled,
             showRestrictedContent = showRestrictedContent,
             onToggleShowRestrictedContent = onToggleShowRestrictedContent,
-        )
-
-        SyncAndReminderSettingsCard(
             syncInterval = syncInterval,
             onOpenSyncDialog = onOpenSyncDialog,
+            onOpenPlaybackRules = onOpenPlaybackRules,
+            onOpenDanmakuSettings = onOpenDanmakuSettings,
+            danmakuSummary =
+                if (danmakuConfig.endpoint.isNotBlank()) {
+                    danmakuConfig.endpoint
+                } else if (danmakuConfig.appId.isNotBlank()) {
+                    stringResource(R.string.feature_user_settings_danmaku_desc_configured)
+                } else {
+                    null
+                },
+        )
+
+        ReminderSettingsCard(
             airingReminderEnabled = airingReminderEnabled,
             onToggleAiringReminder = onToggleAiringReminder,
             hasNotificationPermission = hasNotificationPermission,
@@ -166,24 +161,27 @@ internal fun SettingsSection(
             onOpenKeepAliveSettings = onOpenKeepAliveSettings,
         )
 
-        AiAndStorageSettingsCard(
+        DataAndStorageSettingsCard(
             aiConfig = aiConfig,
             onOpenAiSettingsDialog = onOpenAiSettingsDialog,
             onClearCache = onClearCache,
             isClearingCache = isClearingCache,
-            onOpenCrashLog = onOpenCrashLog,
         )
 
-        AboutAndSupportSettingsCard(
-            isLoggedIn = isLoggedIn,
-            activeProfile = activeProfile,
-            savedAccountsCount = savedAccountsCount,
+        AboutSettingsCard(
             onOpenWebUrl = onOpenWebUrl,
-            onLogoutCurrentClick = onLogoutCurrentClick,
-            onLogoutAllClick = onLogoutAllClick,
             isCheckingUpdate = isCheckingUpdate,
             onCheckForUpdate = onCheckForUpdate,
         )
+
+        if (isLoggedIn) {
+            AccountSettingsCard(
+                activeProfile = activeProfile,
+                savedAccountsCount = savedAccountsCount,
+                onLogoutCurrentClick = onLogoutCurrentClick,
+                onLogoutAllClick = onLogoutAllClick,
+            )
+        }
     }
 }
 
@@ -235,7 +233,7 @@ internal fun AppearanceSettingsCard(
                 icon = BgmIcons.Palette,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(R.string.feature_user_settings_dynamic_color_title),
-                subtitle = stringResource(R.string.feature_user_settings_dynamic_color_desc),
+                subtitle = null,
                 onClick = { onToggleDynamicColor(!dynamicColor) },
                 trailing = {
                     Switch(
@@ -249,7 +247,7 @@ internal fun AppearanceSettingsCard(
                 icon = BgmIcons.DarkMode,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(R.string.feature_user_settings_amoled_title),
-                subtitle = stringResource(R.string.feature_user_settings_amoled_desc),
+                subtitle = null,
                 onClick = { onToggleAmoledDarkMode(!amoledDarkMode) },
                 trailing = {
                     Switch(
@@ -263,9 +261,13 @@ internal fun AppearanceSettingsCard(
 }
 
 @Composable
-internal fun PlaybackSettingsCard(
+internal fun PlaybackAndContentSettingsCard(
     pipEnabled: Boolean,
     onTogglePipEnabled: (Boolean) -> Unit,
+    showRestrictedContent: Boolean,
+    onToggleShowRestrictedContent: (Boolean) -> Unit,
+    syncInterval: SyncInterval,
+    onOpenSyncDialog: () -> Unit,
     onOpenPlaybackRules: (() -> Unit)? = null,
     onOpenDanmakuSettings: (() -> Unit)? = null,
     danmakuSummary: String? = null,
@@ -281,7 +283,7 @@ internal fun PlaybackSettingsCard(
     ) {
         Column(modifier = Modifier.padding(vertical = 10.dp)) {
             Text(
-                text = stringResource(R.string.feature_user_section_playback),
+                text = stringResource(R.string.feature_user_section_playback_content),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -293,7 +295,7 @@ internal fun PlaybackSettingsCard(
                     icon = BgmIcons.PlayCircle,
                     iconTint = MaterialTheme.colorScheme.tertiary,
                     title = stringResource(R.string.feature_user_title_playback_rules),
-                    subtitle = stringResource(R.string.feature_user_settings_playback_manage_desc),
+                    subtitle = null,
                     onClick = onOpenPlaybackRules,
                 )
 
@@ -303,26 +305,39 @@ internal fun PlaybackSettingsCard(
                 )
             }
 
-            if (onOpenDanmakuSettings != null) {
-                SettingsItemRow(
-                    icon = BgmIcons.ChatBubble,
-                    iconTint = MaterialTheme.colorScheme.secondary,
-                    title = stringResource(R.string.feature_user_settings_danmaku_title),
-                    subtitle = danmakuSummary ?: stringResource(R.string.feature_user_settings_danmaku_desc_default),
-                    onClick = onOpenDanmakuSettings,
-                )
+            SettingsItemRow(
+                icon = BgmIcons.Sync,
+                iconTint = MaterialTheme.colorScheme.primary,
+                title = stringResource(R.string.feature_user_settings_auto_sync_title),
+                subtitle = syncInterval.displayName,
+                onClick = onOpenSyncDialog,
+            )
 
+            if (onOpenDanmakuSettings != null) {
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 18.dp),
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                 )
+
+                SettingsItemRow(
+                    icon = BgmIcons.ChatBubble,
+                    iconTint = MaterialTheme.colorScheme.secondary,
+                    title = stringResource(R.string.feature_user_settings_danmaku_title),
+                    subtitle = danmakuSummary,
+                    onClick = onOpenDanmakuSettings,
+                )
             }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 18.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+            )
 
             SettingsItemRow(
                 icon = BgmIcons.PictureInPicture,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(R.string.feature_user_settings_pip_title),
-                subtitle = stringResource(R.string.feature_user_settings_pip_desc),
+                subtitle = null,
                 onClick = { onTogglePipEnabled(!pipEnabled) },
                 trailing = {
                     Switch(
@@ -331,38 +346,17 @@ internal fun PlaybackSettingsCard(
                     )
                 },
             )
-        }
-    }
-}
 
-@Composable
-internal fun PreferenceSettingsCard(
-    showRestrictedContent: Boolean,
-    onToggleShowRestrictedContent: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        Column(modifier = Modifier.padding(vertical = 10.dp)) {
-            Text(
-                text = stringResource(R.string.feature_user_section_restricted),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 18.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
             )
 
             SettingsItemRow(
                 icon = BgmIcons.VisibilityOff,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(R.string.feature_user_settings_restricted_content_title),
-                subtitle = "",
+                subtitle = null,
                 onClick = { onToggleShowRestrictedContent(!showRestrictedContent) },
                 trailing = {
                     Switch(
@@ -376,9 +370,7 @@ internal fun PreferenceSettingsCard(
 }
 
 @Composable
-internal fun SyncAndReminderSettingsCard(
-    syncInterval: SyncInterval,
-    onOpenSyncDialog: () -> Unit,
+internal fun ReminderSettingsCard(
     airingReminderEnabled: Boolean,
     onToggleAiringReminder: (Boolean) -> Unit,
     hasNotificationPermission: Boolean,
@@ -414,25 +406,12 @@ internal fun SyncAndReminderSettingsCard(
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
             )
 
-            SettingsItemRow(
-                icon = BgmIcons.Sync,
-                iconTint = MaterialTheme.colorScheme.primary,
-                title = stringResource(R.string.feature_user_settings_auto_sync_title),
-                subtitle = stringResource(R.string.feature_user_settings_sync_period, syncInterval.displayName),
-                onClick = onOpenSyncDialog,
-            )
-
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 18.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-            )
-
             val isReminderActive = airingReminderEnabled && hasNotificationPermission
             val reminderSubtitle =
                 if (!hasNotificationPermission) {
                     stringResource(R.string.feature_user_settings_reminder_perm_subtitle)
                 } else {
-                    stringResource(R.string.feature_user_settings_reminder_active_subtitle)
+                    null
                 }
             SettingsItemRow(
                 icon = BgmIcons.NotificationsActive,
@@ -461,20 +440,12 @@ internal fun SyncAndReminderSettingsCard(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                     )
 
-                    // 1. 每日追番更新汇总
+                    // 1. 每日更新汇总
                     SettingsItemRow(
                         icon = BgmIcons.Schedule,
                         iconTint = MaterialTheme.colorScheme.secondary,
                         title = stringResource(R.string.feature_user_settings_daily_summary_title),
-                        subtitle =
-                            if (airingDailySummaryEnabled) {
-                                stringResource(
-                                    R.string.feature_user_settings_daily_summary_subtitle,
-                                    "%02d:00".format(airingReminderHour),
-                                )
-                            } else {
-                                stringResource(R.string.feature_user_common_off)
-                            },
+                        subtitle = if (airingDailySummaryEnabled) "%02d:00".format(airingReminderHour) else null,
                         onClick = if (airingDailySummaryEnabled) onOpenReminderHourDialog else null,
                         trailing = {
                             Switch(
@@ -498,8 +469,6 @@ internal fun SyncAndReminderSettingsCard(
                                     -airingNotificationOffsetMinutes,
                                 )
                             airingNotificationOffsetMinutes == 0 -> stringResource(R.string.feature_user_timing_on_time)
-                            airingNotificationOffsetMinutes == 15 ->
-                                stringResource(R.string.feature_user_timing_delay_15_platform)
                             else ->
                                 stringResource(
                                     R.string.feature_user_timing_delay_minutes,
@@ -511,12 +480,7 @@ internal fun SyncAndReminderSettingsCard(
                         icon = BgmIcons.PlayCircle,
                         iconTint = MaterialTheme.colorScheme.tertiary,
                         title = stringResource(R.string.feature_user_settings_pre_air_title),
-                        subtitle =
-                            if (airingPreAirEnabled) {
-                                stringResource(R.string.feature_user_settings_pre_air_desc)
-                            } else {
-                                stringResource(R.string.feature_user_common_off)
-                            },
+                        subtitle = null,
                         onClick = null,
                         trailing = {
                             Switch(
@@ -546,12 +510,7 @@ internal fun SyncAndReminderSettingsCard(
                         icon = BgmIcons.Inventory,
                         iconTint = MaterialTheme.colorScheme.tertiary,
                         title = stringResource(R.string.feature_user_settings_binge_finale_title),
-                        subtitle =
-                            if (airingBingeFinaleEnabled) {
-                                stringResource(R.string.feature_user_settings_binge_finale_desc)
-                            } else {
-                                stringResource(R.string.feature_user_settings_binge_finale_off)
-                            },
+                        subtitle = null,
                         onClick = null,
                         trailing = {
                             Switch(
@@ -566,12 +525,12 @@ internal fun SyncAndReminderSettingsCard(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                     )
 
-                    // 4. 系统通知渠道设置入口
+                    // 4. 系统通知
                     SettingsItemRow(
                         icon = BgmIcons.OpenInNew,
                         iconTint = MaterialTheme.colorScheme.primary,
                         title = stringResource(R.string.feature_user_settings_system_notification_title),
-                        subtitle = stringResource(R.string.feature_user_settings_system_notification_desc),
+                        subtitle = null,
                         onClick = onOpenSystemNotificationSettings,
                     )
 
@@ -580,7 +539,7 @@ internal fun SyncAndReminderSettingsCard(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                     )
 
-                    // 5. 后台运行与准时送达（电池优化与自启动）
+                    // 5. 后台保活
                     SettingsItemRow(
                         icon = BgmIcons.Bolt,
                         iconTint =
@@ -605,12 +564,11 @@ internal fun SyncAndReminderSettingsCard(
 }
 
 @Composable
-internal fun AiAndStorageSettingsCard(
+internal fun DataAndStorageSettingsCard(
     aiConfig: AiConfig,
     onOpenAiSettingsDialog: (() -> Unit)?,
     onClearCache: () -> Unit,
     isClearingCache: Boolean,
-    onOpenCrashLog: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -623,7 +581,7 @@ internal fun AiAndStorageSettingsCard(
     ) {
         Column(modifier = Modifier.padding(vertical = 10.dp)) {
             Text(
-                text = stringResource(R.string.feature_user_section_ai_storage),
+                text = stringResource(R.string.feature_user_section_data_storage),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
@@ -632,9 +590,9 @@ internal fun AiAndStorageSettingsCard(
 
             val providerDisplay =
                 when (aiConfig.provider) {
-                    AiConfig.PROVIDER_OLLAMA -> "Ollama / Local"
+                    AiConfig.PROVIDER_OLLAMA -> "Local"
                     AiConfig.PROVIDER_GEMINI -> "Gemini"
-                    else -> "Custom OpenAI"
+                    else -> "Custom"
                 }
             val modelDisplay =
                 aiConfig.model.ifBlank {
@@ -668,22 +626,9 @@ internal fun AiAndStorageSettingsCard(
                     if (isClearingCache) {
                         stringResource(R.string.feature_user_settings_clearing)
                     } else {
-                        stringResource(R.string.feature_user_settings_clear_cache_desc)
+                        null
                     },
                 onClick = if (isClearingCache) null else onClearCache,
-            )
-
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 18.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-            )
-
-            SettingsItemRow(
-                icon = BgmIcons.BugReport,
-                iconTint = MaterialTheme.colorScheme.tertiary,
-                title = stringResource(R.string.feature_user_crash_log_title),
-                subtitle = stringResource(R.string.feature_user_settings_crash_log_desc),
-                onClick = onOpenCrashLog,
             )
         }
     }
@@ -783,7 +728,7 @@ internal fun DeveloperEntrySettingsCard(
                 icon = BgmIcons.BugReport,
                 iconTint = MaterialTheme.colorScheme.tertiary,
                 title = stringResource(R.string.feature_user_dev_options_title),
-                subtitle = stringResource(R.string.feature_user_dev_options_desc),
+                subtitle = null,
                 trailing = {
                     Icon(
                         imageVector = BgmIcons.KeyboardArrowRight,
@@ -799,13 +744,8 @@ internal fun DeveloperEntrySettingsCard(
 }
 
 @Composable
-internal fun AboutAndSupportSettingsCard(
-    isLoggedIn: Boolean,
-    activeProfile: UserProfile?,
-    savedAccountsCount: Int,
+internal fun AboutSettingsCard(
     onOpenWebUrl: (String) -> Unit,
-    onLogoutCurrentClick: () -> Unit,
-    onLogoutAllClick: () -> Unit,
     modifier: Modifier = Modifier,
     isCheckingUpdate: Boolean = false,
     onCheckForUpdate: () -> Unit = {},
@@ -865,7 +805,7 @@ internal fun AboutAndSupportSettingsCard(
                     if (isCheckingUpdate) {
                         stringResource(R.string.feature_user_settings_checking_update)
                     } else {
-                        stringResource(R.string.feature_user_settings_current_version, clientVersion)
+                        null
                     },
                 trailing = {
                     if (isCheckingUpdate) {
@@ -894,7 +834,7 @@ internal fun AboutAndSupportSettingsCard(
                 icon = BgmIcons.Language,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 title = stringResource(R.string.feature_user_settings_bgm_site_title),
-                subtitle = stringResource(R.string.feature_user_settings_bgm_site_desc),
+                subtitle = null,
                 trailing = {
                     Icon(
                         imageVector = BgmIcons.OpenInNew,
@@ -915,7 +855,7 @@ internal fun AboutAndSupportSettingsCard(
                 icon = BgmIcons.Info,
                 iconTint = MaterialTheme.colorScheme.tertiary,
                 title = stringResource(R.string.feature_user_settings_wiki_title),
-                subtitle = stringResource(R.string.feature_user_settings_wiki_desc),
+                subtitle = null,
                 trailing = {
                     Icon(
                         imageVector = BgmIcons.OpenInNew,
@@ -926,36 +866,57 @@ internal fun AboutAndSupportSettingsCard(
                 },
                 onClick = { onOpenWebUrl(BGM_WIKI_URL) },
             )
+        }
+    }
+}
 
-            if (isLoggedIn) {
+@Composable
+internal fun AccountSettingsCard(
+    activeProfile: UserProfile?,
+    savedAccountsCount: Int,
+    onLogoutCurrentClick: () -> Unit,
+    onLogoutAllClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(vertical = 10.dp)) {
+            Text(
+                text = stringResource(R.string.feature_user_section_account),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+            )
+
+            val usernameText = activeProfile?.username.orEmpty().ifBlank { activeProfile?.id?.toString().orEmpty() }
+            SettingsItemRow(
+                icon = BgmIcons.Logout,
+                iconTint = MaterialTheme.colorScheme.error,
+                title = stringResource(R.string.feature_user_logout_current_title),
+                subtitle = if (usernameText.isNotBlank()) "@$usernameText" else null,
+                onClick = onLogoutCurrentClick,
+            )
+
+            if (savedAccountsCount > 1) {
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 18.dp),
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                 )
 
-                val usernameText = activeProfile?.username.orEmpty().ifBlank { activeProfile?.id?.toString().orEmpty() }
                 SettingsItemRow(
-                    icon = BgmIcons.Logout,
+                    icon = BgmIcons.Delete,
                     iconTint = MaterialTheme.colorScheme.error,
-                    title = stringResource(R.string.feature_user_logout_current_title),
-                    subtitle = stringResource(R.string.feature_user_settings_logout_subtitle, usernameText),
-                    onClick = onLogoutCurrentClick,
+                    title = stringResource(R.string.feature_user_settings_logout_all_title),
+                    subtitle = null,
+                    onClick = onLogoutAllClick,
                 )
-
-                if (savedAccountsCount > 1) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 18.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                    )
-
-                    SettingsItemRow(
-                        icon = BgmIcons.Delete,
-                        iconTint = MaterialTheme.colorScheme.error,
-                        title = stringResource(R.string.feature_user_settings_logout_all_title),
-                        subtitle = stringResource(R.string.feature_user_settings_logout_all_desc),
-                        onClick = onLogoutAllClick,
-                    )
-                }
             }
         }
     }
@@ -966,7 +927,7 @@ private fun SettingsItemRow(
     icon: ImageVector,
     iconTint: androidx.compose.ui.graphics.Color,
     title: String,
-    subtitle: String,
+    subtitle: String? = null,
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
@@ -1004,11 +965,13 @@ private fun SettingsItemRow(
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         if (trailing != null) {
