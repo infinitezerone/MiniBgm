@@ -28,7 +28,26 @@ data class TorrentMediaResource(
     val formattedSize: String = "",
     val pubDate: String = "",
     val infoHash: String = "",
-)
+) {
+    /**
+     * 资源去重键：多个规则源结果合并后按此键稳定去重。
+     *
+     * 只按 `infoHash` 判重时，未携带 40 位十六进制哈希的 `.torrent` 直链条目会集体退化为
+     * 空串，`distinctBy` 只保留第一条，静默丢掉同一 Feed 的其余条目（分集/清晰度全丢）。
+     * 因此按 信息哈希 → 磁力链接 → 种子直链 → 标题 逐级回退，逐级非空即用。
+     */
+    val dedupeKey: String
+        get() =
+            infoHash
+                .trim()
+                .ifBlank { magnetUrl.trim() }
+                .ifBlank { torrentUrl.trim() }
+                .ifBlank { title.trim() }
+
+    /** 是否可用于边下边播/离线下载：至少要有磁力链接或种子直链，两者皆空时动作必须禁用。 */
+    val hasPlayableSource: Boolean
+        get() = magnetUrl.isNotBlank() || torrentUrl.isNotBlank()
+}
 
 /** 向后兼容别名，便于过渡期依赖平滑替换 */
 typealias MikanTorrentResource = TorrentMediaResource

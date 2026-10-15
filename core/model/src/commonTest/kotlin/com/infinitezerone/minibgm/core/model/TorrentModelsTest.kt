@@ -183,4 +183,33 @@ class TorrentModelsTest {
         assertTrue(first.episodeKey != second.episodeKey)
         assertEquals(first.episodeKey, sameEpisodeOtherTask.episodeKey)
     }
+
+    @Test
+    fun torrentMediaResource_dedupeKey_fallsBackWhenHashMissing() {
+        // 有 infoHash 时以 infoHash 为键，磁力链接差异不影响判重
+        val hashed =
+            TorrentMediaResource(
+                title = "Frieren - 01 [1080P]",
+                magnetUrl = "magnet:?xt=urn:btih:aaaa",
+                torrentUrl = "https://example.com/1.torrent",
+                infoHash = "aaaa",
+            )
+        assertEquals("aaaa", hashed.dedupeKey)
+
+        // 无 40 位 hash 的 .torrent 直链条目：infoHash/magnetUrl 全空，必须回退到种子直链，
+        // 否则同一 Feed 的所有条目会退化成同一个空串键并被 distinctBy 静默丢弃
+        val torrentOnlyFirst =
+            TorrentMediaResource(title = "Frieren - 01 [1080P]", torrentUrl = "https://example.com/1.torrent")
+        val torrentOnlySecond =
+            TorrentMediaResource(title = "Frieren - 02 [1080P]", torrentUrl = "https://example.com/2.torrent")
+        assertEquals("https://example.com/1.torrent", torrentOnlyFirst.dedupeKey)
+        assertTrue(torrentOnlyFirst.dedupeKey != torrentOnlySecond.dedupeKey)
+        assertEquals(
+            2,
+            listOf(torrentOnlyFirst, torrentOnlySecond).distinctBy { it.dedupeKey }.size,
+        )
+
+        // 连种子直链都没有时最后回退到标题，保证键永不为空
+        assertEquals("Frieren - 03", TorrentMediaResource(title = "  Frieren - 03  ").dedupeKey)
+    }
 }
