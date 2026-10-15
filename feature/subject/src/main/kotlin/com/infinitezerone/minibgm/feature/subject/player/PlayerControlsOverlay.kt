@@ -448,31 +448,35 @@ internal fun PlayerControlsOverlay(
                     }
 
                     if (showEpisodeQueue) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        IconButton(
-                            onClick = onOpenEpisodeQueue,
-                            modifier = Modifier.size(32.dp),
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.White.copy(alpha = 0.16f),
+                            modifier = Modifier.clickable(onClick = onOpenEpisodeQueue),
                         ) {
-                            Icon(
-                                imageVector = BgmIcons.List,
-                                contentDescription = stringResource(R.string.feature_subject_player_episodes),
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp),
+                            Text(
+                                text = stringResource(R.string.feature_subject_player_episodes_pill),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White.copy(alpha = 0.9f),
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                             )
                         }
                     }
 
                     if (onOpenSourcesPanel != null) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        IconButton(
-                            onClick = onOpenSourcesPanel,
-                            modifier = Modifier.size(32.dp),
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.White.copy(alpha = 0.16f),
+                            modifier = Modifier.clickable(onClick = onOpenSourcesPanel),
                         ) {
-                            Icon(
-                                imageVector = BgmIcons.Tv,
-                                contentDescription = stringResource(R.string.feature_subject_player_sources),
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp),
+                            Text(
+                                text = stringResource(R.string.feature_subject_player_sources_pill),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White.copy(alpha = 0.9f),
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                             )
                         }
                     }

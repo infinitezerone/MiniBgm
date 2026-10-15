@@ -202,42 +202,117 @@ fun OverlayProviderScope.playerEpisodesPanel(
 }
 
 /**
- * 统一播放线路选择底部弹层。
+ * 统一播放线路选择弹层：竖屏底部弹窗，横屏右侧抽屉（与选集抽屉对齐风格，避免宽屏遮挡画面）。
  */
 fun OverlayProviderScope.playerSourcesPanel(
     uiState: PlayerUiState,
     onSelectSource: (Int) -> Unit,
     onManageRules: (() -> Unit)?,
     onRequestOpenSources: (() -> Unit)? = null,
+    isLandscape: Boolean = false,
 ) {
     overlay<PlayerSourcesRequest, Unit> { _, onRespond ->
-        PlayerSourcesBottomSheet(
-            sources = uiState.sources,
-            selectedIndex = uiState.selectedSourceIndex,
-            sourceFailureCounts = uiState.sourceFailureCounts,
-            isResolvingSource = uiState.isResolvingSource,
-            resolveAttempt = uiState.resolveAttempt,
-            resolveAttemptTotal = uiState.resolveAttemptTotal,
-            matchedVodName = uiState.matchedVodName,
-            onSelectSource = { index ->
-                onSelectSource(index)
-                onRespond(Unit)
-            },
-            onManageRules =
-                onManageRules?.let { manage ->
-                    {
-                        onRespond(Unit)
-                        manage()
-                    }
+        if (isLandscape) {
+            val visibleState = remember { MutableTransitionState(false) }
+            androidx.compose.runtime.LaunchedEffect(Unit) { visibleState.targetState = true }
+            BackHandler { visibleState.targetState = false }
+            SideEffect {
+                if (visibleState.isIdle && !visibleState.currentState) {
+                    onRespond(Unit)
+                }
+            }
+            Box(modifier = Modifier.fillMaxSize()) {
+                AnimatedVisibility(
+                    visibleState = visibleState,
+                    enter = fadeIn(tween(durationMillis = 200)),
+                    exit = fadeOut(tween(durationMillis = 200)),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.5f))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = { visibleState.targetState = false },
+                                ),
+                    )
+                }
+                AnimatedVisibility(
+                    visibleState = visibleState,
+                    enter =
+                        slideInHorizontally(
+                            initialOffsetX = { fullWidth -> fullWidth },
+                            animationSpec = tween(durationMillis = 250),
+                        ),
+                    exit =
+                        slideOutHorizontally(
+                            targetOffsetX = { fullWidth -> fullWidth },
+                            animationSpec = tween(durationMillis = 200),
+                        ),
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                ) {
+                    PlayerSourcesDrawer(
+                        sources = uiState.sources,
+                        selectedIndex = uiState.selectedSourceIndex,
+                        sourceFailureCounts = uiState.sourceFailureCounts,
+                        isResolvingSource = uiState.isResolvingSource,
+                        resolveAttempt = uiState.resolveAttempt,
+                        resolveAttemptTotal = uiState.resolveAttemptTotal,
+                        matchedVodName = uiState.matchedVodName,
+                        onSelectSource = { index ->
+                            onSelectSource(index)
+                            visibleState.targetState = false
+                        },
+                        onManageRules =
+                            onManageRules?.let { manage ->
+                                {
+                                    visibleState.targetState = false
+                                    manage()
+                                }
+                            },
+                        onRequestOpenSources =
+                            onRequestOpenSources?.let { openAi ->
+                                {
+                                    visibleState.targetState = false
+                                    openAi()
+                                }
+                            },
+                        onClose = { visibleState.targetState = false },
+                    )
+                }
+            }
+        } else {
+            PlayerSourcesBottomSheet(
+                sources = uiState.sources,
+                selectedIndex = uiState.selectedSourceIndex,
+                sourceFailureCounts = uiState.sourceFailureCounts,
+                isResolvingSource = uiState.isResolvingSource,
+                resolveAttempt = uiState.resolveAttempt,
+                resolveAttemptTotal = uiState.resolveAttemptTotal,
+                matchedVodName = uiState.matchedVodName,
+                onSelectSource = { index ->
+                    onSelectSource(index)
+                    onRespond(Unit)
                 },
-            onRequestOpenSources =
-                onRequestOpenSources?.let { openAi ->
-                    {
-                        onRespond(Unit)
-                        openAi()
-                    }
-                },
-            onDismiss = { onRespond(Unit) },
-        )
+                onManageRules =
+                    onManageRules?.let { manage ->
+                        {
+                            onRespond(Unit)
+                            manage()
+                        }
+                    },
+                onRequestOpenSources =
+                    onRequestOpenSources?.let { openAi ->
+                        {
+                            onRespond(Unit)
+                            openAi()
+                        }
+                    },
+                onDismiss = { onRespond(Unit) },
+            )
+        }
     }
 }

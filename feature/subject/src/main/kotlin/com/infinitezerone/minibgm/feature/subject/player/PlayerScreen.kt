@@ -861,6 +861,7 @@ fun PlayerScreen(
             )
             playerSourcesPanel(
                 uiState = uiState,
+                isLandscape = isLandscape,
                 onSelectSource = viewModel::selectSource,
                 onManageRules = onManageRules,
                 onRequestOpenSources = onRequestOpenSources,
