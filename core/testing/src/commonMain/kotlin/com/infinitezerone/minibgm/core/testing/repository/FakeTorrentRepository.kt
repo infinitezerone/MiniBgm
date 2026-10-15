@@ -73,6 +73,7 @@ class FakeTorrentRepository : TorrentRepository {
         episodeId: Long,
         episodeSort: Float,
         episodeName: String,
+        onTaskQueued: (String) -> Unit,
     ): Result<String> {
         val existing = mutableTasks.value.firstOrNull { it.magnetUrl == magnetUrl }
         if (existing != null && existing.isCompleted && existing.savePath.isNotBlank()) {
@@ -91,6 +92,7 @@ class FakeTorrentRepository : TorrentRepository {
                 episodeSort = episodeSort,
                 episodeName = episodeName,
             )
+        runCatching { onTaskQueued(taskId) }
         val streamUrl = "http://127.0.0.1:18080/torrents/0/stream/0"
         mutableTasks.update { list ->
             list.map { if (it.id == taskId) it.copy(streamUrl = streamUrl) else it }

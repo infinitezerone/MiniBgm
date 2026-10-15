@@ -192,6 +192,7 @@ class AndroidTorrentRepository(
         episodeId: Long,
         episodeSort: Float,
         episodeName: String,
+        onTaskQueued: (String) -> Unit,
     ): Result<String> {
         try {
             val taskId =
@@ -207,6 +208,10 @@ class AndroidTorrentRepository(
                     episodeSort = episodeSort,
                     episodeName = episodeName,
                 )
+
+            // 任务身份必须在等待可播放地址之前交出去：UI 的「停止起播」要靠它暂停底层任务，
+            // 而不是只把自己这条等待协程取消掉（那会留下占着队列的幽灵任务）。
+            runCatching { onTaskQueued(taskId) }
 
             val currentSnapshot = _tasks.value.firstOrNull { it.id == taskId }
             currentSnapshot?.localPlayableUri()?.let { return Result.success(it) }

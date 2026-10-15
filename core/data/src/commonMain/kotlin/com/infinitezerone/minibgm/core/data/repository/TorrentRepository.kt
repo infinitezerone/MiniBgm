@@ -48,6 +48,10 @@ interface TorrentRepository {
      * - 若任务已离线完成且本地文件存在，直接返回 `file://` 路径；
      * - 若任务正在下载且本地流服务已就绪，直接复用当前 `streamUrl`；
      * - 若任务处于排队/暂停/异常或尚未创建，优先调度该任务启动，并在流服务就绪后返回 `streamUrl`。
+     *
+     * @param onTaskQueued 任务身份回调，任务一落库即回调其 ID（早于可播放地址就绪）。
+     *   调用方必须靠它持有任务身份：否则「停止起播」只能取消等待协程，底层任务会继续占用
+     *   单实例 P2P 队列、并在下载页留下一条用户从未主动创建过的幽灵条目。
      */
     suspend fun startStreamDownload(
         title: String,
@@ -60,6 +64,7 @@ interface TorrentRepository {
         episodeId: Long = 0L,
         episodeSort: Float = 0f,
         episodeName: String = "",
+        onTaskQueued: (String) -> Unit = {},
     ): Result<String>
 
     /**
