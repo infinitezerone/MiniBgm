@@ -1277,6 +1277,124 @@ class ArchitectureRulesTest {
     }
 
     /**
+     * 磁力链路「交互与业务逻辑」红线（见 AGENTS.md 领域规则 & 剧本 8）：
+     * 1. 分集检索未命中只允许回退到合集项（`episodeSort == null`），严禁回退整份 Feed：
+     *    否则请求第 5 集会看到第 1-4 集，点单文件资源还会被 Rust 侧「单一候选即选中」静默播成第 1 集；
+     * 2. 多规则结果合并去重必须走 `TorrentMediaResource.dedupeKey`（infoHash → magnetUrl → torrentUrl → title）：
+     *    只按 `infoHash.ifBlank { magnetUrl }` 判重时，未携带 40 位哈希的 `.torrent` 直链条目会集体退化为
+     *    空串，`distinctBy` 只保留第一条，静默丢掉同 Feed 的其余条目；
+     * 3. 条目级（未选分集）动作严禁硬编码假集数（`?: 1f`）：那会把所有条目级资源塌缩成同一个
+     *    `sort:1.0` 身份键，并把 `episodeHint="1"` 喂给 Rust 的分集选片逻辑；必须回退资源自身 `episodeSort`；
+     * 4. 离线下载（后台大任务）必须经 `BgmOverlayHost` 显式确认并披露体积/可用空间；
+     * 5. 流统计轮询一次失败严禁 `break`（会永久中断状态流，下游 `first{}` 与死种看门狗双双无界挂起），
+     *    必须容忍瞬时失败并只在连续失败超阈值时收敛为 `Error`；
+     * 6. 流进度必须经 `TorrentRepository.streamState` 暴露给 UI，feature 层严禁直引 `TorrentStreamEngine`。
+     */
+    @Test
+    fun torrent_ui_and_business_guards_enforce_confirmation_dedupe_and_stream_feedback() {
+        val violations = mutableListOf<String>()
+
+        fun read(relativePath: String): String {
+            val file = File(projectRoot, relativePath)
+            assertTrue(file.isFile, "$relativePath 未找到")
+            return KotlinSourceScanner.sanitize(file.readText())
+        }
+
+        // 1. 分集未命中只回退合集项
+        val feedRepo = read("core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/TorrentFeedRepository.kt")
+        if (feedRepo.contains("matched.isNotEmpty()")) {
+            violations.add(
+                "TorrentFeedRepository.filterAndSort 用 matched.isNotEmpty() 回退了整份 Feed：分集未命中会让用户看到并点到别的集",
+            )
+        }
+        if (!feedRepo.contains("resources.filter { it.episodeSort == null }")) {
+            violations.add(
+                "TorrentFeedRepository.filterAndSort 缺少「只回退合集项（episodeSort == null）」的兜底",
+            )
+        }
+
+        // 2. 去重键必须收敛到 dedupeKey
+        listOf(
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailViewModel.kt",
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/EpisodeDetailViewModel.kt",
+        ).forEach { path ->
+            val content = read(path)
+            if (content.contains("infoHash.ifBlank")) {
+                violations.add(
+                    "$path 仍在就地拼 `infoHash.ifBlank { magnetUrl }` 去重键：无哈希的 .torrent 直链条目会被静默丢弃，改用 dedupeKey",
+                )
+            }
+            if (!content.contains("distinctBy { it.dedupeKey }")) {
+                violations.add("$path 未使用 TorrentMediaResource.dedupeKey 做去重")
+            }
+        }
+
+        // 3~5. 磁力 UI 与流引擎
+        val sheet =
+            read("feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectSourcesBottomSheet.kt")
+        if (Regex("\\?:\\s*1f").containsMatchIn(sheet)) {
+            violations.add(
+                "SubjectSourcesBottomSheet 仍把条目级动作硬编码成「第 1 话」（?: 1f）：身份键会塌缩、episodeHint 会喂假集数",
+            )
+        }
+        if (!sheet.contains("resource.episodeSort")) {
+            violations.add("SubjectSourcesBottomSheet 未回退资源自身 episodeSort 作为分集身份")
+        }
+        val downloadStart = sheet.indexOf("suspend fun downloadTorrentResource")
+        val downloadEnd = sheet.indexOf("private suspend fun ensureTorrentPluginInstalled")
+        if (downloadStart < 0 || downloadEnd <= downloadStart) {
+            violations.add("SubjectSourcesBottomSheet.downloadTorrentResource 结构锚点失效，请同步更新红线")
+        } else {
+            val downloadBody = sheet.substring(downloadStart, downloadEnd)
+            if (!downloadBody.contains("overlayHostState.await(")) {
+                violations.add(
+                    "离线下载未走 BgmOverlayHost 显式确认：后台大任务严禁静默入队",
+                )
+            }
+            if (!downloadBody.contains("feature_subject_source_torrent_download_confirm_title") ||
+                !downloadBody.contains("getStorageUsage()")
+            ) {
+                violations.add("离线下载确认弹窗未披露资源体积与设备可用空间")
+            }
+            val confirmIndex = downloadBody.indexOf("overlayHostState.await(")
+            val startIndex = downloadBody.indexOf("startDownload(")
+            if (confirmIndex < 0 || startIndex < 0 || confirmIndex > startIndex) {
+                violations.add("离线下载的 startDownload 必须晚于用户确认（当前确认未前置于落库调用）")
+            }
+        }
+
+        val streamEngine =
+            read("core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/download/AndroidTorrentStreamEngine.kt")
+        if (streamEngine.contains("getStreamStats() }.getOrNull() ?: break")) {
+            violations.add(
+                "AndroidTorrentStreamEngine 流统计轮询仍以 `?: break` 永久中断状态流：下游 first{} 与死种看门狗会无界挂起",
+            )
+        }
+        if (!streamEngine.contains("MAX_CONSECUTIVE_STAT_FAILURES")) {
+            violations.add("AndroidTorrentStreamEngine 缺少连续失败阈值，瞬时抖动与真实故障无法区分")
+        }
+
+        // 6. 流状态只经仓库契约暴露
+        val repoContract = read("core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/TorrentRepository.kt")
+        if (!repoContract.contains("val streamState: StateFlow<TorrentStreamState>")) {
+            violations.add("TorrentRepository 未暴露只读 streamState，UI 无法呈现起播进度")
+        }
+        // 播放来源面板只允许经仓库契约消费流进度（引擎控制面另有既定入口，不在此红线范围）
+        val sheetPath = "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectSourcesBottomSheet.kt"
+        if (sheet.contains("import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine")) {
+            violations.add("$sheetPath 直引 TorrentStreamEngine：流进度只能经 TorrentRepository.streamState 消费")
+        }
+        if (!sheet.contains("torrentRepository.streamState")) {
+            violations.add("$sheetPath 未消费 TorrentRepository.streamState，起播进度与失败原因对用户不可见")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反磁力交互与业务逻辑红线（见 AGENTS.md 领域规则 & 剧本 8）：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    /**
      * Flow 算子副作用收敛红线：`map` / `onEach` / `filter` / `transform` / `mapNotNull`
      * 等算子的 lambda 内严禁 `launch` 协程。
      *
