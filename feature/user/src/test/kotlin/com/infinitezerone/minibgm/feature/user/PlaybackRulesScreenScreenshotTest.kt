@@ -16,7 +16,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 private const val SAMPLE_SUB_URL =
-    "https://gist.githubusercontent.com/infinitezerone/945c7c492b9e4a4421b1034c9d24e6ca/raw/minibgm_rules.json"
+    "https://example.com/subscriptions/minibgm_rules.json"
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
