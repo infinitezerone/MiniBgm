@@ -1899,6 +1899,114 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 开发者面板「开关必须真实生效」红线（见 AGENTS.md 领域规则 & 剧本 8）：
+     *
+     * 面板里能拨的每一个开关都必须至少有一个**生产消费方**——只能写设置、只能读设置、
+     * 但没人拿它做事，就是"装饰性开关"：用户拨完以为配置生效，实际行为毫无变化，
+     * 且全程没有任何提示。历史上同一次审查里连中两例：
+     *   - `customMirrorPrefixOverride`（自定义加速镜像前缀）：更新包与 BT 原生扩展的下载
+     *     从未读过它，填了前缀照样走默认公共镜像；
+     *   - `verboseLoggingEnabled`（详细网络与引擎日志）：日志门限只在启动期按 BuildConfig
+     *     决定一次，Release 包里打开开关依旧只有 Warn 以上日志，真机排查形同盲人摸象。
+     *
+     * 机械判据：每个开关名在「消费方白名单」之外的源码里至少出现一次，
+     * 且白名单文件本身必须真的把它接进行为（读设置 → 传参 / 调门限）。
+     */
+    @Test
+    fun developer_panel_settings_must_have_a_real_consumer() {
+        val violations = mutableListOf<String>()
+
+        fun raw(relativePath: String): String {
+            val file = File(projectRoot, relativePath)
+            assertTrue(file.isFile, "$relativePath 未找到")
+            return file.readText()
+        }
+
+        fun code(relativePath: String): String = KotlinSourceScanner.sanitize(raw(relativePath))
+
+        val downloaderPath =
+            "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/download/AndroidAssetDownloader.kt"
+        val downloaderDiPath =
+            "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/di/DataModule.android.kt"
+        val appPath = "app/src/main/kotlin/com/infinitezerone/minibgm/MiniBgmApp.kt"
+
+        // 1. 自定义加速镜像前缀：下载器必须暴露读取器，且 DI 必须把它接到 DeveloperSettings 上
+        if (!code(downloaderPath).contains("customMirrorPrefixProvider")) {
+            violations.add(
+                "$downloaderPath 未暴露 customMirrorPrefixProvider：开发者面板配的前缀进不了下载器，只会静默走默认镜像",
+            )
+        }
+        if (!code(downloaderPath).contains("customMirrorPrefixProvider()")) {
+            violations.add("$downloaderPath 声明了 customMirrorPrefixProvider 却从未在解析候选地址前读取（死参数）")
+        }
+        if (!code(downloaderDiPath).contains("customMirrorPrefixProvider") ||
+            !code(downloaderDiPath).contains("developerSettings") ||
+            !code(downloaderDiPath).contains("customMirrorPrefixOverride")
+        ) {
+            violations.add(
+                "$downloaderDiPath 未把 AssetDownloader 的镜像前缀读取器接到 SettingsRepository.developerSettings.customMirrorPrefixOverride",
+            )
+        }
+
+        // 2. 详细调试日志：门限必须由开关驱动，而不是只在启动期按 BuildConfig 定死一次
+        val appCode = code(appPath)
+        if (!appCode.contains("verboseLoggingEnabled")) {
+            violations.add("$appPath 未消费 verboseLoggingEnabled：详细调试日志开关在真机上不改变任何日志门限")
+        }
+        if (!appCode.contains("setMinSeverity")) {
+            violations.add("$appPath 未按开关调整 Logger 门限（setMinSeverity）")
+        }
+        if (!appCode.contains("distinctUntilChanged")) {
+            violations.add("$appPath 收集 developerSettings 时缺少 distinctUntilChanged：每次都重设全局日志门限")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反开发者面板开关生效红线（见 AGENTS.md 领域规则 & 剧本 8）：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    /**
+     * 「已落盘资源」动作诚实性红线（见 AGENTS.md 领域规则 & 剧本 8）：
+     *
+     * 资源已完整落盘时，「离线下载」必须被禁用，且「已下载」判据必须排除物理文件缺失的任务。
+     * 否则两条路径都会骗人：
+     *   - 放行点击只会落进 `startDownload` 的「既有完成任务直接返回 taskId」分支，
+     *     随后弹出「已加入下载队列，可在通知栏查看进度」——用户盯着通知栏等一个永不出现的进度；
+     *   - 若只认 `status == COMPLETED` 而忽略文件已被清理，徽标会宣告「已下载」、
+     *     播放按钮指向不存在的 `file://`，同时下载入口被禁，用户卡在既播不了也重下不了的死路。
+     */
+    @Test
+    fun downloaded_resource_actions_must_stay_honest() {
+        val path =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectSourcesBottomSheet.kt"
+        val code = KotlinSourceScanner.sanitize(File(projectRoot, path).readText())
+        val violations = mutableListOf<String>()
+
+        val inAppDownloadGate =
+            Regex(
+                """R\.string\.feature_subject_source_torrent_in_app_download[\s\S]{0,1200}?enabled\s*=\s*!isAnyBusy\s*&&\s*!isDownloaded""",
+            )
+        if (!inAppDownloadGate.containsMatchIn(code)) {
+            violations.add(
+                "$path 的「离线下载」未在 isDownloaded 时禁用：已下载资源点击后只会弹一条「已加入下载队列」的假提示",
+            )
+        }
+
+        val completedGate = Regex("""fun completedTaskFor\([\s\S]{0,1200}?!task\.isFileMissing""")
+        if (!completedGate.containsMatchIn(code)) {
+            violations.add(
+                "$path 的 completedTaskFor 未排除 isFileMissing：文件已被清理的任务仍会被标成「已下载」，点下去是一条既播不了也重下不了的死路",
+            )
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反「已落盘资源」动作诚实性红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
     private companion object {
         /** 红线只约束生产源码：build 产物与各测试源集目录一律不下钻 */
         val NON_SOURCE_DIR_NAMES =
