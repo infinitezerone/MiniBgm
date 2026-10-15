@@ -82,12 +82,7 @@ data class TorrentTask(
 
     /** 格式化下载速度 */
     val formattedDownloadSpeed: String
-        get() =
-            when {
-                downloadSpeedBytesPerSec <= 0L -> "0 KB/s"
-                downloadSpeedBytesPerSec >= 1024 * 1024 -> "%.1f MB/s".format(downloadSpeedBytesPerSec / (1024.0 * 1024.0))
-                else -> "%d KB/s".format(downloadSpeedBytesPerSec / 1024)
-            }
+        get() = formatTransferSpeed(downloadSpeedBytesPerSec)
 
     /** 预计剩余时间（秒），无有效速率或未知大小时返回 -1L */
     val etaSeconds: Long
@@ -129,6 +124,14 @@ fun torrentEpisodeKey(
         episodeId > 0L -> "id:$episodeId"
         episodeSort > 0f -> "sort:$episodeSort"
         else -> "name:${episodeName.trim()}"
+    }
+
+/** 下载/上传速率的唯一格式化真源（任务卡片、合集视图与播放器流进度共用）。 */
+fun formatTransferSpeed(bytesPerSec: Long): String =
+    when {
+        bytesPerSec <= 0L -> "0 KB/s"
+        bytesPerSec >= 1024 * 1024 -> "%.1f MB/s".format(bytesPerSec / (1024.0 * 1024.0))
+        else -> "%d KB/s".format(bytesPerSec / 1024)
     }
 
 /**
@@ -174,12 +177,7 @@ data class SubjectDownloadGroup(
                 tasks.none { it.status == TorrentTaskStatus.DOWNLOADING && it.connectedPeers > 0 }
 
     val formattedTotalSpeed: String
-        get() =
-            when {
-                totalSpeedBytesPerSec <= 0L -> "0 KB/s"
-                totalSpeedBytesPerSec >= 1024 * 1024 -> "%.1f MB/s".format(totalSpeedBytesPerSec / (1024.0 * 1024.0))
-                else -> "%d KB/s".format(totalSpeedBytesPerSec / 1024)
-            }
+        get() = formatTransferSpeed(totalSpeedBytesPerSec)
 
     val formattedTotalSize: String
         get() {
