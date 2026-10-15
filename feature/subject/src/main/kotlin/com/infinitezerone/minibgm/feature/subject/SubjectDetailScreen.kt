@@ -766,7 +766,7 @@ fun SubjectDetailScreen(
             selectedEpisodeForSources = null
         },
         onStreamingUrlLaunch = handleStreamingUrl,
-        onRequestSourceSearch = { ep -> viewModel.requestSourceSearch(ep) },
+        onRequestSourceSearch = onSourceSearch?.let { { ep -> viewModel.requestSourceSearch(ep) } },
         onManageRules = onManageRules,
         playbackRules = uiState.playbackRules,
         failedSourceReasons = uiState.failedSourceReasons,

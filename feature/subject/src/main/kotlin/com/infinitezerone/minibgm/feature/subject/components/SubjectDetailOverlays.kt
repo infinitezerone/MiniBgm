@@ -71,7 +71,7 @@ internal fun SubjectDetailOverlays(
     selectedEpisodeForSources: Episode?,
     onDismissSourcesSheet: () -> Unit,
     onStreamingUrlLaunch: (String) -> Unit,
-    onRequestSourceSearch: (Episode?) -> Unit,
+    onRequestSourceSearch: ((Episode?) -> Unit)? = null,
     onManageRules: (() -> Unit)?,
     playbackRules: List<PlaybackSourceRule>,
     failedSourceReasons: Map<String, String>,
@@ -192,7 +192,10 @@ internal fun SubjectDetailOverlays(
                         play(route)
                     }
                 },
-            onAiSourceSearch = { onRequestSourceSearch(selectedEpisodeForSources) },
+            onAiSourceSearch =
+                onRequestSourceSearch?.let { search ->
+                    { search(selectedEpisodeForSources) }
+                },
             onManageRules =
                 onManageRules?.let { manage ->
                     {
