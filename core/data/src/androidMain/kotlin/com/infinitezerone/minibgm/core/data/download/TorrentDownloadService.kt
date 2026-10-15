@@ -34,6 +34,9 @@ class TorrentDownloadService :
     private val torrentRepository: TorrentRepository by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
+    /** 系统时长上限触达后的收尾作用域：不得随 onDestroy 一起取消，否则任务来不及落回 PAUSED。 */
+    private val timeoutScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val notificationManager by lazy {
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
@@ -100,6 +103,36 @@ class TorrentDownloadService :
     override fun onDestroy() {
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    /**
+     * Android 15+ 对 `dataSync` 前台服务有 6 小时硬上限：超时后必须主动停止前台服务，
+     * 否则系统会抛 `ForegroundServiceDidNotStopInTimeException` 直接崩溃进程。
+     * 这里把进行中的任务落回 PAUSED（用户可在下载页/通知里手动恢复），再摘掉前台通知。
+     */
+    override fun onTimeout(startId: Int) {
+        handleForegroundTimeout(startId)
+    }
+
+    override fun onTimeout(
+        startId: Int,
+        fgsType: Int,
+    ) {
+        handleForegroundTimeout(startId)
+    }
+
+    private fun handleForegroundTimeout(startId: Int) {
+        logger.w { "前台下载服务触达系统 dataSync 时长上限，暂停进行中的任务并停止服务" }
+        timeoutScope.launch {
+            torrentRepository.tasks.value
+                .filter {
+                    it.status == TorrentTaskStatus.DOWNLOADING ||
+                        it.status == TorrentTaskStatus.RESOLVING ||
+                        it.status == TorrentTaskStatus.QUEUED
+                }.forEach { torrentRepository.pauseDownload(it.id) }
+        }
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf(startId)
     }
 
     private fun observeTasks() {
