@@ -1169,6 +1169,7 @@ class PlayerViewModelTest {
                     ): List<PlayableSource> = emptyList()
                 }
 
+            val failureStore = PlaybackFailureStore()
             val vm =
                 PlayerViewModel(
                     route = route(streamUrl = ""),
@@ -1176,12 +1177,14 @@ class PlayerViewModelTest {
                     authRepository = FakeAuthRepository(initialLoggedIn = true),
                     settingsRepository = settings,
                     playbackResolverRepository = fakeResolver,
+                    failureStore = failureStore,
                 )
             advanceUntilIdle()
 
             val state = vm.uiState.value
             assertTrue(state.error?.contains("未在【EmptyRule】中解析到") == true)
             assertFalse(state.isResolvingSource)
+            assertEquals(1, failureStore.sourceHealth.value["rule1"]?.consecutiveFailures)
         }
 
     @Test
@@ -1786,5 +1789,64 @@ class PlayerViewModelTest {
             assertEquals(2f, state.episodeSort)
             assertEquals(99_000L, state.resumePositionMs)
             assertTrue("换集后旧弹幕应立即清空", state.danmakus.isEmpty())
+        }
+
+    @Test
+    fun selectSource_withinSameEpisode_preservesLatestPlaybackPosition() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule1",
+                    name = "Rule 1",
+                    urlTemplate = "https://example.com/rule1",
+                    isEnabled = true,
+                )
+            settings.importPlaybackRules(listOf(rule))
+
+            val fakeResolver =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> =
+                        listOf(
+                            PlayableSource(
+                                url = "https://example.com/rule1_ep1.m3u8",
+                                kind = PlaylistEntryKind.DIRECT,
+                            ),
+                        )
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+                }
+
+            val vm =
+                PlayerViewModel(
+                    route = route(streamUrl = "https://example.com/direct_ep1.m3u8"),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = fakeResolver,
+                )
+            advanceUntilIdle()
+
+            // 观看至 120 秒
+            vm.onProgressChanged(120_000L)
+
+            // 切换至规则源 (index 1)
+            vm.selectSource(1)
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertEquals("https://example.com/rule1_ep1.m3u8", state.streamUrl)
+            assertEquals("同分集内切换播放线路应无缝继承当前最新进度", 120_000L, state.resumePositionMs)
         }
 }

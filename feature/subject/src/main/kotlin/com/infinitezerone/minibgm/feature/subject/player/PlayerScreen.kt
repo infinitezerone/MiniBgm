@@ -160,6 +160,14 @@ fun PlayerScreen(
         }
     }
 
+    // 单个播放引擎 + 控制器：换源只更新请求头，绝不重建播放器
+    val engine = remember(context) { ExoPlayerEngine(context) }
+    val controller = remember(engine, coroutineScope) { PlayerController(engine, coroutineScope) }
+    val playback by controller.state.collectAsStateWithLifecycle()
+    val position = controller.positionMs
+    val bufferedPosition = controller.bufferedPositionMs
+    val player = controller.player
+
     val openSettingsPanel: () -> Unit = {
         coroutineScope.launch { overlayHostState.await(PlayerSettingsRequest) }
     }
@@ -170,16 +178,9 @@ fun PlayerScreen(
         coroutineScope.launch { overlayHostState.await(PlayerEpisodesRequest) }
     }
     val openSourcesPanel: () -> Unit = {
+        controller.syncPosition()
         coroutineScope.launch { overlayHostState.await(PlayerSourcesRequest) }
     }
-
-    // 单个播放引擎 + 控制器：换源只更新请求头，绝不重建播放器
-    val engine = remember(context) { ExoPlayerEngine(context) }
-    val controller = remember(engine, coroutineScope) { PlayerController(engine, coroutineScope) }
-    val playback by controller.state.collectAsStateWithLifecycle()
-    val position = controller.positionMs
-    val bufferedPosition = controller.bufferedPositionMs
-    val player = controller.player
 
     // 纯 UI 局部状态（与播放器无关）
     var areControlsVisible by remember { mutableStateOf(true) }

@@ -1391,7 +1391,10 @@ class PlayerViewModel(
                         requestHeaders = matchingEntry.requestHeaders,
                         isResolvingSource = false,
                         error = null,
-                        resumePositionMs = resumeForNewEpisode ?: it.resumePositionMs,
+                        resumePositionMs =
+                            resumeForNewEpisode ?: session.latestPositionMs.takeIf { pos ->
+                                pos > 0L
+                            } ?: it.resumePositionMs,
                     )
                 }
             } else {
@@ -1463,7 +1466,7 @@ class PlayerViewModel(
                     val playable = outcome?.directSource
 
                     if (playable != null) {
-                        // 换集到此才拿到新分集的真实地址，续播点在此刻按新地址查表下发
+                        // 换集到此才拿到新分集的真实地址，续播点在此刻按新地址查表下发；同分集内换线路沿用当前进度
                         val resumeForNewEpisode = consumePendingResumePositionForNewEpisode(playable.url)
                         _uiState.update {
                             it.copy(
@@ -1474,7 +1477,8 @@ class PlayerViewModel(
                                 resolveAttempt = 0,
                                 resolveAttemptTotal = 0,
                                 error = null,
-                                resumePositionMs = resumeForNewEpisode ?: it.resumePositionMs,
+                                resumePositionMs =
+                                    resumeForNewEpisode ?: session.latestPositionMs.takeIf { pos -> pos > 0L } ?: it.resumePositionMs,
                             )
                         }
                     } else {
@@ -1490,28 +1494,30 @@ class PlayerViewModel(
                             } else {
                                 "未在【${rule.name}】中解析到「$targetLabel」的可播放直链（已尝试 $attempted 个关键词）"
                             }
+                        val err = "$reason，可尝试切换其他播放源"
+                        failureStore?.markFailed("", err, currentSourceId())
                         _uiState.update {
                             it.copy(
                                 matchedVodName = null,
                                 isResolvingSource = false,
                                 resolveAttempt = 0,
                                 resolveAttemptTotal = 0,
-                                error = "$reason，可尝试切换其他播放源",
+                                error = err,
                             )
                         }
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    val err = "解析失败，可尝试切换其他播放源"
+                    failureStore?.markFailed("", err, currentSourceId())
                     _uiState.update {
                         it.copy(
                             matchedVodName = null,
                             isResolvingSource = false,
                             resolveAttempt = 0,
                             resolveAttemptTotal = 0,
-                            // 不拼 e.message：原始异常文本（英文/类名）不该进 UI，而且这里给不出可行动信息。
-                            // :feature:subject 依赖不到 :core:network 的文案工具，与上面的"试完不命中"统一口径。
-                            error = "解析失败，可尝试切换其他播放源",
+                            error = err,
                         )
                     }
                 }
