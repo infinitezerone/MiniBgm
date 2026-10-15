@@ -1128,6 +1128,88 @@ class ArchitectureRulesTest {
     }
 
     /**
+     * JNI 符号绑定与流统计失败信号红线（见 AGENTS.md 领域规则 & 剧本 8）：
+     * 1. Kotlin 侧 5 个 `external fun` 必须各自带 `@JvmStatic`：只有 `@JvmStatic` 会把 native 跳板
+     *    生成在**外层类** `AndroidTorrentStreamEngine` 上（`$Companion` 只留转发器），符号名才成立为扁平的
+     *    `Java_com_..._AndroidTorrentStreamEngine_nativeXxx`；漏掉即变成 `..._00024Companion_nativeXxx`，
+     *    真机 `UnsatisfiedLinkError` 闪退——而单测与静态检查面对的都是预编译 `.so`，这条链路只能靠契约守住；
+     * 2. Rust 侧必须逐个导出与之同名的符号（改名或漏一个都是同一场真机闪退）；
+     * 3. Kotlin 侧必须保留 `stats.size < 4` 的失败判据，且 Rust 侧无活跃会话时必须走 `stats_to_jni` 的
+     *    `None` 分支返回长度不足 4 的数组——严禁全零数组兜底：那会把"引擎失联"伪装成"健康的零进度"，
+     *    `MAX_CONSECUTIVE_STAT_FAILURES` 永不计数，`streamState` 既不发射也不收敛 Error，
+     *    下游 `first {}` 与死种看门狗双双无界挂起（任务永远停在 DOWNLOADING）。
+     */
+    @Test
+    fun jni_symbol_binding_and_stats_failure_signal_keep_kotlin_and_rust_in_lockstep() {
+        val violations = mutableListOf<String>()
+
+        val nativeMethods =
+            listOf(
+                "nativeIsAvailable",
+                "nativeStartStream",
+                "nativeStopStream",
+                "nativeGetStreamStats",
+                "nativeGetTargetFilePath",
+            )
+
+        val engineFile =
+            File(
+                projectRoot,
+                "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/download/AndroidTorrentStreamEngine.kt",
+            )
+        assertTrue(engineFile.isFile, "AndroidTorrentStreamEngine.kt 未找到")
+        val engineContent = KotlinSourceScanner.sanitize(engineFile.readText())
+
+        // @JvmStatic 必须紧贴各自的声明站点：只断言"文件里出现过 @JvmStatic"会在漏掉其中一个时静默放行。
+        var cursor = 0
+        nativeMethods.forEach { name ->
+            val index = engineContent.indexOf("external fun $name", cursor)
+            if (index < 0) {
+                violations.add(
+                    "AndroidTorrentStreamEngine.kt 缺少 external fun $name（Rust 侧符号将无人绑定）",
+                )
+                return@forEach
+            }
+            if (!engineContent.substring(cursor, index).contains("@JvmStatic")) {
+                violations.add(
+                    "AndroidTorrentStreamEngine.kt 的 external fun $name 缺少 @JvmStatic：" +
+                        "native 会落在外层类之外，JNI 符号变为 ..._00024Companion_$name，真机 UnsatisfiedLinkError",
+                )
+            }
+            cursor = index
+        }
+
+        if (!engineContent.contains("stats.size < 4")) {
+            violations.add(
+                "AndroidTorrentStreamEngine.kt 缺少 stats.size < 4 失败判据：长度不足 4 的统计数组会被当成有效值，引擎失联将不再收敛 Error",
+            )
+        }
+
+        val rustLibFile = File(projectRoot, "crates/minibgm-torrent/src/lib.rs")
+        assertTrue(rustLibFile.isFile, "crates/minibgm-torrent/src/lib.rs 未找到")
+        val rustLib = rustLibFile.readText()
+        nativeMethods.forEach { name ->
+            val symbol =
+                "Java_com_infinitezerone_minibgm_core_data_download_AndroidTorrentStreamEngine_$name"
+            if (!rustLib.contains("pub extern \"system\" fn $symbol(")) {
+                violations.add(
+                    "crates/minibgm-torrent/src/lib.rs 未导出 $symbol：Kotlin 侧调用将 UnsatisfiedLinkError",
+                )
+            }
+        }
+        if (!rustLib.contains("fn stats_to_jni(") || !rustLib.contains("None => return empty_stats_array(&env)")) {
+            violations.add(
+                "crates/minibgm-torrent/src/lib.rs nativeGetStreamStats 缺少无会话失败路径（stats_to_jni 返回 None 必须落为长度 0 的数组），全零数组兜底会伪装成健康零进度",
+            )
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反 JNI 符号绑定与流统计失败信号红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    /**
      * 磁力文件挑选链路红线（见 AGENTS.md 领域规则 & 剧本 8）：
      * 1. `server.rs` 必须以 `paused: true` 添加种子，并在锁定单集后调用 `session.unpause(&handle)`：
      *    否则元数据阶段会先按整包视频选片再收敛单集，合集/BD 包会白下其他剧集的分片；
