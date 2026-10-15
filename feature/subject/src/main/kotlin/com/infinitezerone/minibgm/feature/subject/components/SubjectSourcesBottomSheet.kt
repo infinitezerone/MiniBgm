@@ -582,6 +582,10 @@ fun TorrentMediaResourcesSection(
         torrentTasks.firstOrNull { task ->
             task.episodeKey == resourceEpisodeKey(resource, resourceEpisodeSort(resource)) &&
                 task.isCompleted &&
+                // 已完成但物理文件已被清理（`verifyTaskFiles` 标记）时必须当作"未落盘"：
+                // 否则徽标会宣告「已下载」、按钮会指向一个不存在的 file:// 地址，
+                // 同时 离线下载 被禁用，用户被卡在一条既播不了也重下不了的死路上。
+                !task.isFileMissing &&
                 task.savePath.isNotBlank() &&
                 task.matchesResourceSource(resource)
         }
@@ -1068,7 +1072,10 @@ fun TorrentMediaResourceCard(
                             text = stringResource(R.string.feature_subject_source_torrent_in_app_download),
                             icon = BgmIcons.Download,
                             isPrimary = false,
-                            enabled = !isAnyBusy,
+                            // 已落盘资源没有可下载的内容：放行只会落进 startDownload 的
+                            // 「既有完成任务直接返回 taskId」分支，随后弹「已加入下载队列，
+                            // 可在通知栏查看进度」的假提示——用户盯着通知栏等一个永不出现的进度。
+                            enabled = !isAnyBusy && !isDownloaded,
                             onClick = onInAppDownload,
                             modifier = Modifier.weight(1f),
                         )
