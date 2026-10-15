@@ -4,6 +4,7 @@ import android.content.Context
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.TorrentStreamState
+import com.infinitezerone.minibgm.core.model.magnetInfoHash
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -257,7 +258,7 @@ class AndroidTorrentStreamEngine internal constructor(
                     error("BT 流化组件未安装或当前设备架构不可用")
                 }
 
-                val infoHash = extractInfoHash(magnetUrl)
+                val infoHash = magnetInfoHash(magnetUrl)
                 val targetSaveDir =
                     saveDirPath
                         ?.takeIf { it.isNotBlank() }
@@ -267,7 +268,7 @@ class AndroidTorrentStreamEngine internal constructor(
                 val normalizedEpisodeHint = episodeHint?.trim().orEmpty()
 
                 val existingUrl = activeStreamUrl
-                if (infoHash != "unknown_hash" &&
+                if (infoHash.isNotBlank() &&
                     activeInfoHash.equals(infoHash, ignoreCase = true) &&
                     !existingUrl.isNullOrBlank() &&
                     activeStreamJob?.isActive == true &&
@@ -598,11 +599,6 @@ class AndroidTorrentStreamEngine internal constructor(
             }
         }
         return false
-    }
-
-    private fun extractInfoHash(magnetUrl: String): String {
-        val xt = magnetUrl.substringAfter("xt=urn:btih:", "")
-        return if (xt.isNotBlank()) xt.substringBefore("&") else "unknown_hash"
     }
 
     private object JniNativeTorrentBridge : NativeTorrentBridge {

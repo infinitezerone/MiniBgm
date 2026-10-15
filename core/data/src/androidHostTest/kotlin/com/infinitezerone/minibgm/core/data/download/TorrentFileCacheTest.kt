@@ -120,4 +120,19 @@ class TorrentFileCacheTest {
             )
         assertEquals("title_Fate_stay night_ 合集", byTitle)
     }
+
+    @Test
+    fun cacheKey_urlFingerprint_isStableAndCollisionResistant() {
+        val first = TorrentFileCache.cacheKey(magnetUrl = "", torrentUrl = "https://example.com/a.torrent", title = "t")
+        val again = TorrentFileCache.cacheKey(magnetUrl = "", torrentUrl = "https://example.com/a.torrent", title = "另一个标题")
+        val other = TorrentFileCache.cacheKey(magnetUrl = "", torrentUrl = "https://example.com/b.torrent", title = "t")
+
+        // 同一 URL 必须稳定命中同一键（跨标题、跨会话），否则缓存永不命中
+        assertEquals(first, again)
+        assertTrue(first != other, "不同种子直链必须映射到不同缓存键")
+        assertTrue(
+            Regex("^url_[0-9a-f]{32,}$").matches(first),
+            "直链指纹必须是定长十六进制摘要，而不是 32 位 hashCode（会碰撞成同一缓存文件）",
+        )
+    }
 }

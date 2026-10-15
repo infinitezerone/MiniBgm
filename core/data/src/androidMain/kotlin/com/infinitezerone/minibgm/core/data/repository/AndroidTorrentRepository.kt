@@ -13,6 +13,7 @@ import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.TorrentStreamState
 import com.infinitezerone.minibgm.core.model.TorrentTask
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
+import com.infinitezerone.minibgm.core.model.magnetInfoHash
 import com.infinitezerone.minibgm.core.model.torrentEpisodeKey
 import com.infinitezerone.minibgm.core.network.AssetDownloadService
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
@@ -117,7 +118,7 @@ class AndroidTorrentRepository(
         episodeName: String,
     ): String {
         restoreDeferred.await()
-        val incomingHash = extractInfoHash(magnetUrl)
+        val incomingHash = magnetInfoHash(magnetUrl)
         val incomingEpisodeKey = torrentEpisodeKey(episodeId, episodeSort, episodeName)
         // 分集隔离：合集/BD 包内所有分集共用同一磁力，去重必须同时比对分集身份键。
         // 只比 magnet/infoHash 时，点第 N 集会命中第 M 集的既有任务，直接复用其
@@ -129,7 +130,7 @@ class AndroidTorrentRepository(
                         task.magnetUrl == magnetUrl ||
                             (
                                 incomingHash.isNotBlank() &&
-                                    extractInfoHash(task.magnetUrl).equals(incomingHash, ignoreCase = true)
+                                    magnetInfoHash(task.magnetUrl).equals(incomingHash, ignoreCase = true)
                             )
                     )
             }
@@ -1013,11 +1014,6 @@ class AndroidTorrentRepository(
             episodeSort = episodeSort,
             episodeName = episodeName,
         )
-
-    private fun extractInfoHash(magnetUrl: String): String {
-        val xt = magnetUrl.substringAfter("xt=urn:btih:", "")
-        return if (xt.isNotBlank()) xt.substringBefore("&") else ""
-    }
 
     override suspend fun getStorageUsage(): com.infinitezerone.minibgm.core.model.DownloadStorageUsage =
         withContext(Dispatchers.IO) {

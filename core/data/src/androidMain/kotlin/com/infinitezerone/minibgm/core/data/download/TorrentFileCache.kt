@@ -1,6 +1,8 @@
 package com.infinitezerone.minibgm.core.data.download
 
+import com.infinitezerone.minibgm.core.model.magnetInfoHash
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * 磁力/BT 种子（`.torrent`）缓存的载荷校验与自愈。
@@ -56,23 +58,30 @@ internal object TorrentFileCache {
      * 缓存键：优先 `infoHash`（同一磁力必然同一内容），退化到种子直链指纹，最后才用标题。
      *
      * 严禁只按标题命名——同名不同种会永久读到旧种子。
+     * 直链指纹必须是**强摘要**：曾经用 `Integer.toHexString(url.hashCode())`（32 位、可碰撞），
+     * 两个不同种子 URL 会命中同一缓存文件，而载荷校验只验 bencode 结构不验身份，
+     * 于是"合法但错误"的种子被静默复用（表现为解析出的集数/清晰度对不上）。
      */
     fun cacheKey(
         magnetUrl: String,
         torrentUrl: String?,
         title: String,
     ): String {
-        val infoHash =
-            magnetUrl
-                .substringAfter("xt=urn:btih:", "")
-                .substringBefore("&")
-                .trim()
+        val infoHash = magnetInfoHash(magnetUrl)
         val raw =
             when {
                 infoHash.isNotBlank() -> "hash_${infoHash.lowercase()}"
-                !torrentUrl.isNullOrBlank() -> "url_${Integer.toHexString(torrentUrl.hashCode())}"
+                !torrentUrl.isNullOrBlank() -> "url_${urlFingerprint(torrentUrl)}"
                 else -> "title_${title.trim()}"
             }
         return raw.replace(ILLEGAL_NAME_CHARS, "_").take(120)
     }
+
+    /** SHA-256 前 32 位十六进制：碰撞可忽略，且定长结果不受 URL 长度影响。 */
+    private fun urlFingerprint(url: String): String =
+        MessageDigest
+            .getInstance("SHA-256")
+            .digest(url.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+            .take(32)
 }

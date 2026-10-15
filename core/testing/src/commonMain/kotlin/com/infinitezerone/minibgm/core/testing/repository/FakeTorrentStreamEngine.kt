@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.testing.repository
 
 import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
 import com.infinitezerone.minibgm.core.model.TorrentStreamState
+import com.infinitezerone.minibgm.core.model.magnetInfoHash
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -87,7 +88,7 @@ class FakeTorrentStreamEngine(
         if (hangOnStartStream) {
             awaitCancellation()
         }
-        activeInfoHash = magnetUrl.substringAfter("xt=urn:btih:", "").substringBefore("&").ifBlank { null }
+        activeInfoHash = magnetInfoHash(magnetUrl).ifBlank { null }
         val url = "http://127.0.0.1:8899/stream?hash=fake"
         _streamState.value =
             TorrentStreamState.Ready(
