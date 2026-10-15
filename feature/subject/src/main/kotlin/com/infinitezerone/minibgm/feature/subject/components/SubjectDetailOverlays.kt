@@ -81,6 +81,7 @@ internal fun SubjectDetailOverlays(
     torrentResources: List<com.infinitezerone.minibgm.core.model.TorrentMediaResource> = emptyList(),
     isTorrentLoading: Boolean = false,
     onRequestNotificationPermission: (() -> Unit)? = null,
+    onSelectEpisodeForSources: ((Episode) -> Unit)? = null,
 ) {
     if (showLoginPromptDialog) {
         BgmLoginPromptDialog(
@@ -195,9 +196,63 @@ internal fun SubjectDetailOverlays(
     }
 
     if (showSourcesBottomSheet && displaySubject != null) {
+        val watchedCount = currentCollection?.epStatus ?: 0
+        val isWatched = selectedEpisodeForSources?.let { isEpisodeWatched(it, watchedCount) } ?: false
+        val isNextToWatch =
+            selectedEpisodeForSources?.let {
+                isEpisodeNextToWatch(it, watchedCount, hasProgress = currentCollection != null)
+            } ?: false
+        val sameGroupEpisodes =
+            remember(episodes, selectedEpisodeForSources?.type) {
+                if (selectedEpisodeForSources != null) {
+                    episodes.filter { it.type == selectedEpisodeForSources.type }
+                } else {
+                    emptyList()
+                }
+            }
+        val currentIdx =
+            if (selectedEpisodeForSources !=
+                null
+            ) {
+                sameGroupEpisodes.indexOfFirst { it.id == selectedEpisodeForSources.id }
+            } else {
+                -1
+            }
+        val prevEpisode = if (currentIdx > 0) sameGroupEpisodes[currentIdx - 1] else null
+        val nextEpisode = if (currentIdx in 0 until sameGroupEpisodes.size - 1) sameGroupEpisodes[currentIdx + 1] else null
+
         SubjectSourcesBottomSheet(
             subject = displaySubject,
             episode = selectedEpisodeForSources,
+            isWatched = isWatched,
+            isNextToWatch = isNextToWatch,
+            onToggleWatched =
+                selectedEpisodeForSources?.let { ep ->
+                    {
+                        val epNumber = ep.episodeInt
+                        if (isLoggedIn) {
+                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                        }
+                        onToggleEpisodeWatched(ep, !isWatched, epNumber, ep.type)
+                    }
+                },
+            onBatchMark =
+                if (selectedEpisodeForSources != null && !isWatched && selectedEpisodeForSources.type == 0) {
+                    { onBatchMarkRequest(selectedEpisodeForSources) }
+                } else {
+                    null
+                },
+            onSelectEpisodeForDetail =
+                selectedEpisodeForSources?.let { ep ->
+                    {
+                        onDismissSourcesSheet()
+                        onSelectEpisodeForDetail(ep)
+                    }
+                },
+            onNavigateToPrevious = prevEpisode?.let { prev -> { onSelectEpisodeForSources?.invoke(prev) } },
+            onNavigateToNext = nextEpisode?.let { next -> { onSelectEpisodeForSources?.invoke(next) } },
+            currentIndex = currentIdx,
+            totalCount = sameGroupEpisodes.size,
             onDismissRequest = onDismissSourcesSheet,
             onOpenUrl = onStreamingUrlLaunch,
             onInternalPlayClick =

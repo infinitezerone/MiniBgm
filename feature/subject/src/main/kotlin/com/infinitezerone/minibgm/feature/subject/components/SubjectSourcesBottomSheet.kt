@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,10 +18,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,17 +32,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.data.download.TorrentIntentDispatcher
 import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
@@ -52,6 +58,13 @@ import com.infinitezerone.minibgm.core.designsystem.component.OverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
+import com.infinitezerone.minibgm.core.designsystem.theme.WishOrange
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusAiringContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusCollectContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.onStatusDoingContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusAiringContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusCollectContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.statusDoingContainerColor
 import com.infinitezerone.minibgm.core.model.DownloadStorageUsage
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
@@ -74,11 +87,18 @@ import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
+private data class SourceEpisodeStatusDisplay(
+    val text: String,
+    val containerColor: Color,
+    val contentColor: Color,
+    val icon: ImageVector?,
+)
+
 /**
  * 统一的「播放来源」BottomSheet，条目级与分集级共用同一组件（[episode] 为 null 即条目级）：
  * - 条目级：一体化播放器、AI 找源、播放源管理、条目级外部跳转；
  * - 分集级：逐条渲染规则源（应用内嗅探或外开）、
- *   分集化搜索关键词、外部播放器（mpv / VLC）与失败归因提示。
+ *   原位切集导航、分集打卡微操作、分集化搜索关键词、外部播放器（mpv / VLC）与失败归因提示。
  */
 @Composable
 fun SubjectSourcesBottomSheet(
@@ -87,6 +107,15 @@ fun SubjectSourcesBottomSheet(
     onOpenUrl: (String) -> Unit,
     modifier: Modifier = Modifier,
     episode: Episode? = null,
+    isWatched: Boolean = false,
+    isNextToWatch: Boolean = false,
+    onToggleWatched: (() -> Unit)? = null,
+    onBatchMark: (() -> Unit)? = null,
+    onSelectEpisodeForDetail: (() -> Unit)? = null,
+    onNavigateToPrevious: (() -> Unit)? = null,
+    onNavigateToNext: (() -> Unit)? = null,
+    currentIndex: Int = -1,
+    totalCount: Int = -1,
     mikanId: String? = null,
     onInternalPlayClick: ((PlayerRoute) -> Unit)? = null,
     onAiSourceSearch: (() -> Unit)? = null,
@@ -99,12 +128,13 @@ fun SubjectSourcesBottomSheet(
 ) {
     val context = LocalContext.current
     val displayName = subject.displayName
-    val sheetTitle =
-        remember(displayName, episode) {
+    val sheetTitle = displayName
+    val sheetSubtitle =
+        remember(episode) {
             if (episode != null) {
-                formatEpisodeGuideHeader(displayName, episode)
+                episode.guideLabel
             } else {
-                displayName
+                null
             }
         }
 
@@ -171,10 +201,327 @@ fun SubjectSourcesBottomSheet(
     BgmSourcesBottomSheet(
         title = sheetTitle,
         coverUrl = subject.images?.bestImage.orEmpty(),
-        subtitle = stringResource(R.string.feature_subject_source_choose_source),
+        subtitle = sheetSubtitle ?: stringResource(R.string.feature_subject_source_choose_source),
         onDismissRequest = onDismissRequest,
         modifier = modifier,
     ) { runAfterDismiss ->
+        // 0. 🌟 分集原位信息与打卡微操作区（单层扁平化呈现，彻底消灭弹窗跳弹窗）
+        if (episode != null) {
+            // 原位切集导航
+            if (onNavigateToPrevious != null || onNavigateToNext != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    FilledTonalButton(
+                        onClick = { onNavigateToPrevious?.invoke() },
+                        enabled = onNavigateToPrevious != null,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        modifier = Modifier.height(28.dp),
+                        shape = BgmShapes.small,
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.KeyboardArrowLeft,
+                            contentDescription = stringResource(R.string.feature_subject_ep_previous),
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = stringResource(R.string.feature_subject_ep_previous),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+
+                    Text(
+                        text =
+                            if (currentIndex >= 0 && totalCount > 0) {
+                                "${currentIndex + 1} / $totalCount"
+                            } else {
+                                epLabel
+                            },
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    FilledTonalButton(
+                        onClick = { onNavigateToNext?.invoke() },
+                        enabled = onNavigateToNext != null,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        modifier = Modifier.height(28.dp),
+                        shape = BgmShapes.small,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.feature_subject_ep_next),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(
+                            imageVector = BgmIcons.KeyboardArrowRight,
+                            contentDescription = stringResource(R.string.feature_subject_ep_next),
+                            modifier = Modifier.size(15.dp),
+                        )
+                    }
+                }
+            }
+
+            // 分集主标题与状态标签
+            val primaryTitle = episode.nameCn.ifBlank { episode.name.ifBlank { epLabel } }
+            val secondaryTitle = if (episode.name.isNotBlank() && episode.name != primaryTitle) episode.name else ""
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    val fullHeading = if (primaryTitle != epLabel) "$epLabel · $primaryTitle" else epLabel
+                    Text(
+                        text = fullHeading,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    val status =
+                        when {
+                            isWatched ->
+                                SourceEpisodeStatusDisplay(
+                                    text = stringResource(R.string.feature_subject_ep_status_watched),
+                                    containerColor = statusCollectContainerColor(),
+                                    contentColor = onStatusCollectContainerColor(),
+                                    icon = BgmIcons.Check,
+                                )
+                            isFuture ->
+                                SourceEpisodeStatusDisplay(
+                                    text =
+                                        if (episode.airdate.isNotBlank()) {
+                                            stringResource(R.string.feature_subject_player_airdate, episode.airdate)
+                                        } else {
+                                            stringResource(R.string.feature_subject_episodes_status_to_watch)
+                                        },
+                                    containerColor = statusAiringContainerColor(),
+                                    contentColor = onStatusAiringContainerColor(),
+                                    icon = BgmIcons.Schedule,
+                                )
+                            isNextToWatch ->
+                                SourceEpisodeStatusDisplay(
+                                    text = stringResource(R.string.feature_subject_episodes_status_to_watch),
+                                    containerColor = statusDoingContainerColor(),
+                                    contentColor = onStatusDoingContainerColor(),
+                                    icon = BgmIcons.Play,
+                                )
+                            else ->
+                                SourceEpisodeStatusDisplay(
+                                    text = stringResource(R.string.feature_subject_ep_status_unwatched),
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    icon = null,
+                                )
+                        }
+
+                    Surface(
+                        shape = BgmShapes.small,
+                        color = status.containerColor,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        ) {
+                            if (status.icon != null) {
+                                Icon(
+                                    imageVector = status.icon,
+                                    contentDescription = null,
+                                    tint = status.contentColor,
+                                    modifier = Modifier.size(12.dp),
+                                )
+                            }
+                            Text(
+                                text = status.text,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = status.contentColor,
+                            )
+                        }
+                    }
+                }
+
+                if (secondaryTitle.isNotBlank()) {
+                    Text(
+                        text = secondaryTitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                // 行内元信息：放送时间 · 时长 · 吐槽讨论直达链接
+                val metaItems =
+                    buildList {
+                        if (episode.airdate.isNotBlank()) add(episode.airdate)
+                        if (episode.duration.isNotBlank()) add(episode.duration)
+                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(top = 2.dp),
+                ) {
+                    if (metaItems.isNotEmpty()) {
+                        Text(
+                            text = metaItems.joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        )
+                        Text(
+                            text = "·",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier =
+                            Modifier
+                                .clip(BgmShapes.small)
+                                .clickable {
+                                    runAfterDismiss {
+                                        onSelectEpisodeForDetail?.invoke()
+                                    }
+                                }.padding(horizontal = 4.dp, vertical = 2.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (episode.comment >= 50) BgmIcons.LocalFireDepartment else BgmIcons.ChatBubbleOutline,
+                            contentDescription = null,
+                            tint = if (episode.comment >= 50) WishOrange else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp),
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text =
+                                if (episode.comment > 0) {
+                                    stringResource(R.string.feature_subject_ep_comments_total, episode.comment) + " ›"
+                                } else {
+                                    stringResource(R.string.feature_subject_ep_quick_no_comments) + " ›"
+                                },
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = if (episode.comment >= 50) WishOrange else MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+
+            // 剧情梗概（折叠卡片）
+            if (episode.desc.isNotBlank()) {
+                var isDescExpanded by rememberSaveable(episode.id) { mutableStateOf(false) }
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(BgmShapes.medium)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .clickable { isDescExpanded = !isDescExpanded }
+                            .padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.feature_subject_ep_synopsis),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Icon(
+                            imageVector = if (isDescExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(
+                        text = episode.desc.trim(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (isDescExpanded) Int.MAX_VALUE else 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 18.sp,
+                    )
+                }
+            }
+
+            // 打卡操作行（显式 contentPadding，彻底杜绝文字截断）
+            if (onToggleWatched != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilledTonalButton(
+                        onClick = { onToggleWatched() },
+                        modifier = Modifier.weight(1f).height(38.dp),
+                        shape = BgmShapes.medium,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (isWatched) BgmIcons.Check else BgmIcons.CheckBorder,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text =
+                                if (isWatched) {
+                                    stringResource(R.string.feature_subject_ep_unwatch)
+                                } else {
+                                    stringResource(R.string.feature_subject_ep_mark_watched)
+                                },
+                            maxLines = 1,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+
+                    if (!isWatched && onBatchMark != null && episode.isMain && episode.episodeInt > 1) {
+                        OutlinedButton(
+                            onClick = { onBatchMark() },
+                            modifier = Modifier.weight(1f).height(38.dp),
+                            shape = BgmShapes.medium,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.FormatListNumbered,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(R.string.feature_subject_ep_watch_to_here),
+                                maxLines = 1,
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
+        }
         // 1. 🌟 Hero 主起播区 (一键即播) / 未播分集状态提示
         if (isFuture && episode != null) {
             Surface(

@@ -606,7 +606,8 @@ fun SubjectDetailScreen(
                                     onOpenCollectionSheet = { viewModel.setCollectionSheetVisible(true) },
                                     onIncrementWatched = viewModel::incrementWatchedEpisode,
                                     onEpisodeClickForQuickAction = { episode ->
-                                        selectedEpisodeForQuickAction = episode
+                                        selectedEpisodeForSources = episode
+                                        showSourcesBottomSheet = true
                                     },
                                     onToggleWatching = {
                                         val wasWatching = uiState.collection?.type == CollectionType.DOING.value
@@ -764,6 +765,7 @@ fun SubjectDetailScreen(
         showSourcesBottomSheet = showSourcesBottomSheet,
         displaySubject = displaySubject,
         selectedEpisodeForSources = selectedEpisodeForSources,
+        onSelectEpisodeForSources = { selectedEpisodeForSources = it },
         onDismissSourcesSheet = {
             showSourcesBottomSheet = false
             selectedEpisodeForSources = null
