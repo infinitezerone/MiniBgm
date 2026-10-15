@@ -1129,15 +1129,18 @@ class ArchitectureRulesTest {
 
     /**
      * JNI 符号绑定与流统计失败信号红线（见 AGENTS.md 领域规则 & 剧本 8）：
-     * 1. Kotlin 侧 5 个 `external fun` 必须各自带 `@JvmStatic`：只有 `@JvmStatic` 会把 native 跳板
+     * 1. Kotlin 侧 6 个 `external fun` 必须各自带 `@JvmStatic`：只有 `@JvmStatic` 会把 native 跳板
      *    生成在**外层类** `AndroidTorrentStreamEngine` 上（`$Companion` 只留转发器），符号名才成立为扁平的
      *    `Java_com_..._AndroidTorrentStreamEngine_nativeXxx`；漏掉即变成 `..._00024Companion_nativeXxx`，
      *    真机 `UnsatisfiedLinkError` 闪退——而单测与静态检查面对的都是预编译 `.so`，这条链路只能靠契约守住；
      * 2. Rust 侧必须逐个导出与之同名的符号（改名或漏一个都是同一场真机闪退）；
-     * 3. Kotlin 侧必须保留 `stats.size < 4` 的失败判据，且 Rust 侧无活跃会话时必须走 `stats_to_jni` 的
-     *    `None` 分支返回长度不足 4 的数组——严禁全零数组兜底：那会把"引擎失联"伪装成"健康的零进度"，
-     *    `MAX_CONSECUTIVE_STAT_FAILURES` 永不计数，`streamState` 既不发射也不收敛 Error，
-     *    下游 `first {}` 与死种看门狗双双无界挂起（任务永远停在 DOWNLOADING）。
+     * 3. Kotlin 侧必须保留 `stats.size < STATS_ARRAY_SIZE`（=5）的失败判据，且 Rust 侧无活跃会话时必须走
+     *    `stats_to_jni` 的 `None` 分支返回长度不足的数组——严禁全零数组兜底：那会把"引擎失联"伪装成
+     *    "健康的零进度"，`MAX_CONSECUTIVE_STAT_FAILURES` 永不计数，`streamState` 既不发射也不收敛 Error，
+     *    下游 `first {}` 与死种看门狗双双无界挂起（任务永远停在 DOWNLOADING）；
+     * 4. 第 5 位（下标 4）的引擎状态码与 `nativeGetLastError` 必须成对存在：librqbit 的
+     *    `TorrentStatsState::Error`（磁盘写入失败 / 初始化校验失败）过去被折叠成"0 速度 0 Peer"，
+     *    用户只能在死种看门狗超时后被告知「连不上做种节点」——真实原因被伪装成死种。
      */
     @Test
     fun jni_symbol_binding_and_stats_failure_signal_keep_kotlin_and_rust_in_lockstep() {
@@ -1149,6 +1152,7 @@ class ArchitectureRulesTest {
                 "nativeStartStream",
                 "nativeStopStream",
                 "nativeGetStreamStats",
+                "nativeGetLastError",
                 "nativeGetTargetFilePath",
             )
 
@@ -1179,9 +1183,23 @@ class ArchitectureRulesTest {
             cursor = index
         }
 
-        if (!engineContent.contains("stats.size < 4")) {
+        if (!engineContent.contains("stats.size < STATS_ARRAY_SIZE")) {
             violations.add(
-                "AndroidTorrentStreamEngine.kt 缺少 stats.size < 4 失败判据：长度不足 4 的统计数组会被当成有效值，引擎失联将不再收敛 Error",
+                "AndroidTorrentStreamEngine.kt 缺少 stats.size < STATS_ARRAY_SIZE 失败判据：长度不足的统计数组会被当成有效值，引擎失联将不再收敛 Error",
+            )
+        }
+        if (!engineContent.contains("STATS_ARRAY_SIZE = 5") || !engineContent.contains("STATS_INDEX_STATE = 4")) {
+            violations.add(
+                "AndroidTorrentStreamEngine.kt 统计数组布局常量（长度 5 / 状态码下标 4）与 Rust 侧 stats_to_jni 失配",
+            )
+        }
+        if (!engineContent.contains("STATS_STATE_ENGINE_ERROR") ||
+            !engineContent.contains("getLastError") ||
+            !engineContent.contains("resolveEngineErrorReason")
+        ) {
+            violations.add(
+                "AndroidTorrentStreamEngine.kt 未消费引擎级错误状态码/错误原文：librqbit 判定种子 Error（磁盘写满、初始化校验失败）时只会表现为 0 速度，" +
+                    "用户将在 45 秒后被死种看门狗告知「连不上做种节点」，真实原因被伪装成死种",
             )
         }
 
@@ -1200,6 +1218,25 @@ class ArchitectureRulesTest {
         if (!rustLib.contains("fn stats_to_jni(") || !rustLib.contains("None => return empty_stats_array(&env)")) {
             violations.add(
                 "crates/minibgm-torrent/src/lib.rs nativeGetStreamStats 缺少无会话失败路径（stats_to_jni 返回 None 必须落为长度 0 的数组），全零数组兜底会伪装成健康零进度",
+            )
+        }
+        if (!rustLib.contains("-> Option<[i64; 5]>") || !rustLib.contains("env.new_long_array(5)")) {
+            violations.add(
+                "crates/minibgm-torrent/src/lib.rs 统计数组长度不是 5：Kotlin 侧按 STATS_ARRAY_SIZE=5 判失败，" +
+                    "长度错位会让每次读取都被判为失败并误收敛 STATS_UNAVAILABLE_MESSAGE",
+            )
+        }
+        if (!rustLib.contains("STATS_STATE_ENGINE_ERROR")) {
+            violations.add(
+                "crates/minibgm-torrent/src/lib.rs 未把引擎错误态编码进统计数组第 5 位：Kotlin 侧无从区分「引擎级致命错误」与「死种 0 速度」",
+            )
+        }
+        val rustServerFile = File(projectRoot, "crates/minibgm-torrent/src/server.rs")
+        assertTrue(rustServerFile.isFile, "crates/minibgm-torrent/src/server.rs 未找到")
+        val rustServer = rustServerFile.readText()
+        if (!rustServer.contains("TorrentStatsState::Error") || !rustServer.contains("engine_error")) {
+            violations.add(
+                "crates/minibgm-torrent/src/server.rs 未把 librqbit TorrentStatsState::Error 映射进 StreamStats：致命错误会退化成 0 速度 0 Peer",
             )
         }
 
