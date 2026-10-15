@@ -206,6 +206,8 @@ description: >-
      * **P2P 原画与字幕组资源**：按字幕组归类的种子资源卡片，支持“边下边播”与“离线缓存”；未配置规则时引导用户配置；
      * **辅助工具与外部跳转**：AI 找源、外部跳转与规则管理入口。
 
+    * **单实现优先：共享语义必须收敛到唯一真源（重复造轮子复盘）**：`infoHash` 解析曾在引擎 / 仓库 / 缓存 / UI 四处各写一遍，且降级语义还不一致（引擎返回 `"unknown_hash"` 哨兵、其余处返回空串）——同一语义两套降级正是"未知磁力互相误判为同一源"的温床，必须收敛到 `:core:model` 的 `magnetInfoHash`（解析不出统一返回**空串**，调用方一律 `isBlank()` 判定）；速率与体积格式化必须收敛到 `formatTransferSpeed` / `DownloadStorageUsage.formatBytes`，页面内手搓 `KB/s` 分支与无引用的 `formattedSpeed` 死代码属性一并清除（副本漂移会让同一数值两处显示不一致）；种子缓存键的直链指纹必须是 SHA-256 截断摘要，`Integer.toHexString(url.hashCode())` 这类 32 位弱哈希会碰撞，而载荷校验只验 bencode 结构不验身份，于是静默接受"合法但错误"的种子。红线：`ArchitectureRulesTest#torrent_implementation_consolidation_guards_are_enforced`（原始文本扫描全仓 `substringAfter("xt=urn:btih:")` 只允许出现在真源文件——此处不可用 `KotlinSourceScanner.sanitize()`，违规形态必然落在字符串字面量里会被脱敏抹掉；另闭锁哨兵字符串绝迹、`toHexString(` 禁用、`DownloadScreen` 必须消费真源）。
+    * **「停止起播」必须真停底层任务 + 源同一性须含 torrentUrl**：`startStreamDownload` 必须经 `onTaskQueued(taskId)` 在任务落库瞬间把身份透出给 UI，UI 的停止动作必须 `pauseDownload(taskId)`（选**暂停**而非删除：该任务可能正是用户此前显式确认过的离线下载，删除会连半成品一起清掉）后再清忙态——只 `busyJob?.cancel()` 会让任务继续占着单实例 P2P 队列，并在下载页留下用户从未主动创建过的条目；起播进度与停止入口严禁包在「展开态」里（折叠后入口消失但任务仍在跑）；单实例会话期间所有资源动作必须一并禁用（可见的诚实禁用，而不是按钮亮着却因忙态守卫点了没反应）；既有任务比对必须同时含分集身份键与源同一性（`infoHash` 优先 → `magnetUrl` 原文 → `torrentUrl` 兜底），只比 `magnetUrl` 时 torrentUrl-only 资源两侧都是空串，`"" == ""` 会互相误命中并复用错误的流地址或 `file://` 落盘路径。
 ---
 
 ## 剧本 12：通用资产下载与落盘互斥规范（Asset Download & File Mutex）

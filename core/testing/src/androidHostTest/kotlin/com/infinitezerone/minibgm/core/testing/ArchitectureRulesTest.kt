@@ -1264,9 +1264,16 @@ class ArchitectureRulesTest {
                 "AndroidTorrentStreamEngine 预取/复用本地种子文件未经 TorrentFileCache 校验载荷，坏种子会随 DB 路径被永久复用",
             )
         }
-        if (!sheetContent.contains("task.episodeKey == requestedEpisodeKey")) {
+        // 选源面板既有任务复用判据：锚定 `completedTaskFor` 的「分集身份键 + 源同一性」双判据本体。
+        // 曾经锚定旧的 `task.episodeKey == requestedEpisodeKey` 字面量——面板重构把比对收进
+        // `completedTaskFor` 后该字面量消失，红线必须以结构（函数 + 两处判据）而非旧写法为锚，
+        // 否则「重命名/抽函数」这类等价重构会被误判为违规，而真正的判据删失又会漏检。
+        if (!sheetContent.contains("fun completedTaskFor(") ||
+            !sheetContent.contains("task.episodeKey ==") ||
+            !sheetContent.contains("matchesResourceSource(resource)")
+        ) {
             violations.add(
-                "SubjectSourcesBottomSheet 已完成任务快捷复用缺少 episodeKey 比对：点第 N 集会直接播第 M 集已落盘的文件",
+                "SubjectSourcesBottomSheet 已完成任务快捷复用缺少「分集身份键 + 源同一性」双判据：点第 N 集会直接播第 M 集已落盘的文件，或让不同来源互相复用落盘路径",
             )
         }
 
@@ -1391,6 +1398,140 @@ class ArchitectureRulesTest {
         assertTrue(
             violations.isEmpty(),
             "违反磁力交互与业务逻辑红线（见 AGENTS.md 领域规则 & 剧本 8）：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    /**
+     * 磁力实现收敛红线（见 AGENTS.md 领域规则 & 剧本 8）：
+     * 1. `infoHash` 解析必须收敛到 `:core:model` 的 `magnetInfoHash` 唯一真源：
+     *    历史上引擎 / 仓库 / 缓存 / UI 四处各写一遍，引擎侧还降级成 `"unknown_hash"` 哨兵、
+     *    其余处返回空串——同一语义两套降级，是"未知磁力互相误判为同一源"的温床；
+     * 2. 传输速率与体积格式化只允许走 `formatTransferSpeed` / `DownloadStorageUsage.formatBytes`
+     *    真源，严禁页面内再手搓 `KB/s` 分支（副本漂移会让同一数值在两处显示不一致）；
+     * 3. 种子缓存键的直链指纹必须是强摘要（SHA-256 截断），严禁 `hashCode().toHexString()`
+     *    这种 32 位可碰撞的弱哈希——碰撞会让两个不同种子命中同一缓存文件，而载荷校验只验
+     *    bencode 结构不验身份，会接受"合法但错误"的种子；
+     * 4. 「停止起播」必须真停底层任务（经 `onTaskQueued` 拿到 taskId → `pauseDownload`）：
+     *    只 `busyJob?.cancel()` 会让任务继续占着单实例 P2P 队列，并在下载页留下用户从未创建过的条目；
+     * 5. 既有任务比对必须含 `torrentUrl` 兜底：只比 `magnetUrl` 时 torrentUrl-only 资源两侧都是空串，
+     *    `"" == ""` 会互相误命中并复用错误的流地址或落盘路径。
+     */
+    @Test
+    fun torrent_implementation_consolidation_guards_are_enforced() {
+        val violations = mutableListOf<String>()
+        val infoHashSourceOfTruth =
+            "core/model/src/commonMain/kotlin/com/infinitezerone/minibgm/core/model/TorrentMediaResource.kt"
+
+        fun raw(relativePath: String): String {
+            val file = File(projectRoot, relativePath)
+            assertTrue(file.isFile, "$relativePath 未找到")
+            return file.readText()
+        }
+
+        fun code(relativePath: String): String = KotlinSourceScanner.sanitize(raw(relativePath))
+
+        // 1. infoHash 解析唯一真源（原始文本扫描：违规形态必然落在字符串字面量里，sanitize() 会抹掉字符串）
+        val handrolledParse = "substringAfter(\"xt=urn:btih:\""
+        listOf("core", "feature", "app", "sync").forEach { dirPath ->
+            val dir = File(projectRoot, dirPath)
+            if (!dir.isDirectory) return@forEach
+            dir
+                .walkTopDown()
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                .filter { it.isFile && it.extension == "kt" }
+                .forEach { file ->
+                    val rel = file.relativeTo(projectRoot).path
+                    if (rel != infoHashSourceOfTruth && file.readText().contains(handrolledParse)) {
+                        violations.add("$rel 重复手写 infoHash 解析，必须调用 :core:model 的 magnetInfoHash 唯一真源")
+                    }
+                }
+        }
+        if (!code(infoHashSourceOfTruth).contains("fun magnetInfoHash(")) {
+            violations.add("$infoHashSourceOfTruth 缺少 magnetInfoHash 唯一真源")
+        }
+
+        // 2. 哨兵降级彻底退场（引擎曾用 "unknown_hash"，其余处返回空串）
+        listOf(
+            "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/download/AndroidTorrentStreamEngine.kt",
+            "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/download/TorrentFileCache.kt",
+            "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/repository/AndroidTorrentRepository.kt",
+            "core/testing/src/commonMain/kotlin/com/infinitezerone/minibgm/core/testing/repository/FakeTorrentStreamEngine.kt",
+        ).forEach { path ->
+            if (raw(path).contains("unknown_hash")) {
+                violations.add("$path 仍残留 infoHash 哨兵降级 unknown_hash：未知源必须统一以空串 + isBlank 判定")
+            }
+        }
+
+        // 3. 速率 / 体积格式化唯一真源
+        val downloadScreen = "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/DownloadScreen.kt"
+        if (!code(downloadScreen).contains("formatTransferSpeed(")) {
+            violations.add("$downloadScreen 未消费 formatTransferSpeed 真源")
+        }
+        if (raw(downloadScreen).contains("KB/s") || raw(downloadScreen).contains("MB/s")) {
+            violations.add("$downloadScreen 内联手搓速率单位，必须调用 formatTransferSpeed")
+        }
+        val torrentModels = "core/model/src/commonMain/kotlin/com/infinitezerone/minibgm/core/model/TorrentModels.kt"
+        if (!code(torrentModels).contains("fun formatTransferSpeed(")) {
+            violations.add("$torrentModels 缺少 formatTransferSpeed 真源")
+        }
+        if (!code(torrentModels).contains("fun formatDownloadProgressPair(")) {
+            violations.add("$torrentModels 缺少 formatDownloadProgressPair 真源（已下载/总量进度文案）")
+        }
+        if (!code(torrentModels).contains("DownloadStorageUsage.formatBytes")) {
+            violations.add("$torrentModels 体积格式化未收敛到 DownloadStorageUsage.formatBytes 真源")
+        }
+        val downloadModels = "core/model/src/commonMain/kotlin/com/infinitezerone/minibgm/core/model/DownloadModels.kt"
+        listOf("formattedSpeed", "formattedProgress").forEach { duplicate ->
+            if (code(downloadModels).contains(duplicate)) {
+                violations.add(
+                    "$downloadModels 仍残留 $duplicate 重复格式化实现：速率与体积格式化只能有 :core:model 的单一真源",
+                )
+            }
+        }
+        val rssParser = "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/resolver/TorrentRssParser.kt"
+        if (!code(rssParser).contains("DownloadStorageUsage.formatBytes(")) {
+            violations.add("$rssParser 体积格式化未收敛到 DownloadStorageUsage.formatBytes 真源")
+        }
+
+        // 4. 种子缓存键强摘要
+        val cache = "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/download/TorrentFileCache.kt"
+        if (!raw(cache).contains("SHA-256") || !code(cache).contains("MessageDigest")) {
+            violations.add("$cache 种子缓存键未使用 SHA-256 强摘要")
+        }
+        if (code(cache).contains("toHexString(")) {
+            violations.add("$cache 仍用 toHexString(hashCode()) 弱指纹做缓存键：32 位碰撞会命中错误种子")
+        }
+
+        // 5. 停止起播必须真停任务 + 源同一性必须含 torrentUrl
+        val sheetPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectSourcesBottomSheet.kt"
+        val sheet = code(sheetPath)
+        if (!sheet.contains("pauseDownload(")) {
+            violations.add("$sheetPath 停止起播未调用 pauseDownload：只取消等待协程会让任务继续占着 P2P 队列")
+        }
+        if (!sheet.contains("onTaskQueued")) {
+            violations.add("$sheetPath 未接住 onTaskQueued 回调：拿不到 taskId 就无法真正停止底层任务")
+        }
+        if (sheet.contains("onCancelBusy")) {
+            violations.add("$sheetPath 仍暴露 onCancelBusy 旧语义：停止起播的语义是真停任务，不是只取消等待")
+        }
+        if (!sheet.contains("matchesResourceSource") || !sheet.contains("torrentUrl")) {
+            violations.add("$sheetPath 既有任务比对缺少 torrentUrl 兜底：torrentUrl-only 资源会以空磁力互相误命中")
+        }
+        val repoContract =
+            "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/TorrentRepository.kt"
+        if (!code(repoContract).contains("onTaskQueued")) {
+            violations.add("$repoContract.startStreamDownload 未声明 onTaskQueued：UI 无法在任务落库后拿到身份")
+        }
+        val repoImpl =
+            "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/repository/AndroidTorrentRepository.kt"
+        if (!code(repoImpl).contains("onTaskQueued")) {
+            violations.add("$repoImpl 未实现 onTaskQueued 契约")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反磁力实现收敛红线（见 AGENTS.md 领域规则 & 剧本 8）：\n" + violations.joinToString("\n"),
         )
     }
 
