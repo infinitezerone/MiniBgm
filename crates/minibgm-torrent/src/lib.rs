@@ -1,12 +1,12 @@
 mod server;
 
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use jni::objects::{JClass, JString};
 use jni::sys::{jboolean, jlongArray, jstring};
 use jni::JNIEnv;
-use server::{StreamConfig, StreamServer};
+use server::{StreamConfig, StreamServer, StreamStats};
 use tokio::runtime::{Builder, Runtime};
 
 static RUNTIME: OnceLock<Result<Runtime, String>> = OnceLock::new();
@@ -28,6 +28,57 @@ fn runtime() -> Result<&'static Runtime, String> {
 
 fn active_server() -> &'static Mutex<Option<StreamServer>> {
     ACTIVE_SERVER.get_or_init(|| Mutex::new(None))
+}
+
+/// 取活跃会话锁，并容忍毒锁。
+///
+/// `extern "system"` 边界无法让 panic 展开：一旦 panic 逃逸出 FFI 边界，Rust 会直接 abort
+/// 整个进程（用户看到的是应用闪退）。因此持锁期间任何内部 panic（librqbit 在 `stop()` /
+/// `get_stats()` 内失败等）都不允许把后续调用一起拖崩——毒锁一律取回内部数据继续工作，
+/// 严禁在 JNI 边界写 `lock().unwrap()` / `new_string().unwrap()`。
+fn lock_active_server() -> MutexGuard<'static, Option<StreamServer>> {
+    active_server()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// 取出当前活跃会话（锁内只做 `take`）：teardown 可能干实事（drop `Session` / 关闭监听），
+/// 必须在锁外执行，否则每秒一次的 stats 轮询会一起排队，也会把锁暴露在 drop panic 下。
+fn take_active_server() -> Option<StreamServer> {
+    lock_active_server().take()
+}
+
+/// 分配 Java 字符串：JNI 异常 / OOM 等分配失败降级为 `null`（Kotlin 侧走失败分支），
+/// 而不是 `unwrap()` 把进程 abort 掉。
+fn to_jstring(env: &JNIEnv, value: String) -> jstring {
+    match env.new_string(value) {
+        Ok(s) => s.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// 长度不足 4 的数组是 Kotlin 侧唯一可识别的"读取失败"信号
+/// （`AndroidTorrentStreamEngine` 只在 `stats == null || stats.size < 4` 时累加
+/// `MAX_CONSECUTIVE_STAT_FAILURES`）。无活跃会话时必须返回它，严禁用全零数组兜底：
+/// 那会把"引擎失联"伪装成"健康的零进度"，`streamState` 不再发射也不收敛 Error，
+/// 下游 `first {}` 与死种看门狗双双无界挂起（任务永远停在 DOWNLOADING）。
+fn empty_stats_array(env: &JNIEnv) -> jlongArray {
+    match env.new_long_array(0) {
+        Ok(array) => array.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// 把活跃会话统计折叠为 JNI 返回的四个数值 `[已下载, 总长, 速度, Peer 数]`；
+/// 无活跃会话返回 `None`（契约见 [`empty_stats_array`]）。
+fn stats_to_jni(stats: Option<StreamStats>) -> Option<[i64; 4]> {
+    let stats = stats?;
+    Some([
+        stats.downloaded_bytes as i64,
+        stats.total_bytes as i64,
+        stats.speed_bytes_per_sec as i64,
+        stats.connected_peers as i64,
+    ])
 }
 
 fn init_logger() {
@@ -64,12 +115,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
 
     let magnet_str: String = match env.get_string(&magnet_url) {
         Ok(s) => s.into(),
-        Err(e) => {
-            return env
-                .new_string(format!("ERROR: 解析 magnet_url 失败: {e}"))
-                .unwrap()
-                .into_raw()
-        }
+        Err(e) => return to_jstring(&env, format!("ERROR: 解析 magnet_url 失败: {e}")),
     };
 
     let torrent_path_str: String = match env.get_string(&torrent_path) {
@@ -79,12 +125,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
 
     let save_dir_str: String = match env.get_string(&save_dir) {
         Ok(s) => s.into(),
-        Err(e) => {
-            return env
-                .new_string(format!("ERROR: 解析 save_dir 失败: {e}"))
-                .unwrap()
-                .into_raw()
-        }
+        Err(e) => return to_jstring(&env, format!("ERROR: 解析 save_dir 失败: {e}")),
     };
 
     let episode_hint_str: String = match env.get_string(&episode_hint) {
@@ -94,7 +135,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
 
     let rt = match runtime() {
         Ok(r) => r,
-        Err(e) => return env.new_string(format!("ERROR: {e}")).unwrap().into_raw(),
+        Err(e) => return to_jstring(&env, format!("ERROR: {e}")),
     };
 
     let config = StreamConfig {
@@ -112,12 +153,9 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
         },
     };
 
-    // 停止已存在的活跃服务
-    {
-        let mut server_guard = active_server().lock().unwrap();
-        if let Some(old) = server_guard.take() {
-            old.stop();
-        }
+    // 停止已存在的活跃服务（旧会话必须先同步退出，再启动新会话复用同一落盘目录）
+    if let Some(old) = take_active_server() {
+        old.stop();
     }
 
     // 启动新的 HTTP 流媒体服务器
@@ -128,18 +166,15 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
             let stream_url = server.stream_url.clone();
             log::info!("原生 BT 内存流化服务启动成功: {}", stream_url);
 
-            let mut server_guard = active_server().lock().unwrap();
-            *server_guard = Some(server);
+            *lock_active_server() = Some(server);
 
-            env.new_string(stream_url).unwrap().into_raw()
+            to_jstring(&env, stream_url)
         }
         Err(e) => {
             log::error!("原生 BT 内存流化服务启动失败: {:?}", e);
             // 必须用 {e:#} 展开 anyhow 的 context 链：`{}` 只打印最外层 context，
             // 会把"none of the filenames match..."这类真实原因吞掉，用户只看到笼统失败。
-            env.new_string(format!("ERROR: 启动流服务失败: {e:#}"))
-                .unwrap()
-                .into_raw()
+            to_jstring(&env, format!("ERROR: 启动流服务失败: {e:#}"))
         }
     }
 }
@@ -149,8 +184,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
     _env: JNIEnv,
     _class: JClass,
 ) {
-    let mut server_guard = active_server().lock().unwrap();
-    if let Some(server) = server_guard.take() {
+    if let Some(server) = take_active_server() {
         log::info!("停止原生 BT 流化服务");
         server.stop();
     }
@@ -162,18 +196,13 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
     _class: JClass,
 ) -> jlongArray {
     let stats = {
-        let server_guard = active_server().lock().unwrap();
+        let server_guard = lock_active_server();
         server_guard.as_ref().map(|s| s.get_stats())
     };
 
-    let (downloaded, total, speed, peers) = match stats {
-        Some(s) => (
-            s.downloaded_bytes,
-            s.total_bytes,
-            s.speed_bytes_per_sec,
-            s.connected_peers,
-        ),
-        None => (0, 0, 0, 0),
+    let values = match stats_to_jni(stats) {
+        Some(values) => values,
+        None => return empty_stats_array(&env),
     };
 
     let array = match env.new_long_array(4) {
@@ -181,8 +210,10 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
         Err(_) => return std::ptr::null_mut(),
     };
 
-    let values = [downloaded as i64, total as i64, speed as i64, peers as i64];
-    let _ = env.set_long_array_region(&array, 0, &values);
+    if env.set_long_array_region(&array, 0, &values).is_err() {
+        // 写入失败同样必须降级为"读取失败"，严禁把全零数组当成功结果交给 Kotlin。
+        return empty_stats_array(&env);
+    }
 
     array.into_raw()
 }
@@ -193,15 +224,38 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
     _class: JClass,
 ) -> jstring {
     let path = {
-        let server_guard = active_server().lock().unwrap();
+        let server_guard = lock_active_server();
         server_guard
             .as_ref()
             .map(|s| s.target_file_path.clone())
             .unwrap_or_default()
     };
 
-    match env.new_string(path) {
-        Ok(s) => s.into_raw(),
-        Err(_) => std::ptr::null_mut(),
+    to_jstring(&env, path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 无活跃会话必须落为 `None`（JNI 侧即长度不足 4 的数组），严禁全零数组兜底：
+    /// 全零会被 Kotlin 侧当成"健康的零进度"而永不累加 `MAX_CONSECUTIVE_STAT_FAILURES`，
+    /// 引擎失联时 `streamState` 既不发射也不收敛 Error，下游 `first {}` 与死种看门狗双双无界挂起。
+    #[test]
+    fn stats_to_jni_reports_failure_without_active_session() {
+        assert!(stats_to_jni(None).is_none());
+    }
+
+    /// [已下载, 总长, 速度, Peer 数] 的顺序是 Kotlin 侧 `stats[0..3]` 的下标契约，不得改动。
+    #[test]
+    fn stats_to_jni_maps_active_session_fields_in_order() {
+        let stats = StreamStats {
+            downloaded_bytes: 1,
+            total_bytes: 2,
+            speed_bytes_per_sec: 3,
+            connected_peers: 4,
+        };
+
+        assert_eq!(stats_to_jni(Some(stats)), Some([1, 2, 3, 4]));
     }
 }
