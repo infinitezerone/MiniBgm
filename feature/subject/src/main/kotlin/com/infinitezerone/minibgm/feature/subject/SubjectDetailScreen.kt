@@ -709,6 +709,8 @@ fun SubjectDetailScreen(
         },
         selectedEpisodeForQuickAction = selectedEpisodeForQuickAction,
         onDismissQuickAction = { selectedEpisodeForQuickAction = null },
+        episodes = uiState.episodes,
+        onSelectEpisodeForQuickAction = { selectedEpisodeForQuickAction = it },
         onToggleEpisodeWatched = { episode, isWatched, epNumber, episodeType ->
             viewModel.toggleEpisodeWatched(
                 episodeId = episode.id,

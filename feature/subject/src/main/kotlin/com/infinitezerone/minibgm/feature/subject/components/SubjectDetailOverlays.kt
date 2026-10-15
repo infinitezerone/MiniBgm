@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.res.stringResource
@@ -41,6 +42,8 @@ internal fun SubjectDetailOverlays(
     onSaveCollection: (CollectionType, Int?, String?, Boolean, Int?, List<String>?) -> Unit,
     selectedEpisodeForQuickAction: Episode?,
     onDismissQuickAction: () -> Unit,
+    episodes: List<Episode> = emptyList(),
+    onSelectEpisodeForQuickAction: ((Episode) -> Unit)? = null,
     onToggleEpisodeWatched: (episode: Episode, isWatched: Boolean, epNumber: Int, episodeType: Int) -> Unit,
     onSelectEpisodeForDetail: (Episode) -> Unit,
     onBuildPlayerRoute: (Episode) -> PlayerRoute,
@@ -102,6 +105,14 @@ internal fun SubjectDetailOverlays(
         val watchedCount = currentCollection?.epStatus ?: 0
         val isWatched = isEpisodeWatched(episode, watchedCount)
         val isNextToWatch = isEpisodeNextToWatch(episode, watchedCount, hasProgress = currentCollection != null)
+        val sameGroupEpisodes =
+            remember(episodes, episode.type) {
+                episodes.filter { it.type == episode.type }
+            }
+        val currentIdx = sameGroupEpisodes.indexOfFirst { it.id == episode.id }
+        val prevEpisode = if (currentIdx > 0) sameGroupEpisodes[currentIdx - 1] else null
+        val nextEpisode = if (currentIdx in 0 until sameGroupEpisodes.size - 1) sameGroupEpisodes[currentIdx + 1] else null
+
         EpisodeQuickActionBottomSheet(
             episode = episode,
             isWatched = isWatched,
@@ -135,6 +146,10 @@ internal fun SubjectDetailOverlays(
                 } else {
                     null
                 },
+            onNavigateToPrevious = prevEpisode?.let { prev -> { onSelectEpisodeForQuickAction?.invoke(prev) } },
+            onNavigateToNext = nextEpisode?.let { next -> { onSelectEpisodeForQuickAction?.invoke(next) } },
+            currentIndex = currentIdx,
+            totalCount = sameGroupEpisodes.size,
         )
     }
 
