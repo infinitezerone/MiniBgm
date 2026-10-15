@@ -1556,7 +1556,6 @@ class PlayerViewModel(
     private fun currentSourceId(): String? = _uiState.value.let { state -> state.sources.getOrNull(state.selectedSourceIndex)?.id }
 
     override fun onCleared() {
-        super.onCleared()
         torrentStreamEngine?.releasePlayerSession()
     }
 }

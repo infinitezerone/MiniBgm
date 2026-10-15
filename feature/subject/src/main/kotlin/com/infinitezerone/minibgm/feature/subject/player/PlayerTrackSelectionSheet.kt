@@ -38,6 +38,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
+import androidx.media3.common.util.UnstableApi
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.subject.R
@@ -256,6 +257,7 @@ fun formatTrackDisplayDetails(
 /**
  * 从 Media3 [Player] 动态提取画质、音轨与字幕轨状态快照。
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 fun extractPlayerTracksSnapshot(player: Player): PlayerTracksSnapshot {
     val currentTracks = player.currentTracks
     val params = player.trackSelectionParameters

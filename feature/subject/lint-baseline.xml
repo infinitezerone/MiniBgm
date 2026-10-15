@@ -8,7 +8,7 @@
         errorLine2="                                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt"
-            line="30"
+            line="35"
             column="64"/>
     </issue>
 
@@ -19,7 +19,7 @@
         errorLine2="                         ~~~~~~~~~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt"
-            line="32"
+            line="37"
             column="26"/>
     </issue>
 
@@ -30,7 +30,7 @@
         errorLine2="                     ~~~~~~~~~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt"
-            line="33"
+            line="38"
             column="22"/>
     </issue>
 
@@ -41,7 +41,7 @@
         errorLine2="                                                                   ~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt"
-            line="34"
+            line="39"
             column="68"/>
     </issue>
 
@@ -52,52 +52,151 @@
         errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt"
-            line="37"
+            line="42"
             column="26"/>
     </issue>
 
     <issue
         id="UnsafeOptInUsageError"
         message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
-        errorLine1="            .setMediaSourceFactory(DefaultMediaSourceFactory(httpDataSourceFactory))"
-        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        errorLine1="                DefaultMediaSourceFactory(DefaultDataSource.Factory(context, httpDataSourceFactory)),"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/ExoPlayerEngine.kt"
-            line="50"
-            column="36"/>
+            line="56"
+            column="17"/>
     </issue>
 
     <issue
-        id="ModifierParameter"
-        message="Modifier parameter should be the first optional parameter"
-        errorLine1="    modifier: Modifier = Modifier,"
-        errorLine2="    ~~~~~~~~">
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                    snackbarHostState.showSnackbar(context.getString(R.string.feature_subject_ep_copied_content))"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/EpisodeDetailBottomSheet.kt"
-            line="70"
-            column="5"/>
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/EpisodeDetailScreen.kt"
+            line="130"
+            column="52"/>
     </issue>
 
     <issue
-        id="ModifierParameter"
-        message="Modifier parameter should be the first optional parameter"
-        errorLine1="    modifier: Modifier = Modifier,"
-        errorLine2="    ~~~~~~~~">
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                        ?: context.getString(event.messageRes)"
+        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/EpisodeDetailBottomSheet.kt"
-            line="431"
-            column="5"/>
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/EpisodeDetailScreen.kt"
+            line="140"
+            column="28"/>
     </issue>
 
     <issue
-        id="ModifierParameter"
-        message="Modifier parameter should be the first optional parameter"
-        errorLine1="    modifier: Modifier = Modifier,"
-        errorLine2="    ~~~~~~~~">
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                        title = context.getString(R.string.feature_subject_ep_app_not_installed_title, appName),"
+        errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/EpisodeDetailBottomSheet.kt"
-            line="533"
-            column="5"/>
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/EpisodeDetailScreen.kt"
+            line="160"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                        message = context.getString(R.string.feature_subject_ep_app_not_installed_desc, appName),"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/EpisodeDetailScreen.kt"
+            line="161"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                        confirmText = context.getString(DesignSystemR.string.core_designsystem_action_open_browser),"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/EpisodeDetailScreen.kt"
+            line="162"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                message = context.getString(R.string.feature_subject_ep_copied_content),"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt"
+            line="137"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                message = context.getString(R.string.feature_subject_player_resume_position, formatDuration(resume)),"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt"
+            line="242"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                actionLabel = context.getString(R.string.feature_subject_player_start_from_beginning),"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt"
+            line="243"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                        ?: context.getString(event.messageRes, *event.formatArgs.toTypedArray())"
+        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt"
+            line="351"
+            column="28"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                                        context.getString("
+        errorLine2="                                        ^">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt"
+            line="668"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                    snackbarHostState.showSnackbar(context.getString(R.string.feature_subject_topic_copied))"
+        errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/TopicDetailScreen.kt"
+            line="106"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                        ?: context.getString(event.messageRes)"
+        errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/TopicDetailScreen.kt"
+            line="117"
+            column="28"/>
     </issue>
 
     <issue
@@ -107,7 +206,51 @@
         errorLine2="    ~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/EpisodeDetailScreen.kt"
-            line="90"
+            line="109"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/EpisodeQuickActionBottomSheet.kt"
+            line="61"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerCommon.kt"
+            line="63"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerCommon.kt"
+            line="82"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerCommon.kt"
+            line="209"
             column="5"/>
     </issue>
 
@@ -118,7 +261,7 @@
         errorLine2="    ~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerControlsOverlay.kt"
-            line="97"
+            line="108"
             column="5"/>
     </issue>
 
@@ -128,7 +271,29 @@
         errorLine1="    modifier: Modifier = Modifier,"
         errorLine2="    ~~~~~~~~">
         <location
-            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewComponents.kt"
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerEpisodePickers.kt"
+            line="218"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerEpisodePickers.kt"
+            line="674"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerEpisodeQueueDrawer.kt"
             line="69"
             column="5"/>
     </issue>
@@ -139,8 +304,8 @@
         errorLine1="    modifier: Modifier = Modifier,"
         errorLine2="    ~~~~~~~~">
         <location
-            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewComponents.kt"
-            line="88"
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt"
+            line="933"
             column="5"/>
     </issue>
 
@@ -150,19 +315,8 @@
         errorLine1="    modifier: Modifier = Modifier,"
         errorLine2="    ~~~~~~~~">
         <location
-            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewComponents.kt"
-            line="295"
-            column="5"/>
-    </issue>
-
-    <issue
-        id="ModifierParameter"
-        message="Modifier parameter should be the first optional parameter"
-        errorLine1="    modifier: Modifier = Modifier,"
-        errorLine2="    ~~~~~~~~">
-        <location
-            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewComponents.kt"
-            line="443"
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerTrackSelectionSheet.kt"
+            line="454"
             column="5"/>
     </issue>
 
@@ -173,7 +327,7 @@
         errorLine2="    ~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/RelatedWorksSection.kt"
-            line="396"
+            line="409"
             column="5"/>
     </issue>
 
@@ -195,7 +349,7 @@
         errorLine2="    ~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectCommunitySection.kt"
-            line="341"
+            line="348"
             column="5"/>
     </issue>
 
@@ -205,8 +359,52 @@
         errorLine1="    modifier: Modifier = Modifier,"
         errorLine2="    ~~~~~~~~">
         <location
-            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailScreen.kt"
-            line="833"
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectDetailContent.kt"
+            line="130"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectDetailSkeleton.kt"
+            line="289"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectDetailSkeleton.kt"
+            line="320"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectSourcesBottomSheet.kt"
+            line="1103"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectSourcesBottomSheet.kt"
+            line="1271"
             column="5"/>
     </issue>
 
@@ -217,7 +415,7 @@
         errorLine2="    ~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/TopicDetailScreen.kt"
-            line="71"
+            line="87"
             column="5"/>
     </issue>
 
@@ -228,8 +426,52 @@
         errorLine2="        ~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt"
-            line="375"
+            line="651"
             column="9"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;feature_subject_ep_comments_loading&quot;>正在获取单集吐槽...&lt;/string>"
+        errorLine2="                                                       ~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="279"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;feature_subject_community_short_reviews_loading&quot;>正在加载更多短评...&lt;/string>"
+        errorLine2="                                                                   ~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="312"
+            column="68"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;feature_subject_player_sniffing_stream&quot;>嗅探视频直链...&lt;/string>"
+        errorLine2="                                                          ~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="349"
+            column="59"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;feature_subject_player_sniffing_stream_with_attempt&quot;>嗅探视频直链...（第 %1$d/%2$d 次尝试）&lt;/string>"
+        errorLine2="                                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="350"
+            column="72"/>
     </issue>
 
 </issues>
