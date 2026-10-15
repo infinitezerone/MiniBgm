@@ -55,6 +55,7 @@ class AndroidTorrentStreamEngine internal constructor(
     private val pluginVersionProvider: () -> String = { resolveAppVersion(context) },
     private val supportedAbisProvider: () -> Array<String> = { android.os.Build.SUPPORTED_ABIS },
     private val nativeBridge: NativeTorrentBridge = JniNativeTorrentBridge,
+    private val statsPollIntervalMs: Long = DEFAULT_STATS_POLL_INTERVAL_MS,
 ) : TorrentStreamEngine {
     constructor(
         context: Context,
@@ -341,25 +342,38 @@ class AndroidTorrentStreamEngine internal constructor(
                                 )
                         }
 
+                        var consecutiveStatFailures = 0
                         while (isActive) {
-                            delay(1000)
-                            val stats = runCatching { nativeBridge.getStreamStats() }.getOrNull() ?: break
-                            if (stats.size >= 4) {
-                                val downloaded = stats[0]
-                                val total = stats[1]
-                                val speed = stats[2]
-                                val peers = stats[3].coerceAtLeast(0L).toInt()
-                                if (total > 0L) {
-                                    val progress = (downloaded.toFloat() / total.toFloat()).coerceIn(0f, 1f)
-                                    _streamState.value =
-                                        TorrentStreamState.Buffering(
-                                            progress = progress,
-                                            bufferedBytes = downloaded,
-                                            targetBytes = total,
-                                            speedBytesPerSec = speed,
-                                            connectedPeers = peers,
-                                        )
+                            delay(statsPollIntervalMs)
+                            val stats = runCatching { nativeBridge.getStreamStats() }.getOrNull()
+                            if (stats == null || stats.size < 4) {
+                                // 单次 stats 读取失败（JNI 瞬时抖动/引擎重启中）绝不能 break：
+                                // 一旦退出本循环 streamState 再也不会发射，下游 monitorDirectEngineDownload
+                                // 的 first{} 与死种看门狗会双双无界挂起（任务永远停在 DOWNLOADING）。
+                                // 仅当连续失败超过阈值时才收敛为 Error，让下游走正常失败路径。
+                                consecutiveStatFailures++
+                                if (consecutiveStatFailures >= MAX_CONSECUTIVE_STAT_FAILURES) {
+                                    logger.w { "连续 $consecutiveStatFailures 次读取流统计失败，收束状态流为 Error" }
+                                    _streamState.value = TorrentStreamState.Error(STATS_UNAVAILABLE_MESSAGE)
+                                    break
                                 }
+                                continue
+                            }
+                            consecutiveStatFailures = 0
+                            val downloaded = stats[0]
+                            val total = stats[1]
+                            val speed = stats[2]
+                            val peers = stats[3].coerceAtLeast(0L).toInt()
+                            if (total > 0L) {
+                                val progress = (downloaded.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                                _streamState.value =
+                                    TorrentStreamState.Buffering(
+                                        progress = progress,
+                                        bufferedBytes = downloaded,
+                                        targetBytes = total,
+                                        speedBytesPerSec = speed,
+                                        connectedPeers = peers,
+                                    )
                             }
                         }
                     }
@@ -619,6 +633,13 @@ class AndroidTorrentStreamEngine internal constructor(
     }
 
     companion object {
+        /** 流统计轮询间隔（测试可注入更短间隔）。 */
+        internal const val DEFAULT_STATS_POLL_INTERVAL_MS = 1000L
+
+        /** 流统计连续读取失败上限：超过才收敛为 Error，单次抖动只是跳过本轮。 */
+        internal const val MAX_CONSECUTIVE_STAT_FAILURES = 5
+        internal const val STATS_UNAVAILABLE_MESSAGE = "无法读取流媒体统计信息，P2P 会话可能已异常退出"
+
         internal const val PLUGIN_DIR_REL_PATH = "modules/torrent"
         internal const val PLUGIN_SO_NAME = "libminibgm_torrent.so"
         internal const val STAGING_SUFFIX = ".staging"

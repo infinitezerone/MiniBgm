@@ -4,13 +4,17 @@ import android.content.ContextWrapper
 import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.TorrentStreamState
 import com.infinitezerone.minibgm.core.testing.repository.FakeTorrentStreamEngine
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
@@ -362,6 +366,61 @@ class TorrentStreamEngineTest {
                 }
             }
         }
+
+    @Test
+    fun androidEngine_statsPolling_survivesTransientFailureInsteadOfHanging() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_torrent_stats_resilience").toFile()
+            try {
+                val context = StubDirContext(tempRoot)
+                var failCount = 0
+                val bridge =
+                    FlakyStatsNativeTorrentBridge(
+                        failuresBeforeSuccess = 3,
+                        onFailure = { failCount++ },
+                    )
+                val engine =
+                    AndroidTorrentStreamEngine(
+                        context = context,
+                        pluginVersionProvider = { "0.2.8" },
+                        supportedAbisProvider = { arrayOf("arm64-v8a") },
+                        nativeBridge = bridge,
+                        statsPollIntervalMs = 10L,
+                    )
+
+                assertTrue(
+                    engine
+                        .startStream(
+                            title = "合集 BD",
+                            magnetUrl = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+                        ).isSuccess,
+                )
+
+                // 单次 stats 读取失败绝不能永久中断轮询流：连续失败后必须恢复并继续发射 Buffering，
+                // 否则下游 first{} 与死种看门狗会双双无界挂起。
+                //
+                // 轮询跑在引擎自有的 `Dispatchers.IO` 上（真实时间），因此必须切到真实调度器再套超时：
+                // 留在 runTest 的虚拟时钟里，5s 会被瞬间推进直接判超时（与轮询真实进度无关）。
+                val buffering =
+                    withContext(Dispatchers.Default.limitedParallelism(1)) {
+                        withTimeout(5_000) {
+                            engine.streamState.first {
+                                it is TorrentStreamState.Buffering && it.targetBytes == 100_000_000L
+                            }
+                        }
+                    } as? TorrentStreamState.Buffering
+
+                assertTrue(failCount >= 3)
+                assertTrue(buffering != null)
+                assertEquals(100_000_000L, buffering.targetBytes)
+                engine.stopStream(force = true)
+            } finally {
+                tempRoot.walkBottomUp().forEach {
+                    it.setWritable(true)
+                    it.delete()
+                }
+            }
+        }
 }
 
 private fun validTorrentBytes(): ByteArray = "d8:announce14:http://tracker4:infod6:lengthi1e4:name3:abcee".toByteArray(Charsets.ISO_8859_1)
@@ -432,6 +491,38 @@ private class StubNativeTorrentBridge(
     override fun stopStream() = Unit
 
     override fun getStreamStats(): LongArray = longArrayOf(0L, 100_000_000L, 512_000L, 4L, 2L)
+}
+
+/** 前 [failuresBeforeSuccess] 次 [getStreamStats] 抛异常，用于验证轮询“瞬时失败不致命”。 */
+private class FlakyStatsNativeTorrentBridge(
+    private val failuresBeforeSuccess: Int,
+    private val onFailure: () -> Unit = {},
+) : NativeTorrentBridge {
+    private var calls = 0
+
+    override fun loadFromPath(absolutePath: String): Boolean = File(absolutePath).isFile
+
+    override fun loadEmbeddedLibrary(): Boolean = true
+
+    override fun isAvailable(): Boolean = true
+
+    override fun startStream(
+        magnetUrl: String,
+        torrentPath: String,
+        saveDir: String,
+        episodeHint: String,
+    ): String = "http://127.0.0.1:18080/stream/0"
+
+    override fun stopStream() = Unit
+
+    override fun getStreamStats(): LongArray {
+        calls++
+        if (calls <= failuresBeforeSuccess) {
+            onFailure()
+            throw IllegalStateException("transient stats failure #$calls")
+        }
+        return longArrayOf(0L, 100_000_000L, 512_000L, 4L, 2L)
+    }
 }
 
 /** 记录每次真正拉起原生会话时的 episodeHint，用于断言"换集必须重新解析而非复用会话"。 */
