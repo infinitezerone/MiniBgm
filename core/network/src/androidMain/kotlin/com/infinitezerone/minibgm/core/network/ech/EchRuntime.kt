@@ -16,6 +16,7 @@ object EchRuntime {
     fun initialize(filesDir: File) {
         EchConfigStore.init(filesDir)
         EchEdgePool.init(filesDir)
+        AdaptiveDnsResolver.init(filesDir)
     }
 
     /** 优选池的落盘是节流的，应用退到后台时补一次强制刷写。 */

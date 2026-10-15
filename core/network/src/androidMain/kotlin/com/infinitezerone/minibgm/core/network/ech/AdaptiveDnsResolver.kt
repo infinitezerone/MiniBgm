@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.io.File
 import java.net.InetAddress
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -26,6 +27,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 internal object AdaptiveDnsResolver {
     private val logger = bgmLogger("Bgm/DnsResolver")
+
+    private const val HOSTS_FILE_NAME = "ech_dynamic_hosts.txt"
+    private var hostsFile: File? = null
 
     /** 单次请求最多交给底层尝试的池内候选数，避免用坏节点摊薄请求预算。 */
     private const val MAX_POOL_CANDIDATES = 8
@@ -52,11 +56,41 @@ internal object AdaptiveDnsResolver {
 
     private val dynamicEchHosts = ConcurrentHashMap.newKeySet<String>()
 
+    fun init(filesDir: File) {
+        hostsFile = File(filesDir, HOSTS_FILE_NAME)
+        loadPersistedHosts()
+    }
+
+    private fun loadPersistedHosts() {
+        val file = hostsFile ?: return
+        if (!file.isFile) return
+        runCatching {
+            file.readLines().forEach { line ->
+                val host = line.trim().lowercase()
+                if (host.isNotBlank()) {
+                    dynamicEchHosts.add(host)
+                }
+            }
+        }.onSuccess {
+            logger.i { "[DNS] Loaded ${dynamicEchHosts.size} dynamic ECH host(s) from disk" }
+        }.onFailure {
+            logger.w(it) { "[DNS] Failed to load dynamic ECH hosts: ${it.message}" }
+        }
+    }
+
+    private fun persistHosts() {
+        val file = hostsFile ?: return
+        runCatching {
+            file.writeText(dynamicEchHosts.joinToString("\n"))
+        }
+    }
+
     /** 动态注册由探测器或 DoH 发现的 ECH 支持域名。 */
     fun registerEchHost(host: String) {
         val normalized = host.trim().lowercase()
-        if (normalized.isNotBlank()) {
-            dynamicEchHosts.add(normalized)
+        if (normalized.isNotBlank() && dynamicEchHosts.add(normalized)) {
+            persistHosts()
+            logger.i { "[DNS] Registered and persisted dynamic ECH host: $normalized" }
         }
     }
 
@@ -72,6 +106,7 @@ internal object AdaptiveDnsResolver {
             isDomainOrSubdomain(host, "chii.in") ||
             isDomainOrSubdomain(host, "sda1.dev") ||
             isDomainOrSubdomain(host, "kitsu.io") ||
+            isDomainOrSubdomain(host, "cloudflare-dns.com") ||
             dynamicEchHosts.any { isDomainOrSubdomain(host, it) }
 
     /** 判断域名是否由 Cloudflare 提供服务。这些 host 才会拿到候选地址列表。 */

@@ -37,6 +37,7 @@ class EchCapabilityDetectorTest {
         assertTrue(EchCapabilityDetector.isSeedHost("graphql.anilist.co"))
         assertTrue(EchCapabilityDetector.isSeedHost("sda1.dev"))
         assertTrue(EchCapabilityDetector.isSeedHost("p.sda1.dev"))
+        assertTrue(EchCapabilityDetector.isSeedHost("cloudflare-dns.com"))
 
         assertFalse(EchCapabilityDetector.isSeedHost("i0.hdslb.com"))
         assertFalse(EchCapabilityDetector.isSeedHost("sinaimg.cn"))
@@ -75,7 +76,7 @@ class EchCapabilityDetectorTest {
             // 未知域名：真正发起探测并注册动态路由
             val job = EchCapabilityDetector.probeAsyncIfUnknown("custom-ech-api.org", scope = backgroundScope, client = fakeClient)
             assertNotNull(job)
-            job?.join()
+            job.join()
             assertTrue(AdaptiveDnsResolver.isEchEligible("custom-ech-api.org"))
 
             // 种子域名：跳过
@@ -171,11 +172,52 @@ class EchCapabilityDetectorTest {
             assertTrue(cachedSupported)
             kotlin.test.assertEquals(1, requestCount)
 
-            // 3. 不支持 ECH 的域名
+            // 3. 不支持 ECH 的域名（AliDNS 未命中 + Cloudflare DoH 未命中，共 2 次请求）
             val unsupported = EchCapabilityDetector.isEchSupported("normal-cdn.cn", client)
             assertFalse(unsupported)
             assertFalse(AdaptiveDnsResolver.isEchEligible("normal-cdn.cn"))
-            kotlin.test.assertEquals(2, requestCount)
+            kotlin.test.assertEquals(3, requestCount)
+        }
+
+    @Test
+    fun isEchSupported_falls_back_to_cloudflare_doh_when_alidns_lacks_ech() =
+        runTest {
+            val queriedUrls = mutableListOf<String>()
+            val mockEngine =
+                MockEngine { request ->
+                    val url = request.url.toString()
+                    queriedUrls.add(url)
+                    if (url.startsWith("https://cloudflare-dns.com/dns-query")) {
+                        respond(
+                            content =
+                                """
+                                {
+                                  "Status": 0,
+                                  "Answer": [
+                                    {"name": "poisoned-domain.org.", "type": 65, "data": "1 . ech=\"clean_ech_from_cf\""}
+                                  ]
+                                }
+                                """.trimIndent(),
+                            status = HttpStatusCode.OK,
+                            headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                        )
+                    } else {
+                        // AliDNS 模拟被投毒：抹除 ech 参数
+                        respond(
+                            content = """{"Status": 0, "Answer": [{"name": "poisoned-domain.org.", "type": 65, "data": "1 . alpn=h2"}]}""",
+                            status = HttpStatusCode.OK,
+                            headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                        )
+                    }
+                }
+            val client = HttpClient(mockEngine)
+
+            val supported = EchCapabilityDetector.isEchSupported("poisoned-domain.org", client)
+            assertTrue(supported)
+            assertTrue(AdaptiveDnsResolver.isEchEligible("poisoned-domain.org"))
+            kotlin.test.assertEquals(2, queriedUrls.size)
+            assertTrue(queriedUrls[0].startsWith("https://223.5.5.5/resolve"))
+            assertTrue(queriedUrls[1].startsWith("https://cloudflare-dns.com/dns-query"))
         }
 
     @Test

@@ -6,8 +6,10 @@ import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.TorrentMediaResource
 import com.infinitezerone.minibgm.core.network.PageFetchService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 通用 P2P 种子 / 磁力 RSS 资源检索仓库接口。
@@ -37,6 +39,14 @@ class TorrentFeedRepositoryImpl(
     private val pageFetchService: PageFetchService,
 ) : TorrentFeedRepository {
     private val logger = bgmLogger("Bgm/TorrentFeed")
+
+    private sealed interface FeedFetchResult {
+        data class Success(
+            val resources: List<TorrentMediaResource>,
+        ) : FeedFetchResult
+
+        data object NetworkError : FeedFetchResult
+    }
 
     /** 详情页与分集页会并发检索同一 Feed，裸 `MutableMap` 的并发结构修改会损坏桶链。 */
     private val cacheMutex = Mutex()
@@ -80,9 +90,21 @@ class TorrentFeedRepositoryImpl(
             // 规则模板不含 {title} 时所有候选会解析成同一个 URL，去重避免重复拉取同一 Feed。
             if (!triedUrls.add(targetUrl)) continue
 
-            val resources = fetchFeed(targetUrl, activeRule)
-            if (resources.isNotEmpty()) {
-                return filterAndSort(resources, episodeSort)
+            when (val result = fetchFeed(targetUrl, activeRule)) {
+                is FeedFetchResult.NetworkError -> {
+                    // 当域名在网络层不可达（连接超时、拒绝、重置等）时，立即对当前规则熔断，
+                    // 绝不盲目拿剩余别名重复尝试，避免单死站拖垮总耗时
+                    logger.w { "Network failure for $targetUrl; circuit breaking alias loop for rule ${activeRule.id}" }
+                    break
+                }
+                is FeedFetchResult.Success -> {
+                    if (result.resources.isNotEmpty()) {
+                        val filtered = filterAndSort(result.resources, episodeSort)
+                        if (filtered.isNotEmpty()) {
+                            return filtered
+                        }
+                    }
+                }
             }
         }
         return emptyList()
@@ -92,9 +114,9 @@ class TorrentFeedRepositoryImpl(
     private suspend fun fetchFeed(
         targetUrl: String,
         rule: PlaybackSourceRule,
-    ): List<TorrentMediaResource> {
+    ): FeedFetchResult {
         val cacheKey = "feed:${rule.id}:$targetUrl"
-        readCache(cacheKey)?.let { return it }
+        readCache(cacheKey)?.let { return FeedFetchResult.Success(it) }
 
         val host =
             targetUrl
@@ -103,18 +125,33 @@ class TorrentFeedRepositoryImpl(
                 .substringBefore("/")
                 .substringBefore(":")
 
-        val fetched = pageFetchService.fetchHtml(targetUrl, rule.headers)
-        val xmlContent = fetched?.html.orEmpty()
+        val fetched =
+            try {
+                withTimeoutOrNull(8_000L) {
+                    pageFetchService.fetchHtml(targetUrl, rule.headers)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                null
+            }
+
+        if (fetched == null) {
+            logger.d { "Network failure or timeout for torrent feed: $targetUrl" }
+            return FeedFetchResult.NetworkError
+        }
+
+        val xmlContent = fetched.html
         if (xmlContent.isBlank()) {
             logger.d { "Empty response for torrent feed: $targetUrl" }
-            return emptyList()
+            return FeedFetchResult.Success(emptyList())
         }
 
         val parsed = TorrentRssParser.parse(xmlContent, fallbackHost = host)
         if (parsed.isNotEmpty()) {
             writeCache(cacheKey, parsed)
         }
-        return parsed
+        return FeedFetchResult.Success(parsed)
     }
 
     private suspend fun readCache(key: String): List<TorrentMediaResource>? = cacheMutex.withLock { memoryCache[key] }

@@ -30,8 +30,11 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -402,21 +405,27 @@ class EpisodeDetailViewModel(
 
         torrentState.value = Pair(torrentState.value.first, true)
         viewModelScope.launch {
-            val allResources = mutableListOf<TorrentMediaResource>()
             val feedRepo = torrentFeedRepository
-            if (feedRepo != null) {
-                for (rule in activeTorrentRules) {
-                    val res =
-                        feedRepo.getTorrentResources(
-                            title = title,
-                            episodeSort = primaryEpSort,
-                            alternativeTitles = altTitles,
-                            subjectId = subjectId,
-                            rule = rule,
-                        )
-                    allResources.addAll(res)
+            val allResources =
+                if (feedRepo != null) {
+                    coroutineScope {
+                        activeTorrentRules
+                            .map { rule ->
+                                async {
+                                    feedRepo.getTorrentResources(
+                                        title = title,
+                                        episodeSort = primaryEpSort,
+                                        alternativeTitles = altTitles,
+                                        subjectId = subjectId,
+                                        rule = rule,
+                                    )
+                                }
+                            }.awaitAll()
+                            .flatten()
+                    }
+                } else {
+                    emptyList()
                 }
-            }
             val deduplicated = allResources.distinctBy { it.dedupeKey }
             torrentState.value = Pair(deduplicated, false)
         }

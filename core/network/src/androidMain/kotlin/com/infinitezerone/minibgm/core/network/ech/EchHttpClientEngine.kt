@@ -26,6 +26,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 
@@ -127,13 +128,17 @@ class EchHttpClientEngine(
 
             val host = data.url.host
             val port = data.url.port
-            val targetAddrs = AdaptiveDnsResolver.resolveTargetAddrs(host, port)
-            val enableEch = AdaptiveDnsResolver.isEchEligible(host)
+            var enableEch = AdaptiveDnsResolver.isEchEligible(host)
             if (!enableEch) {
-                // 非种子域名：后台 DoH 探测 ECH 能力（Type 65），命中即注册动态路由——
-                // 当前请求 fail-open 直连不受影响，后续请求自动升级走 ECH
-                EchCapabilityDetector.probeAsyncIfUnknown(host)
+                // 非种子域名：后台 DoH 探测 ECH 能力（Type 65）
+                // 首次探测预留短暂窗口（最多 1500ms），命中即就地升级当次请求走 ECH
+                val probeJob = EchCapabilityDetector.probeAsyncIfUnknown(host)
+                if (probeJob != null) {
+                    withTimeoutOrNull(1500L) { probeJob.join() }
+                    enableEch = AdaptiveDnsResolver.isEchEligible(host)
+                }
             }
+            val targetAddrs = AdaptiveDnsResolver.resolveTargetAddrs(host, port)
             val echConfig = if (enableEch) EchConfigStore.getActiveConfig() else null
 
             val nativeCall =

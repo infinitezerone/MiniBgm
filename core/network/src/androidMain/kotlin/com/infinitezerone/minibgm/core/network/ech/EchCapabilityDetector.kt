@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.network.ech
 
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
+import com.infinitezerone.minibgm.core.network.createPlatformHttpClientEngine
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -32,11 +33,12 @@ object EchCapabilityDetector {
     private val logger = bgmLogger("Bgm/EchDetector")
 
     private const val ALIDNS_DOH_URL = "https://223.5.5.5/resolve"
+    private const val CLOUDFLARE_DOH_URL = "https://cloudflare-dns.com/dns-query"
 
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** 内置的 DoH 探测客户端：纯直连（默认引擎），不经 ECH 引擎，避免自递归 */
-    private val embeddedProbeClient: HttpClient by lazy { HttpClient() }
+    /** 内置的 DoH 探测客户端：使用带平台 ECH 引擎的客户端，安全查询 cloudflare-dns.com 不会被递归拦截 */
+    private val embeddedProbeClient: HttpClient by lazy { HttpClient(createPlatformHttpClientEngine()) }
 
     /** 探测进行中的 host 集合：请求路径每次调用都会触发本探测器，防止并发重复 DoH 查询 */
     private val probingInFlight = ConcurrentHashMap.newKeySet<String>()
@@ -134,21 +136,36 @@ object EchCapabilityDetector {
     private fun isIpLiteral(host: String): Boolean = host.matches(Regex("""\d{1,3}(?:\.\d{1,3}){3}""")) || host.contains(':')
 
     /**
-     * 向 AliDNS DoH 查询指定域名的 Type 65 (HTTPS) 记录并解析 ECH 字段。
+     * 查询指定域名的 Type 65 (HTTPS) 记录并解析 ECH 字段。
+     *
+     * 1. 优先尝试公共 DoH（AliDNS 223.5.5.5）；
+     * 2. 若 AliDNS 探测未返回 ech（国内公共 DNS 常见针对涉外域名的 Type 65 投毒并抹除 ech 参数），
+     *    回退至通过 ECH 加密通道连接的 Cloudflare DoH (cloudflare-dns.com) 获取无污染真实记录。
      */
     private suspend fun probeEchViaDoh(
+        host: String,
+        client: HttpClient,
+    ): Boolean {
+        val aliResult = queryDoh(ALIDNS_DOH_URL, host, client)
+        if (aliResult) return true
+
+        return queryDoh(CLOUDFLARE_DOH_URL, host, client)
+    }
+
+    private suspend fun queryDoh(
+        dohUrl: String,
         host: String,
         client: HttpClient,
     ): Boolean =
         try {
             val response =
-                client.get(ALIDNS_DOH_URL) {
+                client.get(dohUrl) {
                     url.parameters.append("name", host)
                     url.parameters.append("type", "HTTPS")
                     header("Accept", "application/dns-json")
                 }
             if (response.status != HttpStatusCode.OK) {
-                logger.w { "DoH probe for $host returned non-200 status: ${response.status}" }
+                logger.w { "DoH probe for $host via $dohUrl returned non-200 status: ${response.status}" }
                 false
             } else {
                 val body = response.bodyAsText()
@@ -157,7 +174,7 @@ object EchCapabilityDetector {
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (t: Throwable) {
-            logger.w(t) { "DoH probe failed for $host (fail-open to direct connect): ${t.message}" }
+            logger.d { "DoH probe failed for $host via $dohUrl (fail-open to direct connect): ${t.message}" }
             false
         }
 

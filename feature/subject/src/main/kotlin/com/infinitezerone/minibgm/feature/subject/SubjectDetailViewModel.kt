@@ -32,8 +32,11 @@ import com.infinitezerone.minibgm.core.model.aggregateBySubject
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -257,21 +260,27 @@ class SubjectDetailViewModel(
 
         _uiState.update { it.copy(isTorrentLoading = true) }
         viewModelScope.launch {
-            val allResources = mutableListOf<TorrentMediaResource>()
             val feedRepo = torrentFeedRepository
-            if (feedRepo != null) {
-                for (rule in activeTorrentRules) {
-                    val res =
-                        feedRepo.getTorrentResources(
-                            title = title,
-                            episodeSort = primaryEpSort,
-                            alternativeTitles = altTitles,
-                            subjectId = subjectId,
-                            rule = rule,
-                        )
-                    allResources.addAll(res)
+            val allResources =
+                if (feedRepo != null) {
+                    coroutineScope {
+                        activeTorrentRules
+                            .map { rule ->
+                                async {
+                                    feedRepo.getTorrentResources(
+                                        title = title,
+                                        episodeSort = primaryEpSort,
+                                        alternativeTitles = altTitles,
+                                        subjectId = subjectId,
+                                        rule = rule,
+                                    )
+                                }
+                            }.awaitAll()
+                            .flatten()
+                    }
+                } else {
+                    emptyList()
                 }
-            }
             val deduplicated = allResources.distinctBy { it.dedupeKey }
             _uiState.update {
                 it.copy(
