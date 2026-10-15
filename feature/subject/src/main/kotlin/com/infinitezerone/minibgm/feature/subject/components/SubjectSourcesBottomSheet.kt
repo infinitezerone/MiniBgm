@@ -1307,12 +1307,16 @@ fun TorrentMediaResourcesSection(
         )
         if (onManageRules != null) {
             Spacer(modifier = Modifier.height(4.dp))
-            TorrentActionButton(
-                text = stringResource(R.string.feature_subject_source_torrent_configure_rules),
-                icon = BgmIcons.Settings,
-                isPrimary = false,
-                onClick = onManageRules,
-                modifier = Modifier.fillMaxWidth(),
+            BgmSourceActionCard(
+                title = stringResource(R.string.feature_subject_source_torrent_configure_rules),
+                subtitle = stringResource(R.string.feature_subject_source_manage_desc),
+                iconVector = BgmIcons.Settings,
+                iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                onClick = {
+                    onDismissAndRun {
+                        onManageRules()
+                    }
+                },
             )
         }
     } else if (isTorrentLoading) {

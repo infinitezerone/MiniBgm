@@ -2183,6 +2183,74 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 播放源底栏必须统一使用设计系统规范卡片（BgmSourceActionCard）：
+     * 在线 Tab 与 BT Tab 的空态管理引导必须同构，严禁在 BT 空态中随手借调 TorrentActionButton，
+     * 且管理跳转必须严格通过 onDismissAndRun / runAfterDismiss 调度底栏收起动画。
+     * 多按钮操作行必须显式声明 contentPadding，彻底杜绝 Material 3 默认 48dp 内边距挤压截断中文。
+     */
+    @Test
+    fun subject_sources_sheet_must_use_unified_source_action_card_for_management() {
+        val path =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectSourcesBottomSheet.kt"
+        val code = KotlinSourceScanner.sanitize(File(projectRoot, path).readText())
+        val violations = mutableListOf<String>()
+
+        val torrentEmptyBlock =
+            Regex("""!hasTorrentRules[\s\S]{0,1000}?if\s*\(\s*onManageRules\s*!=\s*null\s*\)[\s\S]{0,600}?BgmSourceActionCard""")
+        if (!torrentEmptyBlock.containsMatchIn(code)) {
+            violations.add(
+                "$path 的 BT 空态配置引导未采用 BgmSourceActionCard 统一卡片，破坏了与在线播放 Tab 的设计系统同构性",
+            )
+        }
+
+        val torrentAdhocButton = Regex("""!hasTorrentRules[\s\S]{0,1000}?TorrentActionButton""")
+        if (torrentAdhocButton.containsMatchIn(code)) {
+            violations.add(
+                "$path 的 BT 空态配置引导错误借用了 TorrentActionButton，违反设计系统收敛红线",
+            )
+        }
+
+        val torrentDismissCheck = Regex("""!hasTorrentRules[\s\S]{0,1000}?onDismissAndRun\s*\{\s*onManageRules\(\)\s*\}""")
+        if (!torrentDismissCheck.containsMatchIn(code)) {
+            violations.add(
+                "$path 的 BT 空态管理跳转未包裹 onDismissAndRun 抽屉收起动画",
+            )
+        }
+
+        val buttonPaddingCheck = Regex("""onToggleWatched[\s\S]{0,400}?contentPadding\s*=\s*PaddingValues\(""")
+        if (!buttonPaddingCheck.containsMatchIn(code)) {
+            violations.add(
+                "$path 的打卡动作按钮未显式声明 contentPadding，在窄屏多按钮排版下将触发 Material 3 默认 48dp 内边距导致的中文文字截断",
+            )
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反「播放源底栏组件与交互同构」红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    /**
+     * 详情页分集点击必须直接路由至统一抽屉（SubjectSourcesBottomSheet）：
+     * 严禁退化为「先弹分集微操作、再关弹窗开播放源」的多层嵌套与抽屉跳抽屉反模式。
+     */
+    @Test
+    fun subject_detail_episode_click_must_route_to_unified_sources_sheet() {
+        val path =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailScreen.kt"
+        val code = KotlinSourceScanner.sanitize(File(projectRoot, path).readText())
+
+        val unifiedRouteCheck =
+            Regex(
+                """onEpisodeClickForQuickAction\s*=\s*\{\s*episode\s*->[\s\S]{0,150}?selectedEpisodeForSources\s*=\s*episode[\s\S]{0,100}?showSourcesBottomSheet\s*=\s*true""",
+            )
+        assertTrue(
+            unifiedRouteCheck.containsMatchIn(code),
+            "$path 的 onEpisodeClickForQuickAction 必须直接打开统一底栏（selectedEpisodeForSources + showSourcesBottomSheet），严禁开孤立抽屉套娃！",
+        )
+    }
+
     private companion object {
         /** 红线只约束生产源码：build 产物与各测试源集目录一律不下钻 */
         val NON_SOURCE_DIR_NAMES =
