@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.user.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -55,6 +56,7 @@ internal fun PlaybackRuleCard(
     onToggle: (Boolean) -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    onCopyUrl: ((String) -> Unit)? = null,
 ) {
     Surface(
         shape = BgmShapes.medium,
@@ -62,112 +64,162 @@ internal fun PlaybackRuleCard(
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            val iconContainerColor =
+                if (rule.isEnabled) {
+                    when (rule.kind) {
+                        PlaybackRuleKind.SOURCE -> MaterialTheme.colorScheme.primaryContainer
+                        PlaybackRuleKind.TORRENT -> MaterialTheme.colorScheme.tertiaryContainer
+                        PlaybackRuleKind.PAGE -> MaterialTheme.colorScheme.surfaceContainerHighest
+                    }
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHighest
+                }
+
+            val iconTint =
+                if (rule.isEnabled) {
+                    when (rule.kind) {
+                        PlaybackRuleKind.SOURCE -> MaterialTheme.colorScheme.onPrimaryContainer
+                        PlaybackRuleKind.TORRENT -> MaterialTheme.colorScheme.onTertiaryContainer
+                        PlaybackRuleKind.PAGE -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                }
+
+            val ruleIcon =
+                when (rule.kind) {
+                    PlaybackRuleKind.SOURCE -> BgmIcons.PlayCircle
+                    PlaybackRuleKind.TORRENT -> BgmIcons.Download
+                    PlaybackRuleKind.PAGE -> BgmIcons.OpenInBrowser
+                }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            text = rule.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Surface(
-                            shape = BgmShapes.small,
-                            color =
-                                when (rule.kind) {
-                                    PlaybackRuleKind.SOURCE -> MaterialTheme.colorScheme.primaryContainer
-                                    PlaybackRuleKind.TORRENT -> MaterialTheme.colorScheme.tertiaryContainer
-                                    PlaybackRuleKind.PAGE -> MaterialTheme.colorScheme.surfaceContainerHighest
-                                },
-                        ) {
-                            Text(
-                                text =
-                                    when (rule.kind) {
-                                        PlaybackRuleKind.SOURCE ->
-                                            stringResource(R.string.feature_user_rule_kind_source_prefix, parserTypeLabel(rule.parserType))
-                                        PlaybackRuleKind.TORRENT ->
-                                            stringResource(R.string.feature_user_rule_kind_torrent_prefix, parserTypeLabel(rule.parserType))
-                                        PlaybackRuleKind.PAGE ->
-                                            stringResource(R.string.feature_user_rule_kind_page)
-                                    },
-                                style = MaterialTheme.typography.labelSmall,
-                                color =
-                                    when (rule.kind) {
-                                        PlaybackRuleKind.SOURCE -> MaterialTheme.colorScheme.onPrimaryContainer
-                                        PlaybackRuleKind.TORRENT -> MaterialTheme.colorScheme.onTertiaryContainer
-                                        PlaybackRuleKind.PAGE -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
-                    }
-                    if (rule.description.isNotBlank()) {
-                        Text(
-                            text = rule.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                Surface(
+                    shape = BgmShapes.small,
+                    color = iconContainerColor,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = ruleIcon,
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = rule.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color =
+                            if (rule.isEnabled) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 2.dp),
+                    ) {
+                        Surface(
+                            shape = BgmShapes.extraSmall,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        ) {
+                            Text(
+                                text = parserTypeLabel(rule.parserType),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                        if (rule.headers.isNotEmpty()) {
+                            Surface(
+                                shape = BgmShapes.extraSmall,
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                            ) {
+                                Text(
+                                    text = "${rule.headers.size} Headers",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
                 Switch(
                     checked = rule.isEnabled,
                     onCheckedChange = onToggle,
                 )
             }
 
-            Text(
-                text = rule.urlTemplate,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (rule.description.isNotBlank()) {
+                Text(
+                    text = rule.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
 
-            Row(
+            Surface(
+                shape = BgmShapes.extraSmall,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (rule.headers.isNotEmpty()) {
-                    Surface(
-                        shape = BgmShapes.extraSmall,
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = rule.urlTemplate,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (onCopyUrl != null) {
+                        IconButton(
+                            onClick = { onCopyUrl(rule.urlTemplate) },
+                            modifier = Modifier.size(24.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.ContentCopy,
+                                contentDescription = stringResource(R.string.feature_user_rule_copy_url_action),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier.size(24.dp),
                     ) {
-                        Text(
-                            text = "${rule.headers.size} Headers",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                        Icon(
+                            imageVector = BgmIcons.Delete,
+                            contentDescription = stringResource(R.string.feature_user_action_delete),
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(14.dp),
                         )
                     }
-                } else {
-                    Spacer(modifier = Modifier.width(1.dp))
-                }
-
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Delete,
-                        contentDescription = stringResource(R.string.feature_user_action_delete),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(16.dp),
-                    )
                 }
             }
         }

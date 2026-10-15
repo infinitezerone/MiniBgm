@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.user
 
+import android.content.ClipData
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +39,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -58,6 +61,7 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.designsystem.theme.FeatureGate
 import com.infinitezerone.minibgm.core.model.PlaybackHistory
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.user.components.AddTorrentRuleDialog
@@ -92,6 +96,12 @@ private enum class PlaybackRulesTab(
 ) {
     RULES(R.string.feature_user_tab_rules),
     HISTORY(R.string.feature_user_tab_history),
+}
+
+private enum class RuleFilter {
+    ALL,
+    ONLINE,
+    TORRENT,
 }
 
 /**
@@ -303,6 +313,11 @@ fun PlaybackRulesScreen(
                             onToggleRule = viewModel::toggleRule,
                             onDeleteRule = viewModel::deleteRule,
                             overlayHostState = overlayHostState,
+                            onShowSnackbar = { message ->
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(message)
+                                }
+                            },
                         )
                     PlaybackRulesTab.HISTORY ->
                         HistoryTabContent(
@@ -378,9 +393,9 @@ fun PlaybackRulesScreen(
     }
 }
 
-/** 解析规则页签：订阅状态条 + 规则列表 + 空态引导 */
+/** 解析规则页签：订阅状态条 + 规则列表 + 分类筛选 + 空态引导 */
 @Composable
-private fun RulesTabContent(
+internal fun RulesTabContent(
     rules: List<PlaybackSourceRule>,
     subscriptionUrl: String,
     isRefreshingSubscription: Boolean,
@@ -391,13 +406,38 @@ private fun RulesTabContent(
     onToggleRule: (String, Boolean) -> Unit,
     onDeleteRule: (String) -> Unit,
     overlayHostState: OverlayHostState,
+    modifier: Modifier = Modifier,
+    onShowSnackbar: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
+
+    var selectedFilter by rememberSaveable { mutableStateOf(RuleFilter.ALL) }
+
+    val onlineCount = remember(rules) { rules.count { it.kind != PlaybackRuleKind.TORRENT } }
+    val torrentCount = remember(rules) { rules.count { it.kind == PlaybackRuleKind.TORRENT } }
+    val enabledCount = remember(rules) { rules.count { it.isEnabled } }
+
+    val filteredRules =
+        remember(rules, selectedFilter) {
+            when (selectedFilter) {
+                RuleFilter.ALL -> rules
+                RuleFilter.ONLINE -> rules.filter { it.kind != PlaybackRuleKind.TORRENT }
+                RuleFilter.TORRENT -> rules.filter { it.kind == PlaybackRuleKind.TORRENT }
+            }
+        }
+
+    val copyToClipboard: (String, String) -> Unit = { text, successMessage ->
+        scope.launch {
+            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("text", text)))
+            onShowSnackbar?.invoke(successMessage)
+        }
+    }
 
     LazyColumn(
         modifier =
-            Modifier
+            modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
@@ -410,81 +450,141 @@ private fun RulesTabContent(
                     color = MaterialTheme.colorScheme.surfaceContainerLow,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(
-                            imageVector = BgmIcons.CloudQueue,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.feature_user_subscription_active_title),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = subscriptionUrl,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        TextButton(
-                            onClick = onRefreshSubscription,
-                            enabled = !isRefreshingSubscription,
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            if (isRefreshingSubscription) {
-                                CircularProgressIndicator(
-                                    strokeWidth = 2.dp,
-                                    modifier = Modifier.size(14.dp),
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
+                            Surface(
+                                shape = BgmShapes.small,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = BgmIcons.CloudQueue,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    stringResource(R.string.feature_user_subscription_syncing),
-                                    style = MaterialTheme.typography.labelSmall,
+                                    text = stringResource(R.string.feature_user_subscription_active_title),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 )
-                            } else {
                                 Text(
-                                    stringResource(R.string.feature_user_subscription_sync_action),
+                                    text =
+                                        stringResource(
+                                            R.string.feature_user_rules_active_count,
+                                            enabledCount,
+                                            rules.size,
+                                        ),
                                     style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            TextButton(
+                                onClick = onRefreshSubscription,
+                                enabled = !isRefreshingSubscription,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            ) {
+                                if (isRefreshingSubscription) {
+                                    CircularProgressIndicator(
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        stringResource(R.string.feature_user_subscription_syncing),
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = BgmIcons.Refresh,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        stringResource(R.string.feature_user_subscription_sync_action),
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        val confirmed =
+                                            overlayHostState.await(
+                                                ConfirmDialogAction(
+                                                    title = context.getString(R.string.feature_user_subscription_clear_action),
+                                                    message = context.getString(R.string.feature_user_subscription_clear_message),
+                                                    confirmText =
+                                                        context.getString(
+                                                            R.string.feature_user_subscription_clear_action,
+                                                        ),
+                                                    isDestructive = true,
+                                                ),
+                                            )
+                                        if (confirmed) {
+                                            onClearSubscription()
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.Close,
+                                    contentDescription = stringResource(R.string.feature_user_subscription_clear_action),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp),
                                 )
                             }
                         }
-                        IconButton(
-                            onClick = {
-                                scope.launch {
-                                    val confirmed =
-                                        overlayHostState.await(
-                                            ConfirmDialogAction(
-                                                title = context.getString(R.string.feature_user_subscription_clear_action),
-                                                message = "确定要移除当前订阅源链接吗？已导入的本地规则将被保留。",
-                                                confirmText =
-                                                    context.getString(
-                                                        R.string.feature_user_subscription_clear_action,
-                                                    ),
-                                                isDestructive = true,
-                                            ),
-                                        )
-                                    if (confirmed) {
-                                        onClearSubscription()
-                                    }
-                                }
-                            },
-                            modifier = Modifier.size(32.dp),
+
+                        Surface(
+                            shape = BgmShapes.extraSmall,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Icon(
-                                imageVector = BgmIcons.Close,
-                                contentDescription = stringResource(R.string.feature_user_subscription_clear_action),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp),
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    text = subscriptionUrl,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                IconButton(
+                                    onClick = {
+                                        copyToClipboard(
+                                            subscriptionUrl,
+                                            context.getString(R.string.feature_user_subscription_copied),
+                                        )
+                                    },
+                                    modifier = Modifier.size(24.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = BgmIcons.ContentCopy,
+                                        contentDescription = stringResource(R.string.feature_user_subscription_copy_action),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -515,10 +615,16 @@ private fun RulesTabContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            TextButton(onClick = onOpenSubscriptionImport) {
+                            TextButton(
+                                onClick = onOpenSubscriptionImport,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            ) {
                                 Text(stringResource(R.string.feature_user_subscription_title))
                             }
-                            TextButton(onClick = onOpenSiteProbe) {
+                            TextButton(
+                                onClick = onOpenSiteProbe,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            ) {
                                 Text(stringResource(R.string.feature_user_probe_title))
                             }
                         }
@@ -526,31 +632,124 @@ private fun RulesTabContent(
                 }
             }
         } else {
-            items(rules, key = { it.id }) { rule ->
-                PlaybackRuleCard(
-                    rule = rule,
-                    onToggle = { enabled -> onToggleRule(rule.id, enabled) },
-                    onDelete = {
-                        scope.launch {
-                            val confirmed =
-                                overlayHostState.await(
-                                    ConfirmDialogAction(
-                                        title = context.getString(R.string.feature_user_rules_delete_title),
-                                        message =
-                                            context.getString(
-                                                R.string.feature_user_rules_delete_message,
-                                                rule.name,
-                                            ),
-                                        confirmText = context.getString(R.string.feature_user_action_delete),
-                                        isDestructive = true,
-                                    ),
-                                )
-                            if (confirmed) {
-                                onDeleteRule(rule.id)
-                            }
+            item(key = "rule_category_filters") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilterChip(
+                        selected = selectedFilter == RuleFilter.ALL,
+                        onClick = { selectedFilter = RuleFilter.ALL },
+                        label = {
+                            Text(
+                                stringResource(R.string.feature_user_rules_filter_all, rules.size),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        },
+                    )
+                    FilterChip(
+                        selected = selectedFilter == RuleFilter.ONLINE,
+                        onClick = { selectedFilter = RuleFilter.ONLINE },
+                        label = {
+                            Text(
+                                stringResource(R.string.feature_user_rules_filter_online, onlineCount),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        },
+                        leadingIcon =
+                            if (selectedFilter == RuleFilter.ONLINE) {
+                                {
+                                    Icon(
+                                        imageVector = BgmIcons.PlayCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            } else {
+                                null
+                            },
+                    )
+                    FilterChip(
+                        selected = selectedFilter == RuleFilter.TORRENT,
+                        onClick = { selectedFilter = RuleFilter.TORRENT },
+                        label = {
+                            Text(
+                                stringResource(R.string.feature_user_rules_filter_torrent, torrentCount),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        },
+                        leadingIcon =
+                            if (selectedFilter == RuleFilter.TORRENT) {
+                                {
+                                    Icon(
+                                        imageVector = BgmIcons.Download,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            } else {
+                                null
+                            },
+                    )
+                }
+            }
+
+            if (filteredRules.isEmpty()) {
+                item(key = "filtered_rules_empty") {
+                    Surface(
+                        shape = BgmShapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(24.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.feature_user_rules_empty_filtered),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
-                    },
-                )
+                    }
+                }
+            } else {
+                items(filteredRules, key = { it.id }) { rule ->
+                    PlaybackRuleCard(
+                        rule = rule,
+                        onToggle = { enabled -> onToggleRule(rule.id, enabled) },
+                        onDelete = {
+                            scope.launch {
+                                val confirmed =
+                                    overlayHostState.await(
+                                        ConfirmDialogAction(
+                                            title = context.getString(R.string.feature_user_rules_delete_title),
+                                            message =
+                                                context.getString(
+                                                    R.string.feature_user_rules_delete_message,
+                                                    rule.name,
+                                                ),
+                                            confirmText = context.getString(R.string.feature_user_action_delete),
+                                            isDestructive = true,
+                                        ),
+                                    )
+                                if (confirmed) {
+                                    onDeleteRule(rule.id)
+                                }
+                            }
+                        },
+                        onCopyUrl = { url ->
+                            copyToClipboard(
+                                url,
+                                context.getString(R.string.feature_user_rule_url_copied),
+                            )
+                        },
+                    )
+                }
             }
         }
     }

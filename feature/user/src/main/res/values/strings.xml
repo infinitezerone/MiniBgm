@@ -422,7 +422,18 @@
     <string name="feature_user_dev_crash_log_title">查看崩溃日志</string>
     <string name="feature_user_dev_crash_log_none">暂无崩溃日志记录</string>
     <string name="feature_user_dev_action_reset_overrides">恢复所有覆写为默认</string>
-    <string name="feature_user_dev_action_close_dev_mode">停用开发者选项</string>
+    <string name="feature_user_dev_action_close_dev_mode">关闭开发者选项</string>
+    <!-- 21. 播放源管理界面优化 -->
+    <string name="feature_user_rules_filter_all">全部 (%1$d)</string>
+    <string name="feature_user_rules_filter_online">在线流媒体 (%1$d)</string>
+    <string name="feature_user_rules_filter_torrent">BT 离线 (%1$d)</string>
+    <string name="feature_user_rules_active_count">%1$d/%2$d 已启用</string>
+    <string name="feature_user_subscription_copy_action">复制链接</string>
+    <string name="feature_user_subscription_copied">订阅链接已复制到剪贴板</string>
+    <string name="feature_user_rule_copy_url_action">复制 URL 模板</string>
+    <string name="feature_user_rule_url_copied">规则 URL 模板已复制</string>
+    <string name="feature_user_subscription_clear_message">确定要取消当前订阅源吗？已导入的本地规则将被保留。</string>
+    <string name="feature_user_rules_empty_filtered">当前分类下暂无规则</string>
 </resources>
 
 

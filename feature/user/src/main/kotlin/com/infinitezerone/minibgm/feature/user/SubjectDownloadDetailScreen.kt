@@ -334,7 +334,9 @@ internal fun SubjectDownloadDetailContent(
                                 {
                                     val playUrl =
                                         when {
-                                            task.isCompleted && task.savePath.isNotBlank() && !task.isFileMissing -> "file://${task.savePath}"
+                                            task.isCompleted &&
+                                                task.savePath.isNotBlank() &&
+                                                !task.isFileMissing -> "file://${task.savePath}"
                                             task.status == TorrentTaskStatus.DOWNLOADING && task.streamUrl.isNotBlank() -> task.streamUrl
                                             task.savePath.isNotBlank() && !task.isFileMissing -> "file://${task.savePath}"
                                             else -> ""
