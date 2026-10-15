@@ -277,6 +277,14 @@ class FakeSettingsRepository(
 
     override val isInternalPlayerEnabled: Flow<Boolean> = developerSettingsState.map { it.isInternalPlayerEffective }
 
+    override val featureCapabilities: Flow<com.infinitezerone.minibgm.core.model.FeatureCapabilities> =
+        developerSettingsState.map {
+            com.infinitezerone.minibgm.core.model.FeatureCapabilities(
+                isAiAssistantEnabled = it.isAiAssistantEffective,
+                isInternalPlayerEnabled = it.isInternalPlayerEffective,
+            )
+        }
+
     fun setDeveloperSettings(settings: com.infinitezerone.minibgm.core.model.DeveloperSettings) {
         developerSettingsState.value = settings
     }

@@ -7,6 +7,7 @@ import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.core.model.AiConfigProfile
 import com.infinitezerone.minibgm.core.model.DanmakuConfig
 import com.infinitezerone.minibgm.core.model.DeveloperSettings
+import com.infinitezerone.minibgm.core.model.FeatureCapabilities
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
@@ -215,6 +216,9 @@ interface SettingsRepository {
 
     /** 动态判断当前内置播放器是否启用（结合编译期默认与开发者动态覆写） */
     val isInternalPlayerEnabled: Flow<Boolean>
+
+    /** 应用全局特性能力开关集只读流（单一真源） */
+    val featureCapabilities: Flow<FeatureCapabilities>
 
     /** 设置开发者模式激活状态 */
     suspend fun setDeveloperModeEnabled(enabled: Boolean)
@@ -668,6 +672,14 @@ internal class SettingsRepositoryImpl(
     override val isInternalPlayerEnabled: Flow<Boolean> =
         userPreferences.userPreferences.map { prefs ->
             prefs.devOverrideEnablePlayer ?: true
+        }
+
+    override val featureCapabilities: Flow<FeatureCapabilities> =
+        userPreferences.userPreferences.map { prefs ->
+            FeatureCapabilities(
+                isAiAssistantEnabled = prefs.devOverrideEnableAi ?: true,
+                isInternalPlayerEnabled = prefs.devOverrideEnablePlayer ?: true,
+            )
         }
 
     override suspend fun setDeveloperModeEnabled(enabled: Boolean) {

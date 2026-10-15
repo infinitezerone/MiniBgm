@@ -54,6 +54,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.FeatureGate
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
@@ -84,7 +85,7 @@ fun ScheduleScreen(
     modifier: Modifier = Modifier,
     onSearchClick: () -> Unit = {},
     onAssistantClick: (() -> Unit)? = null,
-    onSourceSearch: (String) -> Unit = {},
+    onSourceSearch: ((String) -> Unit)? = null,
     onPlayClick: ((PlayerRoute) -> Unit)? = null,
     onLoginRequest: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
@@ -154,8 +155,8 @@ fun ScheduleScreen(
                     )
                 },
                 actions = {
-                    if (onAssistantClick != null) {
-                        IconButton(onClick = onAssistantClick) {
+                    FeatureGate(capability = { it.isAiAssistantEnabled && onAssistantClick != null }) {
+                        IconButton(onClick = onAssistantClick ?: {}) {
                             Icon(
                                 imageVector = BgmIcons.Assistant,
                                 contentDescription = stringResource(R.string.feature_schedule_cd_ai_assistant),

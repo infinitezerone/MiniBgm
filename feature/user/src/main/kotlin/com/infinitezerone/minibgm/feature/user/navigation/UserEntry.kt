@@ -66,7 +66,7 @@ fun EntryProviderScope<NavKey>.settingsEntry(
 /** 自定义「播放规则管理」二级页面条目 */
 fun EntryProviderScope<NavKey>.playbackRulesEntry(
     onBackClick: () -> Unit = {},
-    onAiSourceSearch: (String) -> Unit = {},
+    onAiSourceSearch: ((String) -> Unit)? = null,
     onPlayHistory: (PlayerRoute) -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
@@ -131,7 +131,7 @@ fun EntryProviderScope<NavKey>.downloadEntry(
 /** 番剧分集离线下载与播放条目 */
 fun EntryProviderScope<NavKey>.subjectDownloadDetailEntry(
     onBackClick: () -> Unit = {},
-    onPlayEpisode: (com.infinitezerone.minibgm.core.navigation.PlayerRoute) -> Unit = {},
+    onPlayEpisode: ((com.infinitezerone.minibgm.core.navigation.PlayerRoute) -> Unit)? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<com.infinitezerone.minibgm.core.navigation.SubjectDownloadDetailRoute>(metadata = metadata) { route ->

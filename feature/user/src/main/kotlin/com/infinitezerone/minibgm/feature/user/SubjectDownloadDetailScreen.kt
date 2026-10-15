@@ -46,6 +46,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalFeatureCapabilities
 import com.infinitezerone.minibgm.core.model.TorrentTask
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
@@ -65,7 +66,7 @@ fun SubjectDownloadDetailScreen(
     subjectId: Long,
     subjectName: String,
     onBackClick: () -> Unit,
-    onPlayEpisode: (PlayerRoute) -> Unit,
+    onPlayEpisode: ((PlayerRoute) -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: DownloadViewModel = koinViewModel(),
 ) {
@@ -96,7 +97,7 @@ internal fun SubjectDownloadDetailContent(
     subjectName: String,
     group: com.infinitezerone.minibgm.core.model.SubjectDownloadGroup?,
     onBackClick: () -> Unit,
-    onPlayEpisode: (PlayerRoute) -> Unit,
+    onPlayEpisode: ((PlayerRoute) -> Unit)? = null,
     onPauseTask: (String) -> Unit,
     onResumeTask: (String) -> Unit,
     onDeleteTask: (String) -> Unit,
@@ -328,27 +329,30 @@ internal fun SubjectDownloadDetailContent(
                                     selectedTaskIds + task.id
                                 }
                         },
-                        onPlay = {
-                            val playUrl =
-                                when {
-                                    task.isCompleted && task.savePath.isNotBlank() && !task.isFileMissing -> "file://${task.savePath}"
-                                    task.status == TorrentTaskStatus.DOWNLOADING && task.streamUrl.isNotBlank() -> task.streamUrl
-                                    task.savePath.isNotBlank() && !task.isFileMissing -> "file://${task.savePath}"
-                                    else -> ""
+                        onPlay =
+                            onPlayEpisode?.let { play ->
+                                {
+                                    val playUrl =
+                                        when {
+                                            task.isCompleted && task.savePath.isNotBlank() && !task.isFileMissing -> "file://${task.savePath}"
+                                            task.status == TorrentTaskStatus.DOWNLOADING && task.streamUrl.isNotBlank() -> task.streamUrl
+                                            task.savePath.isNotBlank() && !task.isFileMissing -> "file://${task.savePath}"
+                                            else -> ""
+                                        }
+                                    if (playUrl.isNotBlank()) {
+                                        val route =
+                                            PlayerRoute(
+                                                subjectId = task.subjectId.takeIf { it > 0L } ?: subjectId,
+                                                episodeId = task.episodeId,
+                                                streamUrl = playUrl,
+                                                episodeName = task.episodeName.ifBlank { task.title },
+                                                subjectName = task.subjectName.ifBlank { subjectName },
+                                                episodeSort = task.episodeSort,
+                                            )
+                                        play(route)
+                                    }
                                 }
-                            if (playUrl.isNotBlank()) {
-                                val route =
-                                    PlayerRoute(
-                                        subjectId = task.subjectId.takeIf { it > 0L } ?: subjectId,
-                                        episodeId = task.episodeId,
-                                        streamUrl = playUrl,
-                                        episodeName = task.episodeName.ifBlank { task.title },
-                                        subjectName = task.subjectName.ifBlank { subjectName },
-                                        episodeSort = task.episodeSort,
-                                    )
-                                onPlayEpisode(route)
-                            }
-                        },
+                            },
                         onPause = { onPauseTask(task.id) },
                         onResume = { onResumeTask(task.id) },
                         onDelete = {
@@ -438,7 +442,7 @@ internal fun EpisodeDownloadCard(
     isBatchMode: Boolean = false,
     isSelected: Boolean = false,
     onToggleSelect: () -> Unit = {},
-    onPlay: () -> Unit,
+    onPlay: (() -> Unit)? = null,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onDelete: () -> Unit,
@@ -451,7 +455,8 @@ internal fun EpisodeDownloadCard(
         task.status == TorrentTaskStatus.DOWNLOADING &&
             task.streamUrl.isNotBlank() &&
             (task.downloadedBytes > 0L || task.connectedPeers > 0)
-    val isPlayable = (isCompleted && !task.isFileMissing) || canStreamWhileDownloading
+    val isInternalPlayerEnabled = LocalFeatureCapabilities.current.isInternalPlayerEnabled
+    val isPlayable = isInternalPlayerEnabled && onPlay != null && ((isCompleted && !task.isFileMissing) || canStreamWhileDownloading)
 
     Surface(
         onClick =
@@ -681,20 +686,22 @@ internal fun EpisodeDownloadCard(
                     } else {
                         when (task.status) {
                             TorrentTaskStatus.COMPLETED -> {
-                                FilledTonalIconButton(
-                                    onClick = onPlay,
-                                    modifier = Modifier.size(36.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.PlayArrow,
-                                        contentDescription = stringResource(R.string.feature_user_downloads_play_offline),
-                                        modifier = Modifier.size(20.dp),
-                                    )
+                                if (isInternalPlayerEnabled && onPlay != null) {
+                                    FilledTonalIconButton(
+                                        onClick = onPlay,
+                                        modifier = Modifier.size(36.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = BgmIcons.PlayArrow,
+                                            contentDescription = stringResource(R.string.feature_user_downloads_play_offline),
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    }
                                 }
                             }
 
                             TorrentTaskStatus.DOWNLOADING -> {
-                                if (canStreamWhileDownloading) {
+                                if (canStreamWhileDownloading && isInternalPlayerEnabled && onPlay != null) {
                                     FilledTonalIconButton(
                                         onClick = onPlay,
                                         modifier = Modifier.size(36.dp),

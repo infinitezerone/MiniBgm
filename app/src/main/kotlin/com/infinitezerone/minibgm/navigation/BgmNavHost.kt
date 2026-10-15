@@ -20,6 +20,8 @@ import com.infinitezerone.minibgm.BuildConfig
 import com.infinitezerone.minibgm.R
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalFeatureCapabilities
+import com.infinitezerone.minibgm.core.model.FeatureCapabilities
 import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
 import com.infinitezerone.minibgm.core.navigation.DownloadRoute
@@ -79,12 +81,15 @@ fun BgmNavHost(
     val userScrollToTop = remember(navState) { navState.scrollToTopFor(UserRoute) }
     val imageLoader = koinInject<ImageLoader>()
     val settingsRepository = koinInject<SettingsRepository>()
-    val isAiAssistantEnabled by settingsRepository.isAiAssistantEnabled.collectAsStateWithLifecycle(
-        initialValue = BuildConfig.ENABLE_AI_ASSISTANT,
+    val featureCapabilities by settingsRepository.featureCapabilities.collectAsStateWithLifecycle(
+        initialValue =
+            FeatureCapabilities(
+                isAiAssistantEnabled = BuildConfig.ENABLE_AI_ASSISTANT,
+                isInternalPlayerEnabled = BuildConfig.ENABLE_INTERNAL_PLAYER,
+            ),
     )
-    val isInternalPlayerEnabled by settingsRepository.isInternalPlayerEnabled.collectAsStateWithLifecycle(
-        initialValue = BuildConfig.ENABLE_INTERNAL_PLAYER,
-    )
+    val isAiAssistantEnabled = featureCapabilities.isAiAssistantEnabled
+    val isInternalPlayerEnabled = featureCapabilities.isInternalPlayerEnabled
 
     val directive = rememberBgmPaneDirective()
     val isSplitMode = directive.isSplitLayout
@@ -118,7 +123,10 @@ fun BgmNavHost(
 
     SharedTransitionLayout(modifier = modifier) {
         val sharedScope = if (isSplitMode) null else this
-        CompositionLocalProvider(LocalSharedTransitionScope provides sharedScope) {
+        CompositionLocalProvider(
+            LocalSharedTransitionScope provides sharedScope,
+            LocalFeatureCapabilities provides featureCapabilities,
+        ) {
             NavDisplay(
                 sharedTransitionScope = sharedScope,
                 entries =
@@ -137,7 +145,7 @@ fun BgmNavHost(
                                     if (isAiAssistantEnabled) {
                                         { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) }
                                     } else {
-                                        {}
+                                        null
                                     },
                                 onPlayClick =
                                     if (isInternalPlayerEnabled) {
@@ -207,7 +215,12 @@ fun BgmNavHost(
 
                             subjectDownloadDetailEntry(
                                 onBackClick = { navState.goBack() },
-                                onPlayEpisode = { route -> navState.navigateTo(route) },
+                                onPlayEpisode =
+                                    if (isInternalPlayerEnabled) {
+                                        { route -> navState.navigateTo(route) }
+                                    } else {
+                                        null
+                                    },
                                 metadata = bgmDetailPane(),
                             )
 
@@ -248,7 +261,7 @@ fun BgmNavHost(
                                         if (isAiAssistantEnabled) {
                                             { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) }
                                         } else {
-                                            {}
+                                            null
                                         },
                                     onPlayHistory = { route -> navState.navigateTo(route) },
                                     metadata = bgmExtraPane(),

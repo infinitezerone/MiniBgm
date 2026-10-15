@@ -56,6 +56,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.SingleChoiceDialog
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
+import com.infinitezerone.minibgm.core.designsystem.theme.FeatureGate
 import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
@@ -102,7 +103,7 @@ private enum class PlaybackRulesTab(
 fun PlaybackRulesScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onAiSourceSearch: (String) -> Unit = {},
+    onAiSourceSearch: ((String) -> Unit)? = null,
     onPlayHistory: (PlayerRoute) -> Unit = {},
     viewModel: PlaybackRulesViewModel = koinViewModel(),
 ) {
@@ -145,7 +146,7 @@ fun PlaybackRulesScreen(
                 snackbarHostState.showSnackbar(text)
             }
             is PlaybackRulesUiEvent.OpenAiSourceSearch -> {
-                onAiSourceSearch(event.prompt)
+                onAiSourceSearch?.invoke(event.prompt)
             }
             is PlaybackRulesUiEvent.PromptClipboardSubscription -> {
                 val confirmed =
@@ -185,12 +186,14 @@ fun PlaybackRulesScreen(
                 actions = {
                     when (currentTab) {
                         PlaybackRulesTab.RULES ->
-                            IconButton(onClick = { viewModel.requestAiSourceSearch() }) {
-                                Icon(
-                                    imageVector = BgmIcons.Assistant,
-                                    contentDescription = stringResource(R.string.feature_user_cd_ai_source_search),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
+                            FeatureGate(capability = { it.isAiAssistantEnabled && onAiSourceSearch != null }) {
+                                IconButton(onClick = { viewModel.requestAiSourceSearch() }) {
+                                    Icon(
+                                        imageVector = BgmIcons.Assistant,
+                                        contentDescription = stringResource(R.string.feature_user_cd_ai_source_search),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
                             }
                         PlaybackRulesTab.HISTORY ->
                             if (uiState.playbackHistory.isNotEmpty()) {

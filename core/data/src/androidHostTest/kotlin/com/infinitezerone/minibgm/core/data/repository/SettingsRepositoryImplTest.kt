@@ -168,6 +168,9 @@ class SettingsRepositoryImplTest {
             assertEquals("", defaultDev.customMirrorPrefixOverride)
             assertTrue(repo.isAiAssistantEnabled.first())
             assertTrue(repo.isInternalPlayerEnabled.first())
+            val defaultCapabilities = repo.featureCapabilities.first()
+            assertTrue(defaultCapabilities.isAiAssistantEnabled)
+            assertTrue(defaultCapabilities.isInternalPlayerEnabled)
 
             repo.setDeveloperModeEnabled(true)
             repo.setDevOverrideEnableAi(false)
@@ -175,6 +178,9 @@ class SettingsRepositoryImplTest {
 
             repo.setDevOverrideEnablePlayer(false)
             assertEquals(false, repo.isInternalPlayerEnabled.first())
+            val disabledCapabilities = repo.featureCapabilities.first()
+            assertEquals(false, disabledCapabilities.isAiAssistantEnabled)
+            assertEquals(false, disabledCapabilities.isInternalPlayerEnabled)
 
             repo.setDevOverrideEnableAi(null)
             assertTrue(repo.isAiAssistantEnabled.first())

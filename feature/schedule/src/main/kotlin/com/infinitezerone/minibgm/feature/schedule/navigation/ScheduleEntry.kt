@@ -13,7 +13,7 @@ fun EntryProviderScope<NavKey>.scheduleEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onSearchClick: () -> Unit = {},
     onAssistantClick: (() -> Unit)? = null,
-    onSourceSearch: (String) -> Unit = {},
+    onSourceSearch: ((String) -> Unit)? = null,
     onPlayClick: ((PlayerRoute) -> Unit)? = null,
     onLoginRequest: () -> Unit = {},
     scrollToTop: Flow<Unit>? = null,

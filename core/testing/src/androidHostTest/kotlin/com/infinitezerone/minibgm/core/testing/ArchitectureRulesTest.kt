@@ -1616,7 +1616,7 @@ class ArchitectureRulesTest {
                 .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
                 .filter { it.isFile && it.extension == "kt" }
                 .forEach { file ->
-                    val rel = file.relativeTo(projectRoot).path
+                    val rel = file.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
                     if (rel != infoHashSourceOfTruth && file.readText().contains(handrolledParse)) {
                         violations.add("$rel 重复手写 infoHash 解析，必须调用 :core:model 的 magnetInfoHash 唯一真源")
                     }
