@@ -140,7 +140,10 @@ class TorrentFeedRepositoryImpl(
         val filtered =
             if (episodeSort != null) {
                 val matched = resources.filter { it.episodeSort == episodeSort }
-                if (matched.isNotEmpty()) matched else resources
+                // 分集未命中时只回退到合集/BD 整包项（episodeSort == null），绝不回退整份 Feed：
+                // 否则请求第 5 集会看到第 1-4 集，点单文件资源还会被 Rust 侧「单一候选即选中」
+                // 静默播成第 1 集，用户全程无提示。
+                matched.ifEmpty { resources.filter { it.episodeSort == null } }
             } else {
                 resources
             }

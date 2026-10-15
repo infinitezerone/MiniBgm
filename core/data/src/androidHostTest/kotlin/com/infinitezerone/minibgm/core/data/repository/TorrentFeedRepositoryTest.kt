@@ -88,6 +88,78 @@ class TorrentFeedRepositoryTest {
         }
 
     @Test
+    fun getTorrentResources_returnsEmptyWhenEpisodeMissesInsteadOfFullFeed() =
+        runTest {
+            // Feed 里只有第 3、4 话，没有任何合集项
+            val fake = FakeFeedFetchService(sampleRssXml)
+            val repository = TorrentFeedRepositoryImpl(fake)
+            val rule =
+                PlaybackSourceRule(
+                    id = "test-torrent-rule",
+                    name = "Test Torrent Feed",
+                    urlTemplate = "https://feed.example.com/rss?keyword={title}",
+                    kind = PlaybackRuleKind.TORRENT,
+                    parserType = RuleParserType.RSS_TORRENT,
+                )
+
+            val results =
+                repository.getTorrentResources(
+                    title = "葬送的芙莉莲",
+                    episodeSort = 5f,
+                    rule = rule,
+                )
+
+            // 请求第 5 话时 Feed 只有 3、4 话：绝不能回退成整份 Feed 让用户误点播错集
+            assertTrue(results.isEmpty())
+        }
+
+    @Test
+    fun getTorrentResources_fallsBackToCollectionItemsWhenEpisodeMisses() =
+        runTest {
+            val collectionRssXml =
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <rss version="2.0">
+                  <channel>
+                    <title>Sample Torrent Feed</title>
+                    <item>
+                      <title>[LoliHouse] 葬送的芙莉莲 全集 01-28 [1080P][BDRip]</title>
+                      <link>magnet:?xt=urn:btih:1111111111111111111111111111111111111111</link>
+                      <enclosure url="https://feed.example.com/download/collection.torrent" length="12000000000" type="application/x-bittorrent"/>
+                      <description>[11.2 GB]</description>
+                    </item>
+                    <item>
+                      <title>[ANi] 葬送的芙莉莲 - 03 [1080P].mp4</title>
+                      <link>magnet:?xt=urn:btih:2222222222222222222222222222222222222222</link>
+                      <enclosure url="https://feed.example.com/download/03.torrent" length="350000000" type="application/x-bittorrent"/>
+                    </item>
+                  </channel>
+                </rss>
+                """.trimIndent()
+            val fake = FakeFeedFetchService(collectionRssXml)
+            val repository = TorrentFeedRepositoryImpl(fake)
+            val rule =
+                PlaybackSourceRule(
+                    id = "test-torrent-rule",
+                    name = "Test Torrent Feed",
+                    urlTemplate = "https://feed.example.com/rss?keyword={title}",
+                    kind = PlaybackRuleKind.TORRENT,
+                    parserType = RuleParserType.RSS_TORRENT,
+                )
+
+            val results =
+                repository.getTorrentResources(
+                    title = "葬送的芙莉莲",
+                    episodeSort = 5f,
+                    rule = rule,
+                )
+
+            // 未命中单集，但存在合集项：只回退合集（episodeSort == null），不得带上第 3 话的单集条目
+            assertEquals(1, results.size)
+            assertEquals(null, results.first().episodeSort)
+        }
+
+    @Test
     fun getTorrentResources_failOpenOnNetworkError() =
         runTest {
             val fake = FakeFeedFetchService(null)
