@@ -133,7 +133,12 @@ fun BgmNavHost(
                                     } else {
                                         null
                                     },
-                                onSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
+                                onSourceSearch =
+                                    if (isAiAssistantEnabled) {
+                                        { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) }
+                                    } else {
+                                        {}
+                                    },
                                 onPlayClick =
                                     if (isInternalPlayerEnabled) {
                                         { route -> navState.navigateTo(route) }
@@ -239,7 +244,12 @@ fun BgmNavHost(
                             if (isInternalPlayerEnabled) {
                                 playbackRulesEntry(
                                     onBackClick = { navState.goBack() },
-                                    onAiSourceSearch = { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) },
+                                    onAiSourceSearch =
+                                        if (isAiAssistantEnabled) {
+                                            { prompt -> navState.navigateTo(AssistantRoute(prefillPrompt = prompt)) }
+                                        } else {
+                                            {}
+                                        },
                                     onPlayHistory = { route -> navState.navigateTo(route) },
                                     metadata = bgmExtraPane(),
                                 )
@@ -372,15 +382,25 @@ fun BgmNavHost(
                                     onEpisodeDetailClick = { subjectId, episodeId ->
                                         navState.navigateTo(EpisodeDetailRoute(subjectId = subjectId, episodeId = episodeId))
                                     },
-                                    onRequestOpenSources = { route ->
-                                        val title = route.subjectName.ifBlank { context.getString(R.string.app_subject_fallback_title) }
-                                        navState.navigateTo(
-                                            AssistantRoute(
-                                                prefillPrompt =
-                                                    context.getString(R.string.app_ai_search_prompt, title, route.subjectId),
-                                            ),
-                                        )
-                                    },
+                                    onRequestOpenSources =
+                                        if (isAiAssistantEnabled) {
+                                            { route ->
+                                                val title =
+                                                    route.subjectName.ifBlank {
+                                                        context.getString(
+                                                            R.string.app_subject_fallback_title,
+                                                        )
+                                                    }
+                                                navState.navigateTo(
+                                                    AssistantRoute(
+                                                        prefillPrompt =
+                                                            context.getString(R.string.app_ai_search_prompt, title, route.subjectId),
+                                                    ),
+                                                )
+                                            }
+                                        } else {
+                                            null
+                                        },
                                     onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
                                     metadata = bgmExtraPane(),
                                 )
