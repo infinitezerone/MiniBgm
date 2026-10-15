@@ -1536,6 +1536,53 @@ class ArchitectureRulesTest {
     }
 
     /**
+     * 应用内更新下载的可见性红线（见 AGENTS.md 领域规则 & 剧本 12）：
+     * 更新 APK 是数十 MB 的后台大任务，而设置页长期只弹一次固定文案「正在下载新版本… 0%」——
+     * 真实进度（`DownloadState.Downloading`）与取消入口（`UpdateRepository.cancelDownload` /
+     * `UserViewModel.cancelUpdateDownload`）整条链路都已实现且状态一直在发射，却没有任何消费者：
+     * 用户既看不到进度也无法中止，只能杀进程，而固定文案还在持续宣称一个假的 0%。
+     *
+     * 机械判据：
+     * 1. 进度必须来自真实状态（`DownloadState.Downloading` + `percentage`），且未知总量
+     *    （`isIndeterminate`，服务端未给 Content-Length）不得当成 0%；
+     * 2. 必须提供取消入口（`cancelUpdateDownload(`）；
+     * 3. 严禁把百分比硬编码成常量传给下载中文案（原始文本扫描，字符串字面量在 sanitize 后会被抹掉）。
+     */
+    @Test
+    fun update_flow_must_surface_real_progress_and_cancel() {
+        val relativePath = "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/SettingsScreen.kt"
+        val file = File(projectRoot, relativePath)
+        assertTrue(file.isFile, "$relativePath 未找到")
+        val raw = file.readText()
+        val code = KotlinSourceScanner.sanitize(raw)
+        val violations = mutableListOf<String>()
+
+        if (!code.contains("DownloadState.Downloading")) {
+            violations.add("$relativePath 未消费 DownloadState.Downloading：更新下载对用户无进度")
+        }
+        if (!code.contains("isIndeterminate")) {
+            violations.add("$relativePath 未区分未知总量（isIndeterminate）：无 Content-Length 时会显示假的 0%")
+        }
+        if (!code.contains("percentage")) {
+            violations.add("$relativePath 未使用进度百分比：更新下载进度不可见")
+        }
+        if (!code.contains("cancelUpdateDownload(")) {
+            violations.add("$relativePath 未提供取消入口：后台大任务无法中止，用户只能杀进程")
+        }
+        val hardcodedPercent = Regex("feature_user_update_downloading[^)]*\"\\d+%\"")
+        if (hardcodedPercent.containsMatchIn(raw)) {
+            violations.add(
+                "$relativePath 仍把更新下载进度硬编码成固定百分比：文案必须由 DownloadState.Downloading 驱动",
+            )
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反应用内更新下载可见性红线（见 AGENTS.md 领域规则 & 剧本 12）：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    /**
      * Flow 算子副作用收敛红线：`map` / `onEach` / `filter` / `transform` / `mapNotNull`
      * 等算子的 lambda 内严禁 `launch` 协程。
      *
