@@ -11,6 +11,7 @@ import coil3.SingletonImageLoader
 import com.infinitezerone.minibgm.core.data.crash.CrashLogRecorder
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.di.appModule
 import com.infinitezerone.minibgm.feature.widget.WidgetSync
@@ -19,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.get
 import org.koin.android.ext.android.inject
@@ -60,6 +62,25 @@ class MiniBgmApp :
             androidContext(this@MiniBgmApp)
             workManagerFactory()
             modules(appModule())
+        }
+
+        // 开发者面板的「详细网络与引擎日志」必须真实抬高日志门限：此前门限只在启动期由
+        // BuildConfig 决定一次，开关写进 DataStore 后没有任何消费者——Release 包里打开它
+        // 依旧只有 Warn 以上的日志，排查真机问题时这个开关形同装饰。
+        val settingsRepository: SettingsRepository by inject()
+        appScope.launch {
+            settingsRepository.developerSettings
+                .map { it.verboseLoggingEnabled }
+                .distinctUntilChanged()
+                .collect { verboseLogging ->
+                    Logger.setMinSeverity(
+                        when {
+                            verboseLogging -> Severity.Verbose
+                            BuildConfig.DEBUG -> Severity.Debug
+                            else -> Severity.Warn
+                        },
+                    )
+                }
         }
 
         // 初始化后台同步与开播提醒调度（封装在 :sync:work 内部，按偏好动态配置）
