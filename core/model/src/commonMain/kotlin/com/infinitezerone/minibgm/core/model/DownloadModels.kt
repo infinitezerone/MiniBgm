@@ -26,27 +26,6 @@ data class DownloadProgress(
     /** 是否无法预估总量（如未返回 Content-Length） */
     val isIndeterminate: Boolean
         get() = totalBytes <= 0L
-
-    /** 格式化已下载/总大小（如 "12.4 MB / 18.2 MB"） */
-    val formattedProgress: String
-        get() {
-            val downloadedMb = bytesDownloaded / (1024.0 * 1024.0)
-            return if (totalBytes > 0L) {
-                val totalMb = totalBytes / (1024.0 * 1024.0)
-                "%.1f MB / %.1f MB".format(downloadedMb, totalMb)
-            } else {
-                "%.1f MB".format(downloadedMb)
-            }
-        }
-
-    /** 格式化下载速度（如 "2.4 MB/s" 或 "350 KB/s"） */
-    val formattedSpeed: String
-        get() =
-            when {
-                speedBytesPerSec <= 0L -> ""
-                speedBytesPerSec >= 1024 * 1024 -> "%.1f MB/s".format(speedBytesPerSec / (1024.0 * 1024.0))
-                else -> "%d KB/s".format(speedBytesPerSec / 1024)
-            }
 }
 
 /**

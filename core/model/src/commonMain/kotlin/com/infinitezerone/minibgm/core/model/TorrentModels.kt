@@ -68,17 +68,9 @@ data class TorrentTask(
     val isCompleted: Boolean
         get() = status == TorrentTaskStatus.COMPLETED
 
-    /** 格式化已下载/总大小 */
+    /** 格式化已下载/总大小（唯一真源 formatDownloadProgressPair，总量未知时只显示已下载） */
     val formattedProgress: String
-        get() {
-            val downloadedMb = downloadedBytes / (1024.0 * 1024.0)
-            return if (totalBytes > 0L) {
-                val totalMb = totalBytes / (1024.0 * 1024.0)
-                "%.1f MB / %.1f MB".format(downloadedMb, totalMb)
-            } else {
-                "%.1f MB".format(downloadedMb)
-            }
-        }
+        get() = formatDownloadProgressPair(downloadedBytes, totalBytes)
 
     /** 格式化下载速度 */
     val formattedDownloadSpeed: String
@@ -135,6 +127,26 @@ fun formatTransferSpeed(bytesPerSec: Long): String =
     }
 
 /**
+ * 「已下载 / 总量」进度文案的唯一格式化真源（总量未知时只显示已下载）。
+ *
+ * 资产下载进度与磁力任务进度此前各抄了一份逐字相同的 MB 分支。此处**刻意**沿用固定 MB 口径，
+ * 而不改用 [DownloadStorageUsage.formatBytes] 的 KB/GB 自适应：后者会改变既有 UI 文案
+ * （`0.0 MB` → `0 B`）与截图黄金图，属独立的产品决策，不与「消除重复实现」混做。
+ */
+fun formatDownloadProgressPair(
+    downloadedBytes: Long,
+    totalBytes: Long,
+): String {
+    val downloadedMb = downloadedBytes / (1024.0 * 1024.0)
+    return if (totalBytes > 0L) {
+        val totalMb = totalBytes / (1024.0 * 1024.0)
+        "%.1f MB / %.1f MB".format(downloadedMb, totalMb)
+    } else {
+        "%.1f MB".format(downloadedMb)
+    }
+}
+
+/**
  * 按番剧聚合的下载合集视图模型。
  */
 @Serializable
@@ -180,14 +192,7 @@ data class SubjectDownloadGroup(
         get() = formatTransferSpeed(totalSpeedBytesPerSec)
 
     val formattedTotalSize: String
-        get() {
-            val gb = totalBytes / (1024.0 * 1024.0 * 1024.0)
-            return if (gb >= 1.0) {
-                "%.1f GB".format(gb)
-            } else {
-                "%.1f MB".format(totalBytes / (1024.0 * 1024.0))
-            }
-        }
+        get() = DownloadStorageUsage.formatBytes(totalBytes)
 }
 
 /**

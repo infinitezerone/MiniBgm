@@ -39,6 +39,7 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.DownloadStorageUsage
 import com.infinitezerone.minibgm.core.model.SubjectDownloadGroup
+import com.infinitezerone.minibgm.core.model.formatTransferSpeed
 import org.koin.androidx.compose.koinViewModel
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
@@ -179,12 +180,7 @@ private fun DownloadSummaryBanner(
     val errorCount = groups.sumOf { it.errorCount }
     val pausedCount = groups.sumOf { it.pausedCount }
     val totalSpeed = groups.sumOf { it.totalSpeedBytesPerSec }
-    val formattedSpeed =
-        when {
-            totalSpeed <= 0L -> "0 KB/s"
-            totalSpeed >= 1024 * 1024 -> "%.1f MB/s".format(totalSpeed / (1024.0 * 1024.0))
-            else -> "%d KB/s".format(totalSpeed / 1024)
-        }
+    val formattedSpeed = formatTransferSpeed(totalSpeed)
 
     val statusText =
         when {

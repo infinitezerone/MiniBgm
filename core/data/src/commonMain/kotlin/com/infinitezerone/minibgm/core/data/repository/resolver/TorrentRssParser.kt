@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.data.repository.resolver
 
+import com.infinitezerone.minibgm.core.model.DownloadStorageUsage
 import com.infinitezerone.minibgm.core.model.TorrentMediaResource
 
 /**
@@ -207,17 +208,13 @@ object TorrentRssParser {
             ?.trim()
             .orEmpty()
 
-    private fun formatFileSize(bytes: Long): String {
-        if (bytes <= 0L) return ""
-        val gb = bytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
-        if (gb >= 1.0) {
-            val rounded = (gb * 100.0).toLong() / 100.0
-            return "$rounded GB"
-        }
-        val mb = bytes.toDouble() / (1024.0 * 1024.0)
-        val rounded = (mb * 100.0).toLong() / 100.0
-        return "$rounded MB"
-    }
+    /**
+     * 体积展示格式化：与 [DownloadStorageUsage.formatBytes] 共用唯一真源。
+     * 历史上此处另手搓了一份 GB/MB 分支（只到 MB、两位小数取整），副本漂移会让 Feed 声明的体积
+     * 与下载页显示的单位/精度两套口径。保持"未知（<= 0）返回空串"语义：`formattedSize` 以空串
+     * 表示 Feed 未声明体积，下游据此回退到估算值，不可改成 "0 B"。
+     */
+    private fun formatFileSize(bytes: Long): String = if (bytes <= 0L) "" else DownloadStorageUsage.formatBytes(bytes)
 
     private fun unescapeXml(text: String): String =
         text
