@@ -62,6 +62,8 @@ class AndroidTorrentRepository(
     private val _tasks = MutableStateFlow<List<TorrentTask>>(emptyList())
     override val tasks: StateFlow<List<TorrentTask>> = _tasks.asStateFlow()
 
+    override val streamState: StateFlow<TorrentStreamState> = streamEngine.streamState
+
     private val activeJobs = mutableMapOf<String, Job>()
 
     @Volatile

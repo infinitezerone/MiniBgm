@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.testing.repository
 
 import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
+import com.infinitezerone.minibgm.core.model.TorrentStreamState
 import com.infinitezerone.minibgm.core.model.TorrentTask
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,6 +12,9 @@ import kotlinx.coroutines.flow.update
 class FakeTorrentRepository : TorrentRepository {
     val mutableTasks = MutableStateFlow<List<TorrentTask>>(emptyList())
     override val tasks: StateFlow<List<TorrentTask>> = mutableTasks.asStateFlow()
+
+    val mutableStreamState = MutableStateFlow<TorrentStreamState>(TorrentStreamState.Idle)
+    override val streamState: StateFlow<TorrentStreamState> = mutableStreamState.asStateFlow()
 
     var startDownloadCallCount: Int = 0
         private set

@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.data.repository
 
+import com.infinitezerone.minibgm.core.model.TorrentStreamState
 import com.infinitezerone.minibgm.core.model.TorrentTask
 import kotlinx.coroutines.flow.StateFlow
 
@@ -11,6 +12,13 @@ interface TorrentRepository {
      * 当前所有磁力/BT 下载任务列表。
      */
     val tasks: StateFlow<List<TorrentTask>>
+
+    /**
+     * 边下边播流状态只读流（Idle / 安装插件 / 解析元数据 / 缓冲 / 就绪 / 失败）。
+     *
+     * 供 UI 呈现起播进度与失败归因；feature 层只能经本接口消费，严禁直引 `TorrentStreamEngine`。
+     */
+    val streamState: StateFlow<TorrentStreamState>
 
     /**
      * 创建并启动一个下载任务。
