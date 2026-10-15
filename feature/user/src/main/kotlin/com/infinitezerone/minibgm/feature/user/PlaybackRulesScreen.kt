@@ -7,12 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,8 +41,6 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -195,7 +191,25 @@ fun PlaybackRulesScreen(
                 },
                 actions = {
                     when (currentTab) {
-                        PlaybackRulesTab.RULES ->
+                        PlaybackRulesTab.RULES -> {
+                            if (uiState.subscriptionUrl.isNotBlank()) {
+                                IconButton(
+                                    onClick = { viewModel.refreshSubscription() },
+                                    enabled = !uiState.isRefreshingSubscription,
+                                ) {
+                                    if (uiState.isRefreshingSubscription) {
+                                        CircularProgressIndicator(
+                                            strokeWidth = 2.dp,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = BgmIcons.Refresh,
+                                            contentDescription = stringResource(R.string.feature_user_subscription_sync_action),
+                                        )
+                                    }
+                                }
+                            }
                             FeatureGate(capability = { it.isAiAssistantEnabled && onAiSourceSearch != null }) {
                                 IconButton(onClick = { viewModel.requestAiSourceSearch() }) {
                                     Icon(
@@ -205,6 +219,7 @@ fun PlaybackRulesScreen(
                                     )
                                 }
                             }
+                        }
                         PlaybackRulesTab.HISTORY ->
                             if (uiState.playbackHistory.isNotEmpty()) {
                                 IconButton(
@@ -304,10 +319,6 @@ fun PlaybackRulesScreen(
                     PlaybackRulesTab.RULES ->
                         RulesTabContent(
                             rules = uiState.rules,
-                            subscriptionUrl = uiState.subscriptionUrl,
-                            isRefreshingSubscription = uiState.isRefreshingSubscription,
-                            onRefreshSubscription = viewModel::refreshSubscription,
-                            onClearSubscription = viewModel::clearSubscriptionUrl,
                             onOpenSubscriptionImport = viewModel::openSubscriptionImport,
                             onOpenSiteProbe = viewModel::openSiteProbe,
                             onToggleRule = viewModel::toggleRule,
@@ -393,14 +404,10 @@ fun PlaybackRulesScreen(
     }
 }
 
-/** 解析规则页签：订阅状态条 + 规则列表 + 分类筛选 + 空态引导 */
+/** 解析规则页签：规则列表 + 分类筛选 + 空态引导 */
 @Composable
 internal fun RulesTabContent(
     rules: List<PlaybackSourceRule>,
-    subscriptionUrl: String,
-    isRefreshingSubscription: Boolean,
-    onRefreshSubscription: () -> Unit,
-    onClearSubscription: () -> Unit,
     onOpenSubscriptionImport: () -> Unit,
     onOpenSiteProbe: () -> Unit,
     onToggleRule: (String, Boolean) -> Unit,
@@ -443,154 +450,6 @@ internal fun RulesTabContent(
         contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        if (subscriptionUrl.isNotBlank()) {
-            item(key = "subscription_status") {
-                Surface(
-                    shape = BgmShapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Surface(
-                                shape = BgmShapes.small,
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.size(32.dp),
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = BgmIcons.CloudQueue,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.feature_user_subscription_active_title),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    text =
-                                        stringResource(
-                                            R.string.feature_user_rules_active_count,
-                                            enabledCount,
-                                            rules.size,
-                                        ),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            TextButton(
-                                onClick = onRefreshSubscription,
-                                enabled = !isRefreshingSubscription,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                            ) {
-                                if (isRefreshingSubscription) {
-                                    CircularProgressIndicator(
-                                        strokeWidth = 2.dp,
-                                        modifier = Modifier.size(14.dp),
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        stringResource(R.string.feature_user_subscription_syncing),
-                                        style = MaterialTheme.typography.labelMedium,
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = BgmIcons.Refresh,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp),
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        stringResource(R.string.feature_user_subscription_sync_action),
-                                        style = MaterialTheme.typography.labelMedium,
-                                    )
-                                }
-                            }
-                            IconButton(
-                                onClick = {
-                                    scope.launch {
-                                        val confirmed =
-                                            overlayHostState.await(
-                                                ConfirmDialogAction(
-                                                    title = context.getString(R.string.feature_user_subscription_clear_action),
-                                                    message = context.getString(R.string.feature_user_subscription_clear_message),
-                                                    confirmText =
-                                                        context.getString(
-                                                            R.string.feature_user_subscription_clear_action,
-                                                        ),
-                                                    isDestructive = true,
-                                                ),
-                                            )
-                                        if (confirmed) {
-                                            onClearSubscription()
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.size(32.dp),
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Close,
-                                    contentDescription = stringResource(R.string.feature_user_subscription_clear_action),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        }
-
-                        Surface(
-                            shape = BgmShapes.extraSmall,
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                Text(
-                                    text = subscriptionUrl,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                IconButton(
-                                    onClick = {
-                                        copyToClipboard(
-                                            subscriptionUrl,
-                                            context.getString(R.string.feature_user_subscription_copied),
-                                        )
-                                    },
-                                    modifier = Modifier.size(24.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.ContentCopy,
-                                        contentDescription = stringResource(R.string.feature_user_subscription_copy_action),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(14.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         if (rules.isEmpty()) {
             item(key = "rules_empty_hero") {
                 Surface(

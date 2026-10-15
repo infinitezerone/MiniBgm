@@ -15,9 +15,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-private const val SAMPLE_SUB_URL =
-    "https://example.com/subscriptions/minibgm_rules.json"
-
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
@@ -63,10 +60,6 @@ class PlaybackRulesScreenScreenshotTest {
             MiniBgmTheme(darkTheme = false) {
                 RulesTabContent(
                     rules = sampleRules,
-                    subscriptionUrl = SAMPLE_SUB_URL,
-                    isRefreshingSubscription = false,
-                    onRefreshSubscription = {},
-                    onClearSubscription = {},
                     onOpenSubscriptionImport = {},
                     onOpenSiteProbe = {},
                     onToggleRule = { _, _ -> },
@@ -85,10 +78,6 @@ class PlaybackRulesScreenScreenshotTest {
             MiniBgmTheme(darkTheme = true) {
                 RulesTabContent(
                     rules = sampleRules,
-                    subscriptionUrl = SAMPLE_SUB_URL,
-                    isRefreshingSubscription = false,
-                    onRefreshSubscription = {},
-                    onClearSubscription = {},
                     onOpenSubscriptionImport = {},
                     onOpenSiteProbe = {},
                     onToggleRule = { _, _ -> },
