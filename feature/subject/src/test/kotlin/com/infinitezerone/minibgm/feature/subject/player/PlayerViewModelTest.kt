@@ -1688,4 +1688,50 @@ class PlayerViewModelTest {
             assertEquals(0, state.currentIndex)
             assertEquals(null, state.error)
         }
+
+    @Test
+    fun selectEpisode_clearsStaleDanmakusAndRecoversResumePositionFromHistory() =
+        runTest {
+            val historyRepo = FakePlaybackHistoryRepository()
+            historyRepo.saveHistory(
+                PlaybackHistory(
+                    episodeId = 3003L,
+                    subjectId = subjectId,
+                    subjectName = "葬送的芙莉莲",
+                    episodeName = "第 2 话",
+                    episodeSort = 2f,
+                    coverUrl = "",
+                    streamUrl = "https://example.com/dynamic_token_123.m3u8",
+                    positionMs = 120_000L,
+                    durationMs = 24 * 60_000L,
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
+
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = episodeId,
+                            subjectName = "葬送的芙莉莲",
+                            episodeSort = 1f,
+                            streamUrl = initialStreamUrl,
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = FakeSettingsRepository(),
+                    playbackHistoryRepository = historyRepo,
+                )
+            advanceUntilIdle()
+
+            // 切换至第 2 话
+            vm.selectEpisode(PlayerEpisodeItem(id = 3003L, sort = 2f, name = "第 2 话"))
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertEquals(3003L, state.episodeId)
+            assertEquals(120_000L, state.resumePositionMs)
+            assertTrue("换集后旧弹幕应立即清空", state.danmakus.isEmpty())
+        }
 }

@@ -198,7 +198,20 @@ class PlayerController(
                 playWhenReady = engine.playWhenReady,
                 isLooping = looping,
             )
+        resetTrackOverridesOnMediaChange()
         engine.load(url, requestHeaders)
+    }
+
+    private fun resetTrackOverridesOnMediaChange() {
+        val params = engine.trackSelectionParameters
+        if (params.overrides.isNotEmpty()) {
+            engine.trackSelectionParameters =
+                params
+                    .buildUpon()
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                    .build()
+        }
     }
 
     /** 重试当前地址（保留 URL 与请求头）。 */

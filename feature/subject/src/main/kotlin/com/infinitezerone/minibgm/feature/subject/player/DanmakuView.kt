@@ -2,9 +2,13 @@ package com.infinitezerone.minibgm.feature.subject.player
 
 import android.graphics.Paint
 import android.graphics.Typeface
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.nativeCanvas
@@ -19,11 +23,51 @@ private const val DANMAKU_DURATION_MS = 6_000L
 private const val FIXED_DURATION_MS = 4_000L
 
 /**
- * 轻量高性能弹幕渲染层。
+ * 二分查找当前活跃时间窗口的弹幕，避免每帧全量线性扫描与堆分配。
+ */
+internal fun findActiveDanmakus(
+    danmakus: List<DanmakuItem>,
+    currentMs: Long,
+): List<DanmakuItem> {
+    if (danmakus.isEmpty() || currentMs < 0) return emptyList()
+    val minTime = currentMs - DANMAKU_DURATION_MS
+    var low = 0
+    var high = danmakus.size
+    while (low < high) {
+        val mid = (low + high) ushr 1
+        if (danmakus[mid].timeMs < minTime) {
+            low = mid + 1
+        } else {
+            high = mid
+        }
+    }
+    val startIndex = low
+    if (startIndex >= danmakus.size) return emptyList()
+
+    val result = ArrayList<DanmakuItem>(16)
+    for (i in startIndex until danmakus.size) {
+        val item = danmakus[i]
+        if (item.timeMs > currentMs) break
+        val elapsed = currentMs - item.timeMs
+        val isActive =
+            when (item.mode) {
+                DanmakuMode.SCROLL -> elapsed in 0..DANMAKU_DURATION_MS
+                DanmakuMode.TOP, DanmakuMode.BOTTOM -> elapsed in 0..FIXED_DURATION_MS
+            }
+        if (isActive) {
+            result.add(item)
+        }
+    }
+    return result
+}
+
+/**
+ * 高性能流畅弹幕渲染层。
  *
  * 遵循 Fail-Open 架构原则：
  * 任何绘制测量异常自动捕获降级，绝不崩溃播放器宿主。
  * 纯 Canvas 原生文字双层绘制（外层黑色描边 + 内层主题色填充），保障各种画面明暗对比度下的极致清晰度。
+ * 针对 ExoPlayer 500ms 轮询心跳进行平滑插值，消除 2 FPS 卡顿；二分查找时间窗口避免每帧 GC。
  */
 @Composable
 fun DanmakuView(
@@ -31,6 +75,8 @@ fun DanmakuView(
     currentPositionMs: Long,
     isEnabled: Boolean,
     modifier: Modifier = Modifier,
+    isPlaying: Boolean = false,
+    playbackSpeed: Float = 1f,
 ) {
     if (!isEnabled || danmakus.isEmpty() || currentPositionMs < 0) return
 
@@ -61,6 +107,43 @@ fun DanmakuView(
             }
         }
 
+    val sortedDanmakus =
+        remember(danmakus) {
+            if (danmakus.size <= 1) {
+                danmakus
+            } else {
+                var isSorted = true
+                for (i in 0 until danmakus.size - 1) {
+                    if (danmakus[i].timeMs > danmakus[i + 1].timeMs) {
+                        isSorted = false
+                        break
+                    }
+                }
+                if (isSorted) danmakus else danmakus.sortedBy { it.timeMs }
+            }
+        }
+
+    val animPosition = remember { Animatable(currentPositionMs.toFloat()) }
+
+    LaunchedEffect(currentPositionMs, isPlaying, playbackSpeed) {
+        if (!isPlaying) {
+            animPosition.snapTo(currentPositionMs.toFloat())
+            return@LaunchedEffect
+        }
+        val currentAnimVal = animPosition.value
+        val jump = abs(currentPositionMs - currentAnimVal)
+        if (jump > 1_500f) {
+            animPosition.snapTo(currentPositionMs.toFloat())
+        }
+        val targetMs = currentPositionMs + (500L * playbackSpeed)
+        animPosition.animateTo(
+            targetValue = targetMs,
+            animationSpec = tween(durationMillis = 500, easing = LinearEasing),
+        )
+    }
+
+    val renderedPositionMs = animPosition.value.toLong()
+
     Canvas(modifier = modifier.fillMaxSize()) {
         runCatching {
             val canvasWidth = size.width
@@ -70,21 +153,13 @@ fun DanmakuView(
             val maxTracks = ((canvasHeight * 0.6f) / trackHeightPx).toInt().coerceAtLeast(1)
             val nativeCanvas = drawContext.canvas.nativeCanvas
 
-            // 过滤当前活跃时间窗口的弹幕
-            val visibleItems =
-                danmakus.filter { item ->
-                    val elapsed = currentPositionMs - item.timeMs
-                    when (item.mode) {
-                        DanmakuMode.SCROLL -> elapsed in 0..DANMAKU_DURATION_MS
-                        DanmakuMode.TOP, DanmakuMode.BOTTOM -> elapsed in 0..FIXED_DURATION_MS
-                    }
-                }
+            val visibleItems = findActiveDanmakus(sortedDanmakus, renderedPositionMs)
 
             for (item in visibleItems) {
                 val text = item.text
                 val textWidth = fillPaint.measureText(text)
                 val trackIndex = abs(item.text.hashCode()) % maxTracks
-                val elapsed = currentPositionMs - item.timeMs
+                val elapsed = renderedPositionMs - item.timeMs
 
                 val (x, y) =
                     when (item.mode) {
@@ -114,7 +189,6 @@ fun DanmakuView(
                 // 再绘制高对比度字色
                 val colorInt =
                     if (item.color != 0) {
-                        // 保证 Alpha 通道不透明
                         item.color or (0xFF shl 24)
                     } else {
                         android.graphics.Color.WHITE

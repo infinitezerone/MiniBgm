@@ -222,4 +222,57 @@ class PlayerViewComponentsTest {
         val emptySnapshot = PlayerTracksSnapshot()
         assertEquals(null, emptySnapshot.currentQualityDisplayLabel)
     }
+
+    @Test
+    fun findActiveDanmakus_filtersCorrectlyByTimeWindow() {
+        val danmakus =
+            listOf(
+                com.infinitezerone.minibgm.core.model.DanmakuItem(
+                    timeMs = 1_000L,
+                    text = "Old scroll",
+                    mode = com.infinitezerone.minibgm.core.model.DanmakuMode.SCROLL,
+                ),
+                com.infinitezerone.minibgm.core.model.DanmakuItem(
+                    timeMs = 4_000L,
+                    text = "Active scroll 1",
+                    mode = com.infinitezerone.minibgm.core.model.DanmakuMode.SCROLL,
+                ),
+                com.infinitezerone.minibgm.core.model.DanmakuItem(
+                    timeMs = 6_500L,
+                    text = "Active top",
+                    mode = com.infinitezerone.minibgm.core.model.DanmakuMode.TOP,
+                ),
+                com.infinitezerone.minibgm.core.model.DanmakuItem(
+                    timeMs = 9_000L,
+                    text = "Active scroll 2",
+                    mode = com.infinitezerone.minibgm.core.model.DanmakuMode.SCROLL,
+                ),
+                com.infinitezerone.minibgm.core.model.DanmakuItem(
+                    timeMs = 11_000L,
+                    text = "Future danmaku",
+                    mode = com.infinitezerone.minibgm.core.model.DanmakuMode.SCROLL,
+                ),
+            )
+
+        val active = findActiveDanmakus(danmakus, 10_000L)
+        assertEquals(3, active.size)
+        assertEquals("Active scroll 1", active[0].text)
+        assertEquals("Active top", active[1].text)
+        assertEquals("Active scroll 2", active[2].text)
+    }
+
+    @Test
+    fun findActiveDanmakus_handlesEmptyAndBoundary() {
+        assertEquals(emptyList<com.infinitezerone.minibgm.core.model.DanmakuItem>(), findActiveDanmakus(emptyList(), 10_000L))
+        assertEquals(
+            emptyList<com.infinitezerone.minibgm.core.model.DanmakuItem>(),
+            findActiveDanmakus(
+                listOf(
+                    com.infinitezerone.minibgm.core.model
+                        .DanmakuItem(1000L, "test"),
+                ),
+                -100L,
+            ),
+        )
+    }
 }

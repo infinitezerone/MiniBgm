@@ -465,6 +465,7 @@ class PlayerViewModel(
             .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private var resolveJob: Job? = null
+    private var danmakuJob: Job? = null
 
     val commentsDelegate =
         EpisodeCommentsDelegate(
@@ -869,7 +870,44 @@ class PlayerViewModel(
     private fun consumePendingResumePositionForNewEpisode(url: String): Long? {
         if (!session.pendingResumeLookupForNewEpisode) return null
         session.pendingResumeLookupForNewEpisode = false
-        return session.positionsMap[url] ?: 0L
+        val memoryPosition = session.positionsMap[url] ?: 0L
+        syncResumePositionForEpisode(_uiState.value.episodeId, url)
+        return memoryPosition
+    }
+
+    /**
+     * 换集或规则源地址就绪时，联动 [PlaybackHistoryRepository] 兜底恢复历史进度：
+     * 解决动态 URL、签名过期或内存表未命中导致换集续播点丢失的问题。
+     */
+    private fun syncResumePositionForEpisode(
+        episodeId: Long,
+        fallbackUrl: String? = null,
+    ) {
+        if (episodeId <= 0L && fallbackUrl.isNullOrBlank()) return
+        viewModelScope.launch {
+            val historyPosition =
+                if (episodeId > 0L) {
+                    val history = playbackHistoryRepository?.getHistoryByEpisode(episodeId)
+                    if (history != null && history.positionMs > 0L && !history.isCompleted) {
+                        history.positionMs
+                    } else {
+                        0L
+                    }
+                } else {
+                    0L
+                }
+            val memoryPosition = fallbackUrl?.let { session.positionsMap[it] } ?: 0L
+            val bestPosition = maxOf(historyPosition, memoryPosition)
+            if (bestPosition >= MIN_RESUME_POSITION_MS) {
+                _uiState.update { current ->
+                    if (current.episodeId == episodeId && current.resumePositionMs == 0L) {
+                        current.copy(resumePositionMs = bestPosition)
+                    } else {
+                        current
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -1080,6 +1118,8 @@ class PlayerViewModel(
                 currentEpisodeCommentCount = currentEp?.commentCount ?: episode.commentCount,
                 comments = emptyList(),
                 commentsError = null,
+                danmakus = emptyList(),
+                danmakuMatch = null,
                 autoMarked = false,
                 // 非直链源保留当前画面（不清空），等嗅探完成再替换，避免换集瞬间黑屏；
                 // 直链源精确取队列中的对应集，未命中就如实报缺，绝不串到别的集
@@ -1101,6 +1141,7 @@ class PlayerViewModel(
                 error = if (directMissing) "直链列表中没有该分集，请切换到其他播放源" else null,
             )
         }
+        syncResumePositionForEpisode(episode.id, directEntry?.streamUrl)
         resolveCurrentEpisodeStream()
         commentsDelegate.loadComments(episode.id, force = true)
         loadDanmaku()
@@ -1193,30 +1234,35 @@ class PlayerViewModel(
             return
         }
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(isDanmakuLoading = true) }
-            logger.i { "开始拉取分集弹幕: title='$title', epSort=$epSort" }
-            val result =
-                repo.getDanmaku(
-                    bangumiEpisodeId = current.episodeId,
-                    subjectId = current.subjectId,
-                    title = title,
-                    episodeSort = epSort,
-                    episodeName = current.episodeName,
-                )
-            logger.i { "分集弹幕拉取完成: ${result.items.size} 条 (title='$title', epSort=$epSort, state=${result.match?.state})" }
-            _uiState.update {
-                it.copy(danmakus = result.items, danmakuMatch = result.match, isDanmakuLoading = false)
+        val epId = current.episodeId
+        danmakuJob?.cancel()
+        danmakuJob =
+            viewModelScope.launch {
+                _uiState.update { it.copy(isDanmakuLoading = true) }
+                logger.i { "开始拉取分集弹幕: title='$title', epSort=$epSort, epId=$epId" }
+                val result =
+                    repo.getDanmaku(
+                        bangumiEpisodeId = epId,
+                        subjectId = current.subjectId,
+                        title = title,
+                        episodeSort = epSort,
+                        episodeName = current.episodeName,
+                    )
+                if (_uiState.value.episodeId == epId && _uiState.value.episodeSort == epSort) {
+                    logger.i { "分集弹幕拉取完成: ${result.items.size} 条 (title='$title', epSort=$epSort, state=${result.match?.state})" }
+                    _uiState.update {
+                        it.copy(danmakus = result.items, danmakuMatch = result.match, isDanmakuLoading = false)
+                    }
+                    val match = result.match
+                    if (match?.state == DanmakuMatchState.FALLBACK &&
+                        match.candidates.isNotEmpty() &&
+                        !session.hasHintedDanmakuFallback
+                    ) {
+                        session.hasHintedDanmakuFallback = true
+                        _events.send(PlayerUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_player_danmaku_match_fallback_hint))
+                    }
+                }
             }
-            val match = result.match
-            if (match?.state == DanmakuMatchState.FALLBACK &&
-                match.candidates.isNotEmpty() &&
-                !session.hasHintedDanmakuFallback
-            ) {
-                session.hasHintedDanmakuFallback = true
-                _events.send(PlayerUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_player_danmaku_match_fallback_hint))
-            }
-        }
     }
 
     /**

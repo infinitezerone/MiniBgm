@@ -450,4 +450,22 @@ class PlayerControllerTest {
             assertEquals(1, engine.clearCalls)
             assertTrue("无片源时单集循环偏好仍需保留", controller.state.value.isLooping)
         }
+
+    @Test
+    fun setMedia_switchingUrl_clearsStaleTrackOverrides() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+
+            controller.setMedia("https://cdn/ep1.m3u8", emptyMap())
+            controller.setMedia("https://cdn/ep2.m3u8", emptyMap())
+
+            assertTrue(
+                "换集后应清理 text 与 audio 的特定轨道覆盖",
+                engine.trackSelectionParameters.overrides.none {
+                    it.key.type == androidx.media3.common.C.TRACK_TYPE_TEXT ||
+                        it.key.type == androidx.media3.common.C.TRACK_TYPE_AUDIO
+                },
+            )
+        }
 }

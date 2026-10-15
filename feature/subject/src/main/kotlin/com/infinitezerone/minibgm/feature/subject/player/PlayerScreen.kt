@@ -228,10 +228,11 @@ fun PlayerScreen(
         }
 
     suspend fun resumeFromSavedPositionIfNeeded() {
-        if (resumedForUrl == uiState.streamUrl) return
+        val targetUrl = uiState.streamUrl
+        if (resumedForUrl == targetUrl || targetUrl.isBlank()) return
         val resume = uiState.resumePositionMs
         if (resume < MIN_RESUME_POSITION_MS) return
-        resumedForUrl = uiState.streamUrl
+        resumedForUrl = targetUrl
         val duration = playback.durationMs
         if (duration > 0L && resume >= duration * 0.95) return
         controller.seekTo(resume)
@@ -241,7 +242,7 @@ fun PlayerScreen(
                 actionLabel = context.getString(R.string.feature_subject_player_start_from_beginning),
                 duration = SnackbarDuration.Long,
             )
-        if (result == SnackbarResult.ActionPerformed) {
+        if (result == SnackbarResult.ActionPerformed && playback.mediaUrl == targetUrl) {
             controller.seekTo(0L)
         }
     }
@@ -378,6 +379,7 @@ fun PlayerScreen(
         if (uiState.streamUrl != playback.mediaUrl) {
             playerReady = false
             isScrubbing = false
+            snackbarHostState.currentSnackbarData?.dismiss()
         }
         controller.setMedia(uiState.streamUrl, uiState.requestHeaders)
     }
@@ -940,6 +942,8 @@ private fun PlayerVideoStage(
                             danmakus = danmakus,
                             currentPositionMs = currentMs,
                             isEnabled = isDanmakuEnabled,
+                            isPlaying = playback.isPlaying,
+                            playbackSpeed = playbackSpeed,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
