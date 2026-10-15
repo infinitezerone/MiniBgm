@@ -226,6 +226,10 @@
     <string name="feature_subject_source_torrent_progress_resolving">正在解析种子元数据…</string>
     <string name="feature_subject_source_torrent_progress_buffering">缓冲首部数据 %1$d%% · %2$s · %3$d 个 Peer</string>
     <string name="feature_subject_source_torrent_progress_failed">起播失败：%1$s</string>
+    <string name="feature_subject_source_torrent_progress_stop">停止</string>
+    <string name="feature_subject_source_torrent_stream_stopped">已停止起播；任务已暂停，可在下载页恢复</string>
+    <string name="feature_subject_source_torrent_downloaded_badge">已下载</string>
+    <string name="feature_subject_source_torrent_play_downloaded">播放已下载</string>
     <string name="feature_subject_source_mikan_fansub_section">P2P 原画与字幕组资源</string>
     <string name="feature_subject_source_mikan_copy_magnet">复制磁力</string>
     <string name="feature_subject_source_mikan_in_app_download">离线下载</string>

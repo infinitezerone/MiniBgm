@@ -57,7 +57,9 @@ import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.TorrentMediaResource
 import com.infinitezerone.minibgm.core.model.TorrentStreamState
+import com.infinitezerone.minibgm.core.model.TorrentTask
 import com.infinitezerone.minibgm.core.model.formatTransferSpeed
+import com.infinitezerone.minibgm.core.model.magnetInfoHash
 import com.infinitezerone.minibgm.core.model.torrentEpisodeKey
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.StreamingAppLauncher
@@ -540,11 +542,15 @@ fun TorrentMediaResourcesSection(
     val coroutineScope = rememberCoroutineScope()
     val overlayHostState = rememberOverlayHostState()
     var expandedIndex by remember { mutableStateOf<Int?>(-1) }
-    // 单资源进行中态：边下边播单次最长等待 60s，重复点击不得再起一条并发协程
+    // 单资源进行中态：边下边播单次最长等待 60s，重复点击不得再起一条并发协程。
+    // busyTaskId 由 onTaskQueued 在任务落库瞬间回填——「停止起播」必须靠它暂停底层任务，
+    // 只取消等待协程会让任务继续占着单实例 P2P 队列，并在下载页留下幽灵条目。
     var busyResourceKey by remember { mutableStateOf<String?>(null) }
     var busyJob by remember { mutableStateOf<Job?>(null) }
+    var busyTaskId by remember { mutableStateOf<String?>(null) }
     var showAllResources by remember { mutableStateOf(false) }
     val streamState by torrentRepository.streamState.collectAsState()
+    val torrentTasks by torrentRepository.tasks.collectAsState()
 
     /**
      * 分集身份：优先当前分集上下文；条目级（未选分集）动作回退资源自身声明的集数，
@@ -566,31 +572,25 @@ fun TorrentMediaResourcesSection(
             episodeName = resourceEpisodeName(resource),
         )
 
+    /**
+     * 该资源已落盘的既有任务（列表徽标与「点击即播」共用同一判据）。
+     *
+     * 分集身份键 + 源同一性双判据缺一不可：只比磁力会让合集包内第 N 集命中第 M 集，
+     * 只比分集键又会让同一集的清晰度/压制组变体互串。
+     */
+    fun completedTaskFor(resource: TorrentMediaResource): TorrentTask? =
+        torrentTasks.firstOrNull { task ->
+            task.episodeKey == resourceEpisodeKey(resource, resourceEpisodeSort(resource)) &&
+                task.isCompleted &&
+                task.savePath.isNotBlank() &&
+                task.matchesResourceSource(resource)
+        }
+
     suspend fun playTorrentResource(resource: TorrentMediaResource) {
         val effectiveEpSort = resourceEpisodeSort(resource)
-        val resourceHash =
-            resource.magnetUrl
-                .substringAfter("xt=urn:btih:", "")
-                .substringBefore("&")
         // 合集/BD 包内多集共用同一磁力：必须按分集身份键隔离，
         // 否则点第 N 集会直接复用第 M 集已落盘的文件，静默播错集。
-        val requestedEpisodeKey = resourceEpisodeKey(resource, effectiveEpSort)
-        val completedTask =
-            torrentRepository.tasks.value.firstOrNull { task ->
-                task.episodeKey == requestedEpisodeKey &&
-                    task.isCompleted &&
-                    task.savePath.isNotBlank() &&
-                    (
-                        task.magnetUrl == resource.magnetUrl ||
-                            (
-                                resourceHash.isNotBlank() &&
-                                    task.magnetUrl
-                                        .substringAfter("xt=urn:btih:", "")
-                                        .substringBefore("&")
-                                        .equals(resourceHash, ignoreCase = true)
-                            )
-                    )
-            }
+        val completedTask = completedTaskFor(resource)
         if (completedTask != null) {
             withContext(Dispatchers.Main) {
                 onDismissAndRun {
@@ -631,6 +631,7 @@ fun TorrentMediaResourcesSection(
                 episodeId = episode?.id ?: 0L,
                 episodeSort = effectiveEpSort,
                 episodeName = resourceEpisodeName(resource),
+                onTaskQueued = { taskId -> busyTaskId = taskId },
             )
         streamResult
             .onSuccess { streamUrl ->
@@ -734,6 +735,32 @@ fun TorrentMediaResourcesSection(
         }
     }
 
+    /**
+     * 停止本次起播：先掐掉等待协程，再暂停底层任务。
+     *
+     * 只取消等待协程是历史缺陷——任务会继续占着单实例 P2P 队列，并在下载页留下一条
+     * 用户从未主动创建过的条目（进度条的「停止」形同虚设）。这里选择**暂停**而非删除：
+     * 该任务可能正是用户此前显式确认过的离线下载，删除会连半成品一起清掉。
+     */
+    fun stopBusyStream() {
+        val taskIdToStop = busyTaskId
+        busyJob?.cancel()
+        busyResourceKey = null
+        busyJob = null
+        busyTaskId = null
+        if (taskIdToStop != null) {
+            coroutineScope.launch {
+                runCatching { torrentRepository.pauseDownload(taskIdToStop) }
+            }
+            Toast
+                .makeText(
+                    context,
+                    context.getString(R.string.feature_subject_source_torrent_stream_stopped),
+                    Toast.LENGTH_SHORT,
+                ).show()
+        }
+    }
+
     Spacer(modifier = Modifier.height(4.dp))
     BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_torrent_fansub_section))
     if (!hasTorrentRules) {
@@ -782,8 +809,12 @@ fun TorrentMediaResourcesSection(
                     resource = resource,
                     isExpanded = expandedIndex == index,
                     isBusy = isBusy,
+                    // 引擎是单实例 P2P 会话：任一起播进行中时所有资源动作一并禁用（可见的诚实禁用，
+                    // 而不是按钮亮着却因忙态守卫点了没反应）
+                    isAnyBusy = busyResourceKey != null,
+                    isDownloaded = completedTaskFor(resource) != null,
                     streamState = if (isBusy) streamState else null,
-                    onCancelBusy = { busyJob?.cancel() },
+                    onStopBusy = { stopBusyStream() },
                     onToggleExpand = {
                         expandedIndex = if (expandedIndex == index) null else index
                     },
@@ -910,8 +941,10 @@ fun TorrentMediaResourceCard(
     resource: TorrentMediaResource,
     isExpanded: Boolean,
     isBusy: Boolean = false,
+    isAnyBusy: Boolean = false,
+    isDownloaded: Boolean = false,
     streamState: TorrentStreamState? = null,
-    onCancelBusy: () -> Unit = {},
+    onStopBusy: () -> Unit = {},
     onToggleExpand: () -> Unit,
     onStreamPlay: () -> Unit,
     onInAppDownload: () -> Unit,
@@ -975,12 +1008,29 @@ fun TorrentMediaResourceCard(
                     }
                 }
 
+                // 已落盘标记：用户必须在**点击之前**就能分辨哪条已经下载完，
+                // 而不是点下去才发现走的是本地文件（或反过来白等一次起播）
+                if (isDownloaded) {
+                    Text(
+                        text = stringResource(R.string.feature_subject_source_torrent_downloaded_badge),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+
                 Icon(
                     imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     modifier = Modifier.size(20.dp),
                 )
+            }
+
+            // 起播进度刻意留在折叠区之外：用户收起卡片是为了少占屏，不是要丢掉进度与「停止」入口
+            if (isBusy) {
+                Spacer(modifier = Modifier.height(10.dp))
+                TorrentStreamProgress(state = streamState, onStop = onStopBusy)
             }
 
             AnimatedVisibility(visible = isExpanded) {
@@ -991,17 +1041,19 @@ fun TorrentMediaResourceCard(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    if (isBusy) {
-                        TorrentStreamProgress(state = streamState, onCancel = onCancelBusy)
-                        Spacer(modifier = Modifier.height(10.dp))
-                    }
-
                     // 边下边播 (Hero 强调主操作)
                     TorrentActionButton(
-                        text = stringResource(R.string.feature_subject_source_torrent_stream_play),
+                        text =
+                            stringResource(
+                                if (isDownloaded) {
+                                    R.string.feature_subject_source_torrent_play_downloaded
+                                } else {
+                                    R.string.feature_subject_source_torrent_stream_play
+                                },
+                            ),
                         icon = BgmIcons.PlayCircle,
                         isPrimary = true,
-                        enabled = !isBusy,
+                        enabled = !isAnyBusy,
                         onClick = onStreamPlay,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -1016,7 +1068,7 @@ fun TorrentMediaResourceCard(
                             text = stringResource(R.string.feature_subject_source_torrent_in_app_download),
                             icon = BgmIcons.Download,
                             isPrimary = false,
-                            enabled = !isBusy,
+                            enabled = !isAnyBusy,
                             onClick = onInAppDownload,
                             modifier = Modifier.weight(1f),
                         )
@@ -1024,7 +1076,7 @@ fun TorrentMediaResourceCard(
                             text = stringResource(R.string.feature_subject_source_torrent_external_app),
                             icon = BgmIcons.OpenInNew,
                             isPrimary = false,
-                            enabled = !isBusy,
+                            enabled = !isAnyBusy,
                             onClick = onExternalLaunch,
                             modifier = Modifier.weight(1f),
                         )
@@ -1038,7 +1090,7 @@ fun TorrentMediaResourceCard(
                             text = stringResource(R.string.feature_subject_source_torrent_download_torrent),
                             icon = BgmIcons.FolderOpen,
                             isPrimary = false,
-                            enabled = !isBusy,
+                            enabled = !isAnyBusy,
                             onClick = onDownloadTorrent,
                             modifier = Modifier.weight(1f),
                         )
@@ -1046,7 +1098,7 @@ fun TorrentMediaResourceCard(
                             text = stringResource(R.string.feature_subject_source_torrent_copy_magnet),
                             icon = BgmIcons.ContentCopy,
                             isPrimary = false,
-                            enabled = !isBusy,
+                            enabled = !isAnyBusy,
                             onClick = onCopyMagnet,
                             modifier = Modifier.weight(1f),
                         )
@@ -1184,11 +1236,11 @@ private suspend fun ensureTorrentPluginInstalled(
     return true
 }
 
-/** 流式/安装进度可视化：安装组件 → 解析元数据 → 缓冲首部数据，全程可见并可取消。 */
+/** 流式/安装进度可视化：安装组件 → 解析元数据 → 缓冲首部数据，全程可见并可停止。 */
 @Composable
 private fun TorrentStreamProgress(
     state: TorrentStreamState?,
-    onCancel: () -> Unit,
+    onStop: () -> Unit,
 ) {
     val label =
         when (state) {
@@ -1240,13 +1292,13 @@ private fun TorrentStreamProgress(
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = stringResource(DesignSystemR.string.core_designsystem_action_cancel),
+                    text = stringResource(R.string.feature_subject_source_torrent_progress_stop),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier =
                         Modifier
-                            .clickable(onClick = onCancel)
+                            .clickable(onClick = onStop)
                             .padding(start = 8.dp),
                 )
             }
@@ -1266,3 +1318,21 @@ private fun TorrentStreamProgress(
 
 /** 磁力资源列表首屏渲染上限：超出部分折叠到「展开更多」，杜绝静默截断丢条目。 */
 private const val MAX_VISIBLE_TORRENT_RESOURCES = 8
+
+/**
+ * 源同一性判据：infoHash 优先，其次磁力链接原文，最后种子直链。
+ *
+ * 严禁只比 `magnetUrl`：种子直链条目（Feed 只给 `.torrent` 直链）两侧的 `magnetUrl` 都是空串，
+ * `"" == ""` 会让两条互不相干的资源被判成同一来源，直接复用对方的流地址或 `file://` 落盘路径，
+ * 静默播错内容且全程无提示。`TorrentTask` 本就持久化了 `torrentUrl`，直链必须参与比对。
+ */
+private fun TorrentTask.matchesResourceSource(resource: TorrentMediaResource): Boolean {
+    val resourceHash = magnetInfoHash(resource.magnetUrl)
+    val taskHash = magnetInfoHash(magnetUrl)
+    return when {
+        resourceHash.isNotBlank() && taskHash.isNotBlank() -> resourceHash.equals(taskHash, ignoreCase = true)
+        resource.magnetUrl.isNotBlank() -> magnetUrl == resource.magnetUrl
+        !resource.torrentUrl.isNullOrBlank() -> torrentUrl == resource.torrentUrl
+        else -> false
+    }
+}
