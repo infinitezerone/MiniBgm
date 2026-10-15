@@ -1210,6 +1210,63 @@ class ArchitectureRulesTest {
     }
 
     /**
+     * 播放优先红线（见 AGENTS.md 领域规则 & 剧本 8）：
+     * 单实例 librqbit 会话下，后台离线下载起任何新任务都会 release 掉当前会话；若此时前台播放器
+     * 正在消费该本地回环流（"看第 5 集时下第 6 集"），用户的画面会被直接掐断且全程无提示。
+     * 因此下载调度必须同时具备两半，缺一不可：
+     * 1. 礼让：播放器消费本地流期间保持 QUEUED（判据 `isPlayerSessionActive()`），
+     *    只有用户显式点播（`allowPlayerTakeover`）才允许接管会话；
+     * 2. 唤醒：订阅 `playerSessionActive` 流，在播放器释放会话时重新调度——只读一次布尔值感知不到
+     *    "释放"，被礼让的任务会永久停在 QUEUED（通知栏挂着下载中却永远 0 字节）。
+     * 契约侧必须把该状态暴露为可观察流，否则第 2 半无从实现。
+     */
+    @Test
+    fun offline_download_must_yield_to_active_playback_session() {
+        val violations = mutableListOf<String>()
+
+        val repoFile =
+            File(
+                projectRoot,
+                "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/repository/AndroidTorrentRepository.kt",
+            )
+        assertTrue(repoFile.isFile, "AndroidTorrentRepository.kt 未找到")
+        val repoContent = KotlinSourceScanner.sanitize(repoFile.readText())
+        if (!repoContent.contains("isPlayerSessionActive")) {
+            violations.add(
+                "AndroidTorrentRepository.kt 缺少 isPlayerSessionActive 礼让判据：后台下载会在播放期间起新任务并掐断用户正在看的本地流",
+            )
+        }
+        if (!repoContent.contains("allowPlayerTakeover")) {
+            violations.add(
+                "AndroidTorrentRepository.kt 缺少 allowPlayerTakeover 显式接管开关：用户主动点播的边下边播会被自己的礼让判据卡死到超时",
+            )
+        }
+        if (!repoContent.contains("playerSessionActive.collect")) {
+            violations.add(
+                "AndroidTorrentRepository.kt 未订阅 playerSessionActive：播放器释放会话后无人唤醒，被礼让的任务将永久停在 QUEUED",
+            )
+        }
+
+        val contractFile =
+            File(
+                projectRoot,
+                "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/download/TorrentStreamEngine.kt",
+            )
+        assertTrue(contractFile.isFile, "TorrentStreamEngine.kt 未找到")
+        val contractContent = KotlinSourceScanner.sanitize(contractFile.readText())
+        if (!contractContent.contains("val playerSessionActive: StateFlow<Boolean>")) {
+            violations.add(
+                "TorrentStreamEngine 契约未暴露 val playerSessionActive: StateFlow<Boolean>：调度侧无法感知播放会话释放，被礼让的排队任务只能在应用重启后消化",
+            )
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反播放优先红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    /**
      * 磁力文件挑选链路红线（见 AGENTS.md 领域规则 & 剧本 8）：
      * 1. `server.rs` 必须以 `paused: true` 添加种子，并在锁定单集后调用 `session.unpause(&handle)`：
      *    否则元数据阶段会先按整包视频选片再收敛单集，合集/BD 包会白下其他剧集的分片；
