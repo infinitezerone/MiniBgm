@@ -24,7 +24,11 @@ class FakeTorrentStreamEngine(
     var hangOnStartStream: Boolean = false
     private var activeInfoHash: String? = null
     private var downloadSessionProtected: Boolean = false
-    private var playerSessionActive: Boolean = false
+
+    private val _playerSessionActive = MutableStateFlow(false)
+
+    /** 播放器消费状态镜像；用 `setPlayerSessionActive` 驱动，仓库据此在播放结束后唤醒排队任务 */
+    override val playerSessionActive: StateFlow<Boolean> = _playerSessionActive.asStateFlow()
 
     private val _streamState = MutableStateFlow<TorrentStreamState>(TorrentStreamState.Idle)
     override val streamState: StateFlow<TorrentStreamState> = _streamState.asStateFlow()
@@ -40,13 +44,13 @@ class FakeTorrentStreamEngine(
     override fun isDownloadSessionProtected(): Boolean = downloadSessionProtected
 
     override fun setPlayerSessionActive(active: Boolean) {
-        playerSessionActive = active
+        _playerSessionActive.value = active
     }
 
-    override fun isPlayerSessionActive(): Boolean = playerSessionActive
+    override fun isPlayerSessionActive(): Boolean = _playerSessionActive.value
 
     override fun releasePlayerSession() {
-        playerSessionActive = false
+        _playerSessionActive.value = false
         if (!downloadSessionProtected) {
             activeInfoHash = null
             _streamState.value = TorrentStreamState.Idle
@@ -100,11 +104,11 @@ class FakeTorrentStreamEngine(
     }
 
     override suspend fun stopStream(force: Boolean) {
-        if (!force && (downloadSessionProtected || playerSessionActive)) {
+        if (!force && (downloadSessionProtected || _playerSessionActive.value)) {
             return
         }
         downloadSessionProtected = false
-        playerSessionActive = false
+        _playerSessionActive.value = false
         activeInfoHash = null
         _streamState.value = TorrentStreamState.Idle
     }

@@ -108,8 +108,13 @@ class AndroidTorrentStreamEngine internal constructor(
     @Volatile
     private var downloadSessionProtected: Boolean = false
 
-    @Volatile
-    private var playerSessionActive: Boolean = false
+    private val _playerSessionActive = MutableStateFlow(false)
+
+    /**
+     * 播放器消费状态的可观察镜像：下载调度据此实现「播放优先」，
+     * 并在播放器释放会话时被唤醒接手排队任务（只读布尔值无法感知释放）。
+     */
+    override val playerSessionActive: StateFlow<Boolean> = _playerSessionActive.asStateFlow()
 
     override fun isDebugSimulateUninstalled(): Boolean = debugSimulateUninstalled
 
@@ -124,13 +129,13 @@ class AndroidTorrentStreamEngine internal constructor(
     override fun isDownloadSessionProtected(): Boolean = downloadSessionProtected
 
     override fun setPlayerSessionActive(active: Boolean) {
-        playerSessionActive = active
+        _playerSessionActive.value = active
     }
 
-    override fun isPlayerSessionActive(): Boolean = playerSessionActive
+    override fun isPlayerSessionActive(): Boolean = _playerSessionActive.value
 
     override fun releasePlayerSession() {
-        playerSessionActive = false
+        _playerSessionActive.value = false
         scope.launch {
             stopStream(force = false)
         }
@@ -419,14 +424,14 @@ class AndroidTorrentStreamEngine internal constructor(
 
     override suspend fun stopStream(force: Boolean) {
         withContext(Dispatchers.IO) {
-            if (!force && (downloadSessionProtected || playerSessionActive)) {
+            if (!force && (downloadSessionProtected || _playerSessionActive.value)) {
                 logger.i {
-                    "当前 BT 会话仍被活跃消费者持有 (downloadProtected=$downloadSessionProtected, playerActive=$playerSessionActive)，忽略非强制 stopStream"
+                    "当前 BT 会话仍被活跃消费者持有 (downloadProtected=$downloadSessionProtected, playerActive=${_playerSessionActive.value})，忽略非强制 stopStream"
                 }
                 return@withContext
             }
             downloadSessionProtected = false
-            playerSessionActive = false
+            _playerSessionActive.value = false
             releaseCurrentStreamInternal()
         }
     }

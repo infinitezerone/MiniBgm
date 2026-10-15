@@ -85,6 +85,14 @@ class AndroidTorrentRepository(
 
     init {
         scope.launch {
+            // 播放优先联动：排队任务在播放器消费本地流期间必须礼让（scheduleNextIfIdle 的守卫），
+            // 播放器释放会话（退出播放器 / 切到在线线路）后必须被唤醒接手——只读一次布尔值
+            // 感知不到"释放"，被礼让的任务会永久停在 QUEUED。
+            streamEngine.playerSessionActive.collect { active ->
+                if (!active) scheduleNextIfIdle()
+            }
+        }
+        scope.launch {
             try {
                 restorePersistedTasks()
             } catch (e: Exception) {
@@ -299,12 +307,21 @@ class AndroidTorrentRepository(
                 }
             }
         }
-        scheduleNextIfIdle(preferredTaskId = targetTaskId)
+        // 只有用户显式点播（边下边播）才允许接管播放中的会话：此刻播放器本来就准备切到新地址。
+        scheduleNextIfIdle(preferredTaskId = targetTaskId, allowPlayerTakeover = true)
     }
 
     @Synchronized
-    private fun scheduleNextIfIdle(preferredTaskId: String? = null) {
+    private fun scheduleNextIfIdle(
+        preferredTaskId: String? = null,
+        allowPlayerTakeover: Boolean = false,
+    ) {
         if (isPreempting) return
+        // 播放优先：前台播放器正在消费本地流时，后台下载严禁起新任务。单实例 librqbit 会话下
+        // 任何新任务都会 release 掉正在播放的会话，把用户正在看的画面（"看第 5 集时下第 6 集"）
+        // 直接掐断。此处保持 QUEUED，等播放器释放会话后由 playerSessionActive 收集器唤醒接手；
+        // 用户显式点播（allowPlayerTakeover）与前台点播抢占不受此限。
+        if (!allowPlayerTakeover && streamEngine.isPlayerSessionActive()) return
         val currentId = activeRunningTaskId
         if (currentId != null && activeJobs[currentId]?.isActive == true) {
             return

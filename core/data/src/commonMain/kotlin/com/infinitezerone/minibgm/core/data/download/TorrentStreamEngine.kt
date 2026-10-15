@@ -65,6 +65,14 @@ interface TorrentStreamEngine {
     /** 当前流会话是否正由前台播放器消费 */
     fun isPlayerSessionActive(): Boolean = false
 
+    /**
+     * 前台播放器消费状态的可观察镜像（供下载调度实现「播放优先」并唤醒排队任务）。
+     *
+     * `scheduleNextIfIdle` 必须据此在播放期间保持排队，且必须在播放器释放会话时被唤醒——
+     * 只读一次布尔值无法感知释放，排队任务会永久停在 `QUEUED`。
+     */
+    val playerSessionActive: StateFlow<Boolean>
+
     /** 前台播放器退出时调用：解除播放器会话活跃标记，并在无后台离线下载保护时异步释放底层流媒体服务 */
     fun releasePlayerSession() = Unit
 

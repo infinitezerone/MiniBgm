@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -553,6 +554,186 @@ class TorrentRepositoryTest {
                     )
                 assertEquals("http://127.0.0.1:8899/stream?hash=fake", reuseResult.getOrNull())
                 assertEquals(2, repo.tasks.value.size)
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
+
+    /**
+     * 播放优先：用户看第 5 集（本地回环流）时给第 6 集起离线下载，
+     * 单实例 librqbit 会话下任何新任务都会 release 掉正在播放的会话——必须礼让排队，
+     * 并在播放器释放会话后自动接手（不允许永久卡在 QUEUED）。
+     */
+    @Test
+    fun androidTorrentRepository_offlineDownload_yieldsToActivePlaybackAndResumesOnRelease() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_playback_priority_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ): DownloadState = DownloadState.Completed(destinationPath, 64L)
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val streamService =
+                    object : AssetDownloadService {
+                        override suspend fun streamAsset(
+                            url: String,
+                            rangeStart: Long,
+                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                        ): Long = 0L
+                    }
+
+                val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
+                val streamEngine =
+                    FakeTorrentStreamEngine(initialInstalled = true).apply {
+                        mockTargetFilePath = File(downloadDir, "episode06.mkv").absolutePath
+                        // 模拟前台播放器正在消费第 5 集的本地流会话
+                        setPlayerSessionActive(true)
+                    }
+
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        torrentTaskDao = FakeTorrentTaskDao(),
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                        peerConnectTimeoutMs = 0L,
+                    )
+
+                val offlineTaskId =
+                    repo.startDownload(
+                        title = "Ep 06",
+                        magnetUrl = "magnet:?xt=urn:btih:cccccccccccccccccccccccccccccccccccccccc",
+                        totalBytes = 1000L,
+                    )
+
+                assertEquals(
+                    TorrentTaskStatus.QUEUED,
+                    repo.tasks.value
+                        .single { it.id == offlineTaskId }
+                        .status,
+                )
+                assertNull(
+                    streamEngine.getActiveInfoHash(),
+                    "播放期间严禁启动会 release 掉当前播放会话的新任务（否则直接掐断用户正在看的画面）",
+                )
+                assertTrue(streamEngine.isPlayerSessionActive(), "下载侧不得清除播放器会话标记")
+
+                testScheduler.advanceTimeBy(10_000L)
+                testScheduler.runCurrent()
+                assertEquals(
+                    TorrentTaskStatus.QUEUED,
+                    repo.tasks.value
+                        .single { it.id == offlineTaskId }
+                        .status,
+                )
+
+                // 播放器释放会话（退出播放器 / 切到在线线路）后必须被唤醒接手
+                streamEngine.setPlayerSessionActive(false)
+                testScheduler.runCurrent()
+
+                val resumedTask = repo.tasks.value.single { it.id == offlineTaskId }
+                assertEquals(TorrentTaskStatus.DOWNLOADING, resumedTask.status)
+                assertTrue(resumedTask.streamUrl.startsWith("http://127.0.0.1"))
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
+
+    /**
+     * 用户显式点播（边下边播）必须仍能接管播放中的会话：此刻播放器本就准备切到新地址，
+     * 若一并礼让会让 startStreamDownload 死等到获取超时。
+     */
+    @Test
+    fun androidTorrentRepository_startStreamDownload_takesOverActivePlaybackSession() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_playback_takeover_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ): DownloadState = DownloadState.Completed(destinationPath, 64L)
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val streamService =
+                    object : AssetDownloadService {
+                        override suspend fun streamAsset(
+                            url: String,
+                            rangeStart: Long,
+                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                        ): Long = 0L
+                    }
+
+                val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
+                val streamEngine =
+                    FakeTorrentStreamEngine(initialInstalled = true).apply {
+                        mockTargetFilePath = File(downloadDir, "episode07.mkv").absolutePath
+                        setPlayerSessionActive(true)
+                    }
+
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        assetDownloadService = streamService,
+                        streamEngine = streamEngine,
+                        torrentTaskDao = FakeTorrentTaskDao(),
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                        peerConnectTimeoutMs = 0L,
+                    )
+
+                val streamResult =
+                    repo.startStreamDownload(
+                        title = "Ep 07",
+                        magnetUrl = "magnet:?xt=urn:btih:dddddddddddddddddddddddddddddddddddddddd",
+                        totalBytes = 1000L,
+                    )
+
+                assertTrue(streamResult.isSuccess)
+                assertEquals(
+                    TorrentTaskStatus.DOWNLOADING,
+                    repo.tasks.value
+                        .single { it.title == "Ep 07" }
+                        .status,
+                )
+                assertTrue(streamEngine.getActiveInfoHash() != null)
             } finally {
                 tempRoot.deleteRecursively()
             }
