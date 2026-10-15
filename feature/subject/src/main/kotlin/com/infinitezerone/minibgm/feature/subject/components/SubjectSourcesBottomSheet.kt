@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.feature.subject.components
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,12 +15,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -45,17 +50,21 @@ import com.infinitezerone.minibgm.core.designsystem.component.OverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
+import com.infinitezerone.minibgm.core.model.DownloadStorageUsage
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.TorrentMediaResource
+import com.infinitezerone.minibgm.core.model.TorrentStreamState
+import com.infinitezerone.minibgm.core.model.formatTransferSpeed
 import com.infinitezerone.minibgm.core.model.torrentEpisodeKey
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.StreamingAppLauncher
 import com.infinitezerone.minibgm.core.navigation.launchExternalPlayer
 import com.infinitezerone.minibgm.feature.subject.R
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
@@ -82,6 +91,7 @@ fun SubjectSourcesBottomSheet(
     failedSourceReasons: Map<String, String> = emptyMap(),
     torrentResources: List<TorrentMediaResource> = emptyList(),
     isTorrentLoading: Boolean = false,
+    onRequestNotificationPermission: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val displayName = subject.displayName
@@ -134,16 +144,19 @@ fun SubjectSourcesBottomSheet(
                 Spacer(modifier = Modifier.height(4.dp))
             }
 
-            // P2P 种子与字幕组资源（仅在存在启用规则或已加载出资源时渲染）
-            val shouldShowTorrentSection = torrentRules.isNotEmpty() || torrentResources.isNotEmpty() || isTorrentLoading
-            if (shouldShowTorrentSection) {
+            // P2P 种子与字幕组资源：始终渲染，未配置规则时给出可达的配置引导
+            // （否则整段隐藏会让新用户永远看不到「可在规则管理中配置」的入口）
+            run {
                 TorrentMediaResourcesSection(
                     isTorrentLoading = isTorrentLoading,
                     torrentResources = torrentResources,
+                    hasTorrentRules = torrentRules.isNotEmpty(),
                     context = context,
                     subject = subject,
                     episode = null,
                     onInternalPlayClick = onInternalPlayClick,
+                    onManageRules = onManageRules,
+                    onRequestNotificationPermission = onRequestNotificationPermission,
                     onDismissAndRun = runAfterDismiss,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -353,16 +366,18 @@ fun SubjectSourcesBottomSheet(
                 Spacer(modifier = Modifier.height(4.dp))
             }
 
-            // 3. P2P 种子与字幕组资源（仅在存在启用规则或已加载出资源时渲染）
-            val shouldShowTorrentSection = torrentRules.isNotEmpty() || torrentResources.isNotEmpty() || isTorrentLoading
-            if (shouldShowTorrentSection) {
+            // 3. P2P 种子与字幕组资源：始终渲染，未配置规则时给出可达的配置引导
+            run {
                 TorrentMediaResourcesSection(
                     isTorrentLoading = isTorrentLoading,
                     torrentResources = torrentResources,
+                    hasTorrentRules = torrentRules.isNotEmpty(),
                     context = context,
                     subject = subject,
                     episode = episode,
                     onInternalPlayClick = onInternalPlayClick,
+                    onManageRules = onManageRules,
+                    onRequestNotificationPermission = onRequestNotificationPermission,
                     onDismissAndRun = runAfterDismiss,
                 )
                 Spacer(modifier = Modifier.height(4.dp))
@@ -511,10 +526,13 @@ fun isLikelyMediaStream(
 fun TorrentMediaResourcesSection(
     isTorrentLoading: Boolean,
     torrentResources: List<TorrentMediaResource>,
+    hasTorrentRules: Boolean,
     context: Context,
     subject: Subject,
     episode: Episode?,
     onInternalPlayClick: ((PlayerRoute) -> Unit)? = null,
+    onManageRules: (() -> Unit)? = null,
+    onRequestNotificationPermission: (() -> Unit)? = null,
     onDismissAndRun: (() -> Unit) -> Unit,
 ) {
     val torrentRepository: TorrentRepository = koinInject()
@@ -522,10 +540,220 @@ fun TorrentMediaResourcesSection(
     val coroutineScope = rememberCoroutineScope()
     val overlayHostState = rememberOverlayHostState()
     var expandedIndex by remember { mutableStateOf<Int?>(-1) }
+    // 单资源进行中态：边下边播单次最长等待 60s，重复点击不得再起一条并发协程
+    var busyResourceKey by remember { mutableStateOf<String?>(null) }
+    var busyJob by remember { mutableStateOf<Job?>(null) }
+    var showAllResources by remember { mutableStateOf(false) }
+    val streamState by torrentRepository.streamState.collectAsState()
+
+    /**
+     * 分集身份：优先当前分集上下文；条目级（未选分集）动作回退资源自身声明的集数，
+     * 绝不硬编码「第 1 话」——那会把所有条目级资源塌缩成同一个 `sort:1.0` 身份键，
+     * 并把假的集数提示（episodeHint="1"）喂给 Rust 侧的分集选片逻辑。
+     */
+    fun resourceEpisodeSort(resource: TorrentMediaResource): Float =
+        episode?.let { if (it.sort > 0f) it.sort else it.episodeNumber } ?: resource.episodeSort ?: 0f
+
+    fun resourceEpisodeName(resource: TorrentMediaResource): String = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title
+
+    fun resourceEpisodeKey(
+        resource: TorrentMediaResource,
+        episodeSort: Float,
+    ): String =
+        torrentEpisodeKey(
+            episodeId = episode?.id ?: 0L,
+            episodeSort = episodeSort,
+            episodeName = resourceEpisodeName(resource),
+        )
+
+    suspend fun playTorrentResource(resource: TorrentMediaResource) {
+        val effectiveEpSort = resourceEpisodeSort(resource)
+        val resourceHash =
+            resource.magnetUrl
+                .substringAfter("xt=urn:btih:", "")
+                .substringBefore("&")
+        // 合集/BD 包内多集共用同一磁力：必须按分集身份键隔离，
+        // 否则点第 N 集会直接复用第 M 集已落盘的文件，静默播错集。
+        val requestedEpisodeKey = resourceEpisodeKey(resource, effectiveEpSort)
+        val completedTask =
+            torrentRepository.tasks.value.firstOrNull { task ->
+                task.episodeKey == requestedEpisodeKey &&
+                    task.isCompleted &&
+                    task.savePath.isNotBlank() &&
+                    (
+                        task.magnetUrl == resource.magnetUrl ||
+                            (
+                                resourceHash.isNotBlank() &&
+                                    task.magnetUrl
+                                        .substringAfter("xt=urn:btih:", "")
+                                        .substringBefore("&")
+                                        .equals(resourceHash, ignoreCase = true)
+                            )
+                    )
+            }
+        if (completedTask != null) {
+            withContext(Dispatchers.Main) {
+                onDismissAndRun {
+                    onInternalPlayClick?.invoke(
+                        PlayerRoute(
+                            subjectId = subject.id,
+                            episodeId = episode?.id ?: 0L,
+                            streamUrl = "file://${completedTask.savePath}",
+                            episodeName = resourceEpisodeName(resource),
+                            subjectName = subject.displayName,
+                            episodeSort = effectiveEpSort,
+                            episodeType = episode?.type ?: 0,
+                        ),
+                    )
+                }
+            }
+            return
+        }
+
+        val installed =
+            ensureTorrentPluginInstalled(
+                context = context,
+                overlayHostState = overlayHostState,
+                torrentRepository = torrentRepository,
+                purpose = TorrentPluginInstallPurpose.STREAM_PLAYBACK,
+            )
+        if (!installed) return
+
+        val streamResult =
+            torrentRepository.startStreamDownload(
+                title = resource.title,
+                magnetUrl = resource.magnetUrl,
+                torrentUrl = resource.torrentUrl.ifBlank { null },
+                totalBytes = resource.contentLength,
+                subjectId = subject.id,
+                subjectName = subject.displayName,
+                subjectCoverUrl = subject.images?.bestImage.orEmpty(),
+                episodeId = episode?.id ?: 0L,
+                episodeSort = effectiveEpSort,
+                episodeName = resourceEpisodeName(resource),
+            )
+        streamResult
+            .onSuccess { streamUrl ->
+                withContext(Dispatchers.Main) {
+                    onDismissAndRun {
+                        onInternalPlayClick?.invoke(
+                            PlayerRoute(
+                                subjectId = subject.id,
+                                episodeId = episode?.id ?: 0L,
+                                streamUrl = streamUrl,
+                                episodeName = resourceEpisodeName(resource),
+                                subjectName = subject.displayName,
+                                episodeSort = effectiveEpSort,
+                                episodeType = episode?.type ?: 0,
+                            ),
+                        )
+                    }
+                }
+            }.onFailure { err ->
+                withContext(Dispatchers.Main) {
+                    Toast
+                        .makeText(
+                            context,
+                            err.message ?: context.getString(R.string.feature_subject_source_torrent_stream_failed),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                }
+            }
+    }
+
+    suspend fun downloadTorrentResource(resource: TorrentMediaResource) {
+        val effectiveEpSort = resourceEpisodeSort(resource)
+        val estimatedBytes = resource.contentLength
+        val usage = runCatching { torrentRepository.getStorageUsage() }.getOrNull()
+        // 后台大任务必须显式确认，并在确认前披露体积与剩余空间（严禁静默入队）
+        val confirmed =
+            overlayHostState.await(
+                ConfirmDialogAction(
+                    title = context.getString(R.string.feature_subject_source_torrent_download_confirm_title),
+                    message =
+                        context.getString(
+                            R.string.feature_subject_source_torrent_download_confirm_message,
+                            resource.formattedSize.ifBlank { DownloadStorageUsage.formatBytes(estimatedBytes) },
+                            usage?.formattedAvailableSize
+                                ?: context.getString(R.string.feature_subject_source_torrent_download_space_unknown),
+                        ),
+                    confirmText = context.getString(R.string.feature_subject_source_torrent_download_confirm_btn),
+                    dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
+                    isPrimary = true,
+                ),
+            )
+        if (!confirmed) return
+
+        if (usage != null &&
+            estimatedBytes > 0L &&
+            usage.availableBytes > 0L &&
+            estimatedBytes > usage.availableBytes
+        ) {
+            withContext(Dispatchers.Main) {
+                Toast
+                    .makeText(
+                        context,
+                        context.getString(R.string.feature_subject_source_torrent_download_no_space),
+                        Toast.LENGTH_LONG,
+                    ).show()
+            }
+            return
+        }
+
+        val installed =
+            ensureTorrentPluginInstalled(
+                context = context,
+                overlayHostState = overlayHostState,
+                torrentRepository = torrentRepository,
+                purpose = TorrentPluginInstallPurpose.OFFLINE_DOWNLOAD,
+            )
+        if (!installed) return
+
+        withContext(Dispatchers.Main) {
+            onRequestNotificationPermission?.invoke()
+        }
+        torrentRepository.startDownload(
+            title = resource.title,
+            magnetUrl = resource.magnetUrl,
+            torrentUrl = resource.torrentUrl.ifBlank { null },
+            totalBytes = estimatedBytes,
+            subjectId = subject.id,
+            subjectName = subject.displayName,
+            subjectCoverUrl = subject.images?.bestImage.orEmpty(),
+            episodeId = episode?.id ?: 0L,
+            episodeSort = effectiveEpSort,
+            episodeName = resourceEpisodeName(resource),
+        )
+        withContext(Dispatchers.Main) {
+            Toast
+                .makeText(
+                    context,
+                    context.getString(R.string.feature_subject_source_torrent_download_started),
+                    Toast.LENGTH_SHORT,
+                ).show()
+        }
+    }
 
     Spacer(modifier = Modifier.height(4.dp))
     BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_torrent_fansub_section))
-    if (isTorrentLoading) {
+    if (!hasTorrentRules) {
+        Text(
+            text = stringResource(R.string.feature_subject_source_torrent_no_rules),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+        )
+        if (onManageRules != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            TorrentActionButton(
+                text = stringResource(R.string.feature_subject_source_torrent_configure_rules),
+                icon = BgmIcons.Settings,
+                isPrimary = false,
+                onClick = onManageRules,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    } else if (isTorrentLoading) {
         Text(
             text = stringResource(R.string.feature_subject_source_torrent_loading),
             style = MaterialTheme.typography.bodySmall,
@@ -541,155 +769,76 @@ fun TorrentMediaResourcesSection(
         )
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            torrentResources.take(15).forEachIndexed { index, resource ->
+            val visibleResources =
+                if (showAllResources) {
+                    torrentResources
+                } else {
+                    torrentResources.take(MAX_VISIBLE_TORRENT_RESOURCES)
+                }
+            visibleResources.forEachIndexed { index, resource ->
+                val resourceKey = resource.dedupeKey
+                val isBusy = busyResourceKey == resourceKey
                 TorrentMediaResourceCard(
                     resource = resource,
                     isExpanded = expandedIndex == index,
+                    isBusy = isBusy,
+                    streamState = if (isBusy) streamState else null,
+                    onCancelBusy = { busyJob?.cancel() },
                     onToggleExpand = {
                         expandedIndex = if (expandedIndex == index) null else index
                     },
                     onStreamPlay = {
-                        coroutineScope.launch {
-                            val resourceHash =
-                                resource.magnetUrl
-                                    .substringAfter("xt=urn:btih:", "")
-                                    .substringBefore("&")
-                            val effectiveEpSort = episode?.let { if (it.sort > 0f) it.sort else it.episodeNumber } ?: 1f
-                            // 合集/BD 包内多集共用同一磁力：必须按分集身份键隔离，
-                            // 否则点第 N 集会直接复用第 M 集已落盘的文件，静默播错集。
-                            val requestedEpisodeKey =
-                                torrentEpisodeKey(
-                                    episodeId = episode?.id ?: 0L,
-                                    episodeSort = effectiveEpSort,
-                                    episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
-                                )
-                            val completedTask =
-                                torrentRepository.tasks.value.firstOrNull { task ->
-                                    task.episodeKey == requestedEpisodeKey &&
-                                        task.isCompleted &&
-                                        task.savePath.isNotBlank() &&
-                                        (
-                                            task.magnetUrl == resource.magnetUrl ||
-                                                (
-                                                    resourceHash.isNotBlank() &&
-                                                        task.magnetUrl
-                                                            .substringAfter("xt=urn:btih:", "")
-                                                            .substringBefore("&")
-                                                            .equals(resourceHash, ignoreCase = true)
-                                                )
-                                        )
-                                }
-                            if (completedTask != null) {
-                                withContext(Dispatchers.Main) {
-                                    onDismissAndRun {
-                                        if (onInternalPlayClick != null) {
-                                            val route =
-                                                PlayerRoute(
-                                                    subjectId = subject.id,
-                                                    episodeId = episode?.id ?: 0L,
-                                                    streamUrl = "file://${completedTask.savePath}",
-                                                    episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
-                                                    subjectName = subject.displayName,
-                                                    episodeSort = effectiveEpSort,
-                                                    episodeType = episode?.type ?: 0,
-                                                )
-                                            onInternalPlayClick(route)
-                                        }
-                                    }
-                                }
-                                return@launch
-                            }
-
-                            if (!ensureTorrentPluginInstalled(context, overlayHostState, torrentRepository)) {
-                                return@launch
-                            }
-                            withContext(Dispatchers.Main) {
-                                Toast
-                                    .makeText(
-                                        context,
-                                        context.getString(R.string.feature_subject_source_torrent_stream_buffering),
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                            }
-                            val streamResult =
-                                torrentRepository.startStreamDownload(
-                                    title = resource.title,
-                                    magnetUrl = resource.magnetUrl,
-                                    torrentUrl = resource.torrentUrl.ifBlank { null },
-                                    totalBytes = resource.contentLength,
-                                    subjectId = subject.id,
-                                    subjectName = subject.displayName,
-                                    subjectCoverUrl = subject.images?.bestImage.orEmpty(),
-                                    episodeId = episode?.id ?: 0L,
-                                    episodeSort = effectiveEpSort,
-                                    episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
-                                )
-                            streamResult
-                                .onSuccess { streamUrl ->
-                                    withContext(Dispatchers.Main) {
-                                        onDismissAndRun {
-                                            if (onInternalPlayClick != null) {
-                                                val route =
-                                                    PlayerRoute(
-                                                        subjectId = subject.id,
-                                                        episodeId = episode?.id ?: 0L,
-                                                        streamUrl = streamUrl,
-                                                        episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
-                                                        subjectName = subject.displayName,
-                                                        episodeSort = effectiveEpSort,
-                                                        episodeType = episode?.type ?: 0,
-                                                    )
-                                                onInternalPlayClick(route)
-                                            }
-                                        }
-                                    }
-                                }.onFailure { err ->
-                                    withContext(Dispatchers.Main) {
-                                        Toast
-                                            .makeText(
-                                                context,
-                                                err.message ?: context.getString(R.string.feature_subject_source_torrent_stream_failed),
-                                                Toast.LENGTH_SHORT,
-                                            ).show()
+                        // 进行中或没有可用地址（无磁力且无种子直链）时不得再拉起并发任务
+                        if (busyResourceKey == null && resource.hasPlayableSource) {
+                            busyResourceKey = resourceKey
+                            busyJob =
+                                coroutineScope.launch {
+                                    try {
+                                        playTorrentResource(resource)
+                                    } finally {
+                                        busyResourceKey = null
+                                        busyJob = null
                                     }
                                 }
                         }
                     },
                     onInAppDownload = {
-                        coroutineScope.launch {
-                            val effectiveEpSort = episode?.let { if (it.sort > 0f) it.sort else it.episodeNumber } ?: 1f
-                            if (!ensureTorrentPluginInstalled(context, overlayHostState, torrentRepository)) {
-                                return@launch
-                            }
-                            torrentRepository.startDownload(
-                                title = resource.title,
-                                magnetUrl = resource.magnetUrl,
-                                torrentUrl = resource.torrentUrl.ifBlank { null },
-                                totalBytes = resource.contentLength,
-                                subjectId = subject.id,
-                                subjectName = subject.displayName,
-                                subjectCoverUrl = subject.images?.bestImage.orEmpty(),
-                                episodeId = episode?.id ?: 0L,
-                                episodeSort = effectiveEpSort,
-                                episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title,
-                            )
-                            withContext(Dispatchers.Main) {
-                                Toast
-                                    .makeText(
-                                        context,
-                                        context.getString(R.string.feature_subject_source_torrent_download_started),
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                            }
+                        if (busyResourceKey == null && resource.hasPlayableSource) {
+                            busyResourceKey = resourceKey
+                            busyJob =
+                                coroutineScope.launch {
+                                    try {
+                                        downloadTorrentResource(resource)
+                                    } finally {
+                                        busyResourceKey = null
+                                        busyJob = null
+                                    }
+                                }
                         }
                     },
                     onExternalLaunch = {
-                        onDismissAndRun {
-                            torrentIntentDispatcher.launchMagnet(resource.magnetUrl)
+                        if (resource.magnetUrl.isBlank()) {
+                            Toast
+                                .makeText(
+                                    context,
+                                    context.getString(R.string.feature_subject_source_torrent_no_magnet),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                        } else {
+                            onDismissAndRun {
+                                torrentIntentDispatcher.launchMagnet(resource.magnetUrl)
+                            }
                         }
                     },
                     onDownloadTorrent = {
-                        if (resource.torrentUrl.isNotBlank()) {
+                        if (resource.torrentUrl.isBlank()) {
+                            Toast
+                                .makeText(
+                                    context,
+                                    context.getString(R.string.feature_subject_source_torrent_no_torrent),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                        } else {
                             coroutineScope.launch {
                                 val result = torrentRepository.downloadTorrentFile(resource.torrentUrl, resource.title)
                                 withContext(Dispatchers.Main) {
@@ -712,19 +861,40 @@ fun TorrentMediaResourcesSection(
                                         }
                                 }
                             }
-                        } else {
-                            Toast.makeText(context, "当前资源未提供种子直链", Toast.LENGTH_SHORT).show()
                         }
                     },
                     onCopyMagnet = {
-                        torrentIntentDispatcher.copyMagnetToClipboard(resource.magnetUrl)
-                        Toast
-                            .makeText(
-                                context,
-                                context.getString(R.string.feature_subject_source_torrent_copied_magnet),
-                                Toast.LENGTH_SHORT,
-                            ).show()
+                        if (resource.magnetUrl.isBlank()) {
+                            Toast
+                                .makeText(
+                                    context,
+                                    context.getString(R.string.feature_subject_source_torrent_no_magnet),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                        } else {
+                            torrentIntentDispatcher.copyMagnetToClipboard(resource.magnetUrl)
+                            Toast
+                                .makeText(
+                                    context,
+                                    context.getString(R.string.feature_subject_source_torrent_copied_magnet),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                        }
                     },
+                )
+            }
+            if (!showAllResources && torrentResources.size > MAX_VISIBLE_TORRENT_RESOURCES) {
+                Spacer(modifier = Modifier.height(4.dp))
+                TorrentActionButton(
+                    text =
+                        stringResource(
+                            R.string.feature_subject_source_torrent_show_more,
+                            torrentResources.size - MAX_VISIBLE_TORRENT_RESOURCES,
+                        ),
+                    icon = BgmIcons.KeyboardArrowDown,
+                    isPrimary = false,
+                    onClick = { showAllResources = true },
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -739,6 +909,9 @@ fun TorrentMediaResourcesSection(
 fun TorrentMediaResourceCard(
     resource: TorrentMediaResource,
     isExpanded: Boolean,
+    isBusy: Boolean = false,
+    streamState: TorrentStreamState? = null,
+    onCancelBusy: () -> Unit = {},
     onToggleExpand: () -> Unit,
     onStreamPlay: () -> Unit,
     onInAppDownload: () -> Unit,
@@ -818,11 +991,17 @@ fun TorrentMediaResourceCard(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
 
+                    if (isBusy) {
+                        TorrentStreamProgress(state = streamState, onCancel = onCancelBusy)
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
                     // 边下边播 (Hero 强调主操作)
                     TorrentActionButton(
                         text = stringResource(R.string.feature_subject_source_torrent_stream_play),
                         icon = BgmIcons.PlayCircle,
                         isPrimary = true,
+                        enabled = !isBusy,
                         onClick = onStreamPlay,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -837,6 +1016,7 @@ fun TorrentMediaResourceCard(
                             text = stringResource(R.string.feature_subject_source_torrent_in_app_download),
                             icon = BgmIcons.Download,
                             isPrimary = false,
+                            enabled = !isBusy,
                             onClick = onInAppDownload,
                             modifier = Modifier.weight(1f),
                         )
@@ -844,6 +1024,7 @@ fun TorrentMediaResourceCard(
                             text = stringResource(R.string.feature_subject_source_torrent_external_app),
                             icon = BgmIcons.OpenInNew,
                             isPrimary = false,
+                            enabled = !isBusy,
                             onClick = onExternalLaunch,
                             modifier = Modifier.weight(1f),
                         )
@@ -857,6 +1038,7 @@ fun TorrentMediaResourceCard(
                             text = stringResource(R.string.feature_subject_source_torrent_download_torrent),
                             icon = BgmIcons.FolderOpen,
                             isPrimary = false,
+                            enabled = !isBusy,
                             onClick = onDownloadTorrent,
                             modifier = Modifier.weight(1f),
                         )
@@ -864,6 +1046,7 @@ fun TorrentMediaResourceCard(
                             text = stringResource(R.string.feature_subject_source_torrent_copy_magnet),
                             icon = BgmIcons.ContentCopy,
                             isPrimary = false,
+                            enabled = !isBusy,
                             onClick = onCopyMagnet,
                             modifier = Modifier.weight(1f),
                         )
@@ -879,11 +1062,13 @@ private fun TorrentActionButton(
     text: String,
     icon: ImageVector,
     isPrimary: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
         onClick = onClick,
+        enabled = enabled,
         shape = BgmShapes.small,
         color =
             if (isPrimary) {
@@ -891,7 +1076,7 @@ private fun TorrentActionButton(
             } else {
                 MaterialTheme.colorScheme.surfaceContainerHighest
             },
-        modifier = modifier,
+        modifier = modifier.alpha(if (enabled) 1f else 0.5f),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
@@ -926,20 +1111,41 @@ private fun TorrentActionButton(
     }
 }
 
+/** 组件按需安装的用途：决定确认弹窗文案（边下边播 vs 离线下载），避免复用同一套「立即安装并起播」措辞。 */
+private enum class TorrentPluginInstallPurpose {
+    STREAM_PLAYBACK,
+    OFFLINE_DOWNLOAD,
+}
+
 private suspend fun ensureTorrentPluginInstalled(
     context: Context,
     overlayHostState: OverlayHostState,
     torrentRepository: TorrentRepository,
+    purpose: TorrentPluginInstallPurpose = TorrentPluginInstallPurpose.STREAM_PLAYBACK,
 ): Boolean {
     if (torrentRepository.isPluginInstalled()) {
         return true
     }
+    val messageRes =
+        when (purpose) {
+            TorrentPluginInstallPurpose.STREAM_PLAYBACK ->
+                R.string.feature_subject_source_torrent_plugin_dialog_message
+            TorrentPluginInstallPurpose.OFFLINE_DOWNLOAD ->
+                R.string.feature_subject_source_torrent_plugin_dialog_message_download
+        }
+    val confirmRes =
+        when (purpose) {
+            TorrentPluginInstallPurpose.STREAM_PLAYBACK ->
+                R.string.feature_subject_source_torrent_plugin_install_btn
+            TorrentPluginInstallPurpose.OFFLINE_DOWNLOAD ->
+                R.string.feature_subject_source_torrent_plugin_install_btn_download
+        }
     val confirmed =
         overlayHostState.await(
             ConfirmDialogAction(
                 title = context.getString(R.string.feature_subject_source_torrent_plugin_dialog_title),
-                message = context.getString(R.string.feature_subject_source_torrent_plugin_dialog_message),
-                confirmText = context.getString(R.string.feature_subject_source_torrent_plugin_install_btn),
+                message = context.getString(messageRes),
+                confirmText = context.getString(confirmRes),
                 dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
                 isPrimary = true,
             ),
@@ -957,15 +1163,106 @@ private suspend fun ensureTorrentPluginInstalled(
     }
     val installResult = torrentRepository.installPlugin()
     if (installResult.isFailure) {
+        // 严禁吞掉真实失败原因（如设备 ABI 不受支持 / 镜像 404）：否则用户只能看到泛化文案
+        val reason = installResult.exceptionOrNull()?.message?.takeIf { it.isNotBlank() }
+        val text =
+            if (reason != null) {
+                context.getString(R.string.feature_subject_source_torrent_plugin_install_failed_reason, reason)
+            } else {
+                context.getString(R.string.feature_subject_source_torrent_plugin_install_failed)
+            }
         withContext(Dispatchers.Main) {
             Toast
                 .makeText(
                     context,
-                    context.getString(R.string.feature_subject_source_torrent_plugin_install_failed),
-                    Toast.LENGTH_SHORT,
+                    text,
+                    Toast.LENGTH_LONG,
                 ).show()
         }
         return false
     }
     return true
 }
+
+/** 流式/安装进度可视化：安装组件 → 解析元数据 → 缓冲首部数据，全程可见并可取消。 */
+@Composable
+private fun TorrentStreamProgress(
+    state: TorrentStreamState?,
+    onCancel: () -> Unit,
+) {
+    val label =
+        when (state) {
+            is TorrentStreamState.InstallingPlugin ->
+                stringResource(R.string.feature_subject_source_torrent_progress_installing, (state.progress * 100).toInt())
+            is TorrentStreamState.Resolving -> stringResource(R.string.feature_subject_source_torrent_progress_resolving)
+            is TorrentStreamState.Buffering ->
+                stringResource(
+                    R.string.feature_subject_source_torrent_progress_buffering,
+                    (state.progress * 100).toInt(),
+                    formatTransferSpeed(state.speedBytesPerSec),
+                    state.connectedPeers,
+                )
+            is TorrentStreamState.Error -> stringResource(R.string.feature_subject_source_torrent_progress_failed, state.message)
+            else -> stringResource(R.string.feature_subject_source_torrent_stream_buffering)
+        }
+    val fraction =
+        when (state) {
+            is TorrentStreamState.InstallingPlugin -> state.progress
+            is TorrentStreamState.Buffering -> state.progress
+            else -> null
+        }
+
+    Surface(
+        shape = BgmShapes.small,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (fraction == null) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color =
+                        if (state is TorrentStreamState.Error) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = stringResource(DesignSystemR.string.core_designsystem_action_cancel),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier =
+                        Modifier
+                            .clickable(onClick = onCancel)
+                            .padding(start = 8.dp),
+                )
+            }
+            if (fraction != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(3.dp),
+                )
+            }
+        }
+    }
+}
+
+/** 磁力资源列表首屏渲染上限：超出部分折叠到「展开更多」，杜绝静默截断丢条目。 */
+private const val MAX_VISIBLE_TORRENT_RESOURCES = 8

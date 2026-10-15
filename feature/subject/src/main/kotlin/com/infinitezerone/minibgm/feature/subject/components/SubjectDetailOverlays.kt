@@ -77,6 +77,7 @@ internal fun SubjectDetailOverlays(
     failedSourceReasons: Map<String, String>,
     torrentResources: List<com.infinitezerone.minibgm.core.model.TorrentMediaResource> = emptyList(),
     isTorrentLoading: Boolean = false,
+    onRequestNotificationPermission: (() -> Unit)? = null,
 ) {
     if (showLoginPromptDialog) {
         BgmLoginPromptDialog(
@@ -203,6 +204,7 @@ internal fun SubjectDetailOverlays(
             failedSourceReasons = failedSourceReasons,
             torrentResources = torrentResources,
             isTorrentLoading = isTorrentLoading,
+            onRequestNotificationPermission = onRequestNotificationPermission,
         )
     }
 }

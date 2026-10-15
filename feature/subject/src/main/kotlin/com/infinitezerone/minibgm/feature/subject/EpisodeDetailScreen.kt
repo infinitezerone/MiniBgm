@@ -78,6 +78,7 @@ import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.components.SubjectSourcesBottomSheet
 import com.infinitezerone.minibgm.feature.subject.components.episodeCommentsSection
+import com.infinitezerone.minibgm.feature.subject.components.rememberDownloadNotificationPermissionRequester
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -113,6 +114,8 @@ fun EpisodeDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    // 离线下载的通知栏是唯一的外部门控面，首次下载前必须确保通知权限已就绪
+    val requestDownloadNotification = rememberDownloadNotificationPermissionRequester()
     val haptic = LocalHapticFeedback.current
     val clipboard = LocalClipboard.current
     val coroutineScope = rememberCoroutineScope()
@@ -800,6 +803,7 @@ fun EpisodeDetailScreen(
             failedSourceReasons = uiState.failedSourceReasons,
             torrentResources = uiState.torrentResources,
             isTorrentLoading = uiState.isTorrentLoading,
+            onRequestNotificationPermission = requestDownloadNotification,
         )
     }
 

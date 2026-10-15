@@ -273,7 +273,7 @@ class SubjectDetailViewModel(
                     allResources.addAll(res)
                 }
             }
-            val deduplicated = allResources.distinctBy { it.infoHash.ifBlank { it.magnetUrl } }
+            val deduplicated = allResources.distinctBy { it.dedupeKey }
             _uiState.update {
                 it.copy(
                     torrentResources = deduplicated,

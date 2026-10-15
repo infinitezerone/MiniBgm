@@ -417,7 +417,7 @@ class EpisodeDetailViewModel(
                     allResources.addAll(res)
                 }
             }
-            val deduplicated = allResources.distinctBy { it.infoHash.ifBlank { it.magnetUrl } }
+            val deduplicated = allResources.distinctBy { it.dedupeKey }
             torrentState.value = Pair(deduplicated, false)
         }
     }

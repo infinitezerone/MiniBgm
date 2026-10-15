@@ -78,6 +78,7 @@ import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailContent
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailFullSkeleton
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailOverlays
+import com.infinitezerone.minibgm.feature.subject.components.rememberDownloadNotificationPermissionRequester
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -227,6 +228,8 @@ fun SubjectDetailScreen(
                 }
             }
         }
+    // 离线下载的通知栏是唯一的外部门控面，首次下载前必须确保通知权限已就绪
+    val requestDownloadNotification = rememberDownloadNotificationPermissionRequester()
     val isEntering = isNavEntering()
     var hasEnteredTransitionFinished by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(isEntering) {
@@ -769,6 +772,7 @@ fun SubjectDetailScreen(
         failedSourceReasons = uiState.failedSourceReasons,
         torrentResources = uiState.torrentResources,
         isTorrentLoading = uiState.isTorrentLoading,
+        onRequestNotificationPermission = requestDownloadNotification,
     )
 
     if (activeTagForAction != null) {
