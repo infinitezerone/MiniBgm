@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -72,6 +73,7 @@ import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
+import com.infinitezerone.minibgm.core.model.formatTransferSpeed
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.user.components.AiSettingsDialog
 import com.infinitezerone.minibgm.feature.user.components.AiringTimingBottomSheet
@@ -110,8 +112,58 @@ fun SettingsScreen(
     val overlayHostState = rememberOverlayHostState()
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(downloadState) {
+    val updateProgress = (downloadState as? DownloadState.Downloading)?.progress
+    // 服务端未给 Content-Length 时 isIndeterminate 为真：保持 null，不要显示一个假的 0%。
+    val updatePercent = updateProgress?.takeUnless { it.isIndeterminate }?.percentage
+    val updateSpeedSuffix =
+        updateProgress
+            ?.speedBytesPerSec
+            ?.takeIf { it > 0L }
+            ?.let { " · ${formatTransferSpeed(it)}" }
+            .orEmpty()
+    // 整条更新提示由单一 effect 驱动：
+    // ① 进度流以 10Hz 节流发射，直接用 DownloadState 作 key 会让 snackbar 被每秒重建十次，
+    //    按整数百分比去抖后整段下载最多重建 100 次；
+    // ② 不能拆成「进度」与「终态」两个 effect——同一 SnackbarHostState 上前者被取消时的
+    //    finally 会把后者刚装上的「下载完成」提示一并抹掉。
+    val updateSnackbarKey =
         when (val state = downloadState) {
+            is DownloadState.Downloading -> "downloading:${updatePercent ?: "unknown"}"
+            is DownloadState.Completed -> "completed"
+            is DownloadState.Failed -> "failed:${state.message}"
+            else -> null
+        }
+
+    LaunchedEffect(updateSnackbarKey) {
+        when (val state = downloadState) {
+            is DownloadState.Downloading -> {
+                val message =
+                    if (updatePercent == null) {
+                        context.getString(R.string.feature_user_update_downloading_indeterminate)
+                    } else {
+                        context.getString(
+                            R.string.feature_user_update_downloading,
+                            "$updatePercent%$updateSpeedSuffix",
+                        )
+                    }
+                val result =
+                    snackbarHostState.showSnackbar(
+                        message = message,
+                        actionLabel = context.getString(R.string.feature_user_update_download_cancel),
+                        duration = SnackbarDuration.Indefinite,
+                    )
+                if (result == SnackbarResult.ActionPerformed) {
+                    viewModel.cancelUpdateDownload()
+                    // 用 Toast 而非 snackbar 反馈：取消会让本 effect 的 key 归 null 而被取消，
+                    // 其 finally 会立刻清掉刚装上的确认提示。
+                    Toast
+                        .makeText(
+                            context,
+                            context.getString(R.string.feature_user_update_download_canceled),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                }
+            }
             is DownloadState.Completed -> {
                 snackbarHostState.showSnackbar(
                     message = context.getString(R.string.feature_user_update_download_success),
@@ -440,10 +492,6 @@ fun SettingsScreen(
                                             viewModel.openInstallPermissionSettings()
                                         }
                                     }
-                                    snackbarHostState.showSnackbar(
-                                        message = context.getString(R.string.feature_user_update_downloading, "0%"),
-                                        duration = SnackbarDuration.Short,
-                                    )
                                     viewModel.downloadAndInstallUpdate(
                                         downloadUrl = downloadUrl,
                                         targetVersion = info.latestVersion,
