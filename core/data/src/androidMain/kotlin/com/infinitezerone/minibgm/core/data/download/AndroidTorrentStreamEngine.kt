@@ -194,14 +194,10 @@ class AndroidTorrentStreamEngine internal constructor(
                                 .download(downloadUrl, stagingFile.absolutePath)
                                 .onEach { state ->
                                     if (state is DownloadState.Downloading) {
-                                        val total = state.progress.totalBytes
-                                        val ratio =
-                                            if (total > 0L) {
-                                                (state.progress.bytesDownloaded.toFloat() / total.toFloat()).coerceIn(0f, 0.99f)
-                                            } else {
-                                                0f
-                                            }
-                                        _streamState.value = TorrentStreamState.InstallingPlugin(ratio)
+                                        // 复用 DownloadProgress.fraction，不再就地手搓比例；
+                                        // 上限压到 0.99：下载完成前不得先报 100%（后面还要真正装载 .so）。
+                                        _streamState.value =
+                                            TorrentStreamState.InstallingPlugin(state.progress.fraction.coerceAtMost(0.99f))
                                     }
                                 }.filter { it is DownloadState.Completed || it is DownloadState.Failed }
                                 .first()
