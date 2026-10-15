@@ -137,6 +137,7 @@ class TorrentDownloadService :
 
     private fun observeTasks() {
         serviceScope.launch {
+            var lastActiveTaskId: String? = null
             torrentRepository.tasks.collect { tasks ->
                 val activeTask =
                     tasks.firstOrNull {
@@ -146,6 +147,7 @@ class TorrentDownloadService :
                     }
 
                 if (activeTask != null) {
+                    lastActiveTaskId = activeTask.id
                     val statusText =
                         when (activeTask.status) {
                             TorrentTaskStatus.RESOLVING -> strings.resolving
@@ -166,9 +168,12 @@ class TorrentDownloadService :
                         )
                     notificationManager.notify(NOTIFICATION_ID, notification)
                 } else {
-                    val completedTask = tasks.lastOrNull { it.status == TorrentTaskStatus.COMPLETED }
-                    if (completedTask != null) {
-                        val completeNotification = buildCompleteNotification(completedTask)
+                    val justCompletedTask =
+                        lastActiveTaskId?.let { id ->
+                            tasks.firstOrNull { it.id == id && it.status == TorrentTaskStatus.COMPLETED }
+                        }
+                    if (justCompletedTask != null) {
+                        val completeNotification = buildCompleteNotification(justCompletedTask)
                         notificationManager.notify(NOTIFICATION_ID_COMPLETE, completeNotification)
                     }
                     // 无活跃任务时退出前台服务

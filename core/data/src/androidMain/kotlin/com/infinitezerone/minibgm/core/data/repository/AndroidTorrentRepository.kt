@@ -373,6 +373,34 @@ class AndroidTorrentRepository(
             )
         }
 
+        // 2. 准备有效种子载荷（校验缓存与 DB 路径有效性）
+        val localTorrentPath = resolveValidTorrentPath(task, taskId)
+
+        // 3. 启动流媒体 P2P 引擎，将目标目录直接指向持久化下载目录
+        val streamUrl = startEngineForTask(task, localTorrentPath, taskId) ?: return
+
+        val nativeTargetPath = streamEngine.getActiveTargetFilePath()?.takeIf { it.isNotBlank() }
+        updateTask(taskId) {
+            it.copy(
+                status = TorrentTaskStatus.DOWNLOADING,
+                errorMessage = null,
+                streamUrl = streamUrl,
+                savePath = nativeTargetPath ?: it.savePath,
+            )
+        }
+
+        // 4. 若原生引擎已暴露真实落盘路径，直接监听 librqbit 分片进度；单测 Fake 回退至流式落盘
+        if (nativeTargetPath != null) {
+            monitorDirectEngineDownload(taskId, File(nativeTargetPath))
+        } else {
+            downloadStreamToFile(taskId, streamUrl, File(task.savePath))
+        }
+    }
+
+    private suspend fun resolveValidTorrentPath(
+        task: TorrentTask,
+        taskId: String,
+    ): String? {
         var localTorrentPath: String? = task.torrentFilePath
         val torrentUrl = task.torrentUrl
         // DB 中记录的路径必须与缓存命中同一把尺子校验：路径失效（文件被清理）或载荷非法
@@ -392,8 +420,14 @@ class AndroidTorrentRepository(
                 updateTask(taskId) { it.copy(torrentFilePath = localTorrentPath) }
             }
         }
+        return localTorrentPath
+    }
 
-        // 2. 启动流媒体 P2P 引擎，将目标目录直接指向持久化下载目录（使 librqbit 直接落盘真实文件，杜绝二次 HTTP 拷贝）
+    private suspend fun startEngineForTask(
+        task: TorrentTask,
+        localTorrentPath: String?,
+        taskId: String,
+    ): String? {
         val downloadDir = resolveDownloadDir()
         streamEngine.setDownloadSessionProtected(true)
         val episodeHint =
@@ -413,39 +447,11 @@ class AndroidTorrentRepository(
                 episodeHint = episodeHint,
             )
 
-        val streamUrl =
-            streamResult.getOrElse { error ->
-                streamEngine.setDownloadSessionProtected(false)
-                logger.e(error) { "启动流引擎失败: $taskId" }
-                updateTask(taskId) {
-                    it.copy(
-                        status = TorrentTaskStatus.ERROR,
-                        errorMessage = error.message ?: "启动 P2P 引擎失败",
-                        downloadSpeedBytesPerSec = 0L,
-                        connectedPeers = 0,
-                        streamUrl = "",
-                    )
-                }
-                return
-            }
-
-        val nativeTargetPath = streamEngine.getActiveTargetFilePath()?.takeIf { it.isNotBlank() }
-        updateTask(taskId) {
-            it.copy(
-                status = TorrentTaskStatus.DOWNLOADING,
-                errorMessage = null,
-                streamUrl = streamUrl,
-                savePath = nativeTargetPath ?: it.savePath,
-            )
-        }
-
-        // 3. 若原生引擎已暴露真实落盘路径（保留 .mkv/.mp4 等原始扩展名），直接监听 librqbit 分片进度直至 100%，
-        //    彻底消除通过 127.0.0.1 再拉一遍 HTTP 顺序流的双倍磁盘写入与分片 0 死等；
-        //    仅在单测 Fake 引擎未返回真实路径时回退至流式落盘。
-        if (nativeTargetPath != null) {
-            monitorDirectEngineDownload(taskId, File(nativeTargetPath))
-        } else {
-            downloadStreamToFile(taskId, streamUrl, File(task.savePath))
+        return streamResult.getOrElse { error ->
+            streamEngine.setDownloadSessionProtected(false)
+            logger.e(error) { "启动流引擎失败: $taskId" }
+            markTaskFailed(taskId, error.message ?: "启动 P2P 引擎失败")
+            null
         }
     }
 
@@ -456,30 +462,19 @@ class AndroidTorrentRepository(
         var timedOut = false
         try {
             coroutineScope {
-                val monitorScope = this
-                var timeoutJob: Job? = null
+                val watchdog =
+                    StallWatchdog(peerConnectTimeoutMs, this) {
+                        timedOut = true
+                        cancel(CancellationException(PEER_CONNECT_TIMEOUT_MESSAGE))
+                    }
                 var lastBufferedBytes = _tasks.value.firstOrNull { it.id == taskId }?.downloadedBytes ?: 0L
 
-                fun updateStallWatchdog(isActiveProgress: Boolean) {
-                    if (isActiveProgress) {
-                        timeoutJob?.cancel()
-                        timeoutJob = null
-                    } else if (peerConnectTimeoutMs > 0L && timeoutJob?.isActive != true) {
-                        timeoutJob =
-                            launch {
-                                delay(peerConnectTimeoutMs)
-                                timedOut = true
-                                monitorScope.cancel(CancellationException(PEER_CONNECT_TIMEOUT_MESSAGE))
-                            }
-                    }
-                }
-
-                updateStallWatchdog(isActiveProgress = false)
+                watchdog.update(hasActiveProgress = false)
                 try {
                     streamEngine.streamState.first { state ->
                         when (state) {
                             is TorrentStreamState.Ready -> {
-                                updateStallWatchdog(isActiveProgress = false)
+                                watchdog.update(hasActiveProgress = false)
                                 if (state.totalBytes > 0L || state.connectedPeers > 0) {
                                     updateTask(taskId, persist = false) {
                                         if (it.status == TorrentTaskStatus.DOWNLOADING) {
@@ -505,7 +500,7 @@ class AndroidTorrentRepository(
                                     state.speedBytesPerSec > 0L ||
                                         bytesAdvanced ||
                                         isCompleted
-                                updateStallWatchdog(isActiveProgress = hasActiveTransfer)
+                                watchdog.update(hasActiveProgress = hasActiveTransfer)
                                 updateTask(taskId, persist = false) {
                                     if (it.status == TorrentTaskStatus.DOWNLOADING) {
                                         it.copy(
@@ -529,7 +524,7 @@ class AndroidTorrentRepository(
                         }
                     }
                 } finally {
-                    timeoutJob?.cancel()
+                    watchdog.cancel()
                 }
             }
 
@@ -554,40 +549,68 @@ class AndroidTorrentRepository(
         } catch (e: CancellationException) {
             if (timedOut) {
                 logger.w { "任务 $taskId 连接做种节点超时（${peerConnectTimeoutMs}ms 无可用源）" }
-                updateTask(taskId) {
-                    it.copy(
-                        status = TorrentTaskStatus.ERROR,
-                        errorMessage = PEER_CONNECT_TIMEOUT_MESSAGE,
-                        downloadSpeedBytesPerSec = 0L,
-                        connectedPeers = 0,
-                        streamUrl = "",
-                    )
-                }
+                markTaskFailed(taskId, PEER_CONNECT_TIMEOUT_MESSAGE)
             } else {
                 logger.i { "任务 $taskId 协程被取消（已暂停或被移除）" }
                 throw e
             }
         } catch (e: Exception) {
-            val currentStatus = _tasks.value.firstOrNull { it.id == taskId }?.status
-            if (currentStatus == TorrentTaskStatus.QUEUED || currentStatus == TorrentTaskStatus.PAUSED) {
-                logger.i { "任务 $taskId 已处于 $currentStatus 态，跳过错误状态覆盖" }
-                return
-            }
             logger.e(e) { "任务 $taskId 原生下载异常: ${e.message}" }
-            updateTask(taskId) {
-                it.copy(
-                    status = TorrentTaskStatus.ERROR,
-                    errorMessage = e.message ?: "P2P 下载失败",
-                    downloadSpeedBytesPerSec = 0L,
-                    connectedPeers = 0,
-                    streamUrl = "",
-                )
-            }
+            markTaskFailed(taskId, e.message ?: "P2P 下载失败")
         } finally {
             withContext(NonCancellable) {
                 streamEngine.setDownloadSessionProtected(false)
                 streamEngine.stopStream(force = false)
             }
+        }
+    }
+
+    private fun markTaskFailed(
+        taskId: String,
+        errorMessage: String,
+    ) {
+        val currentStatus = _tasks.value.firstOrNull { it.id == taskId }?.status
+        if (currentStatus == TorrentTaskStatus.QUEUED || currentStatus == TorrentTaskStatus.PAUSED) {
+            logger.i { "任务 $taskId 已处于 $currentStatus 态，跳过错误状态覆盖" }
+            return
+        }
+        updateTask(taskId) {
+            it.copy(
+                status = TorrentTaskStatus.ERROR,
+                errorMessage = errorMessage,
+                downloadSpeedBytesPerSec = 0L,
+                connectedPeers = 0,
+                streamUrl = "",
+            )
+        }
+    }
+
+    /**
+     * 死种看门狗探针：在指定毫秒数内若无活动进度（字节前进 / 传输速率 > 0 / 完成），触发超时回调。
+     */
+    private class StallWatchdog(
+        private val timeoutMs: Long,
+        private val scope: CoroutineScope,
+        private val onTimeout: () -> Unit,
+    ) {
+        private var job: Job? = null
+
+        fun update(hasActiveProgress: Boolean) {
+            if (hasActiveProgress) {
+                job?.cancel()
+                job = null
+            } else if (timeoutMs > 0L && job?.isActive != true) {
+                job =
+                    scope.launch {
+                        delay(timeoutMs)
+                        onTimeout()
+                    }
+            }
+        }
+
+        fun cancel() {
+            job?.cancel()
+            job = null
         }
     }
 
@@ -730,21 +753,8 @@ class AndroidTorrentRepository(
             logger.i { "任务 $taskId 协程被取消（已暂停或被移除）" }
             throw e
         } catch (e: Exception) {
-            val currentStatus = _tasks.value.firstOrNull { it.id == taskId }?.status
-            if (currentStatus == TorrentTaskStatus.QUEUED || currentStatus == TorrentTaskStatus.PAUSED) {
-                logger.i { "任务 $taskId 已处于 $currentStatus 态，跳过错误状态覆盖" }
-                return
-            }
             logger.e(e) { "任务 $taskId 下载异常: ${e.message}" }
-            updateTask(taskId) {
-                it.copy(
-                    status = TorrentTaskStatus.ERROR,
-                    errorMessage = e.message ?: "下载流读取失败",
-                    downloadSpeedBytesPerSec = 0L,
-                    connectedPeers = 0,
-                    streamUrl = "",
-                )
-            }
+            markTaskFailed(taskId, e.message ?: "下载流读取失败")
         } finally {
             statsObserverJob.cancel()
             withContext(NonCancellable) {
@@ -850,45 +860,59 @@ class AndroidTorrentRepository(
         torrentUrl: String,
         fileName: String,
     ): Result<String> =
-        runCatching {
+        try {
             val existingLocal = File(torrentUrl)
             if (existingLocal.isFile && existingLocal.length() > 0L) {
                 // 已落盘的本地种子同样要过载荷校验：坏种子就地删除交给后续重新获取，
                 // 杜绝"DB 里记着路径 → 每次启动都读到同一个坏种子"的永久复现。
                 if (TorrentFileCache.isValidPayload(existingLocal)) {
-                    return@runCatching existingLocal.absolutePath
+                    Result.success(existingLocal.absolutePath)
+                } else {
+                    logger.w { "本地种子载荷非法（非 bencode/无 info 键），已删除: ${existingLocal.absolutePath}" }
+                    runCatching { existingLocal.delete() }
+                    downloadAndCacheTorrent(torrentUrl, fileName)
                 }
-                logger.w { "本地种子载荷非法（非 bencode/无 info 键），已删除: ${existingLocal.absolutePath}" }
-                runCatching { existingLocal.delete() }
+            } else {
+                downloadAndCacheTorrent(torrentUrl, fileName)
             }
-            val torrentsDir = File(context.cacheDir, "torrents").apply { mkdirs() }
-            // 缓存键优先 infoHash / 种子直链指纹，严禁只按标题命名（同名不同种会永久互串）
-            val cacheKey = TorrentFileCache.cacheKey(magnetUrl = "", torrentUrl = torrentUrl, title = fileName)
-            val targetFile = File(torrentsDir, "$cacheKey.torrent")
-            if (TorrentFileCache.isUsableCachedFile(targetFile)) {
-                logger.i { "复用已缓存的种子文件: ${targetFile.absolutePath}" }
-                return@runCatching targetFile.absolutePath
-            }
-
-            val downloadState = assetDownloader.downloadAsset(torrentUrl, targetFile.absolutePath)
-            val resolvedPath =
-                when (downloadState) {
-                    is DownloadState.Completed -> targetFile.absolutePath
-                    is DownloadState.Failed -> error(downloadState.message)
-                    else ->
-                        targetFile
-                            .takeIf { it.exists() && it.length() > 0L }
-                            ?.absolutePath
-                            ?: error("种子文件下载未完成")
-                }
-            if (!TorrentFileCache.isValidPayload(File(resolvedPath))) {
-                // 镜像返回 HTTP 200 的 HTML 错误页时 AssetDownloader 只按字节数判定成功，
-                // 必须在此拦下并删除，否则坏种子会随 DB 路径被永久复用。
-                runCatching { File(resolvedPath).delete() }
-                error("种子文件内容非法（疑似镜像错误页），请重试或更换其他资源")
-            }
-            resolvedPath
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
         }
+
+    private suspend fun downloadAndCacheTorrent(
+        torrentUrl: String,
+        fileName: String,
+    ): Result<String> {
+        val torrentsDir = File(context.cacheDir, "torrents").apply { mkdirs() }
+        // 缓存键优先 infoHash / 种子直链指纹，严禁只按标题命名（同名不同种会永久互串）
+        val cacheKey = TorrentFileCache.cacheKey(magnetUrl = "", torrentUrl = torrentUrl, title = fileName)
+        val targetFile = File(torrentsDir, "$cacheKey.torrent")
+        if (TorrentFileCache.isUsableCachedFile(targetFile)) {
+            logger.i { "复用已缓存的种子文件: ${targetFile.absolutePath}" }
+            return Result.success(targetFile.absolutePath)
+        }
+
+        val downloadState = assetDownloader.downloadAsset(torrentUrl, targetFile.absolutePath)
+        val resolvedPath =
+            when (downloadState) {
+                is DownloadState.Completed -> targetFile.absolutePath
+                is DownloadState.Failed -> error(downloadState.message)
+                else ->
+                    targetFile
+                        .takeIf { it.exists() && it.length() > 0L }
+                        ?.absolutePath
+                        ?: error("种子文件下载未完成")
+            }
+        if (!TorrentFileCache.isValidPayload(File(resolvedPath))) {
+            // 镜像返回 HTTP 200 的 HTML 错误页时 AssetDownloader 只按字节数判定成功，
+            // 必须在此拦下并删除，否则坏种子会随 DB 路径被永久复用。
+            runCatching { File(resolvedPath).delete() }
+            error("种子文件内容非法（疑似镜像错误页），请重试或更换其他资源")
+        }
+        return Result.success(resolvedPath)
+    }
 
     private fun updateTask(
         taskId: String,
@@ -896,18 +920,18 @@ class AndroidTorrentRepository(
         transform: (TorrentTask) -> TorrentTask,
     ) {
         var updatedTask: TorrentTask? = null
+        var changed = false
         _tasks.update { list ->
-            list.map {
-                if (it.id == taskId) {
-                    val updated = transform(it)
-                    updatedTask = updated
-                    updated
-                } else {
-                    it
-                }
-            }
+            val index = list.indexOfFirst { it.id == taskId }
+            if (index < 0) return@update list
+            val current = list[index]
+            val updated = transform(current)
+            if (updated == current) return@update list
+            changed = true
+            updatedTask = updated
+            list.toMutableList().apply { set(index, updated) }
         }
-        if (persist) {
+        if (persist && changed) {
             updatedTask?.let { task ->
                 persistenceChannel.trySend(PersistenceAction.Upsert(task.toEntity()))
             }

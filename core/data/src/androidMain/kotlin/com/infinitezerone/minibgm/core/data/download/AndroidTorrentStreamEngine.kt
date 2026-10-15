@@ -5,6 +5,7 @@ import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.TorrentStreamState
 import com.infinitezerone.minibgm.core.model.magnetInfoHash
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -429,9 +430,13 @@ class AndroidTorrentStreamEngine internal constructor(
             return targetTorrentFile.absolutePath
         }
         val dlResult =
-            runCatching {
+            try {
                 downloader.downloadAsset(torrentUrl, targetTorrentFile.absolutePath)
-            }.getOrNull()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
         val downloaded = dlResult is DownloadState.Completed || (targetTorrentFile.exists() && targetTorrentFile.length() > 0L)
         return if (downloaded && TorrentFileCache.isUsableCachedFile(targetTorrentFile)) {
             logger.i { "预取种子文件成功，直接装载种子: ${targetTorrentFile.absolutePath}" }

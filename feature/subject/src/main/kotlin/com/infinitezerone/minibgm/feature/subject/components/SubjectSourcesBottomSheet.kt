@@ -833,6 +833,7 @@ fun TorrentMediaResourcesSection(
                                     } finally {
                                         busyResourceKey = null
                                         busyJob = null
+                                        busyTaskId = null
                                     }
                                 }
                         }
@@ -847,6 +848,7 @@ fun TorrentMediaResourcesSection(
                                     } finally {
                                         busyResourceKey = null
                                         busyJob = null
+                                        busyTaskId = null
                                     }
                                 }
                         }
