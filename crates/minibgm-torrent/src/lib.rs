@@ -57,8 +57,8 @@ fn to_jstring(env: &JNIEnv, value: String) -> jstring {
     }
 }
 
-/// 长度不足 4 的数组是 Kotlin 侧唯一可识别的"读取失败"信号
-/// （`AndroidTorrentStreamEngine` 只在 `stats == null || stats.size < 4` 时累加
+/// 长度不足 5 的数组是 Kotlin 侧唯一可识别的"读取失败"信号
+/// （`AndroidTorrentStreamEngine` 只在 `stats == null || stats.size < 5` 时累加
 /// `MAX_CONSECUTIVE_STAT_FAILURES`）。无活跃会话时必须返回它，严禁用全零数组兜底：
 /// 那会把"引擎失联"伪装成"健康的零进度"，`streamState` 不再发射也不收敛 Error，
 /// 下游 `first {}` 与死种看门狗双双无界挂起（任务永远停在 DOWNLOADING）。
@@ -69,15 +69,28 @@ fn empty_stats_array(env: &JNIEnv) -> jlongArray {
     }
 }
 
-/// 把活跃会话统计折叠为 JNI 返回的四个数值 `[已下载, 总长, 速度, Peer 数]`；
+/// 统计数组第 5 位（下标 4）的引擎状态码，与 Kotlin 侧 `STATS_STATE_*` 成对维护。
+const STATS_STATE_HEALTHY: i64 = 0;
+const STATS_STATE_ENGINE_ERROR: i64 = 1;
+
+/// 把活跃会话统计折叠为 JNI 返回的五个数值 `[已下载, 总长, 速度, Peer 数, 引擎状态码]`；
 /// 无活跃会话返回 `None`（契约见 [`empty_stats_array`]）。
-fn stats_to_jni(stats: Option<StreamStats>) -> Option<[i64; 4]> {
+///
+/// 状态码必须上报：librqbit 的 `TorrentStatsState::Error`（磁盘写入失败 / 初始化校验失败等
+/// 致命错误）在过去被折叠成 0 速度 + 0 Peer，用户只能在 45 秒后被死种看门狗告知
+/// 「连不上做种节点」——真实原因被伪装成死种。错误原文经 `nativeGetLastError` 单独读取。
+fn stats_to_jni(stats: Option<StreamStats>) -> Option<[i64; 5]> {
     let stats = stats?;
     Some([
         stats.downloaded_bytes as i64,
         stats.total_bytes as i64,
         stats.speed_bytes_per_sec as i64,
         stats.connected_peers as i64,
+        if stats.engine_error {
+            STATS_STATE_ENGINE_ERROR
+        } else {
+            STATS_STATE_HEALTHY
+        },
     ])
 }
 
@@ -205,7 +218,7 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
         None => return empty_stats_array(&env),
     };
 
-    let array = match env.new_long_array(4) {
+    let array = match env.new_long_array(5) {
         Ok(arr) => arr,
         Err(_) => return std::ptr::null_mut(),
     };
@@ -216,6 +229,24 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
     }
 
     array.into_raw()
+}
+
+/// 读取引擎级错误原文（`TorrentStats.error`）：仅在 Kotlin 侧检测到统计数组第 5 位为
+/// 错误码时调用，把"磁盘写满 / 初始化校验失败"这类真实原因透出到 UI，
+/// 而不是让用户看到一个伪装的死种超时。无活跃会话或健康态时返回空串。
+#[no_mangle]
+pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_AndroidTorrentStreamEngine_nativeGetLastError(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let message = {
+        let server_guard = lock_active_server();
+        server_guard
+            .as_ref()
+            .and_then(|s| s.get_stats().error_message)
+    };
+
+    to_jstring(&env, message.unwrap_or_default())
 }
 
 #[no_mangle]
@@ -238,7 +269,18 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_data_download_Androi
 mod tests {
     use super::*;
 
-    /// 无活跃会话必须落为 `None`（JNI 侧即长度不足 4 的数组），严禁全零数组兜底：
+    fn healthy_stats() -> StreamStats {
+        StreamStats {
+            downloaded_bytes: 1,
+            total_bytes: 2,
+            speed_bytes_per_sec: 3,
+            connected_peers: 4,
+            engine_error: false,
+            error_message: None,
+        }
+    }
+
+    /// 无活跃会话必须落为 `None`（JNI 侧即长度不足 5 的数组），严禁全零数组兜底：
     /// 全零会被 Kotlin 侧当成"健康的零进度"而永不累加 `MAX_CONSECUTIVE_STAT_FAILURES`，
     /// 引擎失联时 `streamState` 既不发射也不收敛 Error，下游 `first {}` 与死种看门狗双双无界挂起。
     #[test]
@@ -246,16 +288,24 @@ mod tests {
         assert!(stats_to_jni(None).is_none());
     }
 
-    /// [已下载, 总长, 速度, Peer 数] 的顺序是 Kotlin 侧 `stats[0..3]` 的下标契约，不得改动。
+    /// [已下载, 总长, 速度, Peer 数, 状态码] 的顺序是 Kotlin 侧 `stats[0..4]` 的下标契约，不得改动。
     #[test]
     fn stats_to_jni_maps_active_session_fields_in_order() {
+        assert_eq!(stats_to_jni(Some(healthy_stats())), Some([1, 2, 3, 4, 0]));
+    }
+
+    /// 引擎级错误态必须上报为非零状态码：否则磁盘写满这类致命错误只表现为"0 速度 0 Peer"，
+    /// 用户只能等到死种看门狗超时，被告知一个与真实原因无关的"连不上做种节点"。
+    #[test]
+    fn stats_to_jni_surfaces_engine_error_state() {
         let stats = StreamStats {
-            downloaded_bytes: 1,
-            total_bytes: 2,
-            speed_bytes_per_sec: 3,
-            connected_peers: 4,
+            engine_error: true,
+            error_message: Some("fatal error: 磁盘空间不足".to_string()),
+            ..healthy_stats()
         };
 
-        assert_eq!(stats_to_jni(Some(stats)), Some([1, 2, 3, 4]));
+        let mapped = stats_to_jni(Some(stats)).expect("活跃会话必须返回统计数组");
+        assert_eq!(mapped[4], STATS_STATE_ENGINE_ERROR);
+        assert_ne!(mapped[4], STATS_STATE_HEALTHY);
     }
 }

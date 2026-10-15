@@ -41,6 +41,9 @@ internal interface NativeTorrentBridge {
 
     fun getStreamStats(): LongArray
 
+    /** 引擎级错误原文；仅在 [getStreamStats] 第 5 位上报错误码时读取，健康态/无会话返回空串。 */
+    fun getLastError(): String = ""
+
     fun getTargetFilePath(): String = ""
 }
 
@@ -322,6 +325,14 @@ class AndroidTorrentStreamEngine internal constructor(
                 val initialSpeed = initialStats?.getOrNull(2)?.coerceAtLeast(0L) ?: 0L
                 val initialPeers = initialStats?.getOrNull(3)?.coerceAtLeast(0L)?.toInt() ?: 0
 
+                if (initialStats?.getOrNull(STATS_INDEX_STATE) == STATS_STATE_ENGINE_ERROR) {
+                    // 起播即处于引擎错误态：直接暴露真实原因，不先发一个会被立刻推翻的 Ready
+                    val reason = resolveEngineErrorReason()
+                    logger.w { "BT 引擎启动后立即报告种子错误态（$reason）" }
+                    _streamState.value = TorrentStreamState.Error(reason)
+                    return@runCatching resultUrl
+                }
+
                 // 启动流状态与速率轮询
                 activeStreamJob =
                     scope.launch {
@@ -348,7 +359,7 @@ class AndroidTorrentStreamEngine internal constructor(
                         while (isActive) {
                             delay(statsPollIntervalMs)
                             val stats = runCatching { nativeBridge.getStreamStats() }.getOrNull()
-                            if (stats == null || stats.size < 4) {
+                            if (stats == null || stats.size < STATS_ARRAY_SIZE) {
                                 // 单次 stats 读取失败（JNI 瞬时抖动/引擎重启中）绝不能 break：
                                 // 一旦退出本循环 streamState 再也不会发射，下游 monitorDirectEngineDownload
                                 // 的 first{} 与死种看门狗会双双无界挂起（任务永远停在 DOWNLOADING）。
@@ -360,6 +371,15 @@ class AndroidTorrentStreamEngine internal constructor(
                                     break
                                 }
                                 continue
+                            }
+                            if (stats[STATS_INDEX_STATE] == STATS_STATE_ENGINE_ERROR) {
+                                // 引擎级致命错误（磁盘写入失败 / 初始化校验失败）：必须立刻以真实原因收敛，
+                                // 绝不能静默等到死种看门狗超时——那会把"磁盘写满"伪装成"连不上做种节点"。
+                                // 该状态需重新初始化才能恢复，瞬时抖动不会进入，故直接退出轮询是诚实的终态。
+                                val reason = resolveEngineErrorReason()
+                                logger.w { "BT 引擎报告种子错误态（$reason），收束状态流为 Error" }
+                                _streamState.value = TorrentStreamState.Error(reason)
+                                break
                             }
                             consecutiveStatFailures = 0
                             val downloaded = stats[0]
@@ -435,6 +455,14 @@ class AndroidTorrentStreamEngine internal constructor(
             releaseCurrentStreamInternal()
         }
     }
+
+    /** 引擎级错误的用户可见原因：优先透出原生原文，缺失时退回通用文案（严禁伪造死种结论）。 */
+    private fun resolveEngineErrorReason(): String =
+        runCatching { nativeBridge.getLastError() }
+            .getOrNull()
+            .orEmpty()
+            .trim()
+            .ifBlank { ENGINE_ERROR_FALLBACK_MESSAGE }
 
     private fun releaseCurrentStreamInternal() {
         activeStreamJob?.cancel()
@@ -626,6 +654,8 @@ class AndroidTorrentStreamEngine internal constructor(
 
         override fun getStreamStats(): LongArray = nativeGetStreamStats()
 
+        override fun getLastError(): String = nativeGetLastError()
+
         override fun getTargetFilePath(): String = nativeGetTargetFilePath()
     }
 
@@ -636,6 +666,20 @@ class AndroidTorrentStreamEngine internal constructor(
         /** 流统计连续读取失败上限：超过才收敛为 Error，单次抖动只是跳过本轮。 */
         internal const val MAX_CONSECUTIVE_STAT_FAILURES = 5
         internal const val STATS_UNAVAILABLE_MESSAGE = "无法读取流媒体统计信息，P2P 会话可能已异常退出"
+
+        /**
+         * Rust 侧统计数组布局（唯一真源见 `crates/minibgm-torrent/src/lib.rs#stats_to_jni`）：
+         * `[已下载, 总长, 速度, Peer 数, 引擎状态码]`。长度不足 [STATS_ARRAY_SIZE] 即读取失败。
+         */
+        internal const val STATS_ARRAY_SIZE = 5
+        internal const val STATS_INDEX_STATE = 4
+
+        /** 引擎状态码：0 = 正常（Initializing / Live / Paused），1 = librqbit 判定种子致命错误。 */
+        internal const val STATS_STATE_HEALTHY = 0L
+        internal const val STATS_STATE_ENGINE_ERROR = 1L
+
+        /** 原生未给出错误原文时的兜底文案（严禁写成"连不上做种节点"伪造死种结论）。 */
+        internal const val ENGINE_ERROR_FALLBACK_MESSAGE = "BT 引擎报告种子致命错误（磁盘写入或校验失败），已停止该下载"
 
         internal const val PLUGIN_DIR_REL_PATH = "modules/torrent"
         internal const val PLUGIN_SO_NAME = "libminibgm_torrent.so"
@@ -685,6 +729,9 @@ class AndroidTorrentStreamEngine internal constructor(
 
         @JvmStatic
         private external fun nativeGetStreamStats(): LongArray
+
+        @JvmStatic
+        private external fun nativeGetLastError(): String
 
         @JvmStatic
         private external fun nativeGetTargetFilePath(): String

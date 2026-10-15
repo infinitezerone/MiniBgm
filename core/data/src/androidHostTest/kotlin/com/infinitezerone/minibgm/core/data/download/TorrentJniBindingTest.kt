@@ -22,6 +22,7 @@ class TorrentJniBindingTest {
             "nativeStartStream",
             "nativeStopStream",
             "nativeGetStreamStats",
+            "nativeGetLastError",
             "nativeGetTargetFilePath",
         )
 

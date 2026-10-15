@@ -421,6 +421,90 @@ class TorrentStreamEngineTest {
                 }
             }
         }
+
+    /**
+     * 引擎级错误可见性：librqbit 把种子判为 `Error`（磁盘写入失败 / 初始化校验失败）时，
+     * 过去只表现为"0 速度 0 Peer"，用户只能在 45 秒后被死种看门狗告知"连不上做种节点"——
+     * 真实原因被伪装成死种。必须立刻以原生原文收敛为 `TorrentStreamState.Error`。
+     */
+    @Test
+    fun androidEngine_statsPolling_surfacesEngineErrorReasonInsteadOfDeadTorrentZeroSpeed() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_torrent_engine_error").toFile()
+            try {
+                val context = StubDirContext(tempRoot)
+                val reason = "fatal error: No space left on device"
+                // 首次读取（起播初值）仍健康，之后转为引擎级错误态：覆盖轮询途中才暴露的致命错误
+                val bridge = EngineErrorNativeTorrentBridge(healthyReads = 1, reason = reason)
+                val engine =
+                    AndroidTorrentStreamEngine(
+                        context = context,
+                        pluginVersionProvider = { "0.2.8" },
+                        supportedAbisProvider = { arrayOf("arm64-v8a") },
+                        nativeBridge = bridge,
+                        statsPollIntervalMs = 10L,
+                    )
+
+                assertTrue(
+                    engine
+                        .startStream(
+                            title = "合集 BD",
+                            magnetUrl = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+                        ).isSuccess,
+                )
+
+                // 轮询跑在引擎自有的 Dispatchers.IO 上（真实时间），必须切真实调度器再套超时
+                val error =
+                    withContext(Dispatchers.Default.limitedParallelism(1)) {
+                        withTimeout(5_000) {
+                            engine.streamState.first { it is TorrentStreamState.Error }
+                        }
+                    } as TorrentStreamState.Error
+
+                assertEquals(reason, error.message)
+                engine.stopStream(force = true)
+            } finally {
+                tempRoot.walkBottomUp().forEach {
+                    it.setWritable(true)
+                    it.delete()
+                }
+            }
+        }
+
+    /** 起播瞬间引擎就已是错误态：必须直接暴露真实原因，不先发一个会被立刻推翻的 Ready。 */
+    @Test
+    fun androidEngine_startStream_whenEngineAlreadyErrored_surfacesReasonImmediately() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_torrent_engine_error_initial").toFile()
+            try {
+                val context = StubDirContext(tempRoot)
+                val reason = "fatal error: torrent initial check failed"
+                val bridge = EngineErrorNativeTorrentBridge(healthyReads = 0, reason = reason)
+                val engine =
+                    AndroidTorrentStreamEngine(
+                        context = context,
+                        pluginVersionProvider = { "0.2.8" },
+                        supportedAbisProvider = { arrayOf("arm64-v8a") },
+                        nativeBridge = bridge,
+                        statsPollIntervalMs = 10L,
+                    )
+
+                engine.startStream(
+                    title = "合集 BD",
+                    magnetUrl = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+                )
+
+                val error = engine.streamState.value as? TorrentStreamState.Error
+                assertTrue(error != null, "起播即错误态必须立刻收敛为 Error，当前: ${engine.streamState.value}")
+                assertEquals(reason, error.message)
+                engine.stopStream(force = true)
+            } finally {
+                tempRoot.walkBottomUp().forEach {
+                    it.setWritable(true)
+                    it.delete()
+                }
+            }
+        }
 }
 
 private fun validTorrentBytes(): ByteArray = "d8:announce14:http://tracker4:infod6:lengthi1e4:name3:abcee".toByteArray(Charsets.ISO_8859_1)
@@ -490,7 +574,7 @@ private class StubNativeTorrentBridge(
 
     override fun stopStream() = Unit
 
-    override fun getStreamStats(): LongArray = longArrayOf(0L, 100_000_000L, 512_000L, 4L, 2L)
+    override fun getStreamStats(): LongArray = longArrayOf(0L, 100_000_000L, 512_000L, 4L, AndroidTorrentStreamEngine.STATS_STATE_HEALTHY)
 }
 
 /** 前 [failuresBeforeSuccess] 次 [getStreamStats] 抛异常，用于验证轮询“瞬时失败不致命”。 */
@@ -521,11 +605,45 @@ private class FlakyStatsNativeTorrentBridge(
             onFailure()
             throw IllegalStateException("transient stats failure #$calls")
         }
-        return longArrayOf(0L, 100_000_000L, 512_000L, 4L, 2L)
+        return longArrayOf(0L, 100_000_000L, 512_000L, 4L, AndroidTorrentStreamEngine.STATS_STATE_HEALTHY)
     }
 }
 
-/** 记录每次真正拉起原生会话时的 episodeHint，用于断言"换集必须重新解析而非复用会话"。 */
+/** [healthyReads] 次健康统计后转为引擎级错误态（模拟磁盘写入失败 / 初始化校验失败等致命错误）。 */
+private class EngineErrorNativeTorrentBridge(
+    private val healthyReads: Int,
+    private val reason: String,
+) : NativeTorrentBridge {
+    private var calls = 0
+
+    override fun loadFromPath(absolutePath: String): Boolean = File(absolutePath).isFile
+
+    override fun loadEmbeddedLibrary(): Boolean = true
+
+    override fun isAvailable(): Boolean = true
+
+    override fun startStream(
+        magnetUrl: String,
+        torrentPath: String,
+        saveDir: String,
+        episodeHint: String,
+    ): String = "http://127.0.0.1:18080/stream/0"
+
+    override fun stopStream() = Unit
+
+    override fun getStreamStats(): LongArray {
+        calls++
+        return if (calls <= healthyReads) {
+            longArrayOf(0L, 100_000_000L, 512_000L, 4L, AndroidTorrentStreamEngine.STATS_STATE_HEALTHY)
+        } else {
+            longArrayOf(0L, 100_000_000L, 0L, 0L, AndroidTorrentStreamEngine.STATS_STATE_ENGINE_ERROR)
+        }
+    }
+
+    override fun getLastError(): String = if (calls > healthyReads) reason else ""
+}
+
+/** 记录每次真正拉起原生会话时的 episodeHint，用于断言「换集必须重新解析而非复用会话」。 */
 private class RecordingNativeTorrentBridge : NativeTorrentBridge {
     val startEpisodeHints = mutableListOf<String>()
 
@@ -547,5 +665,5 @@ private class RecordingNativeTorrentBridge : NativeTorrentBridge {
 
     override fun stopStream() = Unit
 
-    override fun getStreamStats(): LongArray = longArrayOf(0L, 100_000_000L, 512_000L, 4L, 2L)
+    override fun getStreamStats(): LongArray = longArrayOf(0L, 100_000_000L, 512_000L, 4L, AndroidTorrentStreamEngine.STATS_STATE_HEALTHY)
 }

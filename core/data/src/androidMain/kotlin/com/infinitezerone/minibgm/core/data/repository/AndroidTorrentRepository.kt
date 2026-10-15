@@ -260,7 +260,11 @@ class AndroidTorrentRepository(
     private fun TorrentTask.localPlayableUri(): String? =
         when {
             isCompleted && savePath.isNotBlank() && File(savePath).exists() -> "file://$savePath"
-            status == TorrentTaskStatus.DOWNLOADING && streamUrl.isNotBlank() -> streamUrl
+            // 引擎已判定种子致命错误（磁盘写满 / 校验失败）时严禁交出地址：那个地址背后的会话已经死了，
+            // 交出去用户只会拿到一个泛化的播放错误；正确路径是让等待方看到任务 ERROR 与真实原因。
+            status == TorrentTaskStatus.DOWNLOADING &&
+                streamUrl.isNotBlank() &&
+                streamEngine.streamState.value !is TorrentStreamState.Error -> streamUrl
             else -> null
         }
 

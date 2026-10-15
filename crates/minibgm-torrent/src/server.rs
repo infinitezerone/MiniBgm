@@ -13,6 +13,7 @@ use librqbit::storage::filesystem::FilesystemStorageFactory;
 use librqbit::storage::StorageFactoryExt;
 use librqbit::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, ManagedTorrent, Session, SessionOptions,
+    TorrentStatsState,
 };
 use librqbit_dualstack_sockets::{BindOpts, TcpListener};
 use tokio_util::sync::CancellationToken;
@@ -31,6 +32,15 @@ pub struct StreamStats {
     pub total_bytes: u64,
     pub speed_bytes_per_sec: u64,
     pub connected_peers: u64,
+    /// 引擎级错误态（librqbit `TorrentStatsState::Error`）。
+    ///
+    /// 与「死种」是两回事：Peer 连不上只是 0 速度，librqbit 不会把种子判为 Error；
+    /// 该状态只在磁盘写入失败（`write_chunk`）或初始化校验失败这类致命错误时进入，
+    /// 必须重新初始化才能恢复。不上报的话，用户会在死种看门狗超时后被告知
+    /// 「连不上做种节点」——把磁盘写满这类真实原因伪装成死种。
+    pub engine_error: bool,
+    /// 引擎级错误原文（`TorrentStats.error`），仅在 `engine_error` 为真时才有意义。
+    pub error_message: Option<String>,
 }
 
 pub struct StreamServer {
@@ -250,11 +260,21 @@ impl StreamServer {
             (0, 0)
         };
 
+        // 只在 Error 态透出错误原文：种子的错误态必须经重新初始化才能恢复，
+        // 状态码与文案同源同帧，杜绝"已恢复但文案仍在"的错配。
+        let engine_error = matches!(stats.state, TorrentStatsState::Error);
+
         StreamStats {
             downloaded_bytes,
             total_bytes,
             speed_bytes_per_sec,
             connected_peers,
+            engine_error,
+            error_message: if engine_error {
+                stats.error.clone()
+            } else {
+                None
+            },
         }
     }
 
