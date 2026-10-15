@@ -28,6 +28,13 @@ import java.util.concurrent.ConcurrentHashMap
 class AndroidAssetDownloader(
     private val assetDownloadService: AssetDownloadService,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /**
+     * 开发者自定义加速镜像前缀的按需读取器（`DeveloperSettings.customMirrorPrefixOverride`）。
+     *
+     * 必须在冷流内按次读取而非构造期快照：开发者面板改了前缀要立刻对下一次下载生效。
+     * 调用方显式传入的 `customMirrorPrefix` 优先于本提供者。
+     */
+    private val customMirrorPrefixProvider: suspend () -> String? = { null },
 ) : AssetDownloader {
     private val logger = bgmLogger("Bgm/AssetDownloader")
 
@@ -49,7 +56,13 @@ class AndroidAssetDownloader(
         customMirrorPrefix: String?,
     ): Flow<DownloadState> =
         flow {
-            val candidateUrls = ReleaseMirrorResolver.resolveCandidateUrls(rawUrl, customMirrorPrefix)
+            // 显式入参优先；缺省时回落到开发者面板设置——历史上这个设置只写不读，
+            // 面板里填的前缀对更新包与 BT 扩展的下载全部静默失效。
+            val effectiveMirrorPrefix =
+                customMirrorPrefix
+                    ?.takeIf { it.isNotBlank() }
+                    ?: runCatching { customMirrorPrefixProvider() }.getOrNull()?.takeIf { it.isNotBlank() }
+            val candidateUrls = ReleaseMirrorResolver.resolveCandidateUrls(rawUrl, effectiveMirrorPrefix)
             if (candidateUrls.isEmpty()) {
                 val failure = DownloadState.Failed("无效的下载地址: $rawUrl")
                 _downloadState.value = failure
