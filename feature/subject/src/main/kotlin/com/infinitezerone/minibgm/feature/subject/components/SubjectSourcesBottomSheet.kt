@@ -166,6 +166,8 @@ fun SubjectSourcesBottomSheet(
                 .mapTo(mutableSetOf()) { it.packageName }
         }
 
+    val isFuture = remember(episode?.airdate) { episode?.let { isEpisodeFutureAir(it) } ?: false }
+
     BgmSourcesBottomSheet(
         title = sheetTitle,
         coverUrl = subject.images?.bestImage.orEmpty(),
@@ -173,8 +175,47 @@ fun SubjectSourcesBottomSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
     ) { runAfterDismiss ->
-        // 1. 🌟 Hero 主起播区 (一键即播)
-        if (onInternalPlayClick != null) {
+        // 1. 🌟 Hero 主起播区 (一键即播) / 未播分集状态提示
+        if (isFuture && episode != null) {
+            Surface(
+                shape = BgmShapes.medium,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = BgmIcons.Schedule,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    val unAiredText =
+                        if (episode.airdate.isNotBlank()) {
+                            stringResource(
+                                R.string.feature_subject_ep_not_aired_yet,
+                                episode.formattedNumber,
+                                episode.airdate,
+                            )
+                        } else {
+                            stringResource(
+                                R.string.feature_subject_ep_not_aired_no_date,
+                                episode.formattedNumber,
+                            )
+                        }
+                    Text(
+                        text = unAiredText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+        } else if (onInternalPlayClick != null) {
             HeroPlayCard(
                 title =
                     if (episode != null) {

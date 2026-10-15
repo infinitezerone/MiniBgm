@@ -30,7 +30,6 @@ import com.infinitezerone.minibgm.core.model.TorrentMediaResource
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
-import com.infinitezerone.minibgm.feature.subject.components.isEpisodeNextToWatch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
@@ -283,12 +282,16 @@ class SubjectDetailViewModel(
         }
     }
 
-    /** 计算「下一待看」分集：按打卡进度与续看位置推断，无匹配时回退第一集 */
+    /** 计算「下一待看」分集：按客观播出状态与打卡进度推断，杜绝未播或已追平时倒退回第 1 集 */
     fun nextEpisodeToWatch(): Episode? {
         val state = _uiState.value
-        return state.episodes.firstOrNull {
-            isEpisodeNextToWatch(it, state.collection?.epStatus ?: 0, hasProgress = state.collection != null)
-        } ?: state.episodes.firstOrNull()
+        return when (val status = computeSubjectWatchStatus(state.episodes, state.collection)) {
+            is SubjectWatchStatus.ContinueWatching -> status.nextEpisode
+            is SubjectWatchStatus.CaughtUp -> status.lastWatchedEpisode
+            is SubjectWatchStatus.Completed -> status.lastEpisode
+            is SubjectWatchStatus.Upcoming -> null
+            SubjectWatchStatus.None -> state.episodes.firstOrNull()
+        }
     }
 
     /** 为指定分集组装播放器路由（组装逻辑见 [buildEpisodePlayerRoute]） */

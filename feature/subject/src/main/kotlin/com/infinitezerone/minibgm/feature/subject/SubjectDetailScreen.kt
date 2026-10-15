@@ -437,7 +437,8 @@ fun SubjectDetailScreen(
                         if (isEpisodeLike) {
                             IconButton(
                                 onClick = {
-                                    selectedEpisodeForSources = viewModel.nextEpisodeToWatch()
+                                    // 顶部栏 TV 入口属于条目全局级别，展示全剧规则、合集种子与多源配置
+                                    selectedEpisodeForSources = null
                                     showSourcesBottomSheet = true
                                 },
                             ) {

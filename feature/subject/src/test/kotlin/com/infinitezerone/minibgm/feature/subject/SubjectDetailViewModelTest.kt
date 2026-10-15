@@ -1724,4 +1724,111 @@ class SubjectDetailViewModelTest {
                 )
             assertEquals(1490, viewModel.uiState.value.totalEpisodes)
         }
+
+    @Test
+    fun watchStatus_upcomingAnime_returnsUpcomingAndNullNextEpisode() =
+        runTest {
+            val episodes =
+                listOf(
+                    Episode(id = 101, sort = 1f, ep = 1f, airdate = "2099-01-01"),
+                    Episode(id = 102, sort = 2f, ep = 2f, airdate = "2099-01-08"),
+                )
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, episodes)
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                )
+
+            val status = computeSubjectWatchStatus(episodes, null)
+            assertTrue(status is SubjectWatchStatus.Upcoming)
+            assertEquals("2099-01-01", (status as SubjectWatchStatus.Upcoming).airDate)
+            assertNull(viewModel.nextEpisodeToWatch())
+        }
+
+    @Test
+    fun watchStatus_continueWatching_returnsNextUnwatchedEpisode() =
+        runTest {
+            val episodes =
+                listOf(
+                    Episode(id = 201, sort = 1f, ep = 1f, airdate = "2020-01-01"),
+                    Episode(id = 202, sort = 2f, ep = 2f, airdate = "2020-01-08"),
+                    Episode(id = 203, sort = 3f, ep = 3f, airdate = "2020-01-15"),
+                )
+            val collectionRepo =
+                FakeCollectionRepository().apply {
+                    sendCollection(sampleUserCollection.copy(epStatus = 1))
+                }
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, episodes)
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                )
+
+            val status = computeSubjectWatchStatus(episodes, sampleUserCollection.copy(epStatus = 1))
+            assertTrue(status is SubjectWatchStatus.ContinueWatching)
+            assertEquals(202L, (status as SubjectWatchStatus.ContinueWatching).nextEpisode.id)
+            assertEquals(202L, viewModel.nextEpisodeToWatch()?.id)
+        }
+
+    @Test
+    fun watchStatus_caughtUp_doesNotRewindToEpisodeOne() =
+        runTest {
+            val episodes =
+                listOf(
+                    Episode(id = 301, sort = 1f, ep = 1f, airdate = "2020-01-01"),
+                    Episode(id = 302, sort = 2f, ep = 2f, airdate = "2020-01-08"),
+                    Episode(id = 303, sort = 3f, ep = 3f, airdate = "2099-01-01"),
+                )
+            val collectionRepo =
+                FakeCollectionRepository().apply {
+                    sendCollection(sampleUserCollection.copy(epStatus = 2))
+                }
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, episodes)
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                )
+
+            val status = computeSubjectWatchStatus(episodes, sampleUserCollection.copy(epStatus = 2))
+            assertTrue(status is SubjectWatchStatus.CaughtUp)
+            val caughtUp = status as SubjectWatchStatus.CaughtUp
+            assertEquals(302L, caughtUp.lastWatchedEpisode?.id)
+            assertEquals("2099-01-01", caughtUp.nextAirDate)
+            assertEquals(302L, viewModel.nextEpisodeToWatch()?.id)
+        }
+
+    @Test
+    fun watchStatus_completed_marksCompleted() =
+        runTest {
+            val episodes =
+                listOf(
+                    Episode(id = 401, sort = 1f, ep = 1f, airdate = "2020-01-01"),
+                    Episode(id = 402, sort = 2f, ep = 2f, airdate = "2020-01-08"),
+                )
+            val status = computeSubjectWatchStatus(episodes, sampleUserCollection.copy(epStatus = 2))
+            assertTrue(status is SubjectWatchStatus.Completed)
+            assertEquals(2, (status as SubjectWatchStatus.Completed).totalEpisodes)
+            assertEquals(402L, status.lastEpisode?.id)
+        }
 }

@@ -247,6 +247,46 @@ fun EpisodeQuickActionBottomSheet(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
+            if (isFuture) {
+                Surface(
+                    shape = BgmShapes.small,
+                    color = statusAiringContainerColor().copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.Schedule,
+                            contentDescription = null,
+                            tint = onStatusAiringContainerColor(),
+                            modifier = Modifier.size(16.dp),
+                        )
+                        val unAiredText =
+                            if (episode.airdate.isNotBlank()) {
+                                stringResource(
+                                    R.string.feature_subject_ep_not_aired_yet,
+                                    episode.formattedNumber,
+                                    episode.airdate,
+                                )
+                            } else {
+                                stringResource(
+                                    R.string.feature_subject_ep_not_aired_no_date,
+                                    episode.formattedNumber,
+                                )
+                            }
+                        Text(
+                            text = unAiredText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = onStatusAiringContainerColor(),
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+
             // 核心动作按钮区
             Row(
                 modifier = Modifier.fillMaxWidth(),

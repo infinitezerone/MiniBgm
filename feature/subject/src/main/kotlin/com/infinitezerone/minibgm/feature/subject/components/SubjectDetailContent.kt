@@ -56,6 +56,7 @@ import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailTab
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailUiState
+import com.infinitezerone.minibgm.feature.subject.computeSubjectWatchStatus
 import kotlinx.coroutines.launch
 
 @Composable
@@ -226,12 +227,17 @@ internal fun SubjectDetailContent(
 
         // 2. 个人追番与进度看板卡片
         item(key = "collection_progress_card") {
+            val watchStatus =
+                remember(uiState.episodes, uiState.collection) {
+                    computeSubjectWatchStatus(uiState.episodes, uiState.collection)
+                }
             SubjectCollectionCard(
                 collection = uiState.collection,
                 totalEpisodes = totalEpisodes,
                 subjectType = subjectType,
                 isLoggedIn = uiState.isLoggedIn,
                 nextEpSort = mainNextUpEpNumber ?: nextUpEpNumber,
+                watchStatus = watchStatus,
                 onOpenCollectionSheet = onOpenCollectionSheet,
                 onUpdateCollectionStatus = onUpdateCollectionStatus ?: {},
                 onPlayNext = onPlayNextEpisode,

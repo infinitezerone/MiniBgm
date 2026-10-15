@@ -51,6 +51,15 @@
     <string name="feature_subject_check_in_next_ep">打卡下一集</string>
     <string name="feature_subject_check_in_ep_format">打卡第 %1$d 话</string>
     <string name="feature_subject_reached_latest_ep">已看到最新话</string>
+    <string name="feature_subject_status_upcoming_format">等待首播 · %1$s</string>
+    <string name="feature_subject_status_upcoming">尚未开播</string>
+    <string name="feature_subject_status_caught_up_with_next">已追平 · 下集 %1$s</string>
+    <string name="feature_subject_status_caught_up">已追平最新话</string>
+    <string name="feature_subject_rewatch_ep_format">重温 E%1$s</string>
+    <string name="feature_subject_rewatch_from_start">从头重温</string>
+    <string name="feature_subject_status_completed">全剧已看完</string>
+    <string name="feature_subject_ep_not_aired_yet">第 %1$s 话尚未播出（预计 %2$s）</string>
+    <string name="feature_subject_ep_not_aired_no_date">第 %1$s 话尚未播出</string>
 
     <!-- 4. 评分与全站状态卡片 -->
     <string name="feature_subject_rating_distribution">评分分布</string>

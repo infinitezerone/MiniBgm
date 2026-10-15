@@ -37,6 +37,7 @@ import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.feature.subject.R
+import com.infinitezerone.minibgm.feature.subject.SubjectWatchStatus
 import kotlin.math.roundToInt
 
 private val STATUS_TYPES =
@@ -65,6 +66,7 @@ fun SubjectCollectionCard(
     onUpdateCollectionStatus: (CollectionType) -> Unit,
     modifier: Modifier = Modifier,
     nextEpSort: Float? = null,
+    watchStatus: SubjectWatchStatus = SubjectWatchStatus.None,
     onPlayNext: (() -> Unit)? = null,
     onOpenSources: (() -> Unit)? = null,
     onIncrementWatched: (() -> Unit)? = null,
@@ -262,17 +264,34 @@ fun SubjectCollectionCard(
                                 0
                             }
                         val progressLabel =
-                            if (totalEpisodes > 0) {
-                                stringResource(
-                                    R.string.feature_subject_progress_watched_with_total,
-                                    currentEp,
-                                    totalEpisodes,
-                                    progressPercent,
-                                )
-                            } else if (currentEp > 0) {
-                                stringResource(R.string.feature_subject_progress_watched_only, currentEp)
-                            } else {
-                                stringResource(R.string.feature_subject_progress_not_started)
+                            when (watchStatus) {
+                                is SubjectWatchStatus.Upcoming ->
+                                    if (watchStatus.airDate.isNotBlank()) {
+                                        stringResource(R.string.feature_subject_status_upcoming_format, watchStatus.airDate)
+                                    } else {
+                                        stringResource(R.string.feature_subject_status_upcoming)
+                                    }
+                                is SubjectWatchStatus.CaughtUp ->
+                                    if (watchStatus.nextAirDate != null) {
+                                        stringResource(R.string.feature_subject_status_caught_up_with_next, watchStatus.nextAirDate)
+                                    } else {
+                                        stringResource(R.string.feature_subject_status_caught_up)
+                                    }
+                                is SubjectWatchStatus.Completed ->
+                                    stringResource(R.string.feature_subject_status_completed)
+                                else ->
+                                    if (totalEpisodes > 0) {
+                                        stringResource(
+                                            R.string.feature_subject_progress_watched_with_total,
+                                            currentEp,
+                                            totalEpisodes,
+                                            progressPercent,
+                                        )
+                                    } else if (currentEp > 0) {
+                                        stringResource(R.string.feature_subject_progress_watched_only, currentEp)
+                                    } else {
+                                        stringResource(R.string.feature_subject_progress_not_started)
+                                    }
                             }
 
                         Text(
@@ -286,48 +305,144 @@ fun SubjectCollectionCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            if (onOpenSources != null) {
-                                Surface(
-                                    onClick = onOpenSources,
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                    modifier = Modifier.size(28.dp),
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = BgmIcons.Tv,
-                                            contentDescription = stringResource(R.string.feature_subject_ep_sources),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(14.dp),
-                                        )
+                            when (watchStatus) {
+                                is SubjectWatchStatus.Upcoming -> {
+                                    // 未开播作品不展示起播与分集源选择
+                                }
+                                is SubjectWatchStatus.CaughtUp -> {
+                                    if (onOpenSources != null) {
+                                        Surface(
+                                            onClick = onOpenSources,
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                            modifier = Modifier.size(28.dp),
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = BgmIcons.Tv,
+                                                    contentDescription = stringResource(R.string.feature_subject_ep_sources),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(14.dp),
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (onPlayNext != null && watchStatus.lastWatchedEpisode != null) {
+                                        FilledTonalButton(
+                                            onClick = onPlayNext,
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(28.dp),
+                                        ) {
+                                            Icon(
+                                                imageVector = BgmIcons.Refresh,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(12.dp),
+                                            )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text(
+                                                text =
+                                                    stringResource(
+                                                        R.string.feature_subject_rewatch_ep_format,
+                                                        watchStatus.lastWatchedEpisode.formattedNumber,
+                                                    ),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                        }
                                     }
                                 }
-                            }
-
-                            if (onPlayNext != null) {
-                                val playLabel =
-                                    if (nextEpSort != null && nextEpSort > 0) {
-                                        stringResource(R.string.feature_subject_resume_watch, nextEpSort.toEpisodeLabel())
-                                    } else {
-                                        stringResource(R.string.feature_subject_cd_play)
+                                is SubjectWatchStatus.Completed -> {
+                                    if (onOpenSources != null) {
+                                        Surface(
+                                            onClick = onOpenSources,
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                            modifier = Modifier.size(28.dp),
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = BgmIcons.Tv,
+                                                    contentDescription = stringResource(R.string.feature_subject_ep_sources),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(14.dp),
+                                                )
+                                            }
+                                        }
                                     }
-                                FilledTonalButton(
-                                    onClick = onPlayNext,
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(28.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.Play,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(12.dp),
-                                    )
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(
-                                        text = playLabel,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                    )
+                                    if (onPlayNext != null) {
+                                        FilledTonalButton(
+                                            onClick = onPlayNext,
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(28.dp),
+                                        ) {
+                                            Icon(
+                                                imageVector = BgmIcons.Refresh,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(12.dp),
+                                            )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text(
+                                                text = stringResource(R.string.feature_subject_rewatch_from_start),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                        }
+                                    }
+                                }
+                                else -> {
+                                    if (onOpenSources != null) {
+                                        Surface(
+                                            onClick = onOpenSources,
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                            modifier = Modifier.size(28.dp),
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = BgmIcons.Tv,
+                                                    contentDescription = stringResource(R.string.feature_subject_ep_sources),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(14.dp),
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (onPlayNext != null) {
+                                        val playLabel =
+                                            when (watchStatus) {
+                                                is SubjectWatchStatus.ContinueWatching ->
+                                                    stringResource(
+                                                        R.string.feature_subject_resume_watch,
+                                                        watchStatus.nextEpisode.formattedNumber,
+                                                    )
+                                                else ->
+                                                    if (nextEpSort != null && nextEpSort > 0) {
+                                                        stringResource(R.string.feature_subject_resume_watch, nextEpSort.toEpisodeLabel())
+                                                    } else {
+                                                        stringResource(R.string.feature_subject_cd_play)
+                                                    }
+                                            }
+                                        FilledTonalButton(
+                                            onClick = onPlayNext,
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(28.dp),
+                                        ) {
+                                            Icon(
+                                                imageVector = BgmIcons.Play,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(12.dp),
+                                            )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text(
+                                                text = playLabel,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
