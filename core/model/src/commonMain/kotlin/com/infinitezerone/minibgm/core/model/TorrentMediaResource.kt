@@ -49,5 +49,21 @@ data class TorrentMediaResource(
         get() = magnetUrl.isNotBlank() || torrentUrl.isNotBlank()
 }
 
+/**
+ * 从磁力链接提取 `infoHash`（`xt=urn:btih:` 段，遇 `&` 截止并去除首尾空白）。
+ *
+ * **唯一真源**：引擎会话复用判据、仓库任务去重、种子缓存键与选源面板的既有任务比对都必须调用本函数。
+ * 历史上这几处各写了一遍 `substringAfter("xt=urn:btih:")`，其中引擎侧还把"解析不出来"降级成
+ * `"unknown_hash"` 哨兵字符串、其余处返回空串——同一语义两套降级，是"未知磁力互相误判为同一源"的温床。
+ *
+ * 解析不出（非磁力链接、缺 `xt` 段、`xt` 段为空）时统一返回**空串**，
+ * 调用方一律以 `isBlank()` 判定"未知"，严禁再引入哨兵值。
+ */
+fun magnetInfoHash(magnetUrl: String): String =
+    magnetUrl
+        .substringAfter("xt=urn:btih:", "")
+        .substringBefore("&")
+        .trim()
+
 /** 向后兼容别名，便于过渡期依赖平滑替换 */
 typealias MikanTorrentResource = TorrentMediaResource

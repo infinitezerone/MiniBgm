@@ -212,4 +212,24 @@ class TorrentModelsTest {
         // 连种子直链都没有时最后回退到标题，保证键永不为空
         assertEquals("Frieren - 03", TorrentMediaResource(title = "  Frieren - 03  ").dedupeKey)
     }
+
+    @Test
+    fun magnetInfoHash_isSingleSourceOfTruthAndNeverReturnsSentinel() {
+        assertEquals(
+            "0123456789abcdef0123456789abcdef01234567",
+            magnetInfoHash("magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"),
+        )
+        // 自带 Tracker 声明的磁力：hash 必须止步于 `&`，否则会被拼进缓存键与会话身份
+        assertEquals(
+            "abc123",
+            magnetInfoHash("magnet:?xt=urn:btih:abc123&dn=x&tr=udp%3A%2F%2Ftracker.example%3A80"),
+        )
+        // RSS/HTML 里常见的首尾空白必须裁掉，否则同一磁力会算出两个身份
+        assertEquals("abc123", magnetInfoHash("  magnet:?xt=urn:btih:abc123  "))
+        // 解析不出统一空串：严禁哨兵值——引擎曾用 "unknown_hash"，
+        // 会让两个互不相干的未知磁力被判成同一会话/同一缓存
+        assertEquals("", magnetInfoHash(""))
+        assertEquals("", magnetInfoHash("https://example.com/1.torrent"))
+        assertEquals("", magnetInfoHash("magnet:?dn=nohash"))
+    }
 }
