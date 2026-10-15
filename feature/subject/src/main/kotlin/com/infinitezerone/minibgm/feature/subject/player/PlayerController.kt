@@ -188,7 +188,7 @@ class PlayerController(
             _state.value = PlaybackState(isLooping = looping)
             return
         }
-        if (url == _state.value.mediaUrl) return
+        if (url == _state.value.mediaUrl && _state.value.error == null) return
         _positionMs.value = 0L
         _bufferedPositionMs.value = 0L
         _state.value =

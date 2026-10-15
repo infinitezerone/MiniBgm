@@ -1734,4 +1734,57 @@ class PlayerViewModelTest {
             assertEquals(120_000L, state.resumePositionMs)
             assertTrue("换集后旧弹幕应立即清空", state.danmakus.isEmpty())
         }
+
+    @Test
+    fun switchTo_withKnownEpisode_delegatesToSelectEpisodeAndRecoversResumePosition() =
+        runTest {
+            val historyRepo = FakePlaybackHistoryRepository()
+            historyRepo.saveHistory(
+                PlaybackHistory(
+                    episodeId = 3003L,
+                    subjectId = subjectId,
+                    subjectName = "葬送的芙莉莲",
+                    episodeName = "第 2 话",
+                    episodeSort = 2f,
+                    coverUrl = "",
+                    streamUrl = "https://example.com/ep2.m3u8",
+                    positionMs = 99_000L,
+                    durationMs = 24 * 60_000L,
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
+
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = episodeId,
+                            subjectName = "葬送的芙莉莲",
+                            episodeSort = 1f,
+                            streamUrl = "https://example.com/ep1.m3u8",
+                            queue =
+                                listOf(
+                                    PlayerQueueEntry(streamUrl = "https://example.com/ep1.m3u8", episodeSort = 1f, episodeId = episodeId),
+                                    PlayerQueueEntry(streamUrl = "https://example.com/ep2.m3u8", episodeSort = 2f, episodeId = 3003L),
+                                ),
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = FakeSettingsRepository(),
+                    playbackHistoryRepository = historyRepo,
+                )
+            advanceUntilIdle()
+
+            // 通过选集抽屉 switchTo(1) 切换到第 2 话
+            vm.switchTo(1)
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertEquals(1, state.currentIndex)
+            assertEquals("https://example.com/ep2.m3u8", state.streamUrl)
+            assertEquals(2f, state.episodeSort)
+            assertEquals(99_000L, state.resumePositionMs)
+            assertTrue("换集后旧弹幕应立即清空", state.danmakus.isEmpty())
+        }
 }

@@ -429,9 +429,13 @@ fun PlayerScreen(
         }
     }
 
-    // 保持屏幕常亮
-    DisposableEffect(activity) {
-        activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    // 保持屏幕常亮：仅在播放中常亮，暂停/结束/错误时交还系统自动息屏超时（省电与防烧屏）
+    DisposableEffect(activity, playback.isPlaying) {
+        if (playback.isPlaying) {
+            activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
         onDispose {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
@@ -487,13 +491,20 @@ fun PlayerScreen(
         val observer =
             LifecycleEventObserver { _, event ->
                 when (event) {
-                    Lifecycle.Event.ON_PAUSE -> viewModel.flushPlaybackPosition()
+                    Lifecycle.Event.ON_PAUSE -> {
+                        controller.syncPosition()
+                        viewModel.flushPlaybackPosition()
+                    }
                     Lifecycle.Event.ON_STOP -> controller.pause()
                     else -> Unit
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            controller.syncPosition()
+            viewModel.flushPlaybackPosition()
+        }
     }
 
     // 清晰度选择记忆：起播（mediaUrl 变化）后轨道就绪时，自动匹配用户偏好高度最接近的档位；

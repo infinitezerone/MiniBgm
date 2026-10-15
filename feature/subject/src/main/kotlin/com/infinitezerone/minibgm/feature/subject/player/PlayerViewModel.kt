@@ -1019,18 +1019,25 @@ class PlayerViewModel(
     /** 全屏内选集抽屉换集：先落盘旧分集位置，再切换 */
     fun switchTo(index: Int) {
         if (index !in queue.indices || index == _uiState.value.currentIndex) return
-        flushPlaybackPosition()
-        session.resetProgressTracking()
-        session.hasTriggeredAutoMark = false
-        session.pendingAutoNextOnMoreLoaded = false
-        session.pendingResumeLookupForNewEpisode = false
-        session.currentIndex = index
         val entry = queue[index]
         val currentEp =
             _uiState.value.episodes.firstOrNull {
                 (entry.episodeId > 0 && it.id == entry.episodeId) ||
                     (it.sort == entry.episodeSort && it.type == entry.episodeType)
             }
+        if (currentEp != null) {
+            selectEpisode(currentEp)
+            return
+        }
+
+        flushPlaybackPosition()
+        danmakuJob?.cancel()
+        session.resetProgressTracking()
+        session.hasTriggeredAutoMark = false
+        session.pendingAutoNextOnMoreLoaded = false
+        session.pendingResumeLookupForNewEpisode = _uiState.value.currentSource?.isDirect == false
+        session.currentIndex = index
+
         _uiState.update {
             it.copy(
                 episodeId = entry.episodeId,
@@ -1040,17 +1047,25 @@ class PlayerViewModel(
                 episodeType = entry.episodeType,
                 requestHeaders = entry.requestHeaders,
                 currentIndex = index,
-                isWatched = currentEp?.isWatched ?: false,
-                currentEpisodeDesc = currentEp?.desc ?: "",
-                currentEpisodeAirdate = currentEp?.airdate ?: "",
-                currentEpisodeCommentCount = currentEp?.commentCount ?: 0,
+                isWatched = false,
+                currentEpisodeDesc = "",
+                currentEpisodeAirdate = "",
+                currentEpisodeCommentCount = 0,
                 comments = emptyList(),
                 commentsError = null,
+                danmakus = emptyList(),
+                danmakuMatch = null,
                 autoMarked = false,
                 resumePositionMs = session.positionsMap[entry.streamUrl] ?: 0L,
+                error = null,
             )
         }
-        loadComments(force = true)
+        syncResumePositionForEpisode(entry.episodeId, entry.streamUrl)
+        if (_uiState.value.currentSource?.isDirect == false || entry.streamUrl.isBlank()) {
+            resolveCurrentEpisodeStream()
+        }
+        loadDanmaku()
+        commentsDelegate.loadComments(entry.episodeId, force = true)
     }
 
     /** 切换播放源 */

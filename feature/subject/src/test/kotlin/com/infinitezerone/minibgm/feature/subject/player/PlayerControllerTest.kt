@@ -150,6 +150,22 @@ class PlayerControllerTest {
         }
 
     @Test
+    fun setMedia_sameUrlWhenError_reloadsEngine() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+            controller.setMedia("https://cdn/a.m3u8", emptyMap())
+            assertEquals(1, engine.loadCalls)
+
+            engine.emitError("network error")
+            assertEquals("network error", controller.state.value.error)
+
+            controller.setMedia("https://cdn/a.m3u8", emptyMap())
+            assertEquals("发生错误后重新传入同一 URL 应重新触发加载", 2, engine.loadCalls)
+            assertNull(controller.state.value.error)
+        }
+
+    @Test
     fun setMedia_newUrl_reloads() =
         runTest {
             val engine = FakePlayerEngine()
