@@ -759,6 +759,7 @@ fun SubjectSourcesBottomSheet(
                     onRequestNotificationPermission = onRequestNotificationPermission,
                     onDismissAndRun = runAfterDismiss,
                     onRefreshTorrent = onRefreshTorrent,
+                    onOpenUrl = onOpenUrl,
                 )
             }
             SourceSheetTab.EXTERNAL -> {
@@ -1076,6 +1077,7 @@ fun TorrentMediaResourcesSection(
     onRequestNotificationPermission: (() -> Unit)? = null,
     onDismissAndRun: (() -> Unit) -> Unit,
     onRefreshTorrent: (() -> Unit)? = null,
+    onOpenUrl: ((String) -> Unit)? = null,
 ) {
     val torrentRepository: TorrentRepository = koinInject()
     val torrentIntentDispatcher: TorrentIntentDispatcher = koinInject()
@@ -1429,17 +1431,21 @@ fun TorrentMediaResourcesSection(
                     },
                     onExternalLaunch = {
                         val magnet = resource.effectiveMagnetUrl
-                        if (magnet.isBlank()) {
+                        if (magnet.isNotBlank()) {
+                            onDismissAndRun {
+                                torrentIntentDispatcher.launchMagnet(magnet)
+                            }
+                        } else if (resource.torrentUrl.isNotBlank() && onOpenUrl != null) {
+                            onDismissAndRun {
+                                onOpenUrl(resource.torrentUrl)
+                            }
+                        } else {
                             Toast
                                 .makeText(
                                     context,
                                     context.getString(R.string.feature_subject_source_torrent_no_magnet),
                                     Toast.LENGTH_SHORT,
                                 ).show()
-                        } else {
-                            onDismissAndRun {
-                                torrentIntentDispatcher.launchMagnet(magnet)
-                            }
                         }
                     },
                     onDownloadTorrent = {
@@ -1601,71 +1607,81 @@ fun TorrentMediaResourceCard(
             // 顶栏：分集标识 + 字幕组 + 来源通道 + 体积 + 日期
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Surface(
-                    shape = BgmShapes.small,
-                    color =
-                        if (epSort != null) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                        } else {
-                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)
-                        },
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text(
-                        text = epBadgeText,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
+                    Surface(
+                        shape = BgmShapes.small,
                         color =
                             if (epSort != null) {
-                                MaterialTheme.colorScheme.primary
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                             } else {
-                                MaterialTheme.colorScheme.tertiary
+                                MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)
                             },
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = epBadgeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color =
+                                if (epSort != null) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.tertiary
+                                },
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+
+                    Text(
+                        text = fansubLabel,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
+
+                    Surface(
+                        shape = BgmShapes.small,
+                        color = channelColor,
+                    ) {
+                        Text(
+                            text = channelText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = channelOnColor,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                        )
+                    }
                 }
 
-                Text(
-                    text = fansubLabel,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
+                Spacer(modifier = Modifier.width(8.dp))
 
-                Surface(
-                    shape = BgmShapes.small,
-                    color = channelColor,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text(
-                        text = channelText,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Medium,
-                        color = channelOnColor,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                    )
-                }
+                    if (displaySize.isNotBlank()) {
+                        Text(
+                            text = displaySize,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
 
-                Spacer(modifier = Modifier.weight(1f))
-
-                if (displaySize.isNotBlank()) {
-                    Text(
-                        text = displaySize,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                if (formattedDate.isNotBlank()) {
-                    Text(
-                        text = formattedDate,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                    )
+                    if (formattedDate.isNotBlank()) {
+                        Text(
+                            text = formattedDate,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                        )
+                    }
                 }
             }
 
@@ -1806,60 +1822,62 @@ fun TorrentMediaResourceCard(
                 }
 
                 // 5. 更多菜单 (下载种子文件 / 复制 InfoHash)
-                Box {
-                    IconButton(
-                        onClick = { showMoreMenu = true },
-                        modifier = Modifier.size(34.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.MoreVert,
-                            contentDescription = stringResource(R.string.feature_subject_source_torrent_more_actions),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showMoreMenu,
-                        onDismissRequest = { showMoreMenu = false },
-                    ) {
-                        if (resource.hasTorrent) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.feature_subject_source_torrent_save_file)) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = BgmIcons.FolderOpen,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                },
-                                onClick = {
-                                    showMoreMenu = false
-                                    onDownloadTorrent()
-                                },
+                if (resource.hasTorrent || resource.infoHash.isNotBlank()) {
+                    Box {
+                        IconButton(
+                            onClick = { showMoreMenu = true },
+                            modifier = Modifier.size(34.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.MoreVert,
+                                contentDescription = stringResource(R.string.feature_subject_source_torrent_more_actions),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
                             )
                         }
-                        if (resource.infoHash.isNotBlank()) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.feature_subject_source_torrent_copy_infohash)) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = BgmIcons.ContentCopy,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                },
-                                onClick = {
-                                    showMoreMenu = false
-                                    onCopyInfoHash()
-                                    Toast
-                                        .makeText(
-                                            context,
-                                            context.getString(R.string.feature_subject_source_torrent_hash_copied),
-                                            Toast.LENGTH_SHORT,
-                                        ).show()
-                                },
-                            )
+
+                        DropdownMenu(
+                            expanded = showMoreMenu,
+                            onDismissRequest = { showMoreMenu = false },
+                        ) {
+                            if (resource.hasTorrent) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.feature_subject_source_torrent_save_file)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = BgmIcons.FolderOpen,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        onDownloadTorrent()
+                                    },
+                                )
+                            }
+                            if (resource.infoHash.isNotBlank()) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.feature_subject_source_torrent_copy_infohash)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = BgmIcons.ContentCopy,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        onCopyInfoHash()
+                                        Toast
+                                            .makeText(
+                                                context,
+                                                context.getString(R.string.feature_subject_source_torrent_hash_copied),
+                                                Toast.LENGTH_SHORT,
+                                            ).show()
+                                    },
+                                )
+                            }
                         }
                     }
                 }

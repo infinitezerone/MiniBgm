@@ -146,7 +146,7 @@ fun EpisodeDetailScreen(
     val overlayHostState = rememberOverlayHostState()
     var showSourcesSheet by remember { mutableStateOf(false) }
 
-    LaunchedEffect(showSourcesSheet) {
+    LaunchedEffect(showSourcesSheet, uiState.episode?.id) {
         if (showSourcesSheet) {
             viewModel.loadTorrentResources(uiState.episode)
         }
