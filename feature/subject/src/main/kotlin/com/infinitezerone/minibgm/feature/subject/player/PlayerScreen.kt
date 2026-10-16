@@ -78,6 +78,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
@@ -1151,8 +1152,22 @@ private fun PlayerSubtitleOverlay(
     AndroidView(
         factory = { ctx ->
             SubtitleView(ctx).apply {
-                setUserDefaultStyle()
-                setUserDefaultTextSize()
+                setStyle(
+                    CaptionStyleCompat(
+                        // foregroundColor =
+                        android.graphics.Color.WHITE,
+                        // backgroundColor =
+                        android.graphics.Color.TRANSPARENT,
+                        // windowColor =
+                        android.graphics.Color.TRANSPARENT,
+                        // edgeType =
+                        CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                        // edgeColor =
+                        android.graphics.Color.BLACK,
+                        // typeface =
+                        null,
+                    ),
+                )
                 setApplyEmbeddedStyles(true)
                 setApplyEmbeddedFontSizes(true)
                 setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * 1.05f)
