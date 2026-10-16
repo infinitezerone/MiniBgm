@@ -142,7 +142,7 @@ internal fun Modifier.playerGestures(
     isLocked: Boolean = false,
     onDoubleTapAction: (DoubleTapSide, Int) -> Unit = { _, _ -> },
     onHaptic: (HapticFeedbackType) -> Unit = {},
-    onScrubbing: (Boolean) -> Unit = {},
+    onScrubbing: (isScrubbing: Boolean, progress: Float) -> Unit = { _, _ -> },
 ): Modifier =
     this then
         PlayerGesturesElement(
@@ -180,7 +180,7 @@ private data class PlayerGesturesElement(
     val isLocked: Boolean = false,
     val onDoubleTapAction: (DoubleTapSide, Int) -> Unit = { _, _ -> },
     val onHaptic: (HapticFeedbackType) -> Unit = {},
-    val onScrubbing: (Boolean) -> Unit = {},
+    val onScrubbing: (isScrubbing: Boolean, progress: Float) -> Unit = { _, _ -> },
 ) : ModifierNodeElement<PlayerGesturesNode>() {
     override fun create(): PlayerGesturesNode =
         PlayerGesturesNode(
@@ -248,7 +248,7 @@ private class PlayerGesturesNode(
     var isLocked: Boolean = false,
     var onDoubleTapAction: (DoubleTapSide, Int) -> Unit = { _, _ -> },
     var onHaptic: (HapticFeedbackType) -> Unit = {},
-    var onScrubbing: (Boolean) -> Unit = {},
+    var onScrubbing: (isScrubbing: Boolean, progress: Float) -> Unit = { _, _ -> },
 ) : DelegatingNode() {
     private var isFastForwarding = false
     private var dragMode = DragMode.NONE
@@ -280,7 +280,7 @@ private class PlayerGesturesNode(
         isLocked: Boolean = false,
         onDoubleTapAction: (DoubleTapSide, Int) -> Unit = { _, _ -> },
         onHaptic: (HapticFeedbackType) -> Unit = {},
-        onScrubbing: (Boolean) -> Unit = {},
+        onScrubbing: (isScrubbing: Boolean, progress: Float) -> Unit = { _, _ -> },
     ) {
         this.context = context
         this.isPlaying = isPlaying
@@ -421,7 +421,15 @@ private class PlayerGesturesNode(
                         if (dragMode == DragMode.NONE) {
                             if (abs(dragAccumulatedX) > abs(dragAccumulatedY) && abs(dragAccumulatedX) > thresholdPx) {
                                 dragMode = DragMode.HORIZONTAL_SEEK
-                                onScrubbing(true)
+                                val initialFraction =
+                                    if (total >
+                                        0L
+                                    ) {
+                                        (initialPositionMs.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                                    } else {
+                                        0f
+                                    }
+                                onScrubbing(true, initialFraction)
                             } else if (abs(dragAccumulatedY) > thresholdPx) {
                                 dragMode =
                                     if (startOffset.x < width * 0.5f) {
@@ -437,6 +445,8 @@ private class PlayerGesturesNode(
                                 if (total > 0L) {
                                     val deltaMs = calculateSeekDeltaMs(dragAccumulatedX, width.toFloat(), total)
                                     seekTargetMs = (initialPositionMs + deltaMs).coerceIn(0L, total)
+                                    val currentProgress = (seekTargetMs.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                                    onScrubbing(true, currentProgress)
                                     onHudStateChange(GestureHudState.Seek(seekTargetMs, total, seekTargetMs - initialPositionMs))
                                 }
                             }
@@ -470,7 +480,8 @@ private class PlayerGesturesNode(
                             onSeekConfirm(seekTargetMs)
                         }
                         if (wasSeeking) {
-                            onScrubbing(false)
+                            val finalProgress = if (total > 0L) (seekTargetMs.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
+                            onScrubbing(false, finalProgress)
                         }
                         dragMode = DragMode.NONE
                         onTriggerHudDismiss()
@@ -478,7 +489,9 @@ private class PlayerGesturesNode(
                     onDragCancel = {
                         if (isLocked) return@detectDragGestures
                         if (dragMode == DragMode.HORIZONTAL_SEEK) {
-                            onScrubbing(false)
+                            val total = totalDurationMs()
+                            val cancelProgress = if (total > 0L) (seekTargetMs.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
+                            onScrubbing(false, cancelProgress)
                         }
                         dragMode = DragMode.NONE
                         onTriggerHudDismiss()
@@ -511,7 +524,7 @@ internal fun PlayerGestureDetector(
     onFastForwardEnd: () -> Unit,
     modifier: Modifier = Modifier,
     isLocked: Boolean = false,
-    onScrubbing: (Boolean) -> Unit = {},
+    onScrubbing: (isScrubbing: Boolean, progress: Float) -> Unit = { _, _ -> },
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current

@@ -4,15 +4,14 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -20,6 +19,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.unit.dp
 
 /**
@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
  *
  * 常态：3dp 细线轨道，轻量通透，最小化遮挡视频画面
  * 交互态（按下/拖拽中）：平滑动画加粗至 6dp，Thumb 弹性放大至 14dp 高亮圆球
+ * 具备 44dp 无障碍推荐触摸热区，内部轨道垂直居中
  */
 @Composable
 internal fun PlayerProgressBar(
@@ -65,47 +66,31 @@ internal fun PlayerProgressBar(
     val currentOnScrubStart by rememberUpdatedState(onScrubStart)
     val currentOnScrubbing by rememberUpdatedState(onScrubbing)
     val currentOnScrubEnd by rememberUpdatedState(onScrubEnd)
-    var lastFraction by remember { mutableFloatStateOf(0f) }
 
     Canvas(
         modifier =
             modifier
                 .fillMaxWidth()
-                .height(28.dp)
+                .height(44.dp)
                 .pointerInput(Unit) {
-                    detectTapGestures(
-                        onPress = { offset ->
-                            val fraction = (offset.x / size.width).coerceIn(0f, 1f)
-                            lastFraction = fraction
-                            currentOnScrubStart()
-                            currentOnScrubbing(fraction)
-                            val released = tryAwaitRelease()
-                            if (released) {
-                                currentOnScrubEnd(fraction)
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val width = size.width.toFloat()
+                        val fraction = calculateProgressBarFraction(down.position.x, width)
+                        currentOnScrubStart()
+                        currentOnScrubbing(fraction)
+
+                        var currentFraction = fraction
+                        val dragSuccess =
+                            drag(down.id) { change ->
+                                if (change.positionChange() != Offset.Zero) {
+                                    change.consume()
+                                    currentFraction = calculateProgressBarFraction(change.position.x, width)
+                                    currentOnScrubbing(currentFraction)
+                                }
                             }
-                        },
-                    )
-                }.pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragStart = { offset ->
-                            val fraction = (offset.x / size.width).coerceIn(0f, 1f)
-                            lastFraction = fraction
-                            currentOnScrubStart()
-                            currentOnScrubbing(fraction)
-                        },
-                        onDrag = { change, _ ->
-                            change.consume()
-                            val fraction = (change.position.x / size.width).coerceIn(0f, 1f)
-                            lastFraction = fraction
-                            currentOnScrubbing(fraction)
-                        },
-                        onDragEnd = {
-                            currentOnScrubEnd(lastFraction)
-                        },
-                        onDragCancel = {
-                            currentOnScrubEnd(lastFraction)
-                        },
-                    )
+                        currentOnScrubEnd(currentFraction)
+                    }
                 },
     ) {
         val width = size.width
@@ -115,40 +100,45 @@ internal fun PlayerProgressBar(
         val currentTrackHeight = trackHeight.toPx()
         val currentThumbRadius = thumbRadius.toPx()
 
+        // 几何行程：Thumb 圆心在两端分别为 currentThumbRadius 和 width - currentThumbRadius，
+        // 确保 Progress 为 0% 时圆心正好在 currentThumbRadius，圆的左外切正好贴合轨道最左端 0f；
+        // Progress 为 100% 时圆心在 width - currentThumbRadius，圆的右外切正好贴合轨道最右端 width。
+        val thumbTravel = (width - 2f * currentThumbRadius).coerceAtLeast(0f)
+        val clampedProgress = progress.coerceIn(0f, 1f)
+        val clampedThumbX = currentThumbRadius + clampedProgress * thumbTravel
+
         // 1. 底轨 (Background Track)
         drawLine(
             color = trackColor,
-            start = Offset(0f, centerY),
-            end = Offset(width, centerY),
+            start = Offset(currentThumbRadius, centerY),
+            end = Offset(width - currentThumbRadius, centerY),
             strokeWidth = currentTrackHeight,
             cap = StrokeCap.Round,
         )
 
         // 2. 缓冲轨 (Buffered Track)
         if (bufferedProgress > 0f) {
-            val bufferedWidth = (width * bufferedProgress.coerceIn(0f, 1f)).coerceIn(0f, width)
+            val clampedBuffered = bufferedProgress.coerceIn(0f, 1f)
+            val bufferedEndX = currentThumbRadius + clampedBuffered * thumbTravel
             drawLine(
                 color = bufferedColor,
-                start = Offset(0f, centerY),
-                end = Offset(bufferedWidth, centerY),
+                start = Offset(currentThumbRadius, centerY),
+                end = Offset(bufferedEndX, centerY),
                 strokeWidth = currentTrackHeight,
-                cap = StrokeCap.Butt,
+                cap = StrokeCap.Round,
             )
         }
 
         // 3. 播放进度主轨 (Active Progress Track)
-        val activeWidth = (width * progress.coerceIn(0f, 1f)).coerceIn(0f, width)
-        if (activeWidth > 0f) {
+        if (clampedThumbX > currentThumbRadius) {
             drawLine(
                 color = activeColor,
-                start = Offset(0f, centerY),
-                end = Offset(activeWidth, centerY),
+                start = Offset(currentThumbRadius, centerY),
+                end = Offset(clampedThumbX, centerY),
                 strokeWidth = currentTrackHeight,
-                cap = StrokeCap.Butt,
+                cap = StrokeCap.Round,
             )
         }
-
-        val clampedThumbX = activeWidth.coerceIn(currentThumbRadius, (width - currentThumbRadius).coerceAtLeast(currentThumbRadius))
 
         // 4. Thumb 外层微光晕 (Glow)
         if (glowAlpha > 0f) {
@@ -166,6 +156,17 @@ internal fun PlayerProgressBar(
             center = Offset(clampedThumbX, centerY),
         )
     }
+}
+
+/**
+ * 屏幕/触摸 X 坐标映射为 [0f, 1f] 进度比例纯函数
+ */
+internal fun calculateProgressBarFraction(
+    touchX: Float,
+    totalWidth: Float,
+): Float {
+    if (totalWidth <= 0f) return 0f
+    return (touchX / totalWidth).coerceIn(0f, 1f)
 }
 
 /**

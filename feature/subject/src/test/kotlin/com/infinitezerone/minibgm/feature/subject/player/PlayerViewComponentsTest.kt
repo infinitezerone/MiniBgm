@@ -275,4 +275,15 @@ class PlayerViewComponentsTest {
             ),
         )
     }
+
+    @Test
+    fun calculateProgressBarFraction_handlesBoundariesAndCoercion() {
+        assertEquals(0f, calculateProgressBarFraction(0f, 1000f), 0.0001f)
+        assertEquals(0f, calculateProgressBarFraction(-50f, 1000f), 0.0001f)
+        assertEquals(1f, calculateProgressBarFraction(1000f, 1000f), 0.0001f)
+        assertEquals(1f, calculateProgressBarFraction(1200f, 1000f), 0.0001f)
+        assertEquals(0.5f, calculateProgressBarFraction(500f, 1000f), 0.0001f)
+        assertEquals(0f, calculateProgressBarFraction(500f, 0f), 0.0001f)
+        assertEquals(0f, calculateProgressBarFraction(500f, -100f), 0.0001f)
+    }
 }

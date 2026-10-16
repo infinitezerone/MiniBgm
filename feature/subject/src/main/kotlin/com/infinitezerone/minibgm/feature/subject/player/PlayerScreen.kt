@@ -591,7 +591,10 @@ fun PlayerScreen(
             },
             onScrubStart = { isScrubbing = true },
             onScrubbing = { scrubProgress = it },
-            onGestureScrubbing = { isScrubbing = it },
+            onGestureScrubbing = { scrubbing, progress ->
+                isScrubbing = scrubbing
+                scrubProgress = progress
+            },
             onScrubEnd = { progress ->
                 isScrubbing = false
                 if (playback.durationMs > 0L) {
@@ -935,7 +938,7 @@ private fun PlayerVideoStage(
     onScrubStart: () -> Unit,
     onScrubbing: (Float) -> Unit,
     onScrubEnd: (Float) -> Unit,
-    onGestureScrubbing: (Boolean) -> Unit = {},
+    onGestureScrubbing: (isScrubbing: Boolean, progress: Float) -> Unit = { _, _ -> },
     onBackClick: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onCycleResizeMode: () -> Unit,
@@ -1036,7 +1039,9 @@ private fun PlayerVideoStage(
             val currentPosition by position.collectAsStateWithLifecycle()
             val currentBufferedPosition by bufferedPosition.collectAsStateWithLifecycle()
             val progressFraction =
-                if (playback.durationMs > 0L) {
+                if (isScrubbing) {
+                    scrubProgress
+                } else if (playback.durationMs > 0L) {
                     (currentPosition.toFloat() / playback.durationMs.toFloat()).coerceIn(0f, 1f)
                 } else {
                     0f
