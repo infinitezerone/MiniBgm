@@ -32,7 +32,12 @@ class ExoPlayerEngine(
 
     private val httpDataSourceFactory =
         object : HttpDataSource.Factory {
-            private val base = DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)
+            private val base =
+                DefaultHttpDataSource
+                    .Factory()
+                    .setAllowCrossProtocolRedirects(true)
+                    .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
+                    .setReadTimeoutMs(READ_TIMEOUT_MS)
 
             override fun createDataSource(): HttpDataSource =
                 base.createDataSource().apply {
@@ -197,3 +202,6 @@ internal fun classifyPlaybackError(
 
         else -> error.localizedMessage ?: context.getString(R.string.feature_subject_player_err_unknown)
     }
+
+private const val CONNECT_TIMEOUT_MS = 15_000
+private const val READ_TIMEOUT_MS = 45_000
