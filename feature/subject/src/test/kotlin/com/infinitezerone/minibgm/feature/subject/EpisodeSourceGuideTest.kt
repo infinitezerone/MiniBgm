@@ -186,5 +186,23 @@ class EpisodeSourceGuideTest {
                 "https://mikanani.me/Home/Search?searchstr=frieren",
             ),
         )
+        org.junit.Assert.assertFalse(
+            com.infinitezerone.minibgm.feature.subject.components.isLikelyMediaStream(
+                "https://cj.lziapi.com/api.php/provide/vod/?ac=detail&wd=frieren",
+                description = "TVBox 主力秒播直链切片源",
+            ),
+        )
+        org.junit.Assert.assertFalse(
+            com.infinitezerone.minibgm.feature.subject.components.isLikelyMediaStream(
+                "https://example.com/api/v1/search.json?wd=test",
+                description = "直链视频流",
+            ),
+        )
+        org.junit.Assert.assertFalse(
+            com.infinitezerone.minibgm.feature.subject.components.isLikelyMediaStream(
+                "https://example.com/detail.html",
+                description = "直链",
+            ),
+        )
     }
 }

@@ -198,24 +198,24 @@ internal fun SubjectDetailOverlays(
 
     if (showSourcesBottomSheet && displaySubject != null) {
         val watchedCount = currentCollection?.epStatus ?: 0
-        val isWatched = selectedEpisodeForSources?.let { isEpisodeWatched(it, watchedCount) } ?: false
+        val targetType = selectedEpisodeForSources?.type ?: 0
+        val sameGroupEpisodes =
+            remember(episodes, targetType) {
+                episodes.filter { it.type == targetType }
+            }
+        val effectiveEpisode =
+            selectedEpisodeForSources
+                ?: sameGroupEpisodes.firstOrNull { isEpisodeNextToWatch(it, watchedCount, hasProgress = currentCollection != null) }
+                ?: sameGroupEpisodes.firstOrNull()
+                ?: episodes.firstOrNull()
+        val isWatched = effectiveEpisode?.let { isEpisodeWatched(it, watchedCount) } ?: false
         val isNextToWatch =
-            selectedEpisodeForSources?.let {
+            effectiveEpisode?.let {
                 isEpisodeNextToWatch(it, watchedCount, hasProgress = currentCollection != null)
             } ?: false
-        val sameGroupEpisodes =
-            remember(episodes, selectedEpisodeForSources?.type) {
-                if (selectedEpisodeForSources != null) {
-                    episodes.filter { it.type == selectedEpisodeForSources.type }
-                } else {
-                    emptyList()
-                }
-            }
         val currentIdx =
-            if (selectedEpisodeForSources !=
-                null
-            ) {
-                sameGroupEpisodes.indexOfFirst { it.id == selectedEpisodeForSources.id }
+            if (effectiveEpisode != null) {
+                sameGroupEpisodes.indexOfFirst { it.id == effectiveEpisode.id }
             } else {
                 -1
             }
@@ -224,11 +224,11 @@ internal fun SubjectDetailOverlays(
 
         SubjectSourcesBottomSheet(
             subject = displaySubject,
-            episode = selectedEpisodeForSources,
+            episode = effectiveEpisode,
             isWatched = isWatched,
             isNextToWatch = isNextToWatch,
             onToggleWatched =
-                selectedEpisodeForSources?.let { ep ->
+                effectiveEpisode?.let { ep ->
                     {
                         val epNumber = ep.episodeInt
                         if (isLoggedIn) {
@@ -238,13 +238,13 @@ internal fun SubjectDetailOverlays(
                     }
                 },
             onBatchMark =
-                if (selectedEpisodeForSources != null && !isWatched && selectedEpisodeForSources.type == 0) {
-                    { onBatchMarkRequest(selectedEpisodeForSources) }
+                if (effectiveEpisode != null && !isWatched && effectiveEpisode.type == 0) {
+                    { onBatchMarkRequest(effectiveEpisode) }
                 } else {
                     null
                 },
             onSelectEpisodeForDetail =
-                selectedEpisodeForSources?.let { ep ->
+                effectiveEpisode?.let { ep ->
                     {
                         onDismissSourcesSheet()
                         onSelectEpisodeForDetail(ep)

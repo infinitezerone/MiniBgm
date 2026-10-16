@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.displayCutoutPadding
@@ -588,15 +589,25 @@ private fun BoxScope.PlayerErrorState(
         )
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (onOpenSourcesPanel != null) {
-                OutlinedButton(onClick = onOpenSourcesPanel) {
+                OutlinedButton(
+                    onClick = onOpenSourcesPanel,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                ) {
                     Text(stringResource(R.string.feature_subject_player_switch_source), color = Color.White)
                 }
-            } else if (onNextSource != null) {
-                OutlinedButton(onClick = onNextSource) {
+            }
+            if (onNextSource != null) {
+                OutlinedButton(
+                    onClick = onNextSource,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                ) {
                     Text(stringResource(R.string.feature_subject_player_switch_next_source), color = Color.White)
                 }
             }
-            Button(onClick = onRetry) {
+            Button(
+                onClick = onRetry,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+            ) {
                 Text(stringResource(R.string.feature_subject_player_retry_play))
             }
         }

@@ -310,6 +310,10 @@ description: >-
      * 底栏内的一切「规则配置/外部管理」入口，唯一合法组件必须是 BgmSourceActionCard，严禁在不同 Tab 下拼凑私有小按钮；
      * 底栏内部的外部页面跳转动作必须严格经由 
 unAfterDismiss / onDismissAndRun 调度收起动画，保持人机交互的顺畅连贯。
-  4. **红线拦截**：
+  4. **全局播放入口无分集回退与直链嗅探防线（No-Episode Fallback & API Sniffing Guard）**：
+     * 条目详情页顶栏 TV 图标等全局播放源入口在未选中分集（selectedEpisodeForSources == null）时，SubjectDetailOverlays 必须按「下一集未看 > 首集」智能回退 ffectiveEpisode，抽屉内部 onlineRules 循环严禁因 pisode == null 整体跳过；
+     * API 规则（如 MacCMS）严禁作为媒体直链直接传入 PlayerRoute.streamUrl，isLikelyMediaStream 必须对 .php / pi.php / .json 等接口型 URL 严格断言为非媒体流；
+     * 播放器错误浮层（PlayerControlsOverlay）中的「切换下一个源」（onNextSource）与「切换线路」（onOpenSourcesPanel）必须并存呈现，且横向多按钮排版必须带 PaddingValues(horizontal = 12.dp, vertical = 0.dp) 杜绝截字。
+  5. **红线拦截**：
      * ArchitectureRulesTest#subject_sources_sheet_must_use_unified_source_action_card_for_management
      * ArchitectureRulesTest#subject_detail_episode_click_must_route_to_unified_sources_sheet

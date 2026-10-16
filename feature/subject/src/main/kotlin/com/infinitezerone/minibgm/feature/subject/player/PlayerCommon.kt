@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -247,24 +248,39 @@ internal fun PlayerEmptyView(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = onBackClick) {
+                OutlinedButton(
+                    onClick = onBackClick,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                ) {
                     Text(stringResource(R.string.feature_subject_cd_back), color = Color.White)
                 }
                 if (errorMessage != null) {
-                    Button(onClick = onRetry) {
+                    Button(
+                        onClick = onRetry,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    ) {
                         Text(stringResource(R.string.feature_subject_player_retry_sniff))
                     }
                     if (onNextSource != null) {
-                        OutlinedButton(onClick = onNextSource) {
+                        OutlinedButton(
+                            onClick = onNextSource,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        ) {
                             Text(stringResource(R.string.feature_subject_player_switch_next_source), color = Color.White)
                         }
                     } else if (onRequestOpenSources != null) {
-                        OutlinedButton(onClick = onRequestOpenSources) {
+                        OutlinedButton(
+                            onClick = onRequestOpenSources,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        ) {
                             Text(stringResource(R.string.feature_subject_source_ai_search), color = Color.White)
                         }
                     }
                 } else if (onRequestOpenSources != null) {
-                    Button(onClick = onRequestOpenSources) {
+                    Button(
+                        onClick = onRequestOpenSources,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    ) {
                         Text(stringResource(R.string.feature_subject_source_ai_search))
                     }
                 }

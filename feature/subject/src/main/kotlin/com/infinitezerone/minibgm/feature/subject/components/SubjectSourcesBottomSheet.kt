@@ -73,6 +73,7 @@ import com.infinitezerone.minibgm.core.model.DownloadStorageUsage
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
+import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.TorrentMediaResource
 import com.infinitezerone.minibgm.core.model.TorrentStreamState
@@ -627,100 +628,104 @@ fun SubjectSourcesBottomSheet(
         // 3. 📄 对应 Tab 下的纯净内容
         when (selectedTab) {
             SourceSheetTab.ONLINE -> {
-                if (episode != null) {
-                    if (onlineRules.isNotEmpty()) {
-                        BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_online_routes))
-                        for (rule in onlineRules) {
-                            val epStr = if (episode.isMain) episode.formattedNumber else episode.episodeInt.toString()
-                            val resolvedUrl =
-                                remember(rule, displayName, epStr, subject.id, episode.id) {
-                                    rule.resolveUrl(
-                                        title = displayName,
-                                        ep = epStr,
-                                        subjectId = subject.id,
-                                        episodeId = episode.id,
-                                    )
-                                }
-                            val isMedia =
-                                remember(resolvedUrl, rule.description) {
+                if (onlineRules.isNotEmpty()) {
+                    BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_online_routes))
+                    for (rule in onlineRules) {
+                        val epStr =
+                            episode?.let { if (it.isMain) it.formattedNumber else it.episodeInt.toString() } ?: "1"
+                        val epId = episode?.id ?: 0L
+                        val resolvedUrl =
+                            remember(rule, displayName, epStr, subject.id, epId) {
+                                rule.resolveUrl(
+                                    title = displayName,
+                                    ep = epStr,
+                                    subjectId = subject.id,
+                                    episodeId = epId,
+                                )
+                            }
+                        val isMedia =
+                            remember(resolvedUrl, rule.description, rule.kind, rule.parserType) {
+                                if (rule.kind == PlaybackRuleKind.SOURCE && rule.parserType != RuleParserType.AUTO) {
+                                    false
+                                } else {
                                     isLikelyMediaStream(resolvedUrl, rule.description)
                                 }
-                            val ruleFailure = failedSourceReasons[resolvedUrl]
-                            BgmSourceActionCard(
-                                title = rule.name,
-                                subtitle =
-                                    playbackSourceSubtitle(
-                                        rule.description.ifBlank {
-                                            if (onInternalPlayClick != null || isMedia) {
-                                                stringResource(R.string.feature_subject_source_internal_sniff)
-                                            } else {
-                                                stringResource(R.string.feature_subject_source_open_link)
-                                            }
-                                        },
-                                        ruleFailure,
-                                    ),
-                                iconVector =
+                            }
+                        val ruleFailure = failedSourceReasons[resolvedUrl]
+                        BgmSourceActionCard(
+                            title = rule.name,
+                            subtitle =
+                                playbackSourceSubtitle(
+                                    rule.description.ifBlank {
+                                        if (onInternalPlayClick != null || isMedia) {
+                                            stringResource(R.string.feature_subject_source_internal_sniff)
+                                        } else {
+                                            stringResource(R.string.feature_subject_source_open_link)
+                                        }
+                                    },
+                                    ruleFailure,
+                                ),
+                            iconVector =
+                                if (onInternalPlayClick != null || isMedia) {
+                                    BgmIcons.PlayCircle
+                                } else {
+                                    BgmIcons.OpenInNew
+                                },
+                            iconTint =
+                                when {
+                                    ruleFailure != null -> MaterialTheme.colorScheme.error
+                                    onInternalPlayClick != null || isMedia -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            trailingContent = {
+                                val trailingIcon =
                                     if (onInternalPlayClick != null || isMedia) {
-                                        BgmIcons.PlayCircle
+                                        BgmIcons.KeyboardArrowRight
                                     } else {
                                         BgmIcons.OpenInNew
-                                    },
-                                iconTint =
-                                    when {
-                                        ruleFailure != null -> MaterialTheme.colorScheme.error
-                                        onInternalPlayClick != null || isMedia -> MaterialTheme.colorScheme.primary
-                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                trailingContent = {
-                                    val trailingIcon =
-                                        if (onInternalPlayClick != null || isMedia) {
-                                            BgmIcons.KeyboardArrowRight
-                                        } else {
-                                            BgmIcons.OpenInNew
-                                        }
-                                    Icon(
-                                        imageVector = trailingIcon,
-                                        contentDescription =
-                                            if (onInternalPlayClick != null || isMedia) {
-                                                stringResource(R.string.feature_subject_source_action_play)
-                                            } else {
-                                                stringResource(R.string.feature_subject_source_action_open)
-                                            },
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                },
-                                onClick = {
-                                    runAfterDismiss {
-                                        if (onInternalPlayClick != null) {
-                                            val route =
-                                                PlayerRoute(
-                                                    subjectId = subject.id,
-                                                    episodeId = episode.id,
-                                                    streamUrl = if (isMedia) resolvedUrl else "",
-                                                    episodeName = episode.nameCn.ifBlank { episode.name },
-                                                    subjectName = displayName,
-                                                    episodeSort = episode.episodeNumber,
-                                                    episodeType = episode.type,
-                                                    initialRuleId = rule.id,
-                                                )
-                                            onInternalPlayClick(route)
-                                        } else {
-                                            onOpenUrl(resolvedUrl)
-                                        }
                                     }
-                                },
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                        }
-                    } else {
-                        Text(
-                            text = stringResource(R.string.feature_subject_source_no_online_routes),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+                                Icon(
+                                    imageVector = trailingIcon,
+                                    contentDescription =
+                                        if (onInternalPlayClick != null || isMedia) {
+                                            stringResource(R.string.feature_subject_source_action_play)
+                                        } else {
+                                            stringResource(R.string.feature_subject_source_action_open)
+                                        },
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            },
+                            onClick = {
+                                runAfterDismiss {
+                                    if (onInternalPlayClick != null) {
+                                        val route =
+                                            PlayerRoute(
+                                                subjectId = subject.id,
+                                                episodeId = episode?.id ?: 0L,
+                                                streamUrl = if (isMedia) resolvedUrl else "",
+                                                episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: "",
+                                                subjectName = displayName,
+                                                episodeSort = episode?.episodeNumber ?: 0f,
+                                                episodeType = episode?.type ?: 0,
+                                                initialRuleId = rule.id,
+                                            )
+                                        onInternalPlayClick(route)
+                                    } else {
+                                        onOpenUrl(resolvedUrl)
+                                    }
+                                }
+                            },
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
                     }
+                } else {
+                    Text(
+                        text = stringResource(R.string.feature_subject_source_no_online_routes),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+                    )
                 }
                 if (onManageRules != null) {
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1058,6 +1063,9 @@ fun isLikelyMediaStream(
         return true
     }
     val full = url.lowercase()
+    if (clean.endsWith(".php") || clean.endsWith(".json") || clean.endsWith(".html") || full.contains("api.php")) {
+        return false
+    }
     if (full.contains(".m3u8") || full.contains(".mp4") || full.contains(".flv")) {
         return true
     }
