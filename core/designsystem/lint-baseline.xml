@@ -8,7 +8,7 @@
         errorLine2="                          ~~~~~~~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/component/SkeletonLoader.kt"
-            line="72"
+            line="73"
             column="27"/>
     </issue>
 
@@ -19,8 +19,30 @@
         errorLine2="                        ~~~~~~~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/component/SkeletonLoader.kt"
-            line="73"
+            line="74"
             column="25"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;core_designsystem_collection_comment_placeholder&quot;>写下你的追番感想或评价...&lt;/string>"
+        errorLine2="                                                                    ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="50"
+            column="69"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Bitmap.scale` instead?"
+        errorLine1="            Bitmap.createScaledBitmap(readable, targetWidth, targetHeight, true)"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/ambient/AmbientGlow.kt"
+            line="270"
+            column="13"/>
     </issue>
 
 </issues>

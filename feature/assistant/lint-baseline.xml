@@ -2,13 +2,24 @@
 <issues format="6" by="lint 9.3.2" type="baseline" client="gradle" dependencies="false" name="AGP (9.3.2)" variant="all" version="9.3.2">
 
     <issue
+        id="LocalContextResourcesRead"
+        message="Reading Resources using LocalContext.current.resources is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="    val resources = LocalContext.current.resources"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt"
+            line="89"
+            column="21"/>
+    </issue>
+
+    <issue
         id="ModifierParameter"
         message="Modifier parameter should be the first optional parameter"
         errorLine1="    modifier: Modifier = Modifier,"
         errorLine2="    ~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt"
-            line="127"
+            line="84"
             column="5"/>
     </issue>
 
@@ -19,7 +30,7 @@
         errorLine2="    ~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt"
-            line="210"
+            line="169"
             column="5"/>
     </issue>
 
@@ -29,8 +40,8 @@
         errorLine1="    modifier: Modifier = Modifier,"
         errorLine2="    ~~~~~~~~">
         <location
-            file="src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt"
-            line="837"
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreenParts.kt"
+            line="344"
             column="5"/>
     </issue>
 
@@ -40,9 +51,64 @@
         errorLine1="    modifier: Modifier = Modifier,"
         errorLine2="    ~~~~~~~~">
         <location
-            file="src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreen.kt"
-            line="1057"
+            file="src/main/kotlin/com/infinitezerone/minibgm/feature/assistant/AssistantScreenParts.kt"
+            line="616"
             column="5"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;feature_assistant_input_placeholder&quot;>问问 AI 追番助手...&lt;/string>"
+        errorLine2="                                                       ~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="11"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;feature_assistant_loading_thinking&quot;>AI 正在思考并检索...&lt;/string>"
+        errorLine2="                                                      ~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="52"
+            column="55"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;feature_assistant_pending_status_submitting&quot;>正在提交...&lt;/string>"
+        errorLine2="                                                               ~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="61"
+            column="64"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;feature_assistant_config_testing_endpoint&quot;>正在探测端点连通性并同步可用模型...&lt;/string>"
+        errorLine2="                                                             ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="111"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;feature_assistant_model_picker_search_placeholder&quot;>搜索模型名称...&lt;/string>"
+        errorLine2="                                                                     ~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="144"
+            column="70"/>
     </issue>
 
 </issues>

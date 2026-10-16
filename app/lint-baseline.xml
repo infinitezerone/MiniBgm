@@ -8,13 +8,13 @@
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/AndroidManifest.xml"
-            line="44"
+            line="67"
             column="9"/>
     </issue>
 
     <issue
         id="AndroidGradlePluginVersion"
-        message="A newer version of Gradle than 9.7.1 is available: 9.8.0"
+        message="A newer version of Gradle than 9.7.1 is available: 9.8.1"
         errorLine1="distributionUrl=https\://services.gradle.org/distributions/gradle-9.7.1-bin.zip"
         errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
@@ -80,12 +80,23 @@
 
     <issue
         id="GradleDependency"
+        message="A newer version of androidx.webkit:webkit than 1.12.1 is available: 1.17.1"
+        errorLine1="androidx-webkit = &quot;1.12.1&quot;"
+        errorLine2="                  ~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="9"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
         message="A newer version of androidx.compose:compose-bom than 2026.08.00 is available: 2026.09.00"
         errorLine1="compose-bom = &quot;2026.08.00&quot;"
         errorLine2="              ~~~~~~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="9"
+            line="10"
             column="15"/>
     </issue>
 
@@ -96,7 +107,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="14"
+            line="15"
             column="8"/>
     </issue>
 
@@ -107,7 +118,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="14"
+            line="15"
             column="8"/>
     </issue>
 
@@ -118,7 +129,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="14"
+            line="15"
             column="8"/>
     </issue>
 
@@ -129,7 +140,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="14"
+            line="15"
             column="8"/>
     </issue>
 
@@ -140,7 +151,7 @@
         errorLine2="         ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="15"
+            line="16"
             column="10"/>
     </issue>
 
@@ -151,7 +162,7 @@
         errorLine2="                       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="23"
+            line="24"
             column="24"/>
     </issue>
 
@@ -162,7 +173,7 @@
         errorLine2="                       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="23"
+            line="24"
             column="24"/>
     </issue>
 
@@ -173,7 +184,7 @@
         errorLine2="               ~~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="24"
+            line="25"
             column="16"/>
     </issue>
 
@@ -184,7 +195,7 @@
         errorLine2="               ~~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="24"
+            line="25"
             column="16"/>
     </issue>
 
@@ -195,13 +206,13 @@
         errorLine2="                             ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="25"
+            line="26"
             column="30"/>
     </issue>
 
     <issue
         id="NewerVersionAvailable"
-        message="A newer version of org.jetbrains.kotlin.multiplatform than 2.4.10 is available: 2.4.20"
+        message="A newer version of org.jetbrains.kotlin.multiplatform than 2.4.10 is available: 2.4.21"
         errorLine1="kotlin = &quot;2.4.10&quot;"
         errorLine2="         ~~~~~~~~">
         <location
@@ -212,7 +223,7 @@
 
     <issue
         id="NewerVersionAvailable"
-        message="A newer version of org.jetbrains.kotlin.plugin.compose than 2.4.10 is available: 2.4.20"
+        message="A newer version of org.jetbrains.kotlin.plugin.compose than 2.4.10 is available: 2.4.21"
         errorLine1="kotlin = &quot;2.4.10&quot;"
         errorLine2="         ~~~~~~~~">
         <location
@@ -223,7 +234,7 @@
 
     <issue
         id="NewerVersionAvailable"
-        message="A newer version of org.jetbrains.kotlin.plugin.serialization than 2.4.10 is available: 2.4.20"
+        message="A newer version of org.jetbrains.kotlin.plugin.serialization than 2.4.10 is available: 2.4.21"
         errorLine1="kotlin = &quot;2.4.10&quot;"
         errorLine2="         ~~~~~~~~">
         <location
@@ -239,7 +250,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="10"
+            line="11"
             column="8"/>
     </issue>
 
@@ -250,7 +261,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="10"
+            line="11"
             column="8"/>
     </issue>
 
@@ -261,7 +272,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="10"
+            line="11"
             column="8"/>
     </issue>
 
@@ -272,7 +283,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="10"
+            line="11"
             column="8"/>
     </issue>
 
@@ -283,7 +294,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="10"
+            line="11"
             column="8"/>
     </issue>
 
@@ -294,7 +305,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="10"
+            line="11"
             column="8"/>
     </issue>
 
@@ -305,7 +316,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="10"
+            line="11"
             column="8"/>
     </issue>
 
@@ -316,7 +327,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="10"
+            line="11"
             column="8"/>
     </issue>
 
@@ -327,7 +338,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="17"
+            line="18"
             column="8"/>
     </issue>
 
@@ -338,7 +349,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="17"
+            line="18"
             column="8"/>
     </issue>
 
@@ -349,7 +360,7 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="17"
+            line="18"
             column="8"/>
     </issue>
 
@@ -360,30 +371,41 @@
         errorLine2="       ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="17"
+            line="18"
             column="8"/>
     </issue>
 
     <issue
         id="NewerVersionAvailable"
-        message="A newer version of com.diffplug.spotless than 7.0.2 is available: 8.10.3"
+        message="A newer version of com.diffplug.spotless than 7.0.2 is available: 8.10.4"
         errorLine1="spotless = &quot;7.0.2&quot;"
         errorLine2="           ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="19"
+            line="20"
             column="12"/>
     </issue>
 
     <issue
         id="NewerVersionAvailable"
-        message="A newer version of com.diffplug.spotless:spotless-plugin-gradle than 7.0.2 is available: 8.10.3"
+        message="A newer version of com.diffplug.spotless:spotless-plugin-gradle than 7.0.2 is available: 8.10.4"
         errorLine1="spotless = &quot;7.0.2&quot;"
         errorLine2="           ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="19"
+            line="20"
             column="12"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.jetbrains.kotlinx.kover than 0.9.9 is available: 0.9.11"
+        errorLine1="kover = &quot;0.9.9&quot;"
+        errorLine2="        ~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="29"
+            column="9"/>
     </issue>
 
     <issue
@@ -393,8 +415,140 @@
         errorLine2="         ~~~~~~~">
         <location
             file="../gradle/libs.versions.toml"
-            line="29"
+            line="30"
             column="10"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.github.takahirom.roborazzi than 1.43.1 is available: 1.76.0"
+        errorLine1="roborazzi = &quot;1.43.1&quot;"
+        errorLine2="            ~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="32"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.github.takahirom.roborazzi:roborazzi than 1.43.1 is available: 1.76.0"
+        errorLine1="roborazzi = &quot;1.43.1&quot;"
+        errorLine2="            ~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="32"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.github.takahirom.roborazzi:roborazzi-compose than 1.43.1 is available: 1.76.0"
+        errorLine1="roborazzi = &quot;1.43.1&quot;"
+        errorLine2="            ~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="32"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.github.takahirom.roborazzi:roborazzi-gradle-plugin than 1.43.1 is available: 1.76.0"
+        errorLine1="roborazzi = &quot;1.43.1&quot;"
+        errorLine2="            ~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="32"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of io.github.takahirom.roborazzi:roborazzi-junit-rule than 1.43.1 is available: 1.76.0"
+        errorLine1="roborazzi = &quot;1.43.1&quot;"
+        errorLine2="            ~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="32"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="NewerVersionAvailable"
+        message="A newer version of org.robolectric:robolectric than 4.14.1 is available: 4.17"
+        errorLine1="robolectric = &quot;4.14.1&quot;"
+        errorLine2="              ~~~~~~~~">
+        <location
+            file="../gradle/libs.versions.toml"
+            line="33"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                    message = context.getString(R.string.app_offline_snackbar),"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/ui/BgmApp.kt"
+            line="77"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                    ?.contains(context.getString(R.string.app_offline_snackbar)) == true"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/ui/BgmApp.kt"
+            line="86"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                    message = context.getString(R.string.app_online_restored),"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/ui/BgmApp.kt"
+            line="93"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="        navState.navigateTo(InAppWebRoute(url = url, title = context.getString(R.string.app_in_app_web_title_token)))"
+        errorLine2="                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/navigation/BgmNavHost.kt"
+            line="103"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                                                        context.getString("
+        errorLine2="                                                        ^">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/navigation/BgmNavHost.kt"
+            line="403"
+            column="57"/>
+    </issue>
+
+    <issue
+        id="LocalContextGetResourceValueCall"
+        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
+        errorLine1="                                                            context.getString(R.string.app_ai_search_prompt, title, route.subjectId),"
+        errorLine2="                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/kotlin/com/infinitezerone/minibgm/navigation/BgmNavHost.kt"
+            line="410"
+            column="61"/>
     </issue>
 
     <issue
@@ -404,8 +558,19 @@
         errorLine2="    ~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/ui/BgmApp.kt"
-            line="58"
+            line="62"
             column="5"/>
+    </issue>
+
+    <issue
+        id="ChromeOsAbiSupport"
+        message="Missing x86_64 ABI support for ChromeOS"
+        errorLine1="            include(*nativeLibAbis.toTypedArray())"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle.kts"
+            line="82"
+            column="22"/>
     </issue>
 
     <issue
@@ -424,6 +589,17 @@
         message="This folder configuration (`v26`) is unnecessary; `minSdkVersion` is 31. Merge all the resources in this folder into `mipmap-anydpi`.">
         <location
             file="src/main/res/mipmap-anydpi-v26"/>
+    </issue>
+
+    <issue
+        id="TypographyEllipsis"
+        message="Replace &quot;...&quot; with ellipsis character (…, &amp;#8230;) ?"
+        errorLine1="    &lt;string name=&quot;app_oauth_processing_title&quot;>正在完成登录...&lt;/string>"
+        errorLine2="                                              ~~~~~~~~~">
+        <location
+            file="src/main/res/values/strings.xml"
+            line="14"
+            column="47"/>
     </issue>
 
 </issues>

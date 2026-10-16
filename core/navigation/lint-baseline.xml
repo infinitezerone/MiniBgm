@@ -63,7 +63,7 @@
         errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/core/navigation/StreamingAppLauncher.kt"
-            line="140"
+            line="126"
             column="36"/>
     </issue>
 
