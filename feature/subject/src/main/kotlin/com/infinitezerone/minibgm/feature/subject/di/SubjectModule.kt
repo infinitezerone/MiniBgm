@@ -63,6 +63,9 @@ val subjectModule =
                 communityRepository = getOrNull(),
                 danmakuRepository = getOrNull(),
                 torrentStreamEngine = getOrNull(),
+                // 必填：漏传会在生产里静默退化为 null，播放历史不再落库、换集/换源的"历史兜底续播"
+                // 整条死掉，而 Koin 解析（默认 null 参数）与单测（自己传 fake）都不会报错
+                playbackHistoryRepository = get(),
             )
         }
     }
