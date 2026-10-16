@@ -1659,6 +1659,10 @@ class PlayerViewModelTest {
         var queryCount = 0
             private set
 
+        /** 分集覆盖写入次数：关闭弹幕期间一次都不该发生 */
+        var overrideCount = 0
+            private set
+
         override suspend fun getDanmaku(
             bangumiEpisodeId: Long,
             subjectId: Long,
@@ -1677,7 +1681,9 @@ class PlayerViewModelTest {
             bangumiEpisodeId: Long,
             subjectId: Long,
             candidate: DanmakuEpisodeCandidate,
-        ) = Unit
+        ) {
+            overrideCount++
+        }
 
         override suspend fun clearDanmakuOverride(bangumiEpisodeId: Long) = Unit
     }
@@ -1755,6 +1761,55 @@ class PlayerViewModelTest {
             assertEquals(1, repo.queryCount)
             val event = viewModel.events.first()
             assertTrue(event is PlayerUiEvent.ShowSnackbar && event.messageRes == R.string.feature_subject_player_danmaku_empty_hint)
+        }
+
+    @Test
+    fun selectDanmakuCandidate_whileDanmakuDisabled_isIgnored() =
+        runTest {
+            // 弹幕关掉后两个入口都会收起（控制栏按钮 / 设置面板行），但关掉开关的那一帧里旧入口
+            // 仍可能被点到：放行会给「已关闭的功能」写持久化覆盖并立刻拉一次弹幕，与「关闭即零请求」冲突
+            val settings = FakeSettingsRepository(UserSettings(danmakuEnabled = false))
+            val repo = RecordingDanmakuRepository(emptyList())
+            val viewModel = danmakuViewModel(settings, repo)
+            advanceUntilIdle()
+
+            viewModel.selectDanmakuCandidate(
+                DanmakuEpisodeCandidate(
+                    animeId = 1L,
+                    animeTitle = "葬送的芙莉莲",
+                    episodeId = 2L,
+                    episodeTitle = "第2话",
+                ),
+            )
+            advanceUntilIdle()
+
+            assertEquals("关闭弹幕期间不得写分集覆盖", 0, repo.overrideCount)
+            assertEquals("关闭弹幕期间不得拉取弹幕", 0, repo.queryCount)
+        }
+
+    @Test
+    fun selectDanmakuCandidate_whileEnabled_savesOverrideAndReloads() =
+        runTest {
+            val sampleDanmakus = listOf(DanmakuItem(timeMs = 500L, text = "弹幕"))
+            val settings = FakeSettingsRepository()
+            val repo = RecordingDanmakuRepository(sampleDanmakus)
+            val viewModel = danmakuViewModel(settings, repo)
+            advanceUntilIdle()
+            val baselineQueries = repo.queryCount
+
+            viewModel.selectDanmakuCandidate(
+                DanmakuEpisodeCandidate(
+                    animeId = 1L,
+                    animeTitle = "葬送的芙莉莲",
+                    episodeId = 2L,
+                    episodeTitle = "第2话",
+                ),
+            )
+            advanceUntilIdle()
+
+            assertEquals("选中候选必须写入分集覆盖", 1, repo.overrideCount)
+            assertEquals("选中候选必须重载一次弹幕", baselineQueries + 1, repo.queryCount)
+            assertEquals(sampleDanmakus, viewModel.uiState.value.danmakus)
         }
 
     @Test

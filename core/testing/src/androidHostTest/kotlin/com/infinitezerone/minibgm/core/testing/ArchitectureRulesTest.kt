@@ -47,6 +47,9 @@ import kotlin.test.fail
  * 23. 跨页共用偏好必须只有一份真源：同一个评论区组件在播放页与分集详情页各持一份会话状态时，
  *     一处改成「最新」另一处仍是「热门」、重启又双双回默认——吐槽排序必须写共用的设备侧偏好、
  *     由两页各自的投影回读，解析统一走 CommentSortOrder.fromKey（枚举名不参与持久化）
+ * 24. 弹幕关闭即零请求必须连「分集纠正」入口一起收：该入口最终会 saveDanmakuOverride +
+ *     拉一次弹幕，弹幕关掉后入口仍亮着等于给「已关闭的功能」写持久化覆盖（两个入口
+ *     ——控制栏 DanmakuMatchEntryButton 与设置面板行——都必须随开关收起，VM 侧再兜一层竞态闸口）
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -2080,6 +2083,61 @@ class ArchitectureRulesTest {
         assertTrue(
             violations.isEmpty(),
             "违反「跨页共用偏好必须只有一份真源」红线（两页各持一份会话状态，改一处不动另一处，重启即回默认）：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
+    @Test
+    fun danmaku_match_entry_must_be_gated_by_the_danmaku_toggle() {
+        val violations = mutableListOf<String>()
+
+        // ① 控制栏入口：有候选还不够，弹幕关闭时必须一并收起
+        val overlayPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerControlsOverlay.kt"
+        val overlayCode = KotlinSourceScanner.sanitize(File(projectRoot, overlayPath).readText())
+        if (!Regex("""hasCandidates\s*=\s*isDanmakuEnabled\s*&&""").containsMatchIn(overlayCode)) {
+            violations.add(
+                "$overlayPath 的 DanmakuMatchEntryButton 未按 isDanmakuEnabled 收起：弹幕关掉后仍能进" +
+                    "「分集纠正」，选中候选会给已关闭的功能写持久化覆盖并拉一次弹幕",
+            )
+        }
+
+        // ② 播放设置面板里的「分集纠正」行：同样必须随开关收起
+        val screenPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt"
+        val screenCode = KotlinSourceScanner.sanitize(File(projectRoot, screenPath).readText())
+        if (!Regex(
+                """onOpenDanmakuPicker\s*=\s*openDanmakuPicker\s*\.takeIf\s*\{[^}]*isDanmakuEnabled""",
+            ).containsMatchIn(screenCode)
+        ) {
+            violations.add(
+                "$screenPath 的 onOpenDanmakuPicker 未按 isDanmakuEnabled 收起：设置面板里的" +
+                    "「分集纠正」行会在弹幕关闭时照样可点",
+            )
+        }
+
+        // ③ ViewModel 侧竞态兜底：关掉开关的那一帧里旧入口仍可能被点到
+        val viewModelPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewModel.kt"
+        val viewModelCode = KotlinSourceScanner.sanitize(File(projectRoot, viewModelPath).readText())
+        val start = viewModelCode.indexOf("fun selectDanmakuCandidate(")
+        if (start < 0) {
+            violations.add("$viewModelPath 找不到 selectDanmakuCandidate：闸口必须留在该入口内")
+        } else {
+            val rest = viewModelCode.substring(start)
+            val end = rest.indexOf("\n    fun ")
+            val body = if (end > 0) rest.substring(0, end) else rest
+            if (!body.contains("isDanmakuEnabled")) {
+                violations.add(
+                    "$viewModelPath 的 selectDanmakuCandidate 未按 isDanmakuEnabled 闸口：" +
+                        "关闭弹幕期间点到旧入口仍会 saveDanmakuOverride + 拉一次弹幕",
+                )
+            }
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反「弹幕关闭即零请求」红线（入口不随开关收起，关闭期间仍写覆盖/发请求）：\n" +
                 violations.joinToString("\n"),
         )
     }

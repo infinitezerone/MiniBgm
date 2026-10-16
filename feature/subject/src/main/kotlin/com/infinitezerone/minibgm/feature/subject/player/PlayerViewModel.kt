@@ -1463,6 +1463,12 @@ class PlayerViewModel(
         val repo = danmakuRepository ?: return
         val current = _uiState.value
         if (current.episodeId <= 0L) return
+        // 弹幕关闭期间零请求：两个入口都已随开关收起（控制栏按钮 / 设置面板行），这里是竞态兜底——
+        // 关掉开关的那一帧里入口可能尚未重组掉，放行会给「已关闭的功能」写持久化覆盖并立即拉一次弹幕。
+        if (!current.isDanmakuEnabled) {
+            logger.d { "忽略弹幕分集纠正（弹幕开关已关闭）" }
+            return
+        }
         viewModelScope.launch {
             repo.saveDanmakuOverride(
                 bangumiEpisodeId = current.episodeId,

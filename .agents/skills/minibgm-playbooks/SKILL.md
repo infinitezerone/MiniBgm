@@ -128,6 +128,7 @@ description: >-
    * 正确形态：UI 可见偏好一律写 `SettingsRepository`（`UserPreferences.danmakuEnabled` / `autoNextEnabled`），再由**快照投影**回读，保持单一真源（`PlayViewPreferences` 承载画中画/弹幕/连播三条偏好——同一份偏好拆进两条 combine 支路时，一次写入会各推一次、产出两份快照）；UI 局部状态只留瞬态交互。红线 `ArchitectureRulesTest#player_view_preferences_must_be_persisted_not_held_in_session_state` 物理闭锁：既禁 VM 就地翻转偏好字段/漏写 setter，也含 PlayerScreen 局部状态白名单（新增一处就要显式回答「它该不该持久化」）。
    * 反向同样要钉住：**播放速度与画面比例刻意不持久化**——它们跟着「这条视频/这次观看」走，持久化会让下一部番莫名被裁剪、被变速（B 站/YouTube 的倍速同样不跨视频记忆）。红线同一条测试里机械闭锁：`UserPreferences` 出现该字段、或 `SettingsRepository` 出现同名标识（字段/setter/投影）即失败，另有「速度/比例」关键词兜底防改名绕过（`preferredPlaybackSpeed` 之类同样报错）。
    * 关闭即零请求：弹幕关闭期间不得拉取；自动拉取闸口必须**同步**读投影 + 按 `episodeId:episodeSort` 请求键去重。兜底拉取的判据是「弹幕为空」，而空结果会一直为空，播放进度落盘、源健康度变化都会重放快照——没有请求键就是把同一分集重拉成无界重试；异步回读设置更糟：同一写入推来的两份快照会各自放行一次。「重开弹幕但没有弹幕」的提示只能由那次补拉的**真实空结果**给出，严禁在拨开关的瞬间预判为空。
+   * **「分集纠正」入口同样属于这条闸口**：该入口（控制栏 `DanmakuMatchEntryButton` 与播放设置面板里的那一行）会 `saveDanmakuOverride` + 立即拉一次弹幕，弹幕关掉后入口还亮着，用户点下去就是给「已关闭的功能」写持久化覆盖并发请求。两处入口都必须一并按 `isDanmakuEnabled` 收起（`hasCandidates = isDanmakuEnabled && ...` / `takeIf { isDanmakuEnabled && ... }`），`selectDanmakuCandidate` 再兜一层竞态闸口（关掉开关的那一帧里旧入口可能尚未重组掉）。红线：`ArchitectureRulesTest#danmaku_match_entry_must_be_gated_by_the_danmaku_toggle`。
 
 14. **同一组件在两页各持一份偏好＝改一处不动另一处**：
    * 评论区组件（`CommentsSection`）同时挂在播放页与分集详情页，但两边各持一份会话状态：播放页在 `PlayerViewModel` 的 `commentsDelegate.state.sortOrder`，详情页是一份私有的 `MutableStateFlow(CommentSortOrder.HOT)`。于是「改成最新」只影响当前那一页，切到另一页仍是热门，重启又双双回默认。
