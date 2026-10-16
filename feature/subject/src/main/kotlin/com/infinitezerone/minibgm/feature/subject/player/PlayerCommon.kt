@@ -258,6 +258,10 @@ internal fun PlayerEmptyView(
                         OutlinedButton(onClick = onNextSource) {
                             Text(stringResource(R.string.feature_subject_player_switch_next_source), color = Color.White)
                         }
+                    } else if (onRequestOpenSources != null) {
+                        OutlinedButton(onClick = onRequestOpenSources) {
+                            Text(stringResource(R.string.feature_subject_source_ai_search), color = Color.White)
+                        }
                     }
                 } else if (onRequestOpenSources != null) {
                     Button(onClick = onRequestOpenSources) {
@@ -305,3 +309,32 @@ internal fun formatSourceDisplayName(
         stringResource(R.string.feature_subject_player_source_fallback_format, index + 1)
     }
 }
+
+/**
+ * 提取线路对应的小徽标文案（P2P / 本地 / 直链 / 规则源）。
+ * 若名称本身已包含该标识文案（例如“默认直链”已包含“直链”），返回 null 以彻底消除叠词。
+ */
+@Composable
+internal fun sourceBadgeText(source: PlayerSourceTab): String? {
+    val badgeRes =
+        when (source.kind) {
+            PlayerSourceKind.LOCAL_FILE -> R.string.feature_subject_player_source_local_badge
+            PlayerSourceKind.TORRENT_STREAM -> R.string.feature_subject_player_source_torrent_badge
+            PlayerSourceKind.DIRECT -> R.string.feature_subject_player_source_direct_badge
+            PlayerSourceKind.RULE -> R.string.feature_subject_player_source_rule_badge
+        }
+    val badge = stringResource(badgeRes)
+    val rawName = source.nameRes?.let { stringResource(it) } ?: source.name
+    return if (rawName.contains(badge, ignoreCase = true)) null else badge
+}
+
+/**
+ * 根据线路类型提供语义图标。
+ */
+internal fun sourceIcon(source: PlayerSourceTab): androidx.compose.ui.graphics.vector.ImageVector =
+    when (source.kind) {
+        PlayerSourceKind.LOCAL_FILE -> BgmIcons.FolderOpen
+        PlayerSourceKind.TORRENT_STREAM -> BgmIcons.Download
+        PlayerSourceKind.DIRECT -> BgmIcons.CloudQueue
+        PlayerSourceKind.RULE -> BgmIcons.Tv
+    }

@@ -313,7 +313,7 @@ internal fun PlayerCurrentSourceCard(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Icon(
-                imageVector = if (currentSource.isDirect) BgmIcons.CloudQueue else BgmIcons.Tv,
+                imageVector = sourceIcon(currentSource),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp),
@@ -333,26 +333,22 @@ internal fun PlayerCurrentSourceCard(
                         overflow = TextOverflow.Ellipsis,
                     )
 
-                    // 线路类型徽标
-                    Box(
-                        modifier =
-                            Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                                .padding(horizontal = 5.dp, vertical = 1.dp),
-                    ) {
-                        Text(
-                            text =
-                                stringResource(
-                                    if (currentSource.isDirect) {
-                                        R.string.feature_subject_player_source_direct_badge
-                                    } else {
-                                        R.string.feature_subject_player_source_rule_badge
-                                    },
-                                ),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                    // 线路类型徽标（自动防叠词：若名称已有对应词则不重复贴徽标）
+                    val badge = sourceBadgeText(currentSource)
+                    if (badge != null) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                                    .padding(horizontal = 5.dp, vertical = 1.dp),
+                        ) {
+                            Text(
+                                text = badge,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
 
                     if (failureCount > 0) {

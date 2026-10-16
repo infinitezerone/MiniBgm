@@ -76,14 +76,22 @@ internal const val MIN_RESUME_POSITION_MS = 5_000L
 internal const val RESOLVE_TOTAL_TIMEOUT_MS = 20_000L
 
 /**
- * 播放源标签
+ * 线路类型分类
  */
+enum class PlayerSourceKind {
+    RULE,
+    DIRECT,
+    TORRENT_STREAM,
+    LOCAL_FILE,
+}
+
 data class PlayerSourceTab(
     val id: String,
     val name: String,
     val rule: PlaybackSourceRule? = null,
     val isDirect: Boolean = false,
     @StringRes val nameRes: Int? = null,
+    val kind: PlayerSourceKind = if (isDirect) PlayerSourceKind.DIRECT else PlayerSourceKind.RULE,
 )
 
 /**
@@ -407,12 +415,24 @@ class PlayerViewModel(
         val list = mutableListOf<PlayerSourceTab>()
         val hasDirect = route.queue.isNotEmpty() || route.streamUrl.isNotBlank()
         if (hasDirect) {
+            val directUrl = route.queue.firstOrNull()?.streamUrl ?: route.streamUrl
+            val directKind = resolvePlayerSourceKind(directUrl)
+            val (nameRes, defaultName) =
+                when (directKind) {
+                    PlayerSourceKind.LOCAL_FILE ->
+                        R.string.feature_subject_player_source_local_file to "本地离线"
+                    PlayerSourceKind.TORRENT_STREAM ->
+                        R.string.feature_subject_player_source_torrent_stream to "BT 边下边播"
+                    else ->
+                        R.string.feature_subject_player_source_default_direct to "默认直链"
+                }
             list.add(
                 PlayerSourceTab(
                     id = "direct",
-                    name = "默认直链",
+                    name = defaultName,
                     isDirect = true,
-                    nameRes = R.string.feature_subject_player_source_default_direct,
+                    nameRes = nameRes,
+                    kind = directKind,
                 ),
             )
         }
@@ -423,6 +443,7 @@ class PlayerViewModel(
                     name = rule.name,
                     rule = rule,
                     isDirect = false,
+                    kind = PlayerSourceKind.RULE,
                 ),
             )
         }
@@ -1153,7 +1174,16 @@ class PlayerViewModel(
                 // 续播点属于"分集"而不是"上一个地址"：换集必须按新分集自己的记录下发，
                 // 绝不能沿用上一集的进度（规则源的地址稍后由 consumePendingResumePositionForNewEpisode 补上）
                 resumePositionMs = directEntry?.let { session.positionsMap[it.streamUrl] ?: 0L } ?: 0L,
-                error = if (directMissing) "直链列表中没有该分集，请切换到其他播放源" else null,
+                error =
+                    when {
+                        !directMissing -> null
+                        state.currentSource?.kind == PlayerSourceKind.TORRENT_STREAM ->
+                            "当前 BT 资源仅包含单集，请切换线路或重新选源"
+                        state.currentSource?.kind == PlayerSourceKind.LOCAL_FILE ->
+                            "当前离线缓存仅包含单集，请切换线路或重新选源"
+                        else ->
+                            "直链列表中没有该分集，请切换到其他播放源"
+                    },
             )
         }
         syncResumePositionForEpisode(episode.id, directEntry?.streamUrl)
@@ -1559,3 +1589,10 @@ class PlayerViewModel(
         torrentStreamEngine?.releasePlayerSession()
     }
 }
+
+internal fun resolvePlayerSourceKind(url: String): PlayerSourceKind =
+    when {
+        url.startsWith("file://") -> PlayerSourceKind.LOCAL_FILE
+        url.contains("127.0.0.1") || url.contains("localhost") -> PlayerSourceKind.TORRENT_STREAM
+        else -> PlayerSourceKind.DIRECT
+    }

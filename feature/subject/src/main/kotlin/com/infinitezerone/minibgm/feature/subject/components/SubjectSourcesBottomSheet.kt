@@ -82,6 +82,7 @@ import com.infinitezerone.minibgm.core.model.formatPubDateShort
 import com.infinitezerone.minibgm.core.model.formatTransferSpeed
 import com.infinitezerone.minibgm.core.model.magnetInfoHash
 import com.infinitezerone.minibgm.core.model.torrentEpisodeKey
+import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.StreamingAppLauncher
 import com.infinitezerone.minibgm.core.navigation.launchExternalPlayer
@@ -1139,15 +1140,27 @@ fun TorrentMediaResourcesSection(
         if (completedTask != null) {
             withContext(Dispatchers.Main) {
                 onDismissAndRun {
+                    val offlineUrl = "file://${completedTask.savePath}"
                     onInternalPlayClick?.invoke(
                         PlayerRoute(
                             subjectId = subject.id,
                             episodeId = episode?.id ?: 0L,
-                            streamUrl = "file://${completedTask.savePath}",
+                            streamUrl = offlineUrl,
                             episodeName = resourceEpisodeName(resource),
                             subjectName = subject.displayName,
                             episodeSort = effectiveEpSort,
                             episodeType = episode?.type ?: 0,
+                            queue =
+                                listOf(
+                                    PlayerQueueEntry(
+                                        streamUrl = offlineUrl,
+                                        label = resource.title,
+                                        episodeName = resourceEpisodeName(resource),
+                                        episodeSort = effectiveEpSort,
+                                        episodeType = episode?.type ?: 0,
+                                        episodeId = episode?.id ?: 0L,
+                                    ),
+                                ),
                         ),
                     )
                 }
@@ -1191,6 +1204,17 @@ fun TorrentMediaResourcesSection(
                                 subjectName = subject.displayName,
                                 episodeSort = effectiveEpSort,
                                 episodeType = episode?.type ?: 0,
+                                queue =
+                                    listOf(
+                                        PlayerQueueEntry(
+                                            streamUrl = streamUrl,
+                                            label = resource.title,
+                                            episodeName = resourceEpisodeName(resource),
+                                            episodeSort = effectiveEpSort,
+                                            episodeType = episode?.type ?: 0,
+                                            episodeId = episode?.id ?: 0L,
+                                        ),
+                                    ),
                             ),
                         )
                     }

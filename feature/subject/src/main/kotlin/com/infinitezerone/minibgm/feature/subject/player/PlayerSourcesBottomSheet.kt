@@ -244,7 +244,7 @@ internal fun PlayerSourcesListContent(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Icon(
-                            imageVector = if (source.isDirect) BgmIcons.CloudQueue else BgmIcons.Tv,
+                            imageVector = sourceIcon(source),
                             contentDescription = null,
                             tint =
                                 if (isSelected) {
@@ -268,36 +268,32 @@ internal fun PlayerSourcesListContent(
                                     overflow = TextOverflow.Ellipsis,
                                 )
 
-                                // 类型徽标：直链 / 规则源
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(
+                                // 类型徽标（自动防叠词：若名称已有对应词则不重复贴徽标）
+                                val badge = sourceBadgeText(source)
+                                if (badge != null) {
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(
+                                                    if (isSelected) {
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                                    } else {
+                                                        MaterialTheme.colorScheme.surfaceContainerHighest
+                                                    },
+                                                ).padding(horizontal = 5.dp, vertical = 1.dp),
+                                    ) {
+                                        Text(
+                                            text = badge,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color =
                                                 if (isSelected) {
-                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                                    MaterialTheme.colorScheme.primary
                                                 } else {
-                                                    MaterialTheme.colorScheme.surfaceContainerHighest
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
                                                 },
-                                            ).padding(horizontal = 5.dp, vertical = 1.dp),
-                                ) {
-                                    Text(
-                                        text =
-                                            stringResource(
-                                                if (source.isDirect) {
-                                                    R.string.feature_subject_player_source_direct_badge
-                                                } else {
-                                                    R.string.feature_subject_player_source_rule_badge
-                                                },
-                                            ),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color =
-                                            if (isSelected) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                    )
+                                        )
+                                    }
                                 }
 
                                 SourceFailureHint(failureCount)
