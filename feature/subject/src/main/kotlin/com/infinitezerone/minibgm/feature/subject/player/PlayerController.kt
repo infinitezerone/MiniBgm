@@ -204,11 +204,14 @@ class PlayerController(
 
     private fun resetTrackOverridesOnMediaChange() {
         val params = engine.trackSelectionParameters
-        if (params.overrides.isNotEmpty() || params.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) {
+        // 只清「跟着上一份媒体选的」轨道覆盖：override 里存的是上一份媒体的轨道组下标，
+        // 换源后必须清掉，让引擎按语言偏好（setPreferredTextLanguages）重新选一条。
+        // 但 disabledTrackTypes 是用户级偏好（用户显式点了「关闭字幕」），属"媒体态重置不得吞掉"的字段，
+        // 严禁在此一并 setTrackTypeDisabled(TEXT, false)——那会让用户每换一条线路/换一集都要重关一次字幕。
+        if (params.overrides.isNotEmpty()) {
             engine.trackSelectionParameters =
                 params
                     .buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                     .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                     .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
                     .build()

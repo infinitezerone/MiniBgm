@@ -158,6 +158,14 @@ data class PlayerUiState(
     /** 源标识 → 本次会话内的连续失败次数；用于在选源界面弱化屡试屡败的源 */
     val sourceFailureCounts: Map<String, Int> = emptyMap(),
     val selectedSourceIndex: Int = 0,
+    /**
+     * 当前 [streamUrl] 真正归属的播放源标识（null 表示没有在播地址）。
+     *
+     * 与 [selectedSourceIndex] 分离：用户切到新线路后，旧线路的画面会被**故意保留**到解析完成，
+     * 这十几秒里"选中的"与"正在播的"并不是同一条线。健康度归因、"上次可用源"与界面徽标必须读它，
+     * 否则会把旧流的 Ready/Error 记到新源头上，并在切源失败后谎称新线路"正在使用"。
+     */
+    val playingSourceId: String? = null,
     /** 全部分集列表（由条目详情持续同步） */
     val episodes: List<PlayerEpisodeItem> = emptyList(),
     /** 条目总分集数（由条目或仓库总数探测得出） */
@@ -320,6 +328,14 @@ private class PlaybackSession(
     /** 已落盘的“上次可用源”标识，避免每次 READY 都重复写 DataStore */
     var lastSavedSourceId: String = ""
 
+    /**
+     * 用户当前选中的播放源标识（跨规则列表变化保持身份）。
+     *
+     * [PlayerUiState.selectedSourceIndex] 只有位置语义：规则被启停/增删后下标会指向另一条规则，
+     * 列表刷新必须按标识找回选中项（找不到才回落位置），否则选中线路会静默串到别的规则上。
+     */
+    var selectedSourceId: String? = null
+
     /** 到达列表末尾且后端仍有更多分集时，等待续拉完成后自动连播下一集的意图标记 */
     var pendingAutoNextOnMoreLoaded: Boolean = false
 
@@ -453,6 +469,7 @@ class PlayerViewModel(
     private fun createInitialState(): PlayerUiState {
         val entry = queue[session.currentIndex]
         val initialSources = buildSources(emptyList())
+        val initialDirectId = initialSources.firstOrNull { it.isDirect }?.id
         return PlayerUiState(
             subjectId = route.subjectId,
             episodeId = entry.episodeId,
@@ -468,6 +485,7 @@ class PlayerViewModel(
             resumePositionMs = 0L,
             sources = initialSources,
             selectedSourceIndex = 0,
+            playingSourceId = initialDirectId?.takeIf { entry.streamUrl.isNotBlank() },
             episodes = initialEpisodes(),
             isResolvingSource = false,
         )
@@ -691,8 +709,9 @@ class PlayerViewModel(
             // 播放源列表：由规则流派生；仅在列表真实变化时重算选中项
             val newSources = buildSources(snapshot.rules)
             if (newSources != next.sources) {
+                // 入口携带的初始规则只在首次建表时生效：之后用户手动选的线路不得被列表刷新拽回初始规则
                 val targetRuleIndex =
-                    if (route.initialRuleId.isNotBlank()) {
+                    if (route.initialRuleId.isNotBlank() && next.sources.isEmpty()) {
                         newSources.indexOfFirst { it.rule?.id == route.initialRuleId }.takeIf { it >= 0 }
                     } else {
                         null
@@ -717,8 +736,16 @@ class PlayerViewModel(
                     } else {
                         null
                     }
+                // 身份优先：列表增删/启停后按源标识找回原选中项，绝不沿用旧下标
+                // （下标只有位置语义，在前面插一条规则就会静默指向另一条线，随后健康度、
+                //   "上次可用源"与界面徽标会全部记到错的源上）
+                val previousSelectedId =
+                    session.selectedSourceId ?: next.sources.getOrNull(next.selectedSourceIndex)?.id
+                val identityIndex =
+                    previousSelectedId?.let { id -> newSources.indexOfFirst { it.id == id }.takeIf { it >= 0 } }
                 val newIndex =
                     targetRuleIndex
+                        ?: identityIndex
                         ?: preferredIndex
                         ?: next.selectedSourceIndex.coerceIn(0, (newSources.size - 1).coerceAtLeast(0))
                 next =
@@ -726,6 +753,7 @@ class PlayerViewModel(
                         sources = newSources,
                         selectedSourceIndex = newIndex,
                     )
+                session.selectedSourceId = newSources.getOrNull(newIndex)?.id
                 sourcesChanged = true
             }
             // 全部分集列表与当前分集元数据（由条目详情流与收藏流持续同步）
@@ -1067,6 +1095,13 @@ class PlayerViewModel(
                 episodeSort = entry.episodeSort,
                 episodeType = entry.episodeType,
                 requestHeaders = entry.requestHeaders,
+                playingSourceId =
+                    when {
+                        entry.streamUrl.isBlank() -> null
+                        it.currentSource?.isDirect == true -> it.sources.getOrNull(it.selectedSourceIndex)?.id
+                        // 规则源换集：队列里的临时地址随后会被嗅探结果替换，归属先保持不动
+                        else -> it.playingSourceId
+                    },
                 currentIndex = index,
                 isWatched = false,
                 currentEpisodeDesc = "",
@@ -1092,8 +1127,19 @@ class PlayerViewModel(
     /** 切换播放源 */
     fun selectSource(index: Int) {
         val state = _uiState.value
-        if (index !in state.sources.indices || index == state.selectedSourceIndex) return
+        if (index !in state.sources.indices) return
+        val targetId = state.sources[index].id
+        // 只有「同一条线、确实正在播它、没有在途解析/未处理错误」才算重复点击。
+        // 解析失败后必须允许再点一次重试，否则用户只能"先切到别的线，再切回来"
+        if (index == state.selectedSourceIndex &&
+            targetId == state.playingSourceId &&
+            !state.isResolvingSource &&
+            state.error == null
+        ) {
+            return
+        }
         flushPlaybackPosition()
+        session.selectedSourceId = targetId
         _uiState.update { it.copy(selectedSourceIndex = index, matchedVodName = null) }
         resolveCurrentEpisodeStream()
     }
@@ -1164,6 +1210,13 @@ class PlayerViewModel(
                         directEntry != null -> directEntry.streamUrl
                         directMissing -> ""
                         else -> it.streamUrl
+                    },
+                playingSourceId =
+                    when {
+                        directEntry != null -> it.sources.getOrNull(it.selectedSourceIndex)?.id
+                        directMissing -> null
+                        // 非直链源保留旧画面，归属要等嗅探出地址那一刻才替换
+                        else -> it.playingSourceId
                     },
                 requestHeaders =
                     when {
@@ -1419,6 +1472,7 @@ class PlayerViewModel(
                     it.copy(
                         streamUrl = matchingEntry.streamUrl,
                         requestHeaders = matchingEntry.requestHeaders,
+                        playingSourceId = currentTab.id,
                         isResolvingSource = false,
                         error = null,
                         resumePositionMs =
@@ -1438,6 +1492,7 @@ class PlayerViewModel(
                     it.copy(
                         streamUrl = "",
                         requestHeaders = emptyMap(),
+                        playingSourceId = null,
                         isResolvingSource = false,
                         error = errorMessage,
                     )
@@ -1508,6 +1563,7 @@ class PlayerViewModel(
                             it.copy(
                                 streamUrl = playable.url,
                                 requestHeaders = playable.headers,
+                                playingSourceId = currentTab.id,
                                 matchedVodName = playable.matchedVodName,
                                 isResolvingSource = false,
                                 resolveAttempt = 0,
@@ -1530,32 +1586,12 @@ class PlayerViewModel(
                             } else {
                                 "未在【${rule.name}】中解析到「$targetLabel」的可播放直链（已尝试 $attempted 个关键词）"
                             }
-                        val err = "$reason，可尝试切换其他播放源"
-                        failureStore?.markFailed("", err, currentSourceId())
-                        _uiState.update {
-                            it.copy(
-                                matchedVodName = null,
-                                isResolvingSource = false,
-                                resolveAttempt = 0,
-                                resolveAttemptTotal = 0,
-                                error = err,
-                            )
-                        }
+                        reportResolveFailure("$reason，可尝试切换其他播放源")
                     }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    val err = "解析失败，可尝试切换其他播放源"
-                    failureStore?.markFailed("", err, currentSourceId())
-                    _uiState.update {
-                        it.copy(
-                            matchedVodName = null,
-                            isResolvingSource = false,
-                            resolveAttempt = 0,
-                            resolveAttemptTotal = 0,
-                            error = err,
-                        )
-                    }
+                    reportResolveFailure("解析失败，可尝试切换其他播放源")
                 }
             }
     }
@@ -1574,21 +1610,65 @@ class PlayerViewModel(
         }
     }
 
-    /** 播放成功建立（STATE_READY）：清除该地址的失败标记，并把当前源记为“上次可用源” */
+    /**
+     * 解析失败的诚实收敛。
+     *
+     * 切线路时旧线路的画面是被**故意保留**在播的（避免换源瞬间黑屏），所以解析失败不能直接落全屏错误态——
+     * 那会把仍在正常播放的画面伪装成播放失败，而面板又会把解析失败的那条线标成「正在使用当前线路」。
+     * 这里改为：失败先归因到当前**选中**源（它确实没解析出地址），随后把选中项回退到**正在播**的那条线，
+     * 并用提示告知原因；只有当前根本没有在播地址时，才落错误态。
+     */
+    private suspend fun reportResolveFailure(message: String) {
+        failureStore?.markFailed("", message, currentSourceId())
+        val state = _uiState.value
+        val playingIndex = state.playingSourceId?.let { id -> state.sources.indexOfFirst { it.id == id } }
+        if (playingIndex != null && playingIndex >= 0) {
+            session.selectedSourceId = state.sources[playingIndex].id
+            _uiState.update {
+                it.copy(
+                    selectedSourceIndex = playingIndex,
+                    matchedVodName = null,
+                    isResolvingSource = false,
+                    resolveAttempt = 0,
+                    resolveAttemptTotal = 0,
+                )
+            }
+            _events.send(PlayerUiEvent.ShowSnackbar(message))
+        } else {
+            _uiState.update {
+                it.copy(
+                    matchedVodName = null,
+                    isResolvingSource = false,
+                    resolveAttempt = 0,
+                    resolveAttemptTotal = 0,
+                    error = message,
+                )
+            }
+        }
+    }
+
+    /** 播放成功建立（STATE_READY）：清除该地址的失败标记，并把**在播源**记为“上次可用源” */
     fun onPlaybackReady() {
-        failureStore?.markPlayable(_uiState.value.streamUrl, currentSourceId())
-        val id = currentSourceId() ?: return
+        val state = _uiState.value
+        failureStore?.markPlayable(state.streamUrl, state.playingSourceId)
+        val id = state.playingSourceId ?: return
         if (id == session.lastSavedSourceId) return
         session.lastSavedSourceId = id
         viewModelScope.launch { settingsRepository.setLastPlaybackSourceId(id) }
     }
 
     fun onPlaybackError(message: String) {
+        val state = _uiState.value
         _uiState.update { it.copy(error = message) }
-        failureStore?.markFailed(_uiState.value.streamUrl, message, currentSourceId())
+        failureStore?.markFailed(state.streamUrl, message, state.playingSourceId)
     }
 
-    /** 当前选中源的标识；拿不到就返回 null（计数只记到能认出来的源上） */
+    /**
+     * 当前**选中**源的标识；拿不到就返回 null（计数只记到能认出来的源上）。
+     *
+     * 只用于"用户选了这个源，但它没解析出地址"这类归因；引擎回调（Ready/Error）必须用
+     * [PlayerUiState.playingSourceId]，否则切源解析窗口内会把旧流的播报记到新源头上。
+     */
     private fun currentSourceId(): String? = _uiState.value.let { state -> state.sources.getOrNull(state.selectedSourceIndex)?.id }
 
     override fun onCleared() {

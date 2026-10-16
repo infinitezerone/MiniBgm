@@ -28,6 +28,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeTorrentStreamEngin
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -36,6 +37,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -91,6 +93,48 @@ class PlayerViewModelTest {
             communityRepository = communityRepository,
             playbackHistoryRepository = playbackHistoryRepository,
         )
+
+    /**
+     * 立即返回固定直链的取源替身；不传 url 时恒为空结果（模拟"试完所有关键词都没命中"）。
+     *
+     * 选源后能否拿到地址决定了「在播源」归属：解析成功才把 playingSourceId 换成新源。
+     */
+    private fun resolverReturning(vararg urls: String): PlaybackResolverRepository =
+        object : PlaybackResolverRepository {
+            override suspend fun resolvePages(
+                pageUrls: List<String>,
+                epNumber: Float,
+                siteName: String,
+                title: String,
+            ): List<PlayableSource> = emptyList()
+
+            override suspend fun resolveTemplate(
+                url: String,
+                headers: Map<String, String>,
+                epNumber: Float,
+                siteName: String,
+                title: String,
+            ): List<PlayableSource> = emptyList()
+
+            override suspend fun resolveRule(
+                rule: PlaybackSourceRule,
+                title: String,
+                epNumber: Float,
+                subjectId: Long,
+                episodeId: Long,
+            ): List<PlayableSource> = urls.filter { it.isNotBlank() }.map { PlayableSource(url = it, kind = PlaylistEntryKind.DIRECT) }
+        }
+
+    private fun rulesOf(vararg ids: String): List<PlaybackSourceRule> =
+        ids.map { id ->
+            PlaybackSourceRule(
+                id = id,
+                name = id.uppercase(),
+                urlTemplate = "https://$id/?t={title}",
+                kind = PlaybackRuleKind.SOURCE,
+                isEnabled = true,
+            )
+        }
 
     @Test
     fun onQualitySelected_persistsPreference() =
@@ -916,14 +960,10 @@ class PlayerViewModelTest {
         }
 
     @Test
-    fun onPlaybackReady_recordsLastWorkingSource() =
+    fun onPlaybackReady_withoutAnInPlaySource_recordsNothing() =
         runTest {
             val settings = FakeSettingsRepository()
-            settings.importPlaybackRules(
-                listOf(
-                    PlaybackSourceRule(id = "r1", name = "R1", urlTemplate = "https://a/?t={title}", isEnabled = true),
-                ),
-            )
+            settings.setPlaybackRules(rulesOf("r1"))
             val vm =
                 PlayerViewModel(
                     route = route(streamUrl = ""),
@@ -932,11 +972,13 @@ class PlayerViewModelTest {
                     settingsRepository = settings,
                 )
             advanceUntilIdle()
+            assertNull("规则源未解析出地址时没有在播源", vm.uiState.value.playingSourceId)
 
             vm.onPlaybackReady()
             advanceUntilIdle()
 
-            assertEquals("r1", settings.lastPlaybackSourceId.first())
+            // 引擎回调必须按"真正在播的源"归因：没有在播源就不得凭空记一条"上次可用源"
+            assertEquals("", settings.lastPlaybackSourceId.first())
         }
 
     @Test
@@ -1848,5 +1890,252 @@ class PlayerViewModelTest {
             val state = vm.uiState.value
             assertEquals("https://example.com/rule1_ep1.m3u8", state.streamUrl)
             assertEquals("同分集内切换播放线路应无缝继承当前最新进度", 120_000L, state.resumePositionMs)
+        }
+
+    @Test
+    fun selectSource_resolveFailure_keepsPlayingSourceAndDoesNotRaiseErrorState() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            settings.setPlaybackRules(rulesOf("r1"))
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = episodeId,
+                            streamUrl = "https://example.com/direct_ep1.m3u8",
+                            subjectName = "葬送的芙莉莲",
+                            episodeSort = 1f,
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = resolverReturning(),
+                )
+            advanceUntilIdle()
+            assertEquals("direct", vm.uiState.value.playingSourceId)
+
+            // 切到解析不出地址的规则源：旧画面仍在播，不得被全屏错误态盖掉，也不得谎称新源"正在使用"
+            vm.selectSource(1)
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertEquals("切源失败后选中项必须回退到仍在播的线路", 0, state.selectedSourceIndex)
+            assertEquals("direct", state.playingSourceId)
+            assertNull("仍在播放时禁止落全屏错误态", state.error)
+            assertTrue("失败原因必须以轻提示透出", vm.events.first() is PlayerUiEvent.ShowSnackbar)
+        }
+
+    @Test
+    fun selectSource_resolveFailure_marksFailureOnTheSourceThatFailed() =
+        runTest {
+            val failureStore = PlaybackFailureStore()
+            val settings = FakeSettingsRepository()
+            settings.setPlaybackRules(rulesOf("r1"))
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = episodeId,
+                            streamUrl = "https://example.com/direct_ep1.m3u8",
+                            subjectName = "葬送的芙莉莲",
+                            episodeSort = 1f,
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    failureStore = failureStore,
+                    playbackResolverRepository = resolverReturning(),
+                )
+            advanceUntilIdle()
+
+            vm.selectSource(1)
+            advanceUntilIdle()
+
+            // 归因给「用户选了但没解析出地址」的那条规则源，而不是仍在播的直链
+            assertEquals(1, failureStore.sourceHealth.value["r1"]?.consecutiveFailures)
+            assertNull(failureStore.sourceHealth.value["direct"])
+        }
+
+    @Test
+    fun onPlaybackReady_duringSourceSwitch_staysAttributedToThePlayingSource() =
+        runTest {
+            val gate = CompletableDeferred<Unit>()
+            val settings = FakeSettingsRepository()
+            settings.setPlaybackRules(rulesOf("r1"))
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = episodeId,
+                            streamUrl = "https://example.com/direct_ep1.m3u8",
+                            subjectName = "葬送的芙莉莲",
+                            episodeSort = 1f,
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository =
+                        object : PlaybackResolverRepository {
+                            override suspend fun resolvePages(
+                                pageUrls: List<String>,
+                                epNumber: Float,
+                                siteName: String,
+                                title: String,
+                            ): List<PlayableSource> = emptyList()
+
+                            override suspend fun resolveTemplate(
+                                url: String,
+                                headers: Map<String, String>,
+                                epNumber: Float,
+                                siteName: String,
+                                title: String,
+                            ): List<PlayableSource> = emptyList()
+
+                            override suspend fun resolveRule(
+                                rule: PlaybackSourceRule,
+                                title: String,
+                                epNumber: Float,
+                                subjectId: Long,
+                                episodeId: Long,
+                            ): List<PlayableSource> {
+                                gate.await()
+                                return listOf(PlayableSource(url = "https://example.com/r1_ep1.m3u8", kind = PlaylistEntryKind.DIRECT))
+                            }
+                        },
+                )
+            advanceUntilIdle()
+
+            vm.selectSource(1)
+            runCurrent()
+            assertEquals("解析窗口内选中项已切到新源", 1, vm.uiState.value.selectedSourceIndex)
+            assertEquals("但仍在播的仍是旧线路", "direct", vm.uiState.value.playingSourceId)
+            assertTrue("此刻解析仍在途", vm.uiState.value.isResolvingSource)
+
+            // 旧流此刻才回 READY：它属于 direct，绝不能把「上次可用源」记到正在解析的 r1 头上。
+            // 注意用 runCurrent 而非 advanceUntilIdle——后者会把虚拟时间推到解析总超时，
+            // 在途嗅探会被 TimeoutCancellation 掐掉，"解析窗口"就观察不到了
+            vm.onPlaybackReady()
+            runCurrent()
+            assertEquals("direct", settings.lastPlaybackSourceId.first())
+
+            gate.complete(Unit)
+            advanceUntilIdle()
+            assertEquals("https://example.com/r1_ep1.m3u8", vm.uiState.value.streamUrl)
+            assertEquals("r1", vm.uiState.value.playingSourceId)
+
+            vm.onPlaybackReady()
+            advanceUntilIdle()
+            assertEquals("解析成功后归属才切换到新源", "r1", settings.lastPlaybackSourceId.first())
+        }
+
+    @Test
+    fun ruleListChange_keepsSelectionAndPlayingSourceByIdentity() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            settings.setPlaybackRules(rulesOf("r1", "r2"))
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = episodeId,
+                            streamUrl = "",
+                            subjectName = "葬送的芙莉莲",
+                            episodeSort = 1f,
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = resolverReturning("https://example.com/r_ep1.m3u8"),
+                )
+            advanceUntilIdle()
+            vm.selectSource(1)
+            advanceUntilIdle()
+            assertEquals("r2", vm.uiState.value.playingSourceId)
+
+            // 在最前面插入一条新规则：所有下标后移，选中项与在播源都必须按标识找回
+            settings.setPlaybackRules(rulesOf("r0", "r1", "r2"))
+            advanceUntilIdle()
+
+            val state = vm.uiState.value
+            assertEquals("下标漂移不得把选中线路串到别的规则上", "r2", state.sources[state.selectedSourceIndex].id)
+            assertEquals("r2", state.playingSourceId)
+        }
+
+    @Test
+    fun initialRuleId_onlyAppliesOnFirstBuild_manualSelectionIsNotYankedBack() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            settings.setPlaybackRules(rulesOf("r1", "r2"))
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = episodeId,
+                            streamUrl = "",
+                            subjectName = "葬送的芙莉莲",
+                            episodeSort = 1f,
+                            initialRuleId = "r1",
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = resolverReturning("https://example.com/r_ep1.m3u8"),
+                )
+            advanceUntilIdle()
+            assertEquals(
+                "入口规则首次建表应生效",
+                "r1",
+                vm.uiState.value.sources[vm.uiState.value.selectedSourceIndex]
+                    .id,
+            )
+
+            vm.selectSource(1)
+            advanceUntilIdle()
+            assertEquals("r2", vm.uiState.value.playingSourceId)
+
+            // 列表再次变化时不得把用户手动选的线路拽回入口规则
+            settings.setPlaybackRules(rulesOf("r1", "r2", "r3"))
+            advanceUntilIdle()
+
+            assertEquals(
+                "r2",
+                vm.uiState.value.sources[vm.uiState.value.selectedSourceIndex]
+                    .id,
+            )
+            assertEquals("r2", vm.uiState.value.playingSourceId)
+        }
+
+    @Test
+    fun onPlaybackReady_recordsLastWorkingSource() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            settings.setPlaybackRules(rulesOf("r1"))
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = episodeId,
+                            streamUrl = "",
+                            subjectName = "葬送的芙莉莲",
+                            episodeSort = 1f,
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = resolverReturning("https://example.com/r1_ep1.m3u8"),
+                )
+            advanceUntilIdle()
+            assertEquals("r1", vm.uiState.value.playingSourceId)
+
+            vm.onPlaybackReady()
+            advanceUntilIdle()
+
+            assertEquals("r1", settings.lastPlaybackSourceId.first())
         }
 }

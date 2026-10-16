@@ -417,6 +417,26 @@ class PlayerControllerTest {
         }
 
     @Test
+    fun disableSubtitles_survivesMediaChange() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+
+            controller.setMedia("https://cdn/a.m3u8", emptyMap())
+            controller.disableSubtitles()
+            assertTrue(engine.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+
+            // 换源/换集只允许重置「跟着上一份媒体选的」轨道 override，用户级偏好（关闭字幕）必须保留：
+            // 旧实现在此一并 setTrackTypeDisabled(TEXT, false)，用户每换一条线路/换一集都得重新关一次字幕
+            controller.setMedia("https://cdn/b.m3u8", emptyMap())
+
+            assertTrue(
+                "换媒体不得吞掉用户关闭字幕的偏好",
+                engine.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT),
+            )
+        }
+
+    @Test
     fun selectAutoVideoQuality_clearsVideoOverridesWithoutAndroidTypes() =
         runTest {
             val engine = FakePlayerEngine()

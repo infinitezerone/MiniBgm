@@ -257,6 +257,7 @@ fun OverlayProviderScope.playerSourcesPanel(
                     PlayerSourcesDrawer(
                         sources = uiState.sources,
                         selectedIndex = uiState.selectedSourceIndex,
+                        playingSourceId = uiState.playingSourceId,
                         sourceFailureCounts = uiState.sourceFailureCounts,
                         isResolvingSource = uiState.isResolvingSource,
                         resolveAttempt = uiState.resolveAttempt,
@@ -288,6 +289,7 @@ fun OverlayProviderScope.playerSourcesPanel(
             PlayerSourcesBottomSheet(
                 sources = uiState.sources,
                 selectedIndex = uiState.selectedSourceIndex,
+                playingSourceId = uiState.playingSourceId,
                 sourceFailureCounts = uiState.sourceFailureCounts,
                 isResolvingSource = uiState.isResolvingSource,
                 resolveAttempt = uiState.resolveAttempt,

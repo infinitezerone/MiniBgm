@@ -448,6 +448,7 @@ class PlayerPanelsScreenshotTest {
                 PlayerSourcesBottomSheet(
                     sources = sampleSources,
                     selectedIndex = 0,
+                    playingSourceId = "direct",
                     sourceFailureCounts = mapOf("rule2" to 2),
                     isResolvingSource = false,
                     resolveAttempt = 0,

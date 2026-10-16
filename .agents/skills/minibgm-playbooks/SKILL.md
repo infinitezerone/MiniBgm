@@ -109,7 +109,7 @@ description: >-
 7. **依赖约束先看契约源码，不看搜索摘要**：
    * 接口有没有端点、是否强制验证码、是否支持原生发帖（如 P-005 Turnstile 阻塞），必须查验 OpenAPI 或实测返回，不盲信模型搜索猜测。
 8. **整体覆盖式状态重置会静默吞掉引擎侧偏好**：
-   * 用"整体覆盖"重置媒体态（`_state.value = PlaybackState(...)`）时，任何没被显式带过去的字段都等于被悄悄改回默认值。单集循环 `isLooping` 由引擎 `repeatMode` 持有、UI 只持状态副本，于是出现"面板显示已关闭、视频仍在循环"的幽灵态（开关要点两次才关得掉）。正确形态：重置只覆盖媒体相关字段，偏好类字段显式保留并与引擎保持一致——`PlayerController.setMedia` 里 `val looping = _state.value.isLooping`，且 URL 变化、URL 清空两条路径都要覆盖；新增"重置媒体态"的写法时先问一句"哪些字段是引擎/用户偏好、删了会变行为"。
+   * 用"整体覆盖"重置媒体态（`_state.value = PlaybackState(...)`）时，任何没被显式带过去的字段都等于被悄悄改回默认值。单集循环 `isLooping` 由引擎 `repeatMode` 持有、UI 只持状态副本，于是出现"面板显示已关闭、视频仍在循环"的幽灵态（开关要点两次才关得掉）。正确形态：重置只覆盖媒体相关字段，偏好类字段显式保留并与引擎保持一致——`PlayerController.setMedia` 里 `val looping = _state.value.isLooping`，且 URL 变化、URL 清空两条路径都要覆盖；新增"重置媒体态"的写法时先问一句"哪些字段是引擎/用户偏好、删了会变行为"。同源陷阱：`PlayerController.resetTrackOverridesOnMediaChange()` 曾顺手 `setTrackTypeDisabled(TEXT, false)`，于是用户显式关掉字幕后每换一条线路/换一集都要重关一次——`disabledTrackTypes` 是**用户级偏好**，换媒体只允许清「跟着上一份媒体选的」轨道 override（`clearOverridesOfType`），红线由 `PlayerControllerTest#disableSubtitles_survivesMediaChange` 钉死。
 9. **AGP 的 `splits` 是全局 DSL，没有"按变体开关"的公开 API（9.3.2 的 `Splits` 只在 `com.android.build.api.dsl`）**：
    * 所以"debug 单包 / release 分包"只能靠**项目属性 + 工作流保证**：`app/build.gradle.kts` 里 `val enableAbiSplits = (project.findProperty("minibgm.abiSplits") as? String)?.toBoolean() ?: false`，发版时由 `release.yml` 传 `-Pminibgm.abiSplits=true`。改这类"默认关、发版开"的开关时，**必须在发版链路补产物断言**（缺包直接 exit 1），否则一改就静默退化成 fat APK，下游的分 ABI 资产与 universal 别名全部变形。
 10. **续播点属于"分集"而不是"上一个地址"**：
@@ -177,6 +177,7 @@ description: >-
   2. **红线物理兜底**：`:core:testing:ArchitectureRulesTest` 的 `platform_data_module_declares_all_referenced_services`（硬红线 20）对 `platformDataModule` 的核心服务声明进行静态词法闭锁，防止漏绑或误删；
   3. **拒绝虚假假模块自欺欺人**：严禁在单测中为了“图省事”只写手工 Fake 模块测试 ViewModel；每次新增依赖或修改 `platformDataModule` / `userModule`，必须在 `AppModuleTest` 中执行真实模块容器解析断言（`verifyRealPlatformDataModuleResolution` 与 `verifyRealUserModuleResolutionWithPlatformDataModule`），由真实的 Koin 容器对每一项注入进行深度验证。
   4. **门禁范围不得漏掉装配测试**：`AppModuleTest` 横跨全部模块，因此 `tools/jgate` 只要检出任何模块代码改动就必须一并跑 `:app:testDebugUnitTest`（只按"改动落在哪个模块"推导会漏掉它）；同理 `AppModuleTest` 的 Stub Context 必须跟随生产代码实际调用的 Context API 扩展（`AndroidTorrentRepository.resolveDownloadDir()` 用 `getExternalFilesDir(null)`，缺这个重写会抛 "Method getExternalFilesDir in android.content.ContextWrapper not mocked"，让下载页在构造期直接击穿装配红线——`TorrentRepositoryTest` 的每个 Stub Context 早已按此约定重写，`AppModuleTest` 曾漏配）。
+  5. **手工 `viewModel { XxxViewModel(...) }` 块必须显式传全「可选依赖」**：构造器上带 `= null` 默认值的参数是可选依赖，手工块漏传时**三层防线同时失效**——编译器因默认值不报错、Koin 被默认值兜住（不像漏绑单例会抛 `NoDefinitionFoundException`）、单测又自己传 fake；结果只在真机上表现为整条链路静默退化成「没这个功能」。`SubjectModule` 漏传 `playbackHistoryRepository` 时，播放历史不落库、换集/换源的「历史兜底续播」全废且全程无提示。新增/改动手工 DI 块时逐个 ctor 参数点名核对，红线 `manual_view_model_blocks_must_inject_every_optional_dependency`（`ArchitectureRulesTest` 硬红线 21）会静态比对「ctor 里 `= null` 的参数」与「块里命名实参」，漏一个即失败；非 null 默认值（`autoStart: Boolean = true`、`clock: () -> Long = { ... }`）是有意的可选项，不受此约束。
 
 ---
 

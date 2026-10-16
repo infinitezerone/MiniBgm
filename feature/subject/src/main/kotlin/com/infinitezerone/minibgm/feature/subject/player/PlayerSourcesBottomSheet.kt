@@ -49,6 +49,8 @@ import com.infinitezerone.minibgm.feature.subject.R
 internal fun PlayerSourcesBottomSheet(
     sources: List<PlayerSourceTab>,
     selectedIndex: Int,
+    /** 在播源标识：与 [selectedIndex] 分离，用于区分「正在播放」与「已选中待生效」 */
+    playingSourceId: String?,
     sourceFailureCounts: Map<String, Int>,
     isResolvingSource: Boolean,
     resolveAttempt: Int,
@@ -70,6 +72,7 @@ internal fun PlayerSourcesBottomSheet(
         PlayerSourcesListContent(
             sources = sources,
             selectedIndex = selectedIndex,
+            playingSourceId = playingSourceId,
             sourceFailureCounts = sourceFailureCounts,
             isResolvingSource = isResolvingSource,
             resolveAttempt = resolveAttempt,
@@ -89,6 +92,8 @@ internal fun PlayerSourcesBottomSheet(
 internal fun PlayerSourcesDrawer(
     sources: List<PlayerSourceTab>,
     selectedIndex: Int,
+    /** 在播源标识：与 [selectedIndex] 分离，用于区分「正在播放」与「已选中待生效」 */
+    playingSourceId: String?,
     sourceFailureCounts: Map<String, Int>,
     isResolvingSource: Boolean,
     resolveAttempt: Int,
@@ -108,6 +113,7 @@ internal fun PlayerSourcesDrawer(
         PlayerSourcesListContent(
             sources = sources,
             selectedIndex = selectedIndex,
+            playingSourceId = playingSourceId,
             sourceFailureCounts = sourceFailureCounts,
             isResolvingSource = isResolvingSource,
             resolveAttempt = resolveAttempt,
@@ -126,6 +132,8 @@ internal fun PlayerSourcesDrawer(
 internal fun PlayerSourcesListContent(
     sources: List<PlayerSourceTab>,
     selectedIndex: Int,
+    /** 在播源标识：与 [selectedIndex] 分离，用于区分「正在播放」与「已选中待生效」 */
+    playingSourceId: String?,
     sourceFailureCounts: Map<String, Int>,
     isResolvingSource: Boolean,
     resolveAttempt: Int,
@@ -206,6 +214,16 @@ internal fun PlayerSourcesListContent(
 
         Spacer(modifier = Modifier.height(4.dp))
 
+        if (sources.isEmpty()) {
+            // 只配了 BT 规则（或没配任何规则）时线路列表本来就是空的：
+            // 必须给出可达的下一步，而不是留一个空抽屉让用户以为功能坏了
+            Text(
+                text = stringResource(R.string.feature_subject_player_sources_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         // 线路垂直列表
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
@@ -213,6 +231,9 @@ internal fun PlayerSourcesListContent(
         ) {
             itemsIndexed(sources, key = { _, s -> s.id }) { index, source ->
                 val isSelected = index == selectedIndex
+                // 「正在播放」只认在播源：切源解析窗口内选中的是 B、在播的仍是 A，
+                // 此时把 B 标成「正在使用当前线路」就是在骗用户（解析失败时尤其明显）
+                val isPlaying = source.id == playingSourceId
                 val failureCount = sourceFailureCounts[source.id] ?: 0
                 val isFailing = failureCount > 0 && !isSelected
                 val rawName = source.nameRes?.let { stringResource(it) } ?: source.name
@@ -326,7 +347,7 @@ internal fun PlayerSourcesListContent(
                                         color = MaterialTheme.colorScheme.primary,
                                     )
                                 }
-                            } else if (isSelected && !matchedVodName.isNullOrBlank()) {
+                            } else if (isPlaying && !matchedVodName.isNullOrBlank()) {
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = stringResource(R.string.feature_subject_player_source_matched_format, matchedVodName),
@@ -335,12 +356,20 @@ internal fun PlayerSourcesListContent(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
-                            } else if (isSelected) {
+                            } else if (isPlaying) {
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = stringResource(R.string.feature_subject_player_source_in_use),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary,
+                                )
+                            } else if (isSelected) {
+                                // 选中但尚未在播（理论上只出现在解析窗口的边界态）：如实说明，不冒充"正在使用"
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(R.string.feature_subject_player_source_selected_pending),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }

@@ -36,6 +36,10 @@ import kotlin.test.fail
  *     必须以 @StringRes + formatArgs 下发、UI 侧解析；服务端运行时消息经 message 字段透传（源自播放器文案硬编码复盘）
  * 19. 流媒体发流真实性：流引擎严禁派发未就绪的空 Socket 伪地址；严禁使用虚假 placeholder 桩伪装媒体流（源自磁力边下边播虚假桩复盘）
  * 20. Koin DI 平台契约完整性：platformDataModule 必须显式声明所有底层系统服务契约（ApkInstaller、UpdateRepository、TorrentRepository 等），杜绝单测假桩掩盖导致真机 NoDefinitionFoundException 闪退（源自更新服务 ApkInstaller 漏绑闪退复盘）
+ * 21. 手工 DI 块的可选依赖必须显式注入：`viewModel { XxxViewModel(...) }` 手工构造块必须显式传入目标类全部
+ *     「默认值为 null」的构造器参数（可选依赖）——漏传既不编译报错、Koin 也照常解析（默认值兜住）、
+ *     单测又自己传 fake，最终只在真机上静默退化成「功能没接上」（源自 SubjectModule 漏传
+ *     playbackHistoryRepository，让播放历史与续播兜底整条链路在真机上死掉的复盘）
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -2249,6 +2253,127 @@ class ArchitectureRulesTest {
             unifiedRouteCheck.containsMatchIn(code),
             "$path 的 onEpisodeClickForQuickAction 必须直接打开统一底栏（selectedEpisodeForSources + showSourcesBottomSheet），严禁开孤立抽屉套娃！",
         )
+    }
+
+    /**
+     * 手工 `viewModel { XxxViewModel(...) }` 块必须显式注入**全部**「默认值为 null」的构造器参数。
+     *
+     * 这类参数是"可选依赖"，危险在于漏传时三层防线同时失效：
+     * 1. 编译期不报错（有默认值）；2. Koin 解析不报错（默认值兜住，与 platformDataModule 漏绑触发
+     * NoDefinitionFoundException 的形态不同）；3. 单测自己传 fake，同样不报错。结果只在真机上表现为
+     * 整条链路静默退化成「没有这个功能」——SubjectModule 漏传 `playbackHistoryRepository` 时，
+     * 播放历史不落库、换集/换源的「历史兜底续播」全废，且全程无提示。
+     *
+     * 非 null 的默认值（`autoStart: Boolean = true`、`clock: () -> Long = { ... }`）是有意的可选项，
+     * 不在本红线约束范围内——这里只钉真正会静默退化的「可选依赖」类别。
+     */
+    @Test
+    fun manual_view_model_blocks_must_inject_every_optional_dependency() {
+        val violations = mutableListOf<String>()
+        listOf("feature", "app").forEach { rootName ->
+            val dir = File(projectRoot, rootName)
+            if (!dir.isDirectory) return@forEach
+            dir
+                .walkTopDown()
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                .filter { it.isFile && it.extension == "kt" }
+                .forEach { file ->
+                    val scanner = KotlinSourceScanner.fromFile(file)
+                    val text = scanner.sanitizedContent
+                    val relPath = file.relativeTo(projectRoot).path
+                    MANUAL_VIEW_MODEL_BLOCK.findAll(text).forEach { block ->
+                        val className = block.groupValues[1]
+                        val argsOpen = block.range.last
+                        val argsClose = text.indexOfCloseDelimiter(argsOpen) ?: return@forEach
+                        val passedNames =
+                            splitTopLevelArguments(text.substring(argsOpen + 1, argsClose))
+                                .mapNotNull { topLevelNamedArgumentName(it) }
+                                .toSet()
+                        val classFile =
+                            projectRoot
+                                .walkTopDown()
+                                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                                .firstOrNull { it.isFile && it.name == "$className.kt" }
+                        if (classFile == null) {
+                            violations.add("$relPath 手工构造的 $className 找不到源码文件，无法校验可选依赖是否传全")
+                            return@forEach
+                        }
+                        val nullDefaults =
+                            nullDefaultedConstructorParams(
+                                KotlinSourceScanner.fromFile(classFile).sanitizedContent,
+                                className,
+                            )
+                        val missing = nullDefaults - passedNames
+                        if (missing.isNotEmpty()) {
+                            violations.add(
+                                "$relPath:${scanner.getLineNumber(block.range.first)} 手工构造 $className 漏传可选依赖 " +
+                                    missing.sorted() + "（默认值 null，漏传即静默退化为「功能没接上」）",
+                            )
+                        }
+                    }
+                }
+        }
+        assertTrue(
+            violations.isEmpty(),
+            "违反「手工 DI 块必须显式注入全部可选依赖」红线（漏传不会编译报错也不会被 Koin 发现，只在真机静默退化）：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
+    /** 手工构造 ViewModel 的 Koin 块；`{ params -> ... }`、`{ (arg: T) -> ... }` 与单行写法都要覆盖 */
+    private val MANUAL_VIEW_MODEL_BLOCK = Regex("""\bviewModel\s*\{[\s\S]{0,600}?\b([A-Z]\w*ViewModel)\s*\(""")
+
+    /** 返回 [open] 处 `(` 对应的 `)` 下标（只统计圆括号嵌套；找不到返回 null） */
+    private fun String.indexOfCloseDelimiter(open: Int): Int? {
+        var depth = 0
+        for (i in open until length) {
+            when (this[i]) {
+                '(' -> depth++
+                ')' -> {
+                    depth--
+                    if (depth == 0) return i
+                }
+            }
+        }
+        return null
+    }
+
+    /** 按顶层逗号切分实参/形参列表（嵌套括号内的逗号不算分隔符） */
+    private fun splitTopLevelArguments(list: String): List<String> {
+        val parts = mutableListOf<String>()
+        var depth = 0
+        var start = 0
+        for (i in list.indices) {
+            when (list[i]) {
+                '(', '[', '{' -> depth++
+                ')', ']', '}' -> depth--
+                ',' -> if (depth == 0) {
+                    parts.add(list.substring(start, i))
+                    start = i + 1
+                }
+            }
+        }
+        parts.add(list.substring(start))
+        return parts.filter { it.isNotBlank() }
+    }
+
+    /** 顶层命名实参的参数名（`foo = get()` → foo）；位置实参返回 null */
+    private fun topLevelNamedArgumentName(segment: String): String? =
+        Regex("""^\s*(\w+)\s*=(?!=)""").find(segment)?.groupValues?.get(1)
+
+    /** 取 `class X(` 主构造器里所有「默认值为 null」的可选依赖参数名 */
+    private fun nullDefaultedConstructorParams(
+        code: String,
+        className: String,
+    ): Set<String> {
+        val classIndex = code.indexOf("class $className(")
+        if (classIndex < 0) return emptySet()
+        val open = code.indexOf('(', classIndex)
+        val close = code.indexOfCloseDelimiter(open) ?: return emptySet()
+        return splitTopLevelArguments(code.substring(open + 1, close))
+            .filter { Regex("""=\s*null\s*$""").containsMatchIn(it.trim()) }
+            .mapNotNull { Regex("""(?:^|\s)(?:val|var)\s+(\w+)\s*:""").find(it)?.groupValues?.get(1) }
+            .toSet()
     }
 
     private companion object {
