@@ -15,8 +15,9 @@ internal sealed interface ConnectionDiagnosticState {
     ) : ConnectionDiagnosticState
 
     data class Failure(
-        val summary: String,
-        val detail: String,
+        @StringRes val summaryRes: Int,
+        @StringRes val detailRes: Int? = null,
+        val detailMessage: String? = null,
     ) : ConnectionDiagnosticState
 }
 

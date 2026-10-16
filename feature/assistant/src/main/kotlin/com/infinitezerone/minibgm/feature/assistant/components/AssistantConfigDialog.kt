@@ -45,7 +45,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -76,7 +75,7 @@ fun AssistantConfigDialog(
     onDeleteProfile: (String) -> Unit = {},
 ) {
     val clipboard = LocalClipboard.current
-    val context = LocalContext.current
+    val defaultCustomProviderLabel = stringResource(R.string.feature_assistant_config_custom_provider_name)
     val coroutineScope = rememberCoroutineScope()
     val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
 
@@ -215,33 +214,38 @@ fun AssistantConfigDialog(
                 }
                 is AppResult.Error -> {
                     val rawMsg = result.message.ifBlank { result.throwable.message.orEmpty() }
-                    val summary =
+                    val summaryRes =
                         when {
                             "401" in rawMsg || "unauthorized" in rawMsg.lowercase() ->
-                                context.getString(R.string.feature_assistant_config_err_summary_auth)
+                                R.string.feature_assistant_config_err_summary_auth
                             "403" in rawMsg || "forbidden" in rawMsg.lowercase() ->
-                                context.getString(R.string.feature_assistant_config_err_summary_forbidden)
+                                R.string.feature_assistant_config_err_summary_forbidden
                             "timeout" in rawMsg.lowercase() || "connect" in rawMsg.lowercase() ->
-                                context.getString(R.string.feature_assistant_config_err_summary_timeout)
-                            else -> context.getString(R.string.feature_assistant_config_err_summary_generic)
+                                R.string.feature_assistant_config_err_summary_timeout
+                            else -> R.string.feature_assistant_config_err_summary_generic
                         }
-                    val detail =
+                    val (detailRes, detailMsg) =
                         when {
                             "401" in rawMsg || "unauthorized" in rawMsg.lowercase() ->
-                                context.getString(R.string.feature_assistant_config_err_detail_auth)
+                                Pair(R.string.feature_assistant_config_err_detail_auth, null)
                             "403" in rawMsg || "forbidden" in rawMsg.lowercase() -> {
                                 if ("groq" in normalized.lowercase()) {
-                                    context.getString(R.string.feature_assistant_config_err_detail_groq_region)
+                                    Pair(R.string.feature_assistant_config_err_detail_groq_region, null)
                                 } else {
-                                    context.getString(R.string.feature_assistant_config_err_detail_forbidden)
+                                    Pair(R.string.feature_assistant_config_err_detail_forbidden, null)
                                 }
                             }
                             "timeout" in rawMsg.lowercase() || "connect" in rawMsg.lowercase() ->
-                                context.getString(R.string.feature_assistant_config_err_detail_timeout)
-                            rawMsg.isNotBlank() -> rawMsg
-                            else -> context.getString(R.string.feature_assistant_config_err_detail_generic)
+                                Pair(R.string.feature_assistant_config_err_detail_timeout, null)
+                            rawMsg.isNotBlank() -> Pair(null, rawMsg)
+                            else -> Pair(R.string.feature_assistant_config_err_detail_generic, null)
                         }
-                    diagnosticState = ConnectionDiagnosticState.Failure(summary = summary, detail = detail)
+                    diagnosticState =
+                        ConnectionDiagnosticState.Failure(
+                            summaryRes = summaryRes,
+                            detailRes = detailRes,
+                            detailMessage = detailMsg,
+                        )
                 }
                 AppResult.Loading -> Unit
             }
@@ -268,7 +272,7 @@ fun AssistantConfigDialog(
                     provider = selectedProvider,
                     model = finalModel,
                     endpoint = normalized,
-                    customProviderLabel = context.getString(R.string.feature_assistant_config_custom_provider_name),
+                    customProviderLabel = defaultCustomProviderLabel,
                 )
             }
         onSaveProfile(editingProfileId, name, newConfig)
@@ -718,17 +722,20 @@ fun AssistantConfigDialog(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = state.summary,
+                                        text = stringResource(state.summaryRes),
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.error,
                                     )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = state.detail,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                    )
+                                    val detailText = state.detailRes?.let { stringResource(it) } ?: state.detailMessage.orEmpty()
+                                    if (detailText.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = detailText,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                        )
+                                    }
                                 }
                             }
                         }

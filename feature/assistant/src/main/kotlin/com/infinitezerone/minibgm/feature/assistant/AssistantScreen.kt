@@ -86,7 +86,7 @@ fun AssistantScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val context = LocalContext.current
+    val resources = LocalContext.current.resources
 
     LaunchedEffect(prefillPrompt) {
         viewModel.sendPrefilledPrompt(prefillPrompt)
@@ -97,7 +97,7 @@ fun AssistantScreen(
             is AssistantUiEvent.ShowSnackbar -> {
                 val text =
                     event.message?.takeIf { it.isNotBlank() }
-                        ?: context.getString(event.messageRes, *event.formatArgs.toTypedArray())
+                        ?: resources.getString(event.messageRes, *event.formatArgs.toTypedArray())
                 snackbarHostState.showSnackbar(text)
             }
             is AssistantUiEvent.NavigateToSubject -> {
