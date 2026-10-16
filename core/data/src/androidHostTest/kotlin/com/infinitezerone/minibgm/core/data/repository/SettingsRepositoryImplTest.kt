@@ -26,10 +26,12 @@ class SettingsRepositoryImplTest {
                 ),
             )
 
-        override suspend fun validateAndTestSubscription(url: String): com.infinitezerone.minibgm.core.model.SubscriptionValidationReport =
+        override suspend fun validateAndTestSubscription(
+            target: String,
+        ): com.infinitezerone.minibgm.core.model.SubscriptionValidationReport =
             com.infinitezerone.minibgm.core.model.SubscriptionValidationReport(
                 isHealthy = true,
-                subscriptionUrl = url,
+                subscriptionUrl = target,
                 totalRules = 1,
                 aliveRules = 1,
                 sources = result,
@@ -105,6 +107,70 @@ class SettingsRepositoryImplTest {
             // 文案与旧 ViewModel 实现逐字一致，且不携带英文反序列化异常原文
             assertEquals("规则解析失败，请检查 JSON 格式", assertIs<AppResult.Error>(result).message)
             assertTrue(repo.playbackRules.first().isEmpty())
+        }
+
+    @Test
+    fun refreshPlaybackSubscription_importsAllCandidateSourcesRegardlessOfPingStatus() =
+        runTest {
+            val fakeService = FakeCommunitySubscriptionService()
+            fakeService.result =
+                listOf(
+                    DiscoveredSource(name = "存活源", urlTemplate = "https://alive.com/{title}", isAlive = true),
+                    DiscoveredSource(name = "超时源", urlTemplate = "https://timeout.com/{title}", isAlive = false),
+                )
+            val repo = SettingsRepositoryImpl(createTestUserPreferencesDataSource(), FakeSecureSecretStore(), fakeService)
+            repo.setPlaybackSubscriptionUrl("https://example.com/sub.json")
+
+            val refreshResult = repo.refreshPlaybackSubscription()
+
+            val summary = assertIs<AppResult.Success<RuleImportSummary>>(refreshResult).data
+            assertEquals(2, summary.acceptedCount)
+            val rules = repo.playbackRules.first()
+            assertEquals(2, rules.size)
+            assertTrue(rules.any { it.name == "存活源" })
+            assertTrue(rules.any { it.name == "超时源" })
+        }
+
+    @Test
+    fun importRulesFromJson_communitySubscriptionPackage_parsesAndPersistsRules() =
+        runTest {
+            val fakeService = FakeCommunitySubscriptionService()
+            fakeService.result =
+                listOf(
+                    DiscoveredSource(name = "包源1", urlTemplate = "https://p1.com/{title}", isAlive = true),
+                    DiscoveredSource(name = "包源2", urlTemplate = "https://p2.com/{title}", isAlive = false),
+                )
+            val repo = SettingsRepositoryImpl(createTestUserPreferencesDataSource(), FakeSecureSecretStore(), fakeService)
+
+            val packageJson = """{"version": 1, "description": "测试", "sources": []}"""
+            val result = repo.importRulesFromJson(packageJson)
+
+            val summary = assertIs<AppResult.Success<RuleImportSummary>>(result).data
+            assertEquals(2, summary.acceptedCount)
+            val rules = repo.playbackRules.first()
+            assertEquals(2, rules.size)
+            assertTrue(rules.any { it.name == "包源1" })
+            assertTrue(rules.any { it.name == "包源2" })
+        }
+
+    @Test
+    fun playbackRules_autoHealsFromSubscriptionWhenRulesCountIsDeficient() =
+        runTest {
+            val fakeService = FakeCommunitySubscriptionService()
+            fakeService.result =
+                listOf(
+                    DiscoveredSource(name = "自愈源A", urlTemplate = "https://heal-a.com/{title}", isAlive = true),
+                    DiscoveredSource(name = "自愈源B", urlTemplate = "https://heal-b.com/{title}", isAlive = true),
+                )
+            val ds = createTestUserPreferencesDataSource()
+            ds.setPlaybackSubscriptionUrl("https://example.com/sub.json")
+            val repo = SettingsRepositoryImpl(ds, FakeSecureSecretStore(), fakeService)
+
+            // 首次读取 playbackRules 触发自愈补齐
+            val rules = repo.playbackRules.first()
+            assertEquals(2, rules.size)
+            assertTrue(rules.any { it.name == "自愈源A" })
+            assertTrue(rules.any { it.name == "自愈源B" })
         }
 
     @Test

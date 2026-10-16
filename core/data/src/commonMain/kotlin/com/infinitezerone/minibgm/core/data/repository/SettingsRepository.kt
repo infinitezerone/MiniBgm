@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
@@ -337,16 +338,42 @@ internal class SettingsRepositoryImpl(
     override val airDelayOffsetMinutes: Flow<Int> =
         userPreferences.userPreferences.map { it.airDelayOffsetMinutes }
 
-    override val playbackRules: Flow<List<PlaybackSourceRule>> =
-        userPreferences.userPreferences.map { prefs ->
-            if (prefs.playbackRulesJson.isBlank()) {
-                emptyList()
-            } else {
-                runCatching {
-                    json.decodeFromString<List<PlaybackSourceRule>>(prefs.playbackRulesJson)
-                }.getOrDefault(emptyList())
+    private var healingTriggered = false
+    private val healingMutex = Mutex()
+
+    private suspend fun triggerSubscriptionHealingIfMissing() {
+        if (healingTriggered) return
+        healingMutex.withLock {
+            if (healingTriggered) return
+            healingTriggered = true
+            val prefs = userPreferences.userPreferences.first()
+            val url = prefs.playbackSubscriptionUrl.trim()
+            val rawJson = prefs.playbackRulesJson.trim()
+            val currentRules =
+                if (rawJson.isBlank()) {
+                    emptyList()
+                } else {
+                    runCatching { json.decodeFromString<List<PlaybackSourceRule>>(rawJson) }.getOrDefault(emptyList())
+                }
+            if (url.isNotBlank() && currentRules.size <= 1) {
+                runCatching { refreshPlaybackSubscription() }
             }
         }
+    }
+
+    override val playbackRules: Flow<List<PlaybackSourceRule>> =
+        userPreferences.userPreferences
+            .map { prefs ->
+                if (prefs.playbackRulesJson.isBlank()) {
+                    emptyList()
+                } else {
+                    runCatching {
+                        json.decodeFromString<List<PlaybackSourceRule>>(prefs.playbackRulesJson)
+                    }.getOrDefault(emptyList())
+                }
+            }.onStart {
+                triggerSubscriptionHealingIfMissing()
+            }
 
     override suspend fun setSyncInterval(interval: SyncInterval) {
         userPreferences.setSyncInterval(interval)
@@ -537,13 +564,35 @@ internal class SettingsRepositoryImpl(
 
     override suspend fun importRulesFromJson(jsonText: String): AppResult<RuleImportSummary> =
         try {
-            // 支持单条规则或规则数组解析
-            val importedList =
-                if (jsonText.startsWith("[")) {
-                    json.decodeFromString<List<PlaybackSourceRule>>(jsonText)
+            val trimmed = jsonText.trim()
+            // 1. 优先尝试直接解析标准 PlaybackSourceRule / List<PlaybackSourceRule>
+            val directList =
+                runCatching {
+                    if (trimmed.startsWith("[")) {
+                        json.decodeFromString<List<PlaybackSourceRule>>(trimmed)
+                    } else {
+                        listOf(json.decodeFromString<PlaybackSourceRule>(trimmed))
+                    }
+                }.getOrNull()
+
+            // 2. 兼容解析 MiniBgm 订阅包 ({"version":1,"sources":[...]})、TVBox 配置包及 DiscoveredSource 数组
+            val importedList: List<PlaybackSourceRule> =
+                if (!directList.isNullOrEmpty()) {
+                    directList
+                } else if (communitySubscriptionService != null && (trimmed.startsWith("{") || trimmed.startsWith("["))) {
+                    val report = communitySubscriptionService.validateAndTestSubscription(trimmed)
+                    if (report.errorMessage != null && report.sources.isEmpty()) {
+                        throw IllegalStateException(report.errorMessage)
+                    }
+                    report.sources.map { source ->
+                        source.toPlaybackSourceRule(
+                            id = "sub_${source.name.hashCode().toUInt().toString(16)}",
+                        )
+                    }
                 } else {
-                    listOf(json.decodeFromString<PlaybackSourceRule>(jsonText))
+                    throw IllegalStateException("规则解析失败，请检查 JSON 格式")
                 }
+
             when {
                 importedList.isEmpty() -> AppResult.Success(RuleImportSummary(acceptedCount = 0, rejectedCount = 0))
                 // kind 与 parserType 不匹配时流水线/专用解析器根本没有执行路径，收下只会静默降级成嗅探；
@@ -646,12 +695,12 @@ internal class SettingsRepositoryImpl(
                 when (val reportResult = validateAndTestSubscription(url)) {
                     is AppResult.Success -> {
                         val report = reportResult.data
-                        val aliveSources = report.sources.filter { it.isAlive }
-                        if (aliveSources.isEmpty()) {
-                            AppResult.Error(IllegalStateException("订阅源中没有探活可用的播放源"))
+                        val candidateSources = report.sources
+                        if (candidateSources.isEmpty()) {
+                            AppResult.Error(IllegalStateException("订阅源中没有解析到有效播放源"))
                         } else {
                             val newRules =
-                                aliveSources.map { source ->
+                                candidateSources.map { source ->
                                     source.toPlaybackSourceRule(
                                         id = "sub_${source.name.hashCode().toUInt().toString(16)}",
                                     )

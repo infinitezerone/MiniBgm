@@ -346,7 +346,7 @@ class FakeSettingsRepository(
         if (url.isBlank()) return AppResult.Error(IllegalStateException("尚未配置订阅地址"))
         return when (val report = validateAndTestSubscription(url)) {
             is AppResult.Success -> {
-                val sources = report.data.sources.filter { it.isAlive }
+                val sources = report.data.sources
                 val rules = sources.map { it.toPlaybackSourceRule("fake_${it.name.hashCode()}") }
                 importPlaybackRules(rules)
                 AppResult.Success(RuleImportSummary(acceptedCount = rules.size, rejectedCount = 0))

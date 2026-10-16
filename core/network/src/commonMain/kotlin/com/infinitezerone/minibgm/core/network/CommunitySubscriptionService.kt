@@ -273,12 +273,12 @@ internal class CommunitySubscriptionServiceImpl(
                 measureTimedValue {
                     client.get(pingUrl) {
                         timeout {
-                            requestTimeoutMillis = 2500
-                            connectTimeoutMillis = 2000
+                            requestTimeoutMillis = 5000
+                            connectTimeoutMillis = 4000
                         }
                     }
                 }
-            val isSuccess = response.status.value in 200..399
+            val isSuccess = response.status.value in 200..499 && response.status.value != 404 && response.status.value != 408
             source.copy(
                 isAlive = isSuccess,
                 latencyMs = duration.inWholeMilliseconds,

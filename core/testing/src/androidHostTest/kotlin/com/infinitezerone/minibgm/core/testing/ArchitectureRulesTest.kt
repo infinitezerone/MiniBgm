@@ -2573,6 +2573,51 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 播放源订阅完整性红线（见 AGENTS.md 领域规则 & 剧本 15）：
+     * 1. `SettingsRepository` 刷新/导入订阅源时严禁按 `isAlive` 过滤丢弃规则：
+     *    连通性探测纯用于 UI 延迟排序与诊断展示，瞬时丢包或服务端反爬返回 403 绝不代表规则废弃，
+     *    过滤 `it.isAlive` 会静默丢弃用户订阅的绝大多数合法可用源（历史上曾导致 5 个 MacCMS 源丢掉 4 个）；
+     * 2. `CommunitySubscriptionService` 探测存活判据必须支持 HTTP 403（MacCMS 根路径普遍返回 403 但 API 可用），
+     *    严禁仅以 200..399 判死。
+     */
+    @Test
+    fun subscription_sources_must_never_be_discarded_by_probe_status() {
+        val settingsRepoFile =
+            File(
+                projectRoot,
+                "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/SettingsRepository.kt",
+            )
+        assertTrue(settingsRepoFile.isFile, "SettingsRepository.kt 未找到")
+        val repoContent = KotlinSourceScanner.sanitize(settingsRepoFile.readText())
+
+        val violations = mutableListOf<String>()
+        if (repoContent.contains(".filter { it.isAlive }") || repoContent.contains(".filter { rule -> rule.isAlive }")) {
+            violations.add(
+                "SettingsRepository.kt 在导入/刷新订阅时按 isAlive 过滤规则：探测失败会永久丢弃合法规则源，违反订阅完整性红线",
+            )
+        }
+
+        val serviceFile =
+            File(
+                projectRoot,
+                "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/CommunitySubscriptionService.kt",
+            )
+        assertTrue(serviceFile.isFile, "CommunitySubscriptionService.kt 未找到")
+        val serviceContent = KotlinSourceScanner.sanitize(serviceFile.readText())
+
+        if (serviceContent.contains("status.value in 200..399")) {
+            violations.add(
+                "CommunitySubscriptionService.kt 仅将 200..399 视为存活：MacCMS 等源根路径返回 403 会被误判为死亡",
+            )
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反播放源订阅完整性红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
     /** 手工构造 ViewModel 的 Koin 块；`{ params -> ... }`、`{ (arg: T) -> ... }` 与单行写法都要覆盖 */
     private val manualViewModelBlock = Regex("""\bviewModel\s*\{[\s\S]{0,600}?\b([A-Z]\w*ViewModel)\s*\(""")
 

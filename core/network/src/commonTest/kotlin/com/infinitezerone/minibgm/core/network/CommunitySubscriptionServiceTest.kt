@@ -86,6 +86,57 @@ class CommunitySubscriptionServiceTest {
         }
 
     @Test
+    fun validateAndTestSubscription_probesRecognizeHttp403AsReachableHost() =
+        runTest {
+            val engine =
+                MockEngine { request ->
+                    val urlStr = request.url.toString()
+                    when {
+                        urlStr.contains("rules.json") -> {
+                            val pkg =
+                                """
+                                {
+                                    "version": 1,
+                                    "description": "测试MacCMS规则",
+                                    "sources": [
+                                        {
+                                            "name": "量子资源",
+                                            "urlTemplate": "https://cj.lziapi.com/api.php/provide/vod?ac=detail&wd={title}"
+                                        }
+                                    ]
+                                }
+                                """.trimIndent()
+                            respond(
+                                content = pkg,
+                                status = HttpStatusCode.OK,
+                                headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                            )
+                        }
+                        urlStr.contains("cj.lziapi.com") -> {
+                            // MacCMS 根路径通常返回 403 Forbidden，但实际 API 接口正常，探活应判定在线
+                            respond(content = "Forbidden", status = HttpStatusCode.Forbidden)
+                        }
+                        else -> respond(content = "OK", status = HttpStatusCode.OK)
+                    }
+                }
+
+            val client =
+                HttpClient(engine) {
+                    install(ContentNegotiation) {
+                        json(Json { ignoreUnknownKeys = true })
+                    }
+                }
+
+            val service = CommunitySubscriptionServiceImpl(client = client)
+            val report = service.validateAndTestSubscription("https://cdn.example.com/rules.json")
+
+            assertTrue(report.isHealthy)
+            assertEquals(1, report.aliveRules)
+            val lziSource = report.sources.single()
+            assertTrue(lziSource.isAlive)
+        }
+
+    @Test
     fun validateAndTestSubscription_supportsDirectJsonRules() =
         runTest {
             val engine =
