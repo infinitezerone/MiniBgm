@@ -306,5 +306,6 @@ internal object AdaptiveDnsResolver {
         resolvedCandidates.clear()
         dnsCache.clear()
         dynamicEchHosts.clear()
+        hostsFile = null
     }
 }

@@ -48,118 +48,142 @@ object TorrentRssParser {
         val trimmed = xmlContent.trim()
         if (trimmed.isEmpty()) return emptyList()
 
-        val results = mutableListOf<TorrentMediaResource>()
-        for (match in ITEM_REGEX.findAll(trimmed)) {
-            val itemBlock = match.groupValues[1]
-            val rawTitle = extractTagText(TITLE_REGEX, itemBlock)
-            if (rawTitle.isBlank()) continue
+        return ITEM_REGEX
+            .findAll(trimmed)
+            .mapNotNull { match ->
+                parseItem(match.groupValues[1], fallbackHost)
+            }.toList()
+    }
 
-            val title = unescapeXml(rawTitle)
-            // Feed 的 link / enclosure 普遍把 & 转义成 &amp;，不还原则磁链自带的
-            // Tracker 声明（&amp;tr=...）会被下游当作无效参数丢弃，种子直链也会带着
-            // &amp; 去请求而必然取不到。
-            val link = unescapeXml(extractTagText(LINK_REGEX, itemBlock))
-            val enclosureUrl =
-                unescapeXml(
-                    ENCLOSURE_URL_REGEX
-                        .find(itemBlock)
-                        ?.groupValues
-                        ?.get(1)
-                        .orEmpty(),
-                )
+    private fun parseItem(
+        itemBlock: String,
+        fallbackHost: String,
+    ): TorrentMediaResource? {
+        val rawTitle = extractTagText(TITLE_REGEX, itemBlock)
+        if (rawTitle.isBlank()) return null
 
-            val tagHash = extractTagText(INFO_HASH_TAG_REGEX, itemBlock)
-            val infoHash =
-                tagHash
-                    .ifBlank {
-                        magnetInfoHash(link)
-                            .ifBlank { magnetInfoHash(enclosureUrl) }
-                            .ifBlank { extractHash(link) }
-                            .ifBlank { extractHash(enclosureUrl) }
-                    }.let(::normalizeInfoHash)
-
-            // 合成磁链只保留 infohash：严禁注入硬编码公共 Tracker（会把本机 IP 与
-            // infohash 广播给未知第三方，且域名存活期腐烂）。寻道交给 DHT，Feed 自带
-            // 磁链则原样透传其自身声明的 Tracker。
-            val magnetUrl =
-                when {
-                    link.startsWith("magnet:?", ignoreCase = true) -> link
-                    enclosureUrl.startsWith("magnet:?", ignoreCase = true) -> enclosureUrl
-                    infoHash.isNotBlank() -> "magnet:?xt=urn:btih:${infoHash.lowercase()}"
-                    else -> ""
-                }
-
-            val torrentUrl =
-                when {
-                    enclosureUrl.endsWith(".torrent", ignoreCase = true) -> enclosureUrl
-                    link.endsWith(".torrent", ignoreCase = true) -> link
-                    enclosureUrl.isNotBlank() && !enclosureUrl.startsWith("magnet:?", ignoreCase = true) -> enclosureUrl
-                    infoHash.isNotBlank() && fallbackHost.isNotBlank() -> "https://$fallbackHost/Download/$infoHash.torrent"
-                    else -> ""
-                }
-
-            val rawSizeTag = extractTagText(CONTENT_LENGTH_REGEX, itemBlock)
-            val enclosureLen =
-                ENCLOSURE_LEN_REGEX
+        val title = unescapeXml(rawTitle)
+        // Feed 的 link / enclosure 普遍把 & 转义成 &amp;，不还原则磁链自带的
+        // Tracker 声明（&amp;tr=...）会被下游当作无效参数丢弃，种子直链也会带着
+        // &amp; 去请求而必然取不到。
+        val link = unescapeXml(extractTagText(LINK_REGEX, itemBlock))
+        val enclosureUrl =
+            unescapeXml(
+                ENCLOSURE_URL_REGEX
                     .find(itemBlock)
                     ?.groupValues
                     ?.get(1)
-                    ?.toLongOrNull()
-                    ?: 0L
+                    .orEmpty(),
+            )
 
-            var rawLen = 0L
-            var formattedSize = ""
+        val infoHash = resolveInfoHash(itemBlock, link, enclosureUrl)
+        val magnetUrl = resolveMagnetUrl(link, enclosureUrl, infoHash)
+        val torrentUrl = resolveTorrentUrl(link, enclosureUrl, infoHash, fallbackHost)
+        val (rawLen, formattedSize) = resolveSize(itemBlock)
 
-            if (rawSizeTag.isNotBlank()) {
-                if (rawSizeTag.all { it.isDigit() }) {
-                    val bytes = rawSizeTag.toLongOrNull() ?: 0L
-                    if (bytes > MIN_VALID_MEDIA_BYTES) {
-                        rawLen = bytes
-                        formattedSize = formatFileSize(rawLen)
-                    }
-                } else {
-                    formattedSize = rawSizeTag
-                    rawLen = parseSizeToBytes(rawSizeTag)
-                }
-            }
+        val pubDate = extractTagText(PUB_DATE_REGEX, itemBlock)
+        val fansubName = extractFansub(title)
+        val resolution = extractResolution(title)
+        val episodeSort = extractEpisodeSort(title)
 
-            if (rawLen <= MIN_VALID_MEDIA_BYTES && enclosureLen > MIN_VALID_MEDIA_BYTES) {
-                rawLen = enclosureLen
-                if (formattedSize.isBlank()) {
+        return TorrentMediaResource(
+            title = title,
+            fansubName = fansubName,
+            episodeSort = episodeSort,
+            resolution = resolution,
+            magnetUrl = magnetUrl,
+            torrentUrl = torrentUrl,
+            contentLength = rawLen,
+            formattedSize = formattedSize,
+            pubDate = pubDate,
+            infoHash = infoHash,
+        )
+    }
+
+    private fun resolveInfoHash(
+        itemBlock: String,
+        link: String,
+        enclosureUrl: String,
+    ): String {
+        val tagHash = extractTagText(INFO_HASH_TAG_REGEX, itemBlock)
+        return tagHash
+            .ifBlank {
+                magnetInfoHash(link)
+                    .ifBlank { magnetInfoHash(enclosureUrl) }
+                    .ifBlank { extractHash(link) }
+                    .ifBlank { extractHash(enclosureUrl) }
+            }.let(::normalizeInfoHash)
+    }
+
+    private fun resolveMagnetUrl(
+        link: String,
+        enclosureUrl: String,
+        infoHash: String,
+    ): String =
+        when {
+            link.startsWith("magnet:?", ignoreCase = true) -> link
+            enclosureUrl.startsWith("magnet:?", ignoreCase = true) -> enclosureUrl
+            infoHash.isNotBlank() -> "magnet:?xt=urn:btih:${infoHash.lowercase()}"
+            else -> ""
+        }
+
+    private fun resolveTorrentUrl(
+        link: String,
+        enclosureUrl: String,
+        infoHash: String,
+        fallbackHost: String,
+    ): String =
+        when {
+            enclosureUrl.endsWith(".torrent", ignoreCase = true) -> enclosureUrl
+            link.endsWith(".torrent", ignoreCase = true) -> link
+            enclosureUrl.isNotBlank() && !enclosureUrl.startsWith("magnet:?", ignoreCase = true) -> enclosureUrl
+            infoHash.isNotBlank() && fallbackHost.isNotBlank() -> "https://$fallbackHost/Download/$infoHash.torrent"
+            else -> ""
+        }
+
+    private fun resolveSize(itemBlock: String): Pair<Long, String> {
+        val rawSizeTag = extractTagText(CONTENT_LENGTH_REGEX, itemBlock)
+        val enclosureLen =
+            ENCLOSURE_LEN_REGEX
+                .find(itemBlock)
+                ?.groupValues
+                ?.get(1)
+                ?.toLongOrNull()
+                ?: 0L
+
+        var rawLen = 0L
+        var formattedSize = ""
+
+        if (rawSizeTag.isNotBlank()) {
+            if (rawSizeTag.all { it.isDigit() }) {
+                val bytes = rawSizeTag.toLongOrNull() ?: 0L
+                if (bytes > MIN_VALID_MEDIA_BYTES) {
+                    rawLen = bytes
                     formattedSize = formatFileSize(rawLen)
                 }
+            } else {
+                formattedSize = rawSizeTag
+                rawLen = parseSizeToBytes(rawSizeTag)
             }
-
-            val description = extractTagText(DESCRIPTION_REGEX, itemBlock)
-            if (formattedSize.isBlank()) {
-                val descSize = extractFormattedSize(description)
-                if (descSize.isNotBlank()) {
-                    formattedSize = descSize
-                    rawLen = parseSizeToBytes(descSize)
-                }
-            }
-
-            val pubDate = extractTagText(PUB_DATE_REGEX, itemBlock)
-            val fansubName = extractFansub(title)
-            val resolution = extractResolution(title)
-            val episodeSort = extractEpisodeSort(title)
-
-            results.add(
-                TorrentMediaResource(
-                    title = title,
-                    fansubName = fansubName,
-                    episodeSort = episodeSort,
-                    resolution = resolution,
-                    magnetUrl = magnetUrl,
-                    torrentUrl = torrentUrl,
-                    contentLength = rawLen,
-                    formattedSize = formattedSize,
-                    pubDate = pubDate,
-                    infoHash = infoHash,
-                ),
-            )
         }
-        return results
+
+        if (rawLen <= MIN_VALID_MEDIA_BYTES && enclosureLen > MIN_VALID_MEDIA_BYTES) {
+            rawLen = enclosureLen
+            if (formattedSize.isBlank()) {
+                formattedSize = formatFileSize(rawLen)
+            }
+        }
+
+        val description = extractTagText(DESCRIPTION_REGEX, itemBlock)
+        if (formattedSize.isBlank()) {
+            val descSize = extractFormattedSize(description)
+            if (descSize.isNotBlank()) {
+                formattedSize = descSize
+                rawLen = parseSizeToBytes(descSize)
+            }
+        }
+
+        return Pair(rawLen, formattedSize)
     }
 
     private fun extractTagText(

@@ -55,6 +55,16 @@ class TorrentFeedRepositoryImpl(
     /** 插入序有界缓存：键含规则 ID 与解析后 URL，无上限时每次改关键词都会永久驻留。 */
     private val memoryCache = LinkedHashMap<String, List<TorrentMediaResource>>()
 
+    private sealed interface SearchStepOutcome {
+        data class Found(
+            val resources: List<TorrentMediaResource>,
+        ) : SearchStepOutcome
+
+        data object CircuitBreak : SearchStepOutcome
+
+        data object Continue : SearchStepOutcome
+    }
+
     override suspend fun getTorrentResources(
         title: String,
         episodeSort: Float?,
@@ -71,18 +81,7 @@ class TorrentFeedRepositoryImpl(
             return emptyList()
         }
 
-        val epStr =
-            episodeSort?.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() }.orEmpty()
-        val epPadded =
-            episodeSort
-                ?.let {
-                    if (it % 1f == 0f) {
-                        val epInt = it.toInt()
-                        if (epInt in 0..9) "0$epInt" else epInt.toString()
-                    } else {
-                        it.toString()
-                    }
-                }.orEmpty()
+        val (epStr, epPadded) = formatEpisodeQueryStrings(episodeSort)
 
         // 主标题优先，其后是按声明顺序去重后的别名；标题为空时保留一个空查询，
         // 兼容不依赖 {title} 占位符的固定 Feed 规则。
@@ -103,27 +102,22 @@ class TorrentFeedRepositoryImpl(
 
         // 阶段 1：优先按原标题及别名直接检索（对齐别名回退契约与单次往返命中）
         for (queryTitle in baseTitles) {
-            val targetUrl =
-                activeRule.resolveUrl(title = queryTitle, ep = epStr, subjectId = subjectId)
-            // 规则模板不含 {title} 时所有候选会解析成同一个 URL，去重避免重复拉取同一 Feed。
-            if (!triedUrls.add(targetUrl)) continue
-
-            when (val result = fetchFeed(targetUrl, activeRule, forceRefresh)) {
-                is FeedFetchResult.NetworkError -> {
-                    // 当域名在网络层不可达（连接超时、拒绝、重置等）时，立即对当前规则熔断，
-                    // 绝不盲目拿剩余别名重复尝试，避免单死站拖垮总耗时
-                    logger.w { "Network failure for $targetUrl; circuit breaking alias loop for rule ${activeRule.id}" }
-                    return emptyList()
-                }
-                is FeedFetchResult.Success -> {
-                    if (result.resources.isNotEmpty()) {
-                        titlesWithNonEmptyFeed.add(queryTitle)
-                        val filtered = filterAndSort(result.resources, episodeSort)
-                        if (filtered.isNotEmpty()) {
-                            return filtered
-                        }
-                    }
-                }
+            when (
+                val outcome =
+                    trySearchFeed(
+                        activeRule = activeRule,
+                        queryTitle = queryTitle,
+                        epStr = epStr,
+                        subjectId = subjectId,
+                        triedUrls = triedUrls,
+                        forceRefresh = forceRefresh,
+                        episodeSort = episodeSort,
+                        onFeedNonEmpty = { titlesWithNonEmptyFeed.add(queryTitle) },
+                    )
+            ) {
+                is SearchStepOutcome.Found -> return outcome.resources
+                SearchStepOutcome.CircuitBreak -> return emptyList()
+                SearchStepOutcome.Continue -> Unit
             }
         }
 
@@ -131,38 +125,92 @@ class TorrentFeedRepositoryImpl(
         // 且基础标题均未命中指定分集（说明较早的分集已被挤出第一页），
         // 则针对确实存在资源的标题追加带集数关键字定向检索（如 "标题 03"、"标题 3"）
         if (episodeSort != null && !ruleHasEpPlaceholder && titlesWithNonEmptyFeed.isNotEmpty()) {
-            val epSpecificTitles =
-                titlesWithNonEmptyFeed
-                    .flatMap { base ->
-                        listOfNotNull(
-                            "$base $epPadded",
-                            if (epPadded != epStr) "$base $epStr" else null,
-                        )
-                    }.distinct()
-
+            val epSpecificTitles = buildEpSpecificTitles(titlesWithNonEmptyFeed, epStr, epPadded)
             for (queryTitle in epSpecificTitles) {
-                val targetUrl =
-                    activeRule.resolveUrl(title = queryTitle, ep = epStr, subjectId = subjectId)
-                if (!triedUrls.add(targetUrl)) continue
-
-                when (val result = fetchFeed(targetUrl, activeRule, forceRefresh)) {
-                    is FeedFetchResult.NetworkError -> {
-                        logger.w { "Network failure for $targetUrl in ep fallback; circuit breaking for rule ${activeRule.id}" }
-                        return emptyList()
-                    }
-                    is FeedFetchResult.Success -> {
-                        if (result.resources.isNotEmpty()) {
-                            val filtered = filterAndSort(result.resources, episodeSort)
-                            if (filtered.isNotEmpty()) {
-                                return filtered
-                            }
-                        }
-                    }
+                when (
+                    val outcome =
+                        trySearchFeed(
+                            activeRule = activeRule,
+                            queryTitle = queryTitle,
+                            epStr = epStr,
+                            subjectId = subjectId,
+                            triedUrls = triedUrls,
+                            forceRefresh = forceRefresh,
+                            episodeSort = episodeSort,
+                        )
+                ) {
+                    is SearchStepOutcome.Found -> return outcome.resources
+                    SearchStepOutcome.CircuitBreak -> return emptyList()
+                    SearchStepOutcome.Continue -> Unit
                 }
             }
         }
 
         return emptyList()
+    }
+
+    private fun formatEpisodeQueryStrings(episodeSort: Float?): Pair<String, String> {
+        val epStr =
+            episodeSort?.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() }.orEmpty()
+        val epPadded =
+            episodeSort
+                ?.let {
+                    if (it % 1f == 0f) {
+                        val epInt = it.toInt()
+                        if (epInt in 0..9) "0$epInt" else epInt.toString()
+                    } else {
+                        it.toString()
+                    }
+                }.orEmpty()
+        return Pair(epStr, epPadded)
+    }
+
+    private fun buildEpSpecificTitles(
+        titlesWithNonEmptyFeed: List<String>,
+        epStr: String,
+        epPadded: String,
+    ): List<String> =
+        titlesWithNonEmptyFeed
+            .flatMap { base ->
+                listOfNotNull(
+                    "$base $epPadded",
+                    if (epPadded != epStr) "$base $epStr" else null,
+                )
+            }.distinct()
+
+    private suspend fun trySearchFeed(
+        activeRule: PlaybackSourceRule,
+        queryTitle: String,
+        epStr: String,
+        subjectId: Long,
+        triedUrls: MutableSet<String>,
+        forceRefresh: Boolean,
+        episodeSort: Float?,
+        onFeedNonEmpty: (() -> Unit)? = null,
+    ): SearchStepOutcome {
+        val targetUrl =
+            activeRule.resolveUrl(title = queryTitle, ep = epStr, subjectId = subjectId)
+        if (!triedUrls.add(targetUrl)) return SearchStepOutcome.Continue
+
+        return when (val result = fetchFeed(targetUrl, activeRule, forceRefresh)) {
+            is FeedFetchResult.NetworkError -> {
+                logger.w { "Network failure for $targetUrl; circuit breaking for rule ${activeRule.id}" }
+                SearchStepOutcome.CircuitBreak
+            }
+            is FeedFetchResult.Success -> {
+                if (result.resources.isNotEmpty()) {
+                    onFeedNonEmpty?.invoke()
+                    val filtered = filterAndSort(result.resources, episodeSort)
+                    if (filtered.isNotEmpty()) {
+                        SearchStepOutcome.Found(filtered)
+                    } else {
+                        SearchStepOutcome.Continue
+                    }
+                } else {
+                    SearchStepOutcome.Continue
+                }
+            }
+        }
     }
 
     /** 读取单个 Feed：命中缓存直接返回，否则拉取 + 解析，仅缓存非空结果。 */
