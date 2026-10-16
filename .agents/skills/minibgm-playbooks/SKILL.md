@@ -59,10 +59,13 @@ description: >-
         @StringRes val messageRes: Int = 0,
         val formatArgs: List<String> = emptyList(),
     ) : XxxUiEvent
-    // UI 收集侧解析
+
+    // UI 收集侧解析（Composable 作用域内严禁裸调 context.getString，需经 resources.getString）
+    val resources = LocalContext.current.resources
     val text = event.message?.takeIf { it.isNotBlank() }
-        ?: context.getString(event.messageRes, *event.formatArgs.toTypedArray())
+        ?: resources.getString(event.messageRes, *event.formatArgs.toTypedArray())
     ```
+  * **状态机模型文案传递规范**：组件状态机（如诊断卡片 `Failure`、校验提示等）严禁在状态组装期直接调用 `context.getString(...)`（触发 `LocalContextGetResourceValueCall`）。必须由状态机直接持有 `@StringRes val summaryRes: Int`、`@StringRes val detailRes: Int? = null` 与服务端原文 `val detailMessage: String? = null`，交由 UI 渲染层统一通过 Compose 原生的 `stringResource(state.summaryRes)` 响应式解析。
 
 ---
 
@@ -138,6 +141,14 @@ description: >-
    * 判据仍是「稳定立场 vs 单次观看意图」：弹幕显示/自动连播/吐槽排序/字幕开关是稳定立场；播放速度、画面比例、单集循环不是。
    * 红线：`ArchitectureRulesTest#comment_sort_order_must_be_a_shared_persisted_preference`（三页都必须调 `setCommentSortOrder`、都不得再留 `MutableStateFlow(CommentSortOrder...)`、都必须经 `fromKey` 解析）。
 
+15. **LocalContext 资源获取与 LocalContextGetResourceValueCall 拦截**：
+   * 在 Composable 视图渲染内部直接调用 `LocalContext.current.getString(...)` 会被 Compose 官方 Lint 规则 `LocalContextGetResourceValueCall` 拦截（因其不感知 `Configuration` 动态切换，在深色模式、屏幕旋转或语言切换时会返回陈旧资源）。
+   * 正确形态：Composable 内部静态文案一律使用 `stringResource(...)`；状态模型（如诊断状态、错误卡片等）必须以 `@StringRes` 资源 ID 传递并在 UI 渲染层统一响应式解析；非 Composable 协程回调或一次性事件收集如需通过 Context 解析，必须经 `LocalContext.current.resources.getString(...)`。
+   * 存量基线收敛：当依赖升级暴露大批量存量静态检查基线漂移时，经校验无误后通过 `./gradlew updateLintBaseline` 收敛更新各模块 `lint-baseline.xml`。
+
+16. **CRAP 复杂度死锁（CC > 30 无论覆盖率多高必死）**：
+   * CRAP 公式为 $CRAP(m) = CC^2 \times (1 - Cov)^3 + CC$。当圈复杂度 $CC > 30$ 时，即便测试覆盖率达到 99%，计算结果也必然大于 30.0 阈值而触发 CI 硬失败。
+   * 正确形态：当复杂业务（如多源检索、多策略解析器）逻辑庞大时，切忌在一个方法体内堆叠 `when`/`for`/`if` 分支；必须拆解为职责单一的高内聚纯函数（使各个纯函数 $CC < 10$）。平台边界方法（如磁盘 IO、网络回退）必须编写单元测试，杜绝 $Cov = 0\%$ 导致的 CRAP 爆表（$Cov=0\%$ 时 $CC \ge 6$ 即超标）。验证命令：`./gradlew :core:testing:crapCheck`。
 
 ---
 
