@@ -402,7 +402,7 @@ class EpisodeDetailViewModel(
         }
 
         val title = subject.displayName
-        val primaryEpSort = targetEpisode?.let { if (it.sort > 0f) it.sort else it.episodeNumber }
+        val primaryEpSort = targetEpisode?.episodeNumber
         val altTitles =
             (
                 listOfNotNull(

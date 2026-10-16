@@ -535,7 +535,7 @@ fun EpisodeDetailScreen(
                                                     EpisodeDetailRoute(
                                                         episodeId = prevEp.id,
                                                         subjectId = subjectId,
-                                                        episodeSort = prevEp.sort,
+                                                        episodeSort = prevEp.episodeNumber,
                                                         episodeType = prevEp.type,
                                                         episodeName = prevEp.name,
                                                         episodeNameCn = prevEp.nameCn,
@@ -586,7 +586,7 @@ fun EpisodeDetailScreen(
                                                     EpisodeDetailRoute(
                                                         episodeId = nextEp.id,
                                                         subjectId = subjectId,
-                                                        episodeSort = nextEp.sort,
+                                                        episodeSort = nextEp.episodeNumber,
                                                         episodeType = nextEp.type,
                                                         episodeName = nextEp.name,
                                                         episodeNameCn = nextEp.nameCn,

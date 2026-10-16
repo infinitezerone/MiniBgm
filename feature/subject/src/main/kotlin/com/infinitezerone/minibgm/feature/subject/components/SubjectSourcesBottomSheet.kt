@@ -1099,8 +1099,7 @@ fun TorrentMediaResourcesSection(
      * 绝不硬编码「第 1 话」——那会把所有条目级资源塌缩成同一个 `sort:1.0` 身份键，
      * 并把假的集数提示（episodeHint="1"）喂给 Rust 侧的分集选片逻辑。
      */
-    fun resourceEpisodeSort(resource: TorrentMediaResource): Float =
-        episode?.let { if (it.sort > 0f) it.sort else it.episodeNumber } ?: resource.episodeSort ?: 0f
+    fun resourceEpisodeSort(resource: TorrentMediaResource): Float = episode?.episodeNumber ?: resource.episodeSort ?: 0f
 
     fun resourceEpisodeName(resource: TorrentMediaResource): String = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title
 
