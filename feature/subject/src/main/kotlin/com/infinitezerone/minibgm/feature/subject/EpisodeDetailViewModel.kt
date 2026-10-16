@@ -30,6 +30,7 @@ import com.infinitezerone.minibgm.feature.subject.components.isEpisodeWatched
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -380,16 +381,22 @@ class EpisodeDetailViewModel(
         }
     }
 
+    private var torrentJob: Job? = null
+
     /**
      * 检索通用 P2P 种子与磁力链接资源。
      * 遵循 100% 协议中立：仅当用户启用了 [PlaybackRuleKind.TORRENT] 规则时按需检索，
      * 未启用或规则为空时零网络请求。
      */
-    fun loadTorrentResources(episode: Episode? = null) {
+    fun loadTorrentResources(
+        episode: Episode? = null,
+        forceRefresh: Boolean = false,
+    ) {
         val targetEpisode = episode ?: uiState.value.episode
         val subject = uiState.value.subject ?: return
         val activeTorrentRules = uiState.value.playbackRules.filter { it.isEnabled && it.kind == PlaybackRuleKind.TORRENT }
         if (activeTorrentRules.isEmpty()) {
+            torrentJob?.cancel()
             torrentState.value = Pair(emptyList(), false)
             return
         }
@@ -404,32 +411,40 @@ class EpisodeDetailViewModel(
                 ) + subject.titleAliases
             ).distinct()
 
-        torrentState.value = Pair(torrentState.value.first, true)
-        viewModelScope.launch {
-            val feedRepo = torrentFeedRepository
-            val allResources =
-                if (feedRepo != null) {
-                    coroutineScope {
-                        activeTorrentRules
-                            .map { rule ->
-                                async {
-                                    feedRepo.getTorrentResources(
-                                        title = title,
-                                        episodeSort = primaryEpSort,
-                                        alternativeTitles = altTitles,
-                                        subjectId = subjectId,
-                                        rule = rule,
-                                    )
-                                }
-                            }.awaitAll()
-                            .flatten()
+        torrentJob?.cancel()
+        torrentState.value = Pair(emptyList(), true)
+        torrentJob =
+            viewModelScope.launch {
+                val feedRepo = torrentFeedRepository
+                val allResources =
+                    if (feedRepo != null) {
+                        coroutineScope {
+                            activeTorrentRules
+                                .map { rule ->
+                                    async {
+                                        feedRepo.getTorrentResources(
+                                            title = title,
+                                            episodeSort = primaryEpSort,
+                                            alternativeTitles = altTitles,
+                                            subjectId = subjectId,
+                                            rule = rule,
+                                            forceRefresh = forceRefresh,
+                                        )
+                                    }
+                                }.awaitAll()
+                                .flatten()
+                        }
+                    } else {
+                        emptyList()
                     }
-                } else {
-                    emptyList()
-                }
-            val deduplicated = allResources.mergeAndDeduplicate().distinctBy { it.dedupeKey }
-            torrentState.value = Pair(deduplicated, false)
-        }
+                val deduplicated = allResources.mergeAndDeduplicate().distinctBy { it.dedupeKey }
+                torrentState.value = Pair(deduplicated, false)
+            }
+    }
+
+    /** 手动刷新当前分集的种子资源（绕过本地内存缓存重新触网拉取） */
+    fun refreshTorrentResources(episode: Episode? = null) {
+        loadTorrentResources(episode = episode, forceRefresh = true)
     }
 
     /** 为当前分集组装播放器路由（组装逻辑见 [buildEpisodePlayerRoute]） */

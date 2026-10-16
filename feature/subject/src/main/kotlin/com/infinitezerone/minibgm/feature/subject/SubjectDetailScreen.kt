@@ -778,6 +778,7 @@ fun SubjectDetailScreen(
         torrentResources = uiState.torrentResources,
         isTorrentLoading = uiState.isTorrentLoading,
         onRequestNotificationPermission = requestDownloadNotification,
+        onRefreshTorrent = { viewModel.refreshTorrentResources(selectedEpisodeForSources) },
     )
 
     if (activeTagForAction != null) {

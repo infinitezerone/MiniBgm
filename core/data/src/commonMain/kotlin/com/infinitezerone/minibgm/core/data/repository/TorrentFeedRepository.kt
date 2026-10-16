@@ -32,6 +32,7 @@ interface TorrentFeedRepository {
         alternativeTitles: List<String> = emptyList(),
         subjectId: Long = 0L,
         rule: PlaybackSourceRule? = null,
+        forceRefresh: Boolean = false,
     ): List<TorrentMediaResource>
 }
 
@@ -60,6 +61,7 @@ class TorrentFeedRepositoryImpl(
         alternativeTitles: List<String>,
         subjectId: Long,
         rule: PlaybackSourceRule?,
+        forceRefresh: Boolean,
     ): List<TorrentMediaResource> {
         val cleanTitle = title.trim()
         if (cleanTitle.isBlank() && rule == null) return emptyList()
@@ -71,34 +73,51 @@ class TorrentFeedRepositoryImpl(
 
         val epStr =
             episodeSort?.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() }.orEmpty()
+        val epPadded =
+            episodeSort
+                ?.let {
+                    if (it % 1f == 0f) {
+                        val epInt = it.toInt()
+                        if (epInt in 0..9) "0$epInt" else epInt.toString()
+                    } else {
+                        it.toString()
+                    }
+                }.orEmpty()
 
         // 主标题优先，其后是按声明顺序去重后的别名；标题为空时保留一个空查询，
         // 兼容不依赖 {title} 占位符的固定 Feed 规则。
-        val queryTitles =
+        val baseTitles =
             (listOf(cleanTitle) + alternativeTitles)
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
                 .distinct()
                 .ifEmpty { listOf("") }
 
-        // 别名回退采用「首个非空即返回」而非结果集合并：主标题命中时零额外请求，
-        // 只有主标题确实检索为空（站点按原名/别名索引）时才多一次往返。
+        // 当用户指定了分集且规则模板不包含 {ep} 占位符时（如大多数 Mikan/DMHY/Nyaa/Bangumi.moe RSS 规则），
+        // 站点 RSS 搜索默认只返回最新 20 条。若仅搜番剧名，较早的分集会被挤出第一页。
+        // 因此针对每个候选标题，优先尝试合成带集数关键字的查询（如 "标题 03"、"标题 3"），
+        // 最后回退到纯番剧名。
+        val ruleHasEpPlaceholder = activeRule.urlTemplate.contains("{ep}")
         val triedUrls = mutableSetOf<String>()
-        for (queryTitle in queryTitles) {
+        val titlesWithNonEmptyFeed = mutableListOf<String>()
+
+        // 阶段 1：优先按原标题及别名直接检索（对齐别名回退契约与单次往返命中）
+        for (queryTitle in baseTitles) {
             val targetUrl =
                 activeRule.resolveUrl(title = queryTitle, ep = epStr, subjectId = subjectId)
             // 规则模板不含 {title} 时所有候选会解析成同一个 URL，去重避免重复拉取同一 Feed。
             if (!triedUrls.add(targetUrl)) continue
 
-            when (val result = fetchFeed(targetUrl, activeRule)) {
+            when (val result = fetchFeed(targetUrl, activeRule, forceRefresh)) {
                 is FeedFetchResult.NetworkError -> {
                     // 当域名在网络层不可达（连接超时、拒绝、重置等）时，立即对当前规则熔断，
                     // 绝不盲目拿剩余别名重复尝试，避免单死站拖垮总耗时
                     logger.w { "Network failure for $targetUrl; circuit breaking alias loop for rule ${activeRule.id}" }
-                    break
+                    return emptyList()
                 }
                 is FeedFetchResult.Success -> {
                     if (result.resources.isNotEmpty()) {
+                        titlesWithNonEmptyFeed.add(queryTitle)
                         val filtered = filterAndSort(result.resources, episodeSort)
                         if (filtered.isNotEmpty()) {
                             return filtered
@@ -107,6 +126,42 @@ class TorrentFeedRepositoryImpl(
                 }
             }
         }
+
+        // 阶段 2：若用户指定了分集、规则模板未包含 {ep}（如 Mikan/DMHY 等单页只返回最新 20 条的 RSS），
+        // 且基础标题均未命中指定分集（说明较早的分集已被挤出第一页），
+        // 则针对确实存在资源的标题追加带集数关键字定向检索（如 "标题 03"、"标题 3"）
+        if (episodeSort != null && !ruleHasEpPlaceholder && titlesWithNonEmptyFeed.isNotEmpty()) {
+            val epSpecificTitles =
+                titlesWithNonEmptyFeed
+                    .flatMap { base ->
+                        listOfNotNull(
+                            "$base $epPadded",
+                            if (epPadded != epStr) "$base $epStr" else null,
+                        )
+                    }.distinct()
+
+            for (queryTitle in epSpecificTitles) {
+                val targetUrl =
+                    activeRule.resolveUrl(title = queryTitle, ep = epStr, subjectId = subjectId)
+                if (!triedUrls.add(targetUrl)) continue
+
+                when (val result = fetchFeed(targetUrl, activeRule, forceRefresh)) {
+                    is FeedFetchResult.NetworkError -> {
+                        logger.w { "Network failure for $targetUrl in ep fallback; circuit breaking for rule ${activeRule.id}" }
+                        return emptyList()
+                    }
+                    is FeedFetchResult.Success -> {
+                        if (result.resources.isNotEmpty()) {
+                            val filtered = filterAndSort(result.resources, episodeSort)
+                            if (filtered.isNotEmpty()) {
+                                return filtered
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         return emptyList()
     }
 
@@ -114,9 +169,12 @@ class TorrentFeedRepositoryImpl(
     private suspend fun fetchFeed(
         targetUrl: String,
         rule: PlaybackSourceRule,
+        forceRefresh: Boolean = false,
     ): FeedFetchResult {
         val cacheKey = "feed:${rule.id}:$targetUrl"
-        readCache(cacheKey)?.let { return FeedFetchResult.Success(it) }
+        if (!forceRefresh) {
+            readCache(cacheKey)?.let { return FeedFetchResult.Success(it) }
+        }
 
         val host =
             targetUrl
@@ -180,7 +238,8 @@ class TorrentFeedRepositoryImpl(
                 // 分集未命中时只回退到合集/BD 整包项（episodeSort == null），绝不回退整份 Feed：
                 // 否则请求第 5 集会看到第 1-4 集，点单文件资源还会被 Rust 侧「单一候选即选中」
                 // 静默播成第 1 集，用户全程无提示。
-                matched.ifEmpty { resources.filter { it.episodeSort == null } }
+                val batchItems = resources.filter { it.episodeSort == null }
+                matched.ifEmpty { batchItems.filter { isExplicitBatch(it.title) } }
             } else {
                 resources
             }
@@ -189,6 +248,16 @@ class TorrentFeedRepositoryImpl(
                 .thenByDescending { it.resolution == "4K" }
                 .thenByDescending { it.contentLength },
         )
+    }
+
+    private fun isExplicitBatch(title: String): Boolean {
+        val batchKeywords = listOf("合集", "全集", "Fin]", "Fin)", "【Fin】", "[Fin]", "Complete")
+        val batchEpRangeRegex =
+            Regex(
+                """(?i)(?:\[\s*(?:ep)?\s*\d{1,3}\s*[-~至到]\s*\d{1,3}\s*\]|\b(?:ep|e)\s*\d{1,3}\s*[-~至到]\s*\d{1,3}\b|0\d\s*[-~至到]\s*\d{1,3})""",
+            )
+        return batchKeywords.any { title.contains(it, ignoreCase = true) } ||
+            batchEpRangeRegex.containsMatchIn(title)
     }
 
     private companion object {

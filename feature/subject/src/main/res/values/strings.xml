@@ -254,8 +254,11 @@
     <string name="feature_subject_source_torrent_hash_copied">已复制 InfoHash</string>
     <string name="feature_subject_source_torrent_details_section">详细信息</string>
     <string name="feature_subject_source_torrent_action_play_stream">边播</string>
-    <string name="feature_subject_source_torrent_channels_label">可用通道</string>
     <string name="feature_subject_source_torrent_pub_date_prefix">发布于 %1$s</string>
+    <string name="feature_subject_source_torrent_refresh">刷新种子资源</string>
+    <string name="feature_subject_source_torrent_save_file">保存种子文件 (.torrent)</string>
+    <string name="feature_subject_source_torrent_copy_infohash">复制特征码 (InfoHash)</string>
+    <string name="feature_subject_source_torrent_more_actions">更多操作</string>
     <string name="feature_subject_source_mikan_fansub_section">P2P 原画与字幕组资源</string>
     <string name="feature_subject_source_mikan_copy_magnet">复制磁力</string>
     <string name="feature_subject_source_mikan_in_app_download">离线下载</string>

@@ -804,6 +804,7 @@ fun EpisodeDetailScreen(
             torrentResources = uiState.torrentResources,
             isTorrentLoading = uiState.isTorrentLoading,
             onRequestNotificationPermission = requestDownloadNotification,
+            onRefreshTorrent = { viewModel.refreshTorrentResources() },
         )
     }
 

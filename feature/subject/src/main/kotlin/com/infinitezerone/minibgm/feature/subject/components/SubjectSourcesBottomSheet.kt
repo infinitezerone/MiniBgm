@@ -2,7 +2,6 @@ package com.infinitezerone.minibgm.feature.subject.components
 
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,7 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -25,6 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -128,6 +131,7 @@ fun SubjectSourcesBottomSheet(
     torrentResources: List<TorrentMediaResource> = emptyList(),
     isTorrentLoading: Boolean = false,
     onRequestNotificationPermission: (() -> Unit)? = null,
+    onRefreshTorrent: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val displayName = subject.displayName
@@ -754,6 +758,7 @@ fun SubjectSourcesBottomSheet(
                     onManageRules = onManageRules,
                     onRequestNotificationPermission = onRequestNotificationPermission,
                     onDismissAndRun = runAfterDismiss,
+                    onRefreshTorrent = onRefreshTorrent,
                 )
             }
             SourceSheetTab.EXTERNAL -> {
@@ -1070,6 +1075,7 @@ fun TorrentMediaResourcesSection(
     onManageRules: (() -> Unit)? = null,
     onRequestNotificationPermission: (() -> Unit)? = null,
     onDismissAndRun: (() -> Unit) -> Unit,
+    onRefreshTorrent: (() -> Unit)? = null,
 ) {
     val torrentRepository: TorrentRepository = koinInject()
     val torrentIntentDispatcher: TorrentIntentDispatcher = koinInject()
@@ -1300,7 +1306,37 @@ fun TorrentMediaResourcesSection(
     }
 
     Spacer(modifier = Modifier.height(4.dp))
-    BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_torrent_fansub_section))
+    BgmSourcesSectionLabel(
+        label = stringResource(R.string.feature_subject_source_torrent_fansub_section),
+        trailingContent = {
+            if (hasTorrentRules) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (isTorrentLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else if (onRefreshTorrent != null) {
+                        IconButton(
+                            onClick = onRefreshTorrent,
+                            modifier = Modifier.size(24.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.Refresh,
+                                contentDescription = stringResource(R.string.feature_subject_source_torrent_refresh),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+    )
     if (!hasTorrentRules) {
         Text(
             text = stringResource(R.string.feature_subject_source_torrent_no_rules),
@@ -1496,13 +1532,13 @@ fun TorrentMediaResourcesSection(
 @Composable
 fun TorrentMediaResourceCard(
     resource: TorrentMediaResource,
-    isExpanded: Boolean,
+    isExpanded: Boolean = false,
     isBusy: Boolean = false,
     isAnyBusy: Boolean = false,
     isDownloaded: Boolean = false,
     streamState: TorrentStreamState? = null,
     onStopBusy: () -> Unit = {},
-    onToggleExpand: () -> Unit,
+    onToggleExpand: () -> Unit = {},
     onStreamPlay: () -> Unit,
     onInAppDownload: () -> Unit,
     onExternalLaunch: () -> Unit,
@@ -1512,24 +1548,21 @@ fun TorrentMediaResourceCard(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    var showMoreMenu by remember { mutableStateOf(false) }
 
     val releaseTags = remember(resource.title) { extractReleaseTags(resource.title) }
     val formattedDate = remember(resource.pubDate) { formatPubDateShort(resource.pubDate) }
 
-    val fansubText = if (resource.fansubName.isNotBlank()) "[${resource.fansubName}] " else ""
-    val resText = if (resource.resolution.isNotBlank()) "${resource.resolution} " else ""
-    val sizeText = if (resource.formattedSize.isNotBlank()) "· ${resource.formattedSize}" else ""
-    val headerSpecs = "$fansubText$resText$sizeText".trim().ifBlank { resource.title }
+    val fansubLabel = resource.fansubName.ifBlank { "通用发布" }
+    val displaySize =
+        resource.formattedSize
+            .takeIf { it.isNotBlank() && !it.startsWith("0 B") && !it.startsWith("0.0") && !it.startsWith("0 KB") }
+            .orEmpty()
 
     val epSort = resource.episodeSort
     val epBadgeText =
         if (epSort != null) {
-            val epNum =
-                if (epSort % 1f == 0f) {
-                    epSort.toInt().toString()
-                } else {
-                    epSort.toString()
-                }
+            val epNum = if (epSort % 1f == 0f) epSort.toInt().toString() else epSort.toString()
             stringResource(R.string.feature_subject_source_torrent_ep_badge, epNum)
         } else {
             stringResource(R.string.feature_subject_source_torrent_batch_badge)
@@ -1558,7 +1591,6 @@ fun TorrentMediaResourceCard(
         }
 
     Surface(
-        onClick = onToggleExpand,
         shape = BgmShapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = modifier.fillMaxWidth(),
@@ -1566,285 +1598,277 @@ fun TorrentMediaResourceCard(
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
+            // 顶栏：分集标识 + 字幕组 + 来源通道 + 体积 + 日期
             Row(
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                // 左侧主列
-                Column(modifier = Modifier.weight(1f)) {
-                    // 第 1 行：分集胶囊 + 规格 (字幕组/分辨率/大小) + 来源通道胶囊 + 已下载状态
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
+                Surface(
+                    shape = BgmShapes.small,
+                    color =
+                        if (epSort != null) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        } else {
+                            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)
+                        },
+                ) {
+                    Text(
+                        text = epBadgeText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color =
+                            if (epSort != null) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.tertiary
+                            },
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+
+                Text(
+                    text = fansubLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+
+                Surface(
+                    shape = BgmShapes.small,
+                    color = channelColor,
+                ) {
+                    Text(
+                        text = channelText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = channelOnColor,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                    )
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                if (displaySize.isNotBlank()) {
+                    Text(
+                        text = displaySize,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                if (formattedDate.isNotBlank()) {
+                    Text(
+                        text = formattedDate,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // 标题行：清晰展示发布名称，限制 2 行，消除截断伪重复
+            Text(
+                text = resource.title,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            // 特性与规格胶囊（清晰度 / 编码 / 语言 / 修正）+ 已下载状态
+            val specTags =
+                remember(resource.resolution, releaseTags) {
+                    (listOfNotNull(resource.resolution.takeIf { it.isNotBlank() }) + releaseTags).distinct()
+                }
+            if (specTags.isNotEmpty() || isDownloaded) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (isDownloaded) {
                         Surface(
-                            shape = BgmShapes.small,
-                            color =
-                                if (epSort != null) {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                } else {
-                                    MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)
-                                },
+                            shape = BgmShapes.extraSmall,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                         ) {
-                            Text(
-                                text = epBadgeText,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color =
-                                    if (epSort != null) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.tertiary
-                                    },
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
-
-                        Text(
-                            text = headerSpecs,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-
-                        Surface(
-                            shape = BgmShapes.small,
-                            color = channelColor,
-                        ) {
-                            Text(
-                                text = channelText,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = channelOnColor,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                            )
-                        }
-
-                        if (isDownloaded) {
                             Text(
                                 text = stringResource(R.string.feature_subject_source_torrent_downloaded_badge),
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Medium,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                             )
                         }
                     }
-
-                    // 第 2 行：完整/2行标题（消灭被截断产生的假重复）
-                    if (resource.title.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = resource.title,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-
-                    // 第 3 行：特性标签 (简繁/内封/HEVC/v2) + 发布时间
-                    if (releaseTags.isNotEmpty() || formattedDate.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    specTags.take(4).forEach { tag ->
+                        Surface(
+                            shape = BgmShapes.extraSmall,
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
                         ) {
-                            releaseTags.forEach { tag ->
-                                Surface(
-                                    shape = BgmShapes.extraSmall,
-                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                ) {
-                                    Text(
-                                        text = tag,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                    )
-                                }
-                            }
-                            if (formattedDate.isNotBlank()) {
-                                Spacer(modifier = Modifier.width(2.dp))
-                                Text(
-                                    text = stringResource(R.string.feature_subject_source_torrent_pub_date_prefix, formattedDate),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                                )
-                            }
+                            Text(
+                                text = tag,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                            )
                         }
                     }
                 }
+            }
 
-                // 右侧快捷主操作与展开箭头
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 4 大核心操作横排（显式 contentPadding，坚决杜绝截断中文）
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                // 1. 边下边播 (主动作)
+                Button(
+                    onClick = onStreamPlay,
+                    enabled = !isAnyBusy && resource.hasPlayableSource,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    modifier = Modifier.height(34.dp).weight(1f),
                 ) {
+                    Icon(
+                        imageVector = BgmIcons.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text =
+                            stringResource(
+                                if (isDownloaded) {
+                                    R.string.feature_subject_source_torrent_play_downloaded
+                                } else {
+                                    R.string.feature_subject_source_torrent_stream_play
+                                },
+                            ),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
+
+                // 2. 离线下载
+                val inAppDownloadLabel = stringResource(R.string.feature_subject_source_torrent_in_app_download)
+                FilledTonalButton(
+                    onClick = onInAppDownload,
+                    enabled = !isAnyBusy && !isDownloaded && resource.hasPlayableSource,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                    modifier = Modifier.height(34.dp),
+                ) {
+                    Icon(
+                        imageVector = if (isDownloaded) BgmIcons.Check else BgmIcons.Download,
+                        contentDescription = inAppDownloadLabel,
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = inAppDownloadLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+
+                // 3. 外部打开 (115/网盘/播放器)
+                OutlinedIconButton(
+                    onClick = onExternalLaunch,
+                    enabled = !isAnyBusy && resource.hasPlayableSource,
+                    modifier = Modifier.size(34.dp),
+                ) {
+                    Icon(
+                        imageVector = BgmIcons.OpenInNew,
+                        contentDescription = stringResource(R.string.feature_subject_source_torrent_external_app),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+
+                // 4. 复制磁力
+                OutlinedIconButton(
+                    onClick = onCopyMagnet,
+                    enabled = !isAnyBusy && resource.hasMagnet,
+                    modifier = Modifier.size(34.dp),
+                ) {
+                    Icon(
+                        imageVector = BgmIcons.ContentCopy,
+                        contentDescription = stringResource(R.string.feature_subject_source_torrent_copy_magnet),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+
+                // 5. 更多菜单 (下载种子文件 / 复制 InfoHash)
+                Box {
                     IconButton(
-                        onClick = onStreamPlay,
-                        enabled = !isAnyBusy && resource.hasPlayableSource,
-                        modifier = Modifier.size(36.dp),
+                        onClick = { showMoreMenu = true },
+                        modifier = Modifier.size(34.dp),
                     ) {
                         Icon(
-                            imageVector = BgmIcons.PlayCircle,
-                            contentDescription =
-                                stringResource(
-                                    if (isDownloaded) {
-                                        R.string.feature_subject_source_torrent_play_downloaded
-                                    } else {
-                                        R.string.feature_subject_source_torrent_stream_play
-                                    },
-                                ),
-                            tint =
-                                if (!isAnyBusy && resource.hasPlayableSource) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                                },
-                            modifier = Modifier.size(24.dp),
+                            imageVector = BgmIcons.MoreVert,
+                            contentDescription = stringResource(R.string.feature_subject_source_torrent_more_actions),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
                         )
                     }
 
-                    Icon(
-                        imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(20.dp),
-                    )
+                    DropdownMenu(
+                        expanded = showMoreMenu,
+                        onDismissRequest = { showMoreMenu = false },
+                    ) {
+                        if (resource.hasTorrent) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.feature_subject_source_torrent_save_file)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = BgmIcons.FolderOpen,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                },
+                                onClick = {
+                                    showMoreMenu = false
+                                    onDownloadTorrent()
+                                },
+                            )
+                        }
+                        if (resource.infoHash.isNotBlank()) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.feature_subject_source_torrent_copy_infohash)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = BgmIcons.ContentCopy,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                },
+                                onClick = {
+                                    showMoreMenu = false
+                                    onCopyInfoHash()
+                                    Toast
+                                        .makeText(
+                                            context,
+                                            context.getString(R.string.feature_subject_source_torrent_hash_copied),
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                },
+                            )
+                        }
+                    }
                 }
             }
 
-            // 起播进度刻意留在折叠区之外：用户收起卡片是为了少占屏，不是要丢掉进度与「停止」入口
+            // 起播进度条（起播进行中常驻展示，附带停止按钮）
             if (isBusy) {
                 Spacer(modifier = Modifier.height(10.dp))
                 TorrentStreamProgress(state = streamState, onStop = onStopBusy)
-            }
-
-            AnimatedVisibility(visible = isExpanded) {
-                Column {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    // 详细信息面板（InfoHash + 可用通道）
-                    Surface(
-                        shape = BgmShapes.small,
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            if (resource.infoHash.isNotBlank()) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Text(
-                                        text = "InfoHash: ${resource.infoHash}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        onClick = onCopyInfoHash,
-                                        shape = BgmShapes.extraSmall,
-                                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        ) {
-                                            Icon(
-                                                imageVector = BgmIcons.ContentCopy,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(12.dp),
-                                            )
-                                            Spacer(modifier = Modifier.width(3.dp))
-                                            Text(
-                                                text = "复制",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.primary,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            val channelsDesc =
-                                buildString {
-                                    if (resource.hasTorrent) append("✓ 种子直链 (HTTP极速)  ")
-                                    if (resource.hasMagnet) append("✓ 磁力链接 (DHT寻道)")
-                                }.trim()
-                            if (channelsDesc.isNotBlank()) {
-                                Text(
-                                    text = channelsDesc,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // 4 个核心操作：2 排规范排布
-                    // 第 1 排：离线下载 (纯下载) + 外部打开 (115/网盘/播放器)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        TorrentActionButton(
-                            text = stringResource(R.string.feature_subject_source_torrent_in_app_download),
-                            icon = BgmIcons.Download,
-                            isPrimary = false,
-                            enabled = !isAnyBusy && !isDownloaded && resource.hasPlayableSource,
-                            onClick = onInAppDownload,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TorrentActionButton(
-                            text = stringResource(R.string.feature_subject_source_torrent_external_app),
-                            icon = BgmIcons.OpenInNew,
-                            isPrimary = false,
-                            enabled = !isAnyBusy && resource.hasPlayableSource,
-                            onClick = onExternalLaunch,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // 第 2 排：复制磁力 + 下载种子文件
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        TorrentActionButton(
-                            text = stringResource(R.string.feature_subject_source_torrent_copy_magnet),
-                            icon = BgmIcons.ContentCopy,
-                            isPrimary = false,
-                            enabled = !isAnyBusy && resource.hasMagnet,
-                            onClick = onCopyMagnet,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TorrentActionButton(
-                            text = stringResource(R.string.feature_subject_source_torrent_download_torrent),
-                            icon = BgmIcons.FolderOpen,
-                            isPrimary = false,
-                            enabled = !isAnyBusy && resource.hasTorrent,
-                            onClick = onDownloadTorrent,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
             }
         }
     }

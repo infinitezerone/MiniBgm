@@ -230,16 +230,22 @@ class SubjectDetailViewModel(
         }
     }
 
+    private var torrentJob: Job? = null
+
     /**
      * 检索通用 P2P 种子与磁力链接资源。
      * 遵循 100% 协议中立：仅当用户启用了 [PlaybackRuleKind.TORRENT] 规则时按需检索，
      * 未启用或规则为空时零网络请求。
      */
-    fun loadTorrentResources(episode: Episode? = null) {
+    fun loadTorrentResources(
+        episode: Episode? = null,
+        forceRefresh: Boolean = false,
+    ) {
         val state = _uiState.value
         val subject = state.subject ?: return
         val activeTorrentRules = state.playbackRules.filter { it.isEnabled && it.kind == PlaybackRuleKind.TORRENT }
         if (activeTorrentRules.isEmpty()) {
+            torrentJob?.cancel()
             _uiState.update {
                 it.copy(
                     torrentResources = emptyList(),
@@ -259,37 +265,50 @@ class SubjectDetailViewModel(
                 ) + subject.titleAliases
             ).distinct()
 
-        _uiState.update { it.copy(isTorrentLoading = true) }
-        viewModelScope.launch {
-            val feedRepo = torrentFeedRepository
-            val allResources =
-                if (feedRepo != null) {
-                    coroutineScope {
-                        activeTorrentRules
-                            .map { rule ->
-                                async {
-                                    feedRepo.getTorrentResources(
-                                        title = title,
-                                        episodeSort = primaryEpSort,
-                                        alternativeTitles = altTitles,
-                                        subjectId = subjectId,
-                                        rule = rule,
-                                    )
-                                }
-                            }.awaitAll()
-                            .flatten()
-                    }
-                } else {
-                    emptyList()
-                }
-            val deduplicated = allResources.mergeAndDeduplicate().distinctBy { it.dedupeKey }
-            _uiState.update {
-                it.copy(
-                    torrentResources = deduplicated,
-                    isTorrentLoading = false,
-                )
-            }
+        torrentJob?.cancel()
+        _uiState.update {
+            it.copy(
+                torrentResources = emptyList(),
+                isTorrentLoading = true,
+            )
         }
+        torrentJob =
+            viewModelScope.launch {
+                val feedRepo = torrentFeedRepository
+                val allResources =
+                    if (feedRepo != null) {
+                        coroutineScope {
+                            activeTorrentRules
+                                .map { rule ->
+                                    async {
+                                        feedRepo.getTorrentResources(
+                                            title = title,
+                                            episodeSort = primaryEpSort,
+                                            alternativeTitles = altTitles,
+                                            subjectId = subjectId,
+                                            rule = rule,
+                                            forceRefresh = forceRefresh,
+                                        )
+                                    }
+                                }.awaitAll()
+                                .flatten()
+                        }
+                    } else {
+                        emptyList()
+                    }
+                val deduplicated = allResources.mergeAndDeduplicate().distinctBy { it.dedupeKey }
+                _uiState.update {
+                    it.copy(
+                        torrentResources = deduplicated,
+                        isTorrentLoading = false,
+                    )
+                }
+            }
+    }
+
+    /** 手动刷新当前分集的种子资源（绕过本地内存缓存重新触网拉取） */
+    fun refreshTorrentResources(episode: Episode? = null) {
+        loadTorrentResources(episode = episode, forceRefresh = true)
     }
 
     /** 计算「下一待看」分集：按客观播出状态与打卡进度推断，杜绝未播或已追平时倒退回第 1 集 */
