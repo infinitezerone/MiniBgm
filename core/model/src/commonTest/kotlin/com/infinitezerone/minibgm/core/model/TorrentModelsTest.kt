@@ -226,10 +226,100 @@ class TorrentModelsTest {
         )
         // RSS/HTML 里常见的首尾空白必须裁掉，否则同一磁力会算出两个身份
         assertEquals("abc123", magnetInfoHash("  magnet:?xt=urn:btih:abc123  "))
+        // RFC 4648 / BEP 0009 标准 32 位 Base32 BTIH 自动归一化为 40 位十六进制
+        assertEquals(
+            "9c1e52f4598f8285265e8de56d7bcfa4a7554baf",
+            magnetInfoHash("magnet:?xt=urn:btih:TQPFF5CZR6BIKJS6RXSW266PUSTVKS5P&dn=test"),
+        )
+        assertEquals(
+            "4f7c8c96896666977f76ccc283860841eb21c045",
+            magnetInfoHash("magnet:?xt=urn:btih:J56IZFUJMZTJO73WZTBIHBQIIHVSDQCF"),
+        )
         // 解析不出统一空串：严禁哨兵值——引擎曾用 "unknown_hash"，
         // 会让两个互不相干的未知磁力被判成同一会话/同一缓存
         assertEquals("", magnetInfoHash(""))
         assertEquals("", magnetInfoHash("https://example.com/1.torrent"))
         assertEquals("", magnetInfoHash("magnet:?dn=nohash"))
+    }
+
+    @Test
+    fun torrentMediaResource_effectiveMagnetUrl_and_channelFlags() {
+        val hashOnly = TorrentMediaResource(title = "Test", infoHash = "0123456789abcdef0123456789abcdef01234567")
+        assertEquals(
+            "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+            hashOnly.effectiveMagnetUrl,
+        )
+        assertTrue(hashOnly.hasMagnet)
+        assertFalse(hashOnly.hasTorrent)
+        assertFalse(hashOnly.isDualSource)
+        assertTrue(hashOnly.hasPlayableSource)
+
+        val dual =
+            TorrentMediaResource(
+                title = "Test",
+                magnetUrl = "magnet:?xt=urn:btih:abc",
+                torrentUrl = "https://example.com/1.torrent",
+            )
+        assertTrue(dual.hasMagnet)
+        assertTrue(dual.hasTorrent)
+        assertTrue(dual.isDualSource)
+        assertTrue(dual.hasPlayableSource)
+    }
+
+    @Test
+    fun torrentMediaResource_mergeAndDeduplicate_mergesCrossSiteReleases() {
+        // 源 A（如 Mikan）：有磁力和 infoHash，无种子直链，无大小（0L）
+        val fromMikan =
+            TorrentMediaResource(
+                title = "[LoliHouse] JoJo's Bizarre Adventure - SBR - 04 [WebRip 1080p HEVC-10bit AAC] [简繁内封]",
+                fansubName = "LoliHouse",
+                episodeSort = 4f,
+                resolution = "1080P",
+                magnetUrl = "magnet:?xt=urn:btih:4f7c8c96896666977f76ccc283860841eb21c045",
+                infoHash = "4f7c8c96896666977f76ccc283860841eb21c045",
+                contentLength = 0L,
+                formattedSize = "",
+            )
+
+        // 源 B（如 Bangumi.moe）：标题相同，但无 infoHash，只有种子直链和真实大小
+        val fromBangumiMoe =
+            TorrentMediaResource(
+                title = "[LoliHouse] JoJo's Bizarre Adventure - SBR - 04 [WebRip 1080p HEVC-10bit AAC] [简繁内封].mp4",
+                fansubName = "LoliHouse",
+                episodeSort = 4f,
+                resolution = "1080P",
+                torrentUrl = "https://bangumi.moe/download/torrent/12345.torrent",
+                contentLength = 471859200L,
+                formattedSize = "450.0 MB",
+                pubDate = "2026-10-16 07:02:00",
+            )
+
+        val merged = listOf(fromMikan, fromBangumiMoe).mergeAndDeduplicate()
+
+        assertEquals(1, merged.size)
+        val result = merged.first()
+        assertEquals("4f7c8c96896666977f76ccc283860841eb21c045", result.infoHash)
+        assertEquals("magnet:?xt=urn:btih:4f7c8c96896666977f76ccc283860841eb21c045", result.magnetUrl)
+        assertEquals("https://bangumi.moe/download/torrent/12345.torrent", result.torrentUrl)
+        assertEquals(471859200L, result.contentLength)
+        assertEquals("450.0 MB", result.formattedSize)
+        assertTrue(result.isDualSource)
+    }
+
+    @Test
+    fun extractReleaseTags_extractsSubtitleAndQualityTags() {
+        val tags = extractReleaseTags("[LoliHouse] SBR - 04 [WebRip 1080p HEVC-10bit AAC] [简繁内封] [v2]")
+        assertTrue(tags.contains("简繁"))
+        assertTrue(tags.contains("内封"))
+        assertTrue(tags.contains("HEVC"))
+        assertTrue(tags.contains("10bit"))
+        assertTrue(tags.contains("v2修正"))
+    }
+
+    @Test
+    fun formatPubDateShort_formatsIsoAndRfc822Dates() {
+        assertEquals("10-16 07:02", formatPubDateShort("2026-10-16T07:02:15Z"))
+        assertEquals("10-16 07:02", formatPubDateShort("2026-10-16 07:02:15"))
+        assertEquals("10-16 07:02", formatPubDateShort("Thu, 16 Oct 2026 07:02:15 GMT"))
     }
 }

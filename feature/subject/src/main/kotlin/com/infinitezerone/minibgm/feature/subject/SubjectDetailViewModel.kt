@@ -29,6 +29,7 @@ import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.core.model.TorrentMediaResource
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.aggregateBySubject
+import com.infinitezerone.minibgm.core.model.mergeAndDeduplicate
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -281,7 +282,7 @@ class SubjectDetailViewModel(
                 } else {
                     emptyList()
                 }
-            val deduplicated = allResources.distinctBy { it.dedupeKey }
+            val deduplicated = allResources.mergeAndDeduplicate().distinctBy { it.dedupeKey }
             _uiState.update {
                 it.copy(
                     torrentResources = deduplicated,

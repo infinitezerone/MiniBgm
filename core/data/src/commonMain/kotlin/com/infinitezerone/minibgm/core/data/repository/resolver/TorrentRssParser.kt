@@ -2,6 +2,8 @@ package com.infinitezerone.minibgm.core.data.repository.resolver
 
 import com.infinitezerone.minibgm.core.model.DownloadStorageUsage
 import com.infinitezerone.minibgm.core.model.TorrentMediaResource
+import com.infinitezerone.minibgm.core.model.magnetInfoHash
+import com.infinitezerone.minibgm.core.model.normalizeInfoHash
 
 /**
  * 通用动漫 BT 种子 / RSS XML 纯 Kotlin 解析器。
@@ -16,18 +18,25 @@ object TorrentRssParser {
     private val TITLE_REGEX = Regex("""<title>([\s\S]*?)</title>""", RegexOption.IGNORE_CASE)
     private val LINK_REGEX = Regex("""<link>([\s\S]*?)</link>""", RegexOption.IGNORE_CASE)
     private val DESCRIPTION_REGEX = Regex("""<description>([\s\S]*?)</description>""", RegexOption.IGNORE_CASE)
-    private val CONTENT_LENGTH_REGEX = Regex("""<contentLength>(\d+)</contentLength>""", RegexOption.IGNORE_CASE)
+    private val CONTENT_LENGTH_REGEX =
+        Regex("""<(?:\w+:)?(?:contentLength|size)>([^<]+)</(?:\w+:)?(?:contentLength|size)>""", RegexOption.IGNORE_CASE)
+    private val INFO_HASH_TAG_REGEX =
+        Regex("""<(?:\w+:)?infoHash>([^<]+)</(?:\w+:)?infoHash>""", RegexOption.IGNORE_CASE)
     private val PUB_DATE_REGEX = Regex("""<pubDate>([\s\S]*?)</pubDate>""", RegexOption.IGNORE_CASE)
     private val ENCLOSURE_URL_REGEX = Regex("""<enclosure[^>]+url=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
     private val ENCLOSURE_LEN_REGEX = Regex("""<enclosure[^>]+length=["'](\d+)["']""", RegexOption.IGNORE_CASE)
 
     private val HASH_REGEX = Regex("""(?:/Episode/|/)([0-9a-fA-F]{40})(?:\.torrent|/|$)""")
     private val FANSUB_REGEX = Regex("""^\s*[\[【]([^\]】]+)[\]】]""")
-    private val SIZE_FROM_DESC_REGEX = Regex("""\[(\d+(?:\.\d+)?\s*(?:[KMG]B|Bytes|gb|mb|kb))\]$""")
+    private val SIZE_TEXT_REGEX =
+        Regex("""\b(\d+(?:\.\d+)?\s*(?:GiB|MiB|KiB|GB|MB|KB|Bytes))\b""", RegexOption.IGNORE_CASE)
 
     private val BATCH_KEYWORDS = listOf("合集", "全集", "Fin]", "Fin)", "【Fin】", "[Fin]")
     private val BATCH_EP_RANGE_REGEX =
         Regex("""(?i)(?:\[\s*(?:ep)?\s*\d{1,3}\s*[-~至到]\s*\d{1,3}\s*\]|\b(?:ep|e)\s*\d{1,3}\s*[-~至到]\s*\d{1,3}\b|0\d\s*[-~至到]\s*\d{1,3})""")
+
+    /** 影视媒体文件最小有效体积阈值（<= 1KB 视为 RSS 占位伪长度，如 DMHY 的 length="1"） */
+    private const val MIN_VALID_MEDIA_BYTES = 1024L
 
     /**
      * 解析任意标准动漫 BT RSS XML 文本为 [TorrentMediaResource] 列表。
@@ -59,7 +68,16 @@ object TorrentRssParser {
                         .orEmpty(),
                 )
 
-            val infoHash = extractHash(link).ifBlank { extractHash(enclosureUrl) }
+            val tagHash = extractTagText(INFO_HASH_TAG_REGEX, itemBlock)
+            val infoHash =
+                tagHash
+                    .ifBlank {
+                        magnetInfoHash(link)
+                            .ifBlank { magnetInfoHash(enclosureUrl) }
+                            .ifBlank { extractHash(link) }
+                            .ifBlank { extractHash(enclosureUrl) }
+                    }.let(::normalizeInfoHash)
+
             // 合成磁链只保留 infohash：严禁注入硬编码公共 Tracker（会把本机 IP 与
             // infohash 广播给未知第三方，且域名存活期腐烂）。寻道交给 DHT，Feed 自带
             // 磁链则原样透传其自身声明的 Tracker。
@@ -75,27 +93,51 @@ object TorrentRssParser {
                 when {
                     enclosureUrl.endsWith(".torrent", ignoreCase = true) -> enclosureUrl
                     link.endsWith(".torrent", ignoreCase = true) -> link
-                    enclosureUrl.isNotBlank() -> enclosureUrl
+                    enclosureUrl.isNotBlank() && !enclosureUrl.startsWith("magnet:?", ignoreCase = true) -> enclosureUrl
                     infoHash.isNotBlank() && fallbackHost.isNotBlank() -> "https://$fallbackHost/Download/$infoHash.torrent"
                     else -> ""
                 }
 
-            val rawLen =
-                CONTENT_LENGTH_REGEX
+            val rawSizeTag = extractTagText(CONTENT_LENGTH_REGEX, itemBlock)
+            val enclosureLen =
+                ENCLOSURE_LEN_REGEX
                     .find(itemBlock)
                     ?.groupValues
                     ?.get(1)
                     ?.toLongOrNull()
-                    ?: ENCLOSURE_LEN_REGEX
-                        .find(itemBlock)
-                        ?.groupValues
-                        ?.get(1)
-                        ?.toLongOrNull()
                     ?: 0L
 
+            var rawLen = 0L
+            var formattedSize = ""
+
+            if (rawSizeTag.isNotBlank()) {
+                if (rawSizeTag.all { it.isDigit() }) {
+                    val bytes = rawSizeTag.toLongOrNull() ?: 0L
+                    if (bytes > MIN_VALID_MEDIA_BYTES) {
+                        rawLen = bytes
+                        formattedSize = formatFileSize(rawLen)
+                    }
+                } else {
+                    formattedSize = rawSizeTag
+                    rawLen = parseSizeToBytes(rawSizeTag)
+                }
+            }
+
+            if (rawLen <= MIN_VALID_MEDIA_BYTES && enclosureLen > MIN_VALID_MEDIA_BYTES) {
+                rawLen = enclosureLen
+                if (formattedSize.isBlank()) {
+                    formattedSize = formatFileSize(rawLen)
+                }
+            }
+
             val description = extractTagText(DESCRIPTION_REGEX, itemBlock)
-            val formattedSize =
-                extractFormattedSize(description).ifBlank { formatFileSize(rawLen) }
+            if (formattedSize.isBlank()) {
+                val descSize = extractFormattedSize(description)
+                if (descSize.isNotBlank()) {
+                    formattedSize = descSize
+                    rawLen = parseSizeToBytes(descSize)
+                }
+            }
 
             val pubDate = extractTagText(PUB_DATE_REGEX, itemBlock)
             val fansubName = extractFansub(title)
@@ -200,21 +242,33 @@ object TorrentRssParser {
         return null
     }
 
-    private fun extractFormattedSize(description: String): String =
-        SIZE_FROM_DESC_REGEX
-            .find(description)
+    private fun extractFormattedSize(text: String): String =
+        SIZE_TEXT_REGEX
+            .find(text)
             ?.groupValues
             ?.get(1)
             ?.trim()
             .orEmpty()
 
+    internal fun parseSizeToBytes(sizeStr: String): Long {
+        val match = Regex("""^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$""").find(sizeStr.trim()) ?: return 0L
+        val value = match.groupValues[1].toDoubleOrNull() ?: return 0L
+        val multiplier =
+            when (match.groupValues[2].uppercase()) {
+                "GIB", "GB" -> 1024L * 1024L * 1024L
+                "MIB", "MB" -> 1024L * 1024L
+                "KIB", "KB" -> 1024L
+                else -> 1L
+            }
+        return (value * multiplier).toLong()
+    }
+
     /**
      * 体积展示格式化：与 [DownloadStorageUsage.formatBytes] 共用唯一真源。
-     * 历史上此处另手搓了一份 GB/MB 分支（只到 MB、两位小数取整），副本漂移会让 Feed 声明的体积
-     * 与下载页显示的单位/精度两套口径。保持"未知（<= 0）返回空串"语义：`formattedSize` 以空串
-     * 表示 Feed 未声明体积，下游据此回退到估算值，不可改成 "0 B"。
+     * 保持"未知（<= MIN_VALID_MEDIA_BYTES）返回空串"语义：`formattedSize` 以空串
+     * 表示 Feed 未声明有效体积，下游据此回退到估算值，严禁把占位符（如 length="1"）格式化成 "0.0 KB" 或 "0 B"。
      */
-    private fun formatFileSize(bytes: Long): String = if (bytes <= 0L) "" else DownloadStorageUsage.formatBytes(bytes)
+    private fun formatFileSize(bytes: Long): String = if (bytes <= MIN_VALID_MEDIA_BYTES) "" else DownloadStorageUsage.formatBytes(bytes)
 
     private fun unescapeXml(text: String): String =
         text

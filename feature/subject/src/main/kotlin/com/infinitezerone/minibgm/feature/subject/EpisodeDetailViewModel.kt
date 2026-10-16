@@ -22,6 +22,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.TorrentMediaResource
 import com.infinitezerone.minibgm.core.model.UserCollection
+import com.infinitezerone.minibgm.core.model.mergeAndDeduplicate
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
@@ -426,7 +427,7 @@ class EpisodeDetailViewModel(
                 } else {
                     emptyList()
                 }
-            val deduplicated = allResources.distinctBy { it.dedupeKey }
+            val deduplicated = allResources.mergeAndDeduplicate().distinctBy { it.dedupeKey }
             torrentState.value = Pair(deduplicated, false)
         }
     }

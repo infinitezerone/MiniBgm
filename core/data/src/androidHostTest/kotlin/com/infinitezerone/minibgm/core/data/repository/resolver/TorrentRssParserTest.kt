@@ -208,4 +208,41 @@ class TorrentRssParserTest {
             result.first().torrentUrl,
         )
     }
+
+    @Test
+    fun `parse 兼容 Base32 磁链并归一化为 40 位十六进制 infoHash`() {
+        val xml =
+            """
+            <item>
+              <title>[Frieren] 葬送的芙莉莲 - 04 [1080p]</title>
+              <enclosure url="magnet:?xt=urn:btih:J56IZFUJMZTJO73WZTBIHBQIIHVSDQCF&amp;tr=udp%3A%2F%2Ftracker.example%3A80" length="1" type="application/x-bittorrent" />
+            </item>
+            """.trimIndent()
+
+        val item = TorrentRssParser.parse(xml).first()
+
+        assertEquals("4f7c8c96896666977f76ccc283860841eb21c045", item.infoHash)
+        assertTrue(item.magnetUrl.startsWith("magnet:?xt=urn:btih:J56IZFUJMZTJO73WZTBIHBQIIHVSDQCF"))
+        // length="1" 为 RSS 占位符，必须过滤，严禁格式化为 0.0 KB
+        assertEquals("", item.formattedSize)
+        assertEquals(0L, item.contentLength)
+    }
+
+    @Test
+    fun `parse 提取通用的 size 标签与说明文本中的人类可读体积`() {
+        val xmlNyaa =
+            """
+            <item>
+              <title>[ToonsHub] Anime S01E04 1080p</title>
+              <link>https://example.com/download/123.torrent</link>
+              <nyaa:infoHash>3d5bc14d5feb36fc4b1009cbed5e5fbddb3dc689</nyaa:infoHash>
+              <nyaa:size>1.2 GiB</nyaa:size>
+            </item>
+            """.trimIndent()
+
+        val nyaaItem = TorrentRssParser.parse(xmlNyaa).first()
+        assertEquals("3d5bc14d5feb36fc4b1009cbed5e5fbddb3dc689", nyaaItem.infoHash)
+        assertEquals("1.2 GiB", nyaaItem.formattedSize)
+        assertEquals(1288490188L, nyaaItem.contentLength)
+    }
 }
