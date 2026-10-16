@@ -64,6 +64,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.PictureInPictureModeChangedInfo
 import androidx.core.util.Consumer
 import androidx.core.view.WindowCompat
@@ -74,8 +75,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
+import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
+import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
@@ -169,6 +172,7 @@ fun PlayerScreen(
     val player = controller.player
 
     val openSettingsPanel: () -> Unit = {
+        controller.refreshTracksSnapshot()
         coroutineScope.launch { overlayHostState.await(PlayerSettingsRequest) }
     }
     val openEpisodeQueuePanel: () -> Unit = {
@@ -1099,13 +1103,68 @@ private fun PlayerVideoSurface(
     resizeMode: PlayerResizeMode,
     modifier: Modifier = Modifier,
 ) {
-    ContentFrame(
-        player = player,
+    Box(
         modifier = modifier,
-        contentScale = resizeMode.toContentScale(),
-        // 进/出 PiP 与轨道变化时保留上一帧，避免黑色 shutter 盖住画面造成瞬间黑闪
-        keepContentOnReset = true,
-        shutter = {},
+        contentAlignment = Alignment.Center,
+    ) {
+        ContentFrame(
+            player = player,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = resizeMode.toContentScale(),
+            // 进/出 PiP 与轨道变化时保留上一帧，避免黑色 shutter 盖住画面造成瞬间黑闪
+            keepContentOnReset = true,
+            shutter = {},
+        )
+        PlayerSubtitleOverlay(
+            player = player,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+/**
+ * 软字幕图层：使用 media3 官方 [SubtitleView] 渲染内嵌或外挂字幕（ASS/SSA 特效字幕、SRT 等）。
+ * [ContentFrame] 仅承载视频图形图层，通过在此处叠加 [SubtitleView] 并监听 [Player.Listener.onCues] 补齐字幕呈现。
+ */
+@OptIn(UnstableApi::class)
+@Composable
+private fun PlayerSubtitleOverlay(
+    player: Player,
+    modifier: Modifier = Modifier,
+) {
+    var cues by remember(player) { mutableStateOf(player.currentCues.cues) }
+
+    DisposableEffect(player) {
+        val listener =
+            object : Player.Listener {
+                override fun onCues(cueGroup: CueGroup) {
+                    cues = cueGroup.cues
+                }
+            }
+        player.addListener(listener)
+        cues = player.currentCues.cues
+        onDispose {
+            player.removeListener(listener)
+        }
+    }
+
+    AndroidView(
+        factory = { ctx ->
+            SubtitleView(ctx).apply {
+                setUserDefaultStyle()
+                setUserDefaultTextSize()
+                setApplyEmbeddedStyles(true)
+                setApplyEmbeddedFontSizes(true)
+                setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * 1.05f)
+                setBottomPaddingFraction(0.06f)
+                isClickable = false
+                isFocusable = false
+            }
+        },
+        update = { subtitleView ->
+            subtitleView.setCues(cues)
+        },
+        modifier = modifier,
     )
 }
 

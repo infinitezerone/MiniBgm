@@ -423,6 +423,7 @@
     <string name="feature_subject_player_audio_group">音频轨道</string>
     <string name="feature_subject_player_subtitles_off">关闭字幕</string>
     <string name="feature_subject_player_subtitles_auto">自动匹配</string>
+    <string name="feature_subject_player_subtitles_auto_current">当前匹配：%1$s</string>
     <string name="feature_subject_player_track_default">默认</string>
     <string name="feature_subject_player_track_unnamed">未命名轨道</string>
 

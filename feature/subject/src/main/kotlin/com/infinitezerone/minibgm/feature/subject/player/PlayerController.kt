@@ -204,10 +204,11 @@ class PlayerController(
 
     private fun resetTrackOverridesOnMediaChange() {
         val params = engine.trackSelectionParameters
-        if (params.overrides.isNotEmpty()) {
+        if (params.overrides.isNotEmpty() || params.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) {
             engine.trackSelectionParameters =
                 params
                     .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                     .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                     .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
                     .build()
@@ -303,6 +304,13 @@ class PlayerController(
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                 .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                 .build()
+    }
+
+    /** 主动刷新轨道快照（供打开设置面板等场景确保轨道列表最新）。 */
+    fun refreshTracksSnapshot() {
+        runCatching {
+            _tracksSnapshot.value = extractPlayerTracksSnapshot(engine.player)
+        }
     }
 
     /** 切换音轨为指定轨道。 */

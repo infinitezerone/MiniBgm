@@ -642,8 +642,18 @@ internal fun PlayerTrackSelectionContent(
             }
 
             item {
+                val autoSubtitleSubtitle =
+                    if (tracksSnapshot.subtitleMode == SubtitleMode.AUTO) {
+                        tracksSnapshot.subtitleTracks.firstOrNull { it.isSelected }?.let {
+                            stringResource(R.string.feature_subject_player_subtitles_auto_current, it.name)
+                        }
+                    } else {
+                        null
+                    }
+
                 TrackItemRow(
                     title = stringResource(R.string.feature_subject_player_subtitles_auto),
+                    subtitle = autoSubtitleSubtitle,
                     isSelected = tracksSnapshot.subtitleMode == SubtitleMode.AUTO,
                     isDarkThemed = isDarkThemed,
                     onClick = {

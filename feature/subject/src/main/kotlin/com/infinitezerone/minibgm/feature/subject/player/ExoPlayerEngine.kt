@@ -62,7 +62,15 @@ class ExoPlayerEngine(
             ).setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
-            .apply { playWhenReady = true }
+            .apply {
+                playWhenReady = true
+                trackSelectionParameters =
+                    trackSelectionParameters
+                        .buildUpon()
+                        .setPreferredTextLanguages("zh", "chi", "zho")
+                        .setSelectUndeterminedTextLanguage(true)
+                        .build()
+            }
 
     private var listener: PlayerEngineListener? = null
 
