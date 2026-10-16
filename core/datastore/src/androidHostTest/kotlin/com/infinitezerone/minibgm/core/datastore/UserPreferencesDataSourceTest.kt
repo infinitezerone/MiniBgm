@@ -180,6 +180,34 @@ class UserPreferencesDataSourceTest {
         }
 
     @Test
+    fun `setDanmakuEnabled toggles flag without touching other preferences`() =
+        runTest {
+            val (dataSource, dataStore) = createDataSource()
+            assertTrue(dataStore.data.first().danmakuEnabled, "default should be true")
+
+            dataSource.setDanmakuEnabled(false)
+            assertFalse(dataStore.data.first().danmakuEnabled)
+            assertTrue(dataStore.data.first().autoNextEnabled, "auto next must be preserved")
+
+            dataSource.setDanmakuEnabled(true)
+            assertTrue(dataStore.data.first().danmakuEnabled)
+        }
+
+    @Test
+    fun `setAutoNextEnabled toggles flag without touching other preferences`() =
+        runTest {
+            val (dataSource, dataStore) = createDataSource()
+            assertTrue(dataStore.data.first().autoNextEnabled, "default should be true")
+
+            dataSource.setAutoNextEnabled(false)
+            assertFalse(dataStore.data.first().autoNextEnabled)
+            assertTrue(dataStore.data.first().danmakuEnabled, "danmaku flag must be preserved")
+
+            dataSource.setAutoNextEnabled(true)
+            assertTrue(dataStore.data.first().autoNextEnabled)
+        }
+
+    @Test
     fun `notification sub-switches toggle independently`() =
         runTest {
             val (dataSource, dataStore) = createDataSource()

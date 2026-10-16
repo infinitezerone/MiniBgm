@@ -149,7 +149,7 @@ data class PlayerUiState(
     /** 本次播放的分集队列；单集播放时长度为 1，选集抽屉与连播按钮仅在 size > 1 时展示 */
     val queue: List<PlayerQueueEntry> = emptyList(),
     val currentIndex: Int = 0,
-    /** 播完自动连播下一集（可在选集抽屉内关闭） */
+    /** 播完自动连播下一集（长期偏好，可在选集抽屉内关闭；真值来自设置仓库投影） */
     val autoNextEnabled: Boolean = true,
     /** 当前分集的断点续播位置（毫秒，0 表示没有可恢复的记录；与打卡是两套独立进度） */
     val resumePositionMs: Long = 0L,
@@ -184,7 +184,7 @@ data class PlayerUiState(
     val pipEnabled: Boolean = true,
     /** 源站返回的真实匹配条目名（用于在播放器与选源栏向用户展示） */
     val matchedVodName: String? = null,
-    /** 弹幕开关 */
+    /** 弹幕显示开关（长期偏好，真值来自设置仓库投影；关闭期间不发起任何弹幕请求） */
     val isDanmakuEnabled: Boolean = true,
     /** 当前分集已加载的弹幕列表 */
     val danmakus: List<DanmakuItem> = emptyList(),
@@ -253,9 +253,23 @@ private data class PlayerRepoSnapshot(
     val subject: Subject? = null,
     val rawEpisodes: List<Episode> = emptyList(),
     val pipEnabled: Boolean = true,
+    val danmakuEnabled: Boolean = true,
+    val autoNextEnabled: Boolean = true,
     val collection: UserCollection? = null,
     val totalEpisodes: Int = 0,
     val hasMoreEpisodes: Boolean = false,
+)
+
+/**
+ * 播放页长期偏好投影（画中画 / 弹幕显示 / 自动连播），唯一真源是设置仓库。
+ *
+ * 三者必须走**同一条**流：一份偏好拆进两条 combine 支路时，一次写入会各推一次、产出两份快照，
+ * 无卡口的下游（弹幕兜底拉取）就会被重复触发。
+ */
+private data class PlayViewPreferences(
+    val pipEnabled: Boolean = true,
+    val danmakuEnabled: Boolean = true,
+    val autoNextEnabled: Boolean = true,
 )
 
 private data class RepoSubjectData(
@@ -286,6 +300,22 @@ private class PlaybackSession(
 
     /** 弹幕 FALLBACK 提示一次性守卫：一部番仅提示一次，避免每集开播都吵 */
     var hasHintedDanmakuFallback: Boolean = false
+
+    /**
+     * 最近一次**真实发起**的弹幕拉取请求键（`episodeId:episodeSort`；null 表示本会话尚未发起）。
+     *
+     * 自动路径据此去重：兜底拉取的判据是「弹幕为空」，而空结果会一直为空——播放进度落盘、
+     * 源健康度变化都会重放快照，没有请求键就会把同一分集重拉成无界重试；换集与手动重开弹幕
+     * 都会改变请求键（重开时显式清空），该拉的一次都不会少。
+     */
+    var lastDanmakuRequestKey: String? = null
+
+    /**
+     * 「重开弹幕但确实没有弹幕」一次性提示意图：
+     * 关闭期间不拉取弹幕、重开后才补拉，所以「当前没有弹幕」只能由**这次拉取的真实结果**给出，
+     * 严禁在拨开关的瞬间预判为空——那会把还在路上的弹幕说成「未加载到弹幕」。
+     */
+    var pendingDanmakuEmptyHint: Boolean = false
 
     /** 自动打卡一次性守卫：一次播放会话仅触发一次，换集后复位 */
     var hasTriggeredAutoMark: Boolean = false
@@ -481,7 +511,6 @@ class PlayerViewModel(
             requestHeaders = entry.requestHeaders,
             queue = queue,
             currentIndex = session.currentIndex,
-            autoNextEnabled = true,
             resumePositionMs = 0L,
             sources = initialSources,
             selectedSourceIndex = 0,
@@ -543,12 +572,17 @@ class PlayerViewModel(
             flowOf(emptyList())
         }
 
-    /** 画中画开关偏好流：仅在有 subjectId 时订阅（与迁移前收集器的门控一致） */
-    private val pipEnabledFlow: Flow<Boolean> =
-        if (route.subjectId > 0) {
-            settingsRepository.settings.map { it.pipEnabled }
-        } else {
-            flowOf(true)
+    /**
+     * 播放页长期偏好流（画中画 / 弹幕显示 / 自动连播）：设备侧稳定偏好，与条目无关，始终订阅
+     * （不再按 subjectId 门控——门控只为迁就旧收集器，代价是同一份设置被拆成两条支路各推一次快照）。
+     */
+    private val playViewPreferencesFlow: Flow<PlayViewPreferences> =
+        settingsRepository.settings.map {
+            PlayViewPreferences(
+                pipEnabled = it.pipEnabled,
+                danmakuEnabled = it.danmakuEnabled,
+                autoNextEnabled = it.autoNextEnabled,
+            )
         }
 
     /** 仓库总分集数流 */
@@ -570,8 +604,8 @@ class PlayerViewModel(
     /**
      * 数据侧单点投影：全部仓库流 combine 成一个 [PlayerRepoSnapshot] 快照流。
      *
-     * 条目/分集/PiP/收藏/总数 六路仅在携带 subjectId 时订阅（与迁移前逐路收集器的门控一致，
-     * 其余场景给空默认值，快照仍可即时产出）。
+     * 条目/分集/收藏/总数 四路仅在携带 subjectId 时订阅（与迁移前逐路收集器的门控一致，
+     * 其余场景给空默认值，快照仍可即时产出）；播放页偏好与源健康度常驻。
      */
     private val repoSnapshots: Flow<PlayerRepoSnapshot> =
         combine(
@@ -583,9 +617,9 @@ class PlayerViewModel(
             },
             combine(
                 failureStore?.sourceHealth ?: flowOf(emptyMap()),
-                pipEnabledFlow,
-            ) { health, pipEnabled ->
-                health.mapValues { it.value.consecutiveFailures } to pipEnabled
+                playViewPreferencesFlow,
+            ) { health, playView ->
+                health.mapValues { it.value.consecutiveFailures } to playView
             },
             combine(
                 subjectFlow,
@@ -596,14 +630,16 @@ class PlayerViewModel(
             ) { subject, episodes, collection, totalEpisodes, hasMoreEpisodes ->
                 RepoSubjectData(subject, episodes, collection, totalEpisodes, hasMoreEpisodes)
             },
-        ) { (positions, rules), (failureCounts, pipEnabled), subjectData ->
+        ) { (positions, rules), (failureCounts, playView), subjectData ->
             PlayerRepoSnapshot(
                 positions = positions,
                 rules = rules,
                 failureCounts = failureCounts,
                 subject = subjectData.subject,
                 rawEpisodes = subjectData.episodes,
-                pipEnabled = pipEnabled,
+                pipEnabled = playView.pipEnabled,
+                danmakuEnabled = playView.danmakuEnabled,
+                autoNextEnabled = playView.autoNextEnabled,
                 collection = subjectData.collection,
                 totalEpisodes = subjectData.totalEpisodes,
                 hasMoreEpisodes = subjectData.hasMoreEpisodes,
@@ -680,7 +716,6 @@ class PlayerViewModel(
                     torrentStreamEngine?.setPlayerSessionActive(isTorrentLocal)
                 }
         }
-        loadDanmaku()
     }
 
     /**
@@ -830,6 +865,14 @@ class PlayerViewModel(
             if (snapshot.pipEnabled != next.pipEnabled) {
                 next = next.copy(pipEnabled = snapshot.pipEnabled)
             }
+            // 弹幕显示开关（长期偏好，由设置仓库投影；命令侧据此决定是否补拉）
+            if (snapshot.danmakuEnabled != next.isDanmakuEnabled) {
+                next = next.copy(isDanmakuEnabled = snapshot.danmakuEnabled)
+            }
+            // 播放结束自动连播（长期偏好）
+            if (snapshot.autoNextEnabled != next.autoNextEnabled) {
+                next = next.copy(autoNextEnabled = snapshot.autoNextEnabled)
+            }
             // 尚无可恢复点时跟随位置表刷新当前分集（已下发/消费过的不回退）
             if (next.resumePositionMs == 0L && next.streamUrl.isNotBlank()) {
                 next = next.copy(resumePositionMs = snapshot.positions[next.streamUrl] ?: 0L)
@@ -857,7 +900,7 @@ class PlayerViewModel(
             loadComments()
         }
         if (_uiState.value.subjectName.isNotBlank() && _uiState.value.danmakus.isEmpty() && !_uiState.value.isDanmakuLoading) {
-            loadDanmaku()
+            loadDanmakuIfEnabled()
         }
         return sourcesChanged
     }
@@ -1084,6 +1127,7 @@ class PlayerViewModel(
         session.resetProgressTracking()
         session.hasTriggeredAutoMark = false
         session.pendingAutoNextOnMoreLoaded = false
+        session.pendingDanmakuEmptyHint = false
         session.pendingResumeLookupForNewEpisode = _uiState.value.currentSource?.isDirect == false
         session.currentIndex = index
 
@@ -1120,7 +1164,7 @@ class PlayerViewModel(
         if (_uiState.value.currentSource?.isDirect == false || entry.streamUrl.isBlank()) {
             resolveCurrentEpisodeStream()
         }
-        loadDanmaku()
+        loadDanmakuIfEnabled()
         commentsDelegate.loadComments(entry.episodeId, force = true)
     }
 
@@ -1166,6 +1210,7 @@ class PlayerViewModel(
         session.resetProgressTracking()
         session.hasTriggeredAutoMark = false
         session.pendingAutoNextOnMoreLoaded = false
+        session.pendingDanmakuEmptyHint = false
 
         val queueIndex =
             queue.indexOfFirst {
@@ -1242,7 +1287,7 @@ class PlayerViewModel(
         syncResumePositionForEpisode(episode.id, directEntry?.streamUrl)
         resolveCurrentEpisodeStream()
         commentsDelegate.loadComments(episode.id, force = true)
-        loadDanmaku()
+        loadDanmakuIfEnabled()
     }
 
     /**
@@ -1310,15 +1355,44 @@ class PlayerViewModel(
         }
     }
 
-    /** 切换弹幕开关 */
+    /**
+     * 切换弹幕显示开关。
+     *
+     * 这是**长期偏好**（重进播放页、换集、换条目都保持）：只写设置仓库、由快照投影回读，
+     * 严禁就地翻转 UI 状态形成第二事实源；关闭期间不发起任何弹幕请求，重开时才补拉
+     * （补拉由快照驱动的 [loadDanmakuIfEnabled] 承接），「当前没有弹幕」只在这次补拉
+     * 真的返回空结果时才提示。
+     */
     fun toggleDanmaku() {
         val targetEnabled = !_uiState.value.isDanmakuEnabled
-        _uiState.update { it.copy(isDanmakuEnabled = targetEnabled) }
-        if (targetEnabled && _uiState.value.danmakus.isEmpty() && !_uiState.value.isDanmakuLoading) {
-            viewModelScope.launch {
-                _events.send(PlayerUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_player_danmaku_empty_hint))
-            }
+        if (targetEnabled) {
+            // 重开 = 显式要求补拉一次（关闭期间不拉，内存里也可能本就没有数据）
+            session.lastDanmakuRequestKey = null
+            session.pendingDanmakuEmptyHint = true
         }
+        viewModelScope.launch {
+            settingsRepository.setDanmakuEnabled(targetEnabled)
+        }
+    }
+
+    /**
+     * 自动路径的弹幕兜底拉取：弹幕关闭时零网络请求，同一分集只自动拉一次。
+     *
+     * 判据必须是**同步**的 [PlayerUiState.isDanmakuEnabled] 投影，且只在快照合流内调用：
+     * 投影在同一次 [applyRepoSnapshot] 里先于兜底拉取更新，首个快照就已带持久化真值。
+     * （异步回读设置会把闸口推迟到协程恢复之后，同一写入推来的两份快照会各自放行一次，重复拉取。）
+     */
+    private fun loadDanmakuIfEnabled() {
+        val state = _uiState.value
+        if (!state.isDanmakuEnabled) {
+            logger.d { "跳过弹幕拉取（弹幕开关已关闭）" }
+            return
+        }
+        if (session.lastDanmakuRequestKey == "${state.episodeId}:${state.episodeSort}") {
+            logger.d { "跳过弹幕拉取（本分集已请求过，不因快照重放而重复拉取）" }
+            return
+        }
+        loadDanmaku()
     }
 
     /** 异步拉取当前分集的弹弹play全网聚合弹幕 */
@@ -1333,6 +1407,7 @@ class PlayerViewModel(
         }
 
         val epId = current.episodeId
+        session.lastDanmakuRequestKey = "$epId:$epSort"
         danmakuJob?.cancel()
         danmakuJob =
             viewModelScope.launch {
@@ -1346,10 +1421,15 @@ class PlayerViewModel(
                         episodeSort = epSort,
                         episodeName = current.episodeName,
                     )
+                val shouldHintEmpty = session.pendingDanmakuEmptyHint
+                session.pendingDanmakuEmptyHint = false
                 if (_uiState.value.episodeId == epId && _uiState.value.episodeSort == epSort) {
                     logger.i { "分集弹幕拉取完成: ${result.items.size} 条 (title='$title', epSort=$epSort, state=${result.match?.state})" }
                     _uiState.update {
                         it.copy(danmakus = result.items, danmakuMatch = result.match, isDanmakuLoading = false)
+                    }
+                    if (shouldHintEmpty && result.items.isEmpty()) {
+                        _events.send(PlayerUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_player_danmaku_empty_hint))
                     }
                     val match = result.match
                     if (match?.state == DanmakuMatchState.FALLBACK &&
@@ -1596,8 +1676,12 @@ class PlayerViewModel(
             }
     }
 
+    /** 切换播放结束自动连播（长期偏好：只写设置仓库，由快照投影回读） */
     fun toggleAutoNext() {
-        _uiState.update { it.copy(autoNextEnabled = !it.autoNextEnabled) }
+        val targetEnabled = !_uiState.value.autoNextEnabled
+        viewModelScope.launch {
+            settingsRepository.setAutoNextEnabled(targetEnabled)
+        }
     }
 
     /** 重试当前地址：清掉错误态，由界面重新 prepare 或重新嗅探 */

@@ -40,6 +40,10 @@ import kotlin.test.fail
  *     「默认值为 null」的构造器参数（可选依赖）——漏传既不编译报错、Koin 也照常解析（默认值兜住）、
  *     单测又自己传 fake，最终只在真机上静默退化成「功能没接上」（源自 SubjectModule 漏传
  *     playbackHistoryRepository，让播放历史与续播兜底整条链路在真机上死掉的复盘）
+ * 22. 播放页偏好必须落库、单次观看意图必须不落库：判据是「稳定立场 vs 单次观看意图」——弹幕显示 /
+ *     自动连播 / 画中画这类稳定立场必须写 SettingsRepository 并由快照投影回读；播放速度 / 画面比例
+ *     这类「这一次要多快、要什么画幅」的意图刻意不持久化（落库等于让上一部调成 2 倍速/被裁剪的画幅
+ *     静默作用到下一部毫不相干的番上）
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -1943,6 +1947,130 @@ class ArchitectureRulesTest {
             "PlayerController 禁止用 PlaybackState() 无参整体重置媒体态，必须显式保留 isLooping 等引擎侧偏好",
         )
     }
+
+    /**
+     * 播放页长期偏好必须持久化，且只能有一个真源（设置仓库投影回读）。
+     *
+     * 弹幕开关曾只活在 PlayerViewModel 的内存状态里：`toggleDanmaku()` 就地翻转 `_uiState`，
+     * 换集/重进播放页就悄悄回到「开」，用户关掉的弹幕自己长回来，且关闭期间仍在后台拉弹幕；
+     * 自动连播是同一形态（关掉后换一集又自动连播）。反向的坑在 UI 侧——把偏好私藏在
+     * `remember { mutableStateOf }` 里，仓库层完全不知情，重启即丢。两侧都要钉住：
+     * 偏好写设置仓库并由快照投影回读，UI 局部状态只承载瞬态交互。
+     */
+    @Test
+    fun player_view_preferences_must_be_persisted_not_held_in_session_state() {
+        val violations = mutableListOf<String>()
+
+        // ① ViewModel：偏好开关必须写设置仓库，严禁就地翻转 _uiState 形成第二事实源
+        val viewModelPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewModel.kt"
+        val viewModelCode = KotlinSourceScanner.sanitize(File(projectRoot, viewModelPath).readText())
+        PLAYER_PERSISTED_PREFERENCES.forEach { (field, setter) ->
+            if (Regex("""_uiState\s*\.update\s*\{\s*it\.copy\(\s*$field\s*=""").containsMatchIn(viewModelCode)) {
+                violations.add(
+                    "$viewModelPath 就地翻转 $field：偏好开关必须写设置仓库（$setter）并由快照投影回读，" +
+                        "否则重进播放页/换集即丢，且关闭期间的行为（如弹幕拉取）不会真的停",
+                )
+            }
+            if (!viewModelCode.contains("settingsRepository.$setter(")) {
+                violations.add("$viewModelPath 缺少 $setter 调用：$field 会退化成拨了不落库的装饰性开关")
+            }
+        }
+
+        // ② UI：PlayerScreen 的局部状态只能是瞬态交互（悬浮控件/拖动/横竖屏…）。
+        //    新增一处局部状态就必须显式回答「它该不该持久化」——偏好要经 ViewModel 下发
+        val screenPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt"
+        val screenCode = KotlinSourceScanner.sanitize(File(projectRoot, screenPath).readText())
+        PLAYER_SCREEN_LOCAL_STATE.findAll(screenCode).map { it.groupValues[1] }.forEach { name ->
+            if (name !in PLAYER_SCREEN_TRANSIENT_STATE) {
+                violations.add(
+                    "$screenPath 新增局部状态 `$name`：用户偏好必须持久化（经 SettingsRepository 与快照投影），" +
+                        "只有瞬态交互才允许留在 UI 局部状态",
+                )
+            }
+        }
+
+        // ③ 反向：单次观看意图（播放速度 / 画面比例）严禁落库。它们跟着「这一条视频、这一次观看」走，
+        //    持久化等于让「上一部调到 2 倍速 / 拉伸成裁切」静默作用到下一部毫不相干的番上
+        //    （B 站 / YouTube 的倍速同样不跨视频记忆）。落库只可能从这两处发生：偏好模型的数据类，
+        //    或设置仓库的字段/setter——两处都闭锁。
+        val preferencesPath =
+            "core/datastore/src/commonMain/kotlin/com/infinitezerone/minibgm/core/datastore/UserPreferences.kt"
+        val repositoryPath =
+            "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/SettingsRepository.kt"
+        val preferencesCode = KotlinSourceScanner.sanitize(File(projectRoot, preferencesPath).readText())
+        val repositoryCode = KotlinSourceScanner.sanitize(File(projectRoot, repositoryPath).readText())
+        PLAYER_TRANSIENT_INTENT_STATE.forEach { name ->
+            if (Regex("""\b(?:val|var)\s+$name\b""").containsMatchIn(preferencesCode)) {
+                violations.add(
+                    "$preferencesPath 出现偏好字段 `$name`：播放速度/画面比例属单次观看意图，" +
+                        "落库会把上一次的选择静默带到下一个毫不相干的视频",
+                )
+            }
+            if (Regex("""\b$name\b""").containsMatchIn(repositoryCode)) {
+                violations.add(
+                    "$repositoryPath 出现 `$name`：单次观看意图不得进入设置仓库（字段/setter/投影都不行），" +
+                        "它只允许活在播放页的局部状态里",
+                )
+            }
+        }
+        // 换个名字（如 preferredPlaybackSpeed / videoResizeMode）落库同样不允许：两处都按关键词兜一遍，
+        // 免得「改个名就绕过」
+        listOf(preferencesPath to preferencesCode, repositoryPath to repositoryCode).forEach { (path, code) ->
+            Regex("""\b(?:val|var|fun)\s+\w*[Ss]peed\w*\b""").findAll(code).forEach { match ->
+                violations.add("$path 出现速度类偏好声明 ${match.value.trim()}：播放速度属单次观看意图，严禁落库")
+            }
+            Regex("""\b(?:val|var|fun)\s+\w*(?:[Rr]esize|[Aa]spect)\w*\b""").findAll(code).forEach { match ->
+                violations.add("$path 出现画面比例类偏好声明 ${match.value.trim()}：画面比例属单次观看意图，严禁落库")
+            }
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反「播放页偏好必须持久化」红线（偏好只活在会话内存里，重进页面即回退且行为不会真的停）：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
+    /** 播放页必须落库的偏好字段 → 对应的 SettingsRepository 写入方法 */
+    private val PLAYER_PERSISTED_PREFERENCES: Map<String, String> =
+        mapOf(
+            "isDanmakuEnabled" to "setDanmakuEnabled",
+            "autoNextEnabled" to "setAutoNextEnabled",
+        )
+
+    /** PlayerScreen 允许保留的 UI 局部状态（全部是瞬态交互，不是用户偏好） */
+    private val PLAYER_SCREEN_TRANSIENT_STATE: Set<String> =
+        setOf(
+            "areControlsVisible",
+            "isLandscape",
+            // 播放速度与画面比例：跟着「这一条视频、这一次观看」走，刻意不持久化（见测试内的反向闭锁）
+            "playbackSpeed",
+            "resizeMode",
+            "isScreenLocked",
+            "isScrubbing",
+            "scrubProgress",
+            "resumedForUrl",
+            "playerReady",
+            "selectedPortraitTab",
+            "rawStageBounds",
+            "qualityAppliedKey",
+        )
+
+    /** PlayerScreen 里的 `var x by remember { mutableStateOf(...) }` 声明 */
+    private val PLAYER_SCREEN_LOCAL_STATE =
+        Regex(
+            """^\s*var\s+(\w+)\s+by\s+remember(?:Saveable)?\s*\{\s*mutable\w*StateOf""",
+            RegexOption.MULTILINE,
+        )
+
+    /** 刻意不落库的播放页单次观看意图（对应 PlayerScreen 上同名的局部状态） */
+    private val PLAYER_TRANSIENT_INTENT_STATE: Set<String> =
+        setOf(
+            "playbackSpeed",
+            "resizeMode",
+        )
 
     @Test
     fun exoplayer_engine_media_source_factory_must_wrap_default_data_source() {

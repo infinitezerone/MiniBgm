@@ -52,6 +52,10 @@ data class UserSettings(
     val dynamicColor: Boolean = false,
     /** 画中画（PiP）模式开关（离开播放页时自动进入画中画小窗） */
     val pipEnabled: Boolean = true,
+    /** 弹幕显示开关（播放页长期偏好：关闭期间不发起任何弹幕请求） */
+    val danmakuEnabled: Boolean = true,
+    /** 播放结束自动连播下一集（播放页长期偏好） */
+    val autoNextEnabled: Boolean = true,
     val showRestrictedContent: Boolean = false,
     /** 清晰度选择记忆（0 = 自动自适应；>0 = 用户偏好的视频高度，如 1080，下次起播自动匹配最接近档位） */
     val preferredQualityHeight: Int = 0,
@@ -107,6 +111,12 @@ interface SettingsRepository {
 
     /** 画中画（PiP）开关 */
     suspend fun setPipEnabled(enabled: Boolean)
+
+    /** 弹幕显示开关（播放页长期偏好） */
+    suspend fun setDanmakuEnabled(enabled: Boolean)
+
+    /** 播放结束自动连播下一集 */
+    suspend fun setAutoNextEnabled(enabled: Boolean)
 
     /** 记录清晰度选择偏好（0 = 自动自适应；>0 = 偏好视频高度） */
     suspend fun setPreferredQualityHeight(height: Int)
@@ -276,6 +286,8 @@ internal class SettingsRepositoryImpl(
                 themeMode = prefs.themeMode,
                 dynamicColor = prefs.dynamicColor,
                 pipEnabled = prefs.pipEnabled,
+                danmakuEnabled = prefs.danmakuEnabled,
+                autoNextEnabled = prefs.autoNextEnabled,
                 preferredQualityHeight = prefs.preferredQualityHeight,
                 showRestrictedContent = prefs.showRestrictedContent,
             )
@@ -370,6 +382,14 @@ internal class SettingsRepositoryImpl(
 
     override suspend fun setPipEnabled(enabled: Boolean) {
         userPreferences.setPipEnabled(enabled)
+    }
+
+    override suspend fun setDanmakuEnabled(enabled: Boolean) {
+        userPreferences.setDanmakuEnabled(enabled)
+    }
+
+    override suspend fun setAutoNextEnabled(enabled: Boolean) {
+        userPreferences.setAutoNextEnabled(enabled)
     }
 
     override suspend fun setPreferredQualityHeight(height: Int) {

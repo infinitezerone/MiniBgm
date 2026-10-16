@@ -5,6 +5,7 @@ import com.infinitezerone.minibgm.core.data.playback.PlaybackFailureStore
 import com.infinitezerone.minibgm.core.data.repository.DanmakuRepository
 import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepository
 import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
+import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.model.DanmakuEpisodeCandidate
 import com.infinitezerone.minibgm.core.model.DanmakuItem
 import com.infinitezerone.minibgm.core.model.DanmakuResult
@@ -1618,6 +1619,136 @@ class PlayerViewModelTest {
 
             val event = vm.events.first()
             assertTrue(event is PlayerUiEvent.ShowSnackbar && event.messageRes == R.string.feature_subject_player_danmaku_empty_hint)
+        }
+
+    /** 固定返回同一份弹幕的替身（记录调用次数，用于验证「关闭弹幕时零请求」） */
+    private class RecordingDanmakuRepository(
+        private val items: List<DanmakuItem>,
+    ) : DanmakuRepository {
+        var queryCount = 0
+            private set
+
+        override suspend fun getDanmaku(
+            bangumiEpisodeId: Long,
+            subjectId: Long,
+            title: String,
+            episodeSort: Float,
+            episodeName: String?,
+            appId: String?,
+            appSecret: String?,
+            apiEndpoint: String?,
+        ): DanmakuResult {
+            queryCount++
+            return DanmakuResult(items, null)
+        }
+
+        override suspend fun saveDanmakuOverride(
+            bangumiEpisodeId: Long,
+            subjectId: Long,
+            candidate: DanmakuEpisodeCandidate,
+        ) = Unit
+
+        override suspend fun clearDanmakuOverride(bangumiEpisodeId: Long) = Unit
+    }
+
+    private fun danmakuRoute(): PlayerRoute = route().copy(subjectName = "葬送的芙莉莲")
+
+    private fun danmakuViewModel(
+        settings: FakeSettingsRepository,
+        danmakuRepository: DanmakuRepository,
+    ): PlayerViewModel =
+        PlayerViewModel(
+            route = danmakuRoute(),
+            collectionRepository = FakeCollectionRepository(),
+            authRepository = FakeAuthRepository(initialLoggedIn = true),
+            settingsRepository = settings,
+            danmakuRepository = danmakuRepository,
+        )
+
+    @Test
+    fun danmakuToggle_isPersisted_andSurvivesViewModelRecreation() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val firstRepo = RecordingDanmakuRepository(emptyList())
+            val first = danmakuViewModel(settings, firstRepo)
+            advanceUntilIdle()
+            assertTrue("默认应开启弹幕", first.uiState.value.isDanmakuEnabled)
+
+            first.toggleDanmaku()
+            advanceUntilIdle()
+
+            assertEquals("关闭动作必须落到设置仓库", 1, settings.setDanmakuEnabledCallCount)
+            assertFalse(first.uiState.value.isDanmakuEnabled)
+
+            // 重建播放页（等价于换条目/重进页面）：开关必须保持关闭，且关闭期间一次弹幕请求都不发
+            val secondRepo = RecordingDanmakuRepository(emptyList())
+            val second = danmakuViewModel(settings, secondRepo)
+            advanceUntilIdle()
+
+            assertFalse("弹幕开关必须跨播放页重建保持", second.uiState.value.isDanmakuEnabled)
+            assertEquals("关闭弹幕期间必须零网络请求", 0, secondRepo.queryCount)
+        }
+
+    @Test
+    fun danmakuDisabledByPreference_skipsNetworkUntilReEnabled() =
+        runTest {
+            val sampleDanmakus = listOf(DanmakuItem(timeMs = 1000L, text = "弹幕测试", color = 0xFFFFFF))
+            val settings = FakeSettingsRepository(UserSettings(danmakuEnabled = false))
+            val repo = RecordingDanmakuRepository(sampleDanmakus)
+            val viewModel = danmakuViewModel(settings, repo)
+            advanceUntilIdle()
+
+            assertFalse(viewModel.uiState.value.isDanmakuEnabled)
+            assertEquals("持久化关闭的弹幕不得在进页时拉取", 0, repo.queryCount)
+
+            viewModel.toggleDanmaku()
+            advanceUntilIdle()
+
+            assertTrue(viewModel.uiState.value.isDanmakuEnabled)
+            assertEquals("重开弹幕必须补拉且只拉一次", 1, repo.queryCount)
+            assertEquals(sampleDanmakus, viewModel.uiState.value.danmakus)
+        }
+
+    @Test
+    fun danmakuReEnabled_withEmptyResult_hintsOnlyAfterRealFetch() =
+        runTest {
+            val settings = FakeSettingsRepository(UserSettings(danmakuEnabled = false))
+            val repo = RecordingDanmakuRepository(emptyList())
+            val viewModel = danmakuViewModel(settings, repo)
+            advanceUntilIdle()
+
+            viewModel.toggleDanmaku()
+            advanceUntilIdle()
+
+            // 拨开关的瞬间不预判为空：提示必须由这次补拉的真实空结果给出
+            assertEquals(1, repo.queryCount)
+            val event = viewModel.events.first()
+            assertTrue(event is PlayerUiEvent.ShowSnackbar && event.messageRes == R.string.feature_subject_player_danmaku_empty_hint)
+        }
+
+    @Test
+    fun autoNextToggle_isPersisted_andSurvivesViewModelRecreation() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val queueRoute = route(queue = queueOf("https://example.com/ep1.m3u8", "https://example.com/ep2.m3u8"))
+
+            val first = viewModel(route = queueRoute, settingsRepository = settings)
+            advanceUntilIdle()
+            assertTrue("默认应开启自动连播", first.uiState.value.autoNextEnabled)
+
+            first.toggleAutoNext()
+            advanceUntilIdle()
+
+            assertEquals("关闭动作必须落到设置仓库", 1, settings.setAutoNextEnabledCallCount)
+            assertFalse(first.uiState.value.autoNextEnabled)
+
+            // 重建播放页：自动连播必须保持关闭，且播完真的不再前进
+            val second = viewModel(route = queueRoute, settingsRepository = settings)
+            advanceUntilIdle()
+
+            assertFalse("自动连播必须跨播放页重建保持", second.uiState.value.autoNextEnabled)
+            assertFalse(second.onPlaybackEnded())
+            assertEquals(0, second.uiState.value.currentIndex)
         }
 
     @Test

@@ -38,6 +38,10 @@ class FakeSettingsRepository(
         private set
     var setPipEnabledCallCount: Int = 0
         private set
+    var setDanmakuEnabledCallCount: Int = 0
+        private set
+    var setAutoNextEnabledCallCount: Int = 0
+        private set
     var setShowRestrictedContentCallCount: Int = 0
         private set
 
@@ -115,6 +119,16 @@ class FakeSettingsRepository(
     override suspend fun setPipEnabled(enabled: Boolean) {
         setPipEnabledCallCount++
         settingsState.value = settingsState.value.copy(pipEnabled = enabled)
+    }
+
+    override suspend fun setDanmakuEnabled(enabled: Boolean) {
+        setDanmakuEnabledCallCount++
+        settingsState.value = settingsState.value.copy(danmakuEnabled = enabled)
+    }
+
+    override suspend fun setAutoNextEnabled(enabled: Boolean) {
+        setAutoNextEnabledCallCount++
+        settingsState.value = settingsState.value.copy(autoNextEnabled = enabled)
     }
 
     override suspend fun setPreferredQualityHeight(height: Int) {

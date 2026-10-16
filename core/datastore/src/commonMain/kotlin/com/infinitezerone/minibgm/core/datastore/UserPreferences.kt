@@ -24,6 +24,10 @@ data class UserPreferences(
     val amoledDarkMode: Boolean = false,
     /** 画中画模式开关（开启后播放中划回桌面自动进入小窗） */
     val pipEnabled: Boolean = true,
+    /** 弹幕显示开关（播放页长期偏好：关闭期间不发起任何弹幕请求，重开时才补拉） */
+    val danmakuEnabled: Boolean = true,
+    /** 播放结束自动连播下一集（播放页长期偏好） */
+    val autoNextEnabled: Boolean = true,
     val notifyBeforeAirMinutes: Int = 15,
     /** 开播提醒总开关 */
     val airingReminderEnabled: Boolean = true,

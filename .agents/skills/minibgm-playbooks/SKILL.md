@@ -123,6 +123,12 @@ description: >-
    * 正确形态：需要「随流持续刷新」时用**单条收集协程串行执行**（`viewModelScope.launch { tasks.collect { _storageUsage.value = repo.getStorageUsage() } }`）——StateFlow 自带 conflate，天然背压，扫描期间的发射被丢弃，始终只有一个任务在跑；只有 UI 动作触发的刷新才保留独立的 `refreshStorageUsage()`。
    * 红线：`ArchitectureRulesTest#flow_operators_never_launch_side_effect_coroutines` 对 `core/`、`feature/`、`app/`、`sync/` 全量源码静态闭锁（词法脱敏后按 `算子 {` … `launch {` 跨行匹配）。
 
+13. **关掉的开关自己长回来：播放页偏好只活在会话内存里**：
+   * `toggleDanmaku()` 曾只做 `_uiState.update { it.copy(isDanmakuEnabled = ...) }`：换集/重进播放页就悄悄回到「开」，用户关掉的弹幕自己长回来，关闭期间还在后台按集拉弹幕；自动连播是同一形态（关掉后换一集又自动连播）。反向的坑在 UI 侧——画面比例/播放速度私藏在 `remember { mutableStateOf }` 里，仓库层完全不知情，重启即丢。
+   * 正确形态：UI 可见偏好一律写 `SettingsRepository`（`UserPreferences.danmakuEnabled` / `autoNextEnabled`），再由**快照投影**回读，保持单一真源（`PlayViewPreferences` 承载画中画/弹幕/连播三条偏好——同一份偏好拆进两条 combine 支路时，一次写入会各推一次、产出两份快照）；UI 局部状态只留瞬态交互。红线 `ArchitectureRulesTest#player_view_preferences_must_be_persisted_not_held_in_session_state` 物理闭锁：既禁 VM 就地翻转偏好字段/漏写 setter，也含 PlayerScreen 局部状态白名单（新增一处就要显式回答「它该不该持久化」）。
+   * 反向同样要钉住：**播放速度与画面比例刻意不持久化**——它们跟着「这条视频/这次观看」走，持久化会让下一部番莫名被裁剪、被变速（B 站/YouTube 的倍速同样不跨视频记忆）。红线同一条测试里机械闭锁：`UserPreferences` 出现该字段、或 `SettingsRepository` 出现同名标识（字段/setter/投影）即失败，另有「速度/比例」关键词兜底防改名绕过（`preferredPlaybackSpeed` 之类同样报错）。
+   * 关闭即零请求：弹幕关闭期间不得拉取；自动拉取闸口必须**同步**读投影 + 按 `episodeId:episodeSort` 请求键去重。兜底拉取的判据是「弹幕为空」，而空结果会一直为空，播放进度落盘、源健康度变化都会重放快照——没有请求键就是把同一分集重拉成无界重试；异步回读设置更糟：同一写入推来的两份快照会各自放行一次。「重开弹幕但没有弹幕」的提示只能由那次补拉的**真实空结果**给出，严禁在拨开关的瞬间预判为空。
+
 ---
 
 ## 剧本 8：原生流播与后台传输真实性规范（Stream Engine & Native Fidelity）

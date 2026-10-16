@@ -82,6 +82,20 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 弹幕显示开关（关闭期间播放页不发起任何弹幕请求） */
+    suspend fun setDanmakuEnabled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(danmakuEnabled = enabled)
+        }
+    }
+
+    /** 播放结束自动连播下一集 */
+    suspend fun setAutoNextEnabled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(autoNextEnabled = enabled)
+        }
+    }
+
     suspend fun setNotifyBeforeAirMinutes(minutes: Int) {
         dataStore.updateData { current ->
             current.copy(notifyBeforeAirMinutes = minutes)
