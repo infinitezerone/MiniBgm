@@ -340,6 +340,7 @@ class PlaybackRulesViewModel(
                             .map { it.index }
                             .toSet()
                             .ifEmpty { report.sources.indices.toSet() }
+
                     if ((!report.isHealthy && report.sources.isEmpty()) || defaultSelected.isEmpty()) {
                         _subscriptionImport.update {
                             it.copy(

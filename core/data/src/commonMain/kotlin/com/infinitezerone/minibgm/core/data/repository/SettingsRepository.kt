@@ -355,8 +355,11 @@ internal class SettingsRepositoryImpl(
                 } else {
                     runCatching { json.decodeFromString<List<PlaybackSourceRule>>(rawJson) }.getOrDefault(emptyList())
                 }
-            if (url.isNotBlank() && currentRules.size <= 1) {
-                runCatching { refreshPlaybackSubscription() }
+            if (url.isNotBlank()) {
+                val hasSubRules = currentRules.any { it.id.startsWith("sub_") }
+                if (!hasSubRules || currentRules.size <= 1) {
+                    runCatching { refreshPlaybackSubscription() }
+                }
             }
         }
     }
