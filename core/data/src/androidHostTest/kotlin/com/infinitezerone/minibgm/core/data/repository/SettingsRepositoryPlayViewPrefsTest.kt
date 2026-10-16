@@ -22,7 +22,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** SettingsRepository 的播放页长期偏好（弹幕显示 / 自动连播）读写行为测试 */
+/** SettingsRepository 的长期偏好（弹幕显示 / 自动连播 / 两页共用的吐槽排序）读写行为测试 */
 class SettingsRepositoryPlayViewPrefsTest {
     private class LocalCoordinator : InterProcessCoordinator {
         private val mutex = Mutex()
@@ -149,6 +149,55 @@ class SettingsRepositoryPlayViewPrefsTest {
                     .autoNextEnabled,
             )
             assertTrue(h.storage.snapshot().autoNextEnabled)
+        }
+
+    @Test
+    fun `setCommentSortOrder 写入设置流并持久化`() =
+        runTest {
+            val h = Harness()
+
+            // 空串 = 尚未设置（按热门），两页共用这一条
+            assertEquals(
+                "",
+                h.repository.settings
+                    .first()
+                    .commentSortOrder,
+            )
+
+            h.repository.setCommentSortOrder("desc")
+
+            assertEquals(
+                "desc",
+                h.repository.settings
+                    .first()
+                    .commentSortOrder,
+            )
+            assertEquals("desc", h.storage.snapshot().commentSortOrder, "sort key must persist to preferences")
+
+            h.repository.setCommentSortOrder("asc")
+            assertEquals("asc", h.storage.snapshot().commentSortOrder)
+        }
+
+    @Test
+    fun `吐槽排序与播放页开关互不串写`() =
+        runTest {
+            val h = Harness()
+
+            h.repository.setCommentSortOrder("asc")
+
+            val settings = h.repository.settings.first()
+            assertEquals("asc", settings.commentSortOrder)
+            assertTrue(settings.danmakuEnabled, "改排序不得顺手关掉弹幕")
+            assertTrue(settings.autoNextEnabled, "改排序不得顺手关掉自动连播")
+
+            h.repository.setDanmakuEnabled(false)
+            assertEquals(
+                "asc",
+                h.repository.settings
+                    .first()
+                    .commentSortOrder,
+                "拨播放页开关不得重置排序偏好",
+            )
         }
 
     @Test

@@ -60,6 +60,13 @@ data class UserPreferences(
     val searchHistory: List<String> = emptyList(),
     /** 探索发现页排序偏好（heat / score / rank） */
     val exploreSortPreference: String = "rank",
+    /**
+     * 吐槽/评论排序偏好（hot / asc / desc）。
+     *
+     * 播放页与分集详情页共用同一条设备侧偏好——同一个评论区组件在两处各持一份会话状态时，
+     * 用户在一处改成「最新」、另一处仍是「热门」，重启又双双回默认。空串表示尚未设置（按热门）。
+     */
+    val commentSortOrder: String = "",
     /** 题材标签排除黑名单 */
     val blockedSubjectTags: List<String> = emptyList(),
     /** 囤番（待全剧终开刷）条目 ID 集合：普通集数静默通知，仅完结最终话提醒 */

@@ -44,6 +44,9 @@ import kotlin.test.fail
  *     自动连播 / 画中画这类稳定立场必须写 SettingsRepository 并由快照投影回读；播放速度 / 画面比例
  *     这类「这一次要多快、要什么画幅」的意图刻意不持久化（落库等于让上一部调成 2 倍速/被裁剪的画幅
  *     静默作用到下一部毫不相干的番上）
+ * 23. 跨页共用偏好必须只有一份真源：同一个评论区组件在播放页与分集详情页各持一份会话状态时，
+ *     一处改成「最新」另一处仍是「热门」、重启又双双回默认——吐槽排序必须写共用的设备侧偏好、
+ *     由两页各自的投影回读，解析统一走 CommentSortOrder.fromKey（枚举名不参与持久化）
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -2029,6 +2032,54 @@ class ArchitectureRulesTest {
         assertTrue(
             violations.isEmpty(),
             "违反「播放页偏好必须持久化」红线（偏好只活在会话内存里，重进页面即回退且行为不会真的停）：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
+    @Test
+    fun comment_sort_order_must_be_a_shared_persisted_preference() {
+        val violations = mutableListOf<String>()
+        val sharedConsumers =
+            listOf(
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewModel.kt",
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/EpisodeDetailViewModel.kt",
+            )
+        sharedConsumers.forEach { path ->
+            val code = KotlinSourceScanner.sanitize(File(projectRoot, path).readText())
+
+            // ① 写入必须落到两页共用的那条设备侧偏好
+            if (!code.contains("settingsRepository.setCommentSortOrder(") &&
+                !code.contains("settingsRepository?.setCommentSortOrder(")
+            ) {
+                violations.add("$path 未调用 setCommentSortOrder：吐槽排序必须写在两页共用的设备侧偏好上")
+            }
+
+            // ② 严禁再留一份会话状态——两处各持一份时，这里改成「最新」详情页仍是「热门」，重启又双双回默认
+            if (Regex("""MutableStateFlow\s*\(\s*CommentSortOrder""").containsMatchIn(code) ||
+                Regex("""\bcommentSortOrder\s*\.\s*value\s*=""").containsMatchIn(code)
+            ) {
+                violations.add("$path 仍持有评论排序的会话状态：唯一真源必须是与另一页共用的设备侧偏好")
+            }
+
+            // ③ 解析必须经唯一入口 fromKey——两处各自写默认值正是「同一语义两套降级」的温床
+            if (!code.contains("CommentSortOrder.fromKey(")) {
+                violations.add("$path 未经 CommentSortOrder.fromKey 解析持久化键：两页的默认值会各自漂移")
+            }
+        }
+
+        // ④ 持久化键必须与枚举名解耦：直接落 name 会让一次改名把用户已保存的排序静默打回默认值
+        val enumPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/CommentSortOrder.kt"
+        if (!Regex("""val\s+sortKey\s*:\s*String""").containsMatchIn(
+                KotlinSourceScanner.sanitize(File(projectRoot, enumPath).readText()),
+            )
+        ) {
+            violations.add("$enumPath 缺少 sortKey：持久化键必须独立于枚举名（改名不得重置用户排序偏好）")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反「跨页共用偏好必须只有一份真源」红线（两页各持一份会话状态，改一处不动另一处，重启即回默认）：\n" +
                 violations.joinToString("\n"),
         )
     }

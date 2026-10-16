@@ -232,6 +232,13 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 更新吐槽/评论排序偏好（hot / asc / desc；播放页与分集详情页共用） */
+    suspend fun setCommentSortOrder(sortKey: String) {
+        dataStore.updateData { current ->
+            current.copy(commentSortOrder = sortKey)
+        }
+    }
+
     /** 更新题材标签排除黑名单 */
     suspend fun setBlockedSubjectTags(tags: List<String>) {
         dataStore.updateData { current ->

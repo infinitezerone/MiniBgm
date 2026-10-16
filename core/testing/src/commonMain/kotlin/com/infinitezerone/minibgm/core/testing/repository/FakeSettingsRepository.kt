@@ -42,6 +42,8 @@ class FakeSettingsRepository(
         private set
     var setAutoNextEnabledCallCount: Int = 0
         private set
+    var setCommentSortOrderCallCount: Int = 0
+        private set
     var setShowRestrictedContentCallCount: Int = 0
         private set
 
@@ -129,6 +131,11 @@ class FakeSettingsRepository(
     override suspend fun setAutoNextEnabled(enabled: Boolean) {
         setAutoNextEnabledCallCount++
         settingsState.value = settingsState.value.copy(autoNextEnabled = enabled)
+    }
+
+    override suspend fun setCommentSortOrder(sortKey: String) {
+        setCommentSortOrderCallCount++
+        settingsState.value = settingsState.value.copy(commentSortOrder = sortKey)
     }
 
     override suspend fun setPreferredQualityHeight(height: Int) {

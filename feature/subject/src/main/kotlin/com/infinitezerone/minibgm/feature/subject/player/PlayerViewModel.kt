@@ -255,21 +255,24 @@ private data class PlayerRepoSnapshot(
     val pipEnabled: Boolean = true,
     val danmakuEnabled: Boolean = true,
     val autoNextEnabled: Boolean = true,
+    val commentSortOrder: String = "",
     val collection: UserCollection? = null,
     val totalEpisodes: Int = 0,
     val hasMoreEpisodes: Boolean = false,
 )
 
 /**
- * 播放页长期偏好投影（画中画 / 弹幕显示 / 自动连播），唯一真源是设置仓库。
+ * 内容消费侧长期偏好投影（画中画 / 弹幕显示 / 自动连播 / 吐槽排序），唯一真源是设置仓库。
  *
- * 三者必须走**同一条**流：一份偏好拆进两条 combine 支路时，一次写入会各推一次、产出两份快照，
- * 无卡口的下游（弹幕兜底拉取）就会被重复触发。
+ * 几者必须走**同一条**流：一份偏好拆进两条 combine 支路时，一次写入会各推一次、产出两份快照，
+ * 无卡口的下游（弹幕兜底拉取）就会被重复触发。吐槽排序是播放页与分集详情页**共用**的一条偏好
+ * （这里只投影，写入侧两页共用同一个 setter），故两处的默认值也必须同源（[CommentSortOrder.fromKey]）。
  */
 private data class PlayViewPreferences(
     val pipEnabled: Boolean = true,
     val danmakuEnabled: Boolean = true,
     val autoNextEnabled: Boolean = true,
+    val commentSortOrder: String = "",
 )
 
 private data class RepoSubjectData(
@@ -573,7 +576,7 @@ class PlayerViewModel(
         }
 
     /**
-     * 播放页长期偏好流（画中画 / 弹幕显示 / 自动连播）：设备侧稳定偏好，与条目无关，始终订阅
+     * 播放页长期偏好流（画中画 / 弹幕显示 / 自动连播 / 吐槽排序）：设备侧稳定偏好，与条目无关，始终订阅
      * （不再按 subjectId 门控——门控只为迁就旧收集器，代价是同一份设置被拆成两条支路各推一次快照）。
      */
     private val playViewPreferencesFlow: Flow<PlayViewPreferences> =
@@ -582,6 +585,7 @@ class PlayerViewModel(
                 pipEnabled = it.pipEnabled,
                 danmakuEnabled = it.danmakuEnabled,
                 autoNextEnabled = it.autoNextEnabled,
+                commentSortOrder = it.commentSortOrder,
             )
         }
 
@@ -640,6 +644,7 @@ class PlayerViewModel(
                 pipEnabled = playView.pipEnabled,
                 danmakuEnabled = playView.danmakuEnabled,
                 autoNextEnabled = playView.autoNextEnabled,
+                commentSortOrder = playView.commentSortOrder,
                 collection = subjectData.collection,
                 totalEpisodes = subjectData.totalEpisodes,
                 hasMoreEpisodes = subjectData.hasMoreEpisodes,
@@ -731,6 +736,13 @@ class PlayerViewModel(
         snapshot.subject?.let { subject ->
             session.subjectOriginalName = subject.name
             session.subjectAliases = subject.titleAliases
+        }
+        // 吐槽排序（长期偏好，与分集详情页共用同一条设置）：真值在设置仓库，这里只投影，
+        // 并驱动评论区按新规则重整（仅在真的变化时调用，避免每次快照重放都重排一遍列表）。
+        // 放在 _uiState.update 之外：它是另一个状态容器的副作用，不该塞进快照写入的 CAS 重试里。
+        val projectedSortOrder = CommentSortOrder.fromKey(snapshot.commentSortOrder)
+        if (projectedSortOrder != commentsDelegate.state.value.sortOrder) {
+            commentsDelegate.setSortOrder(projectedSortOrder)
         }
         var sourcesChanged = false
         _uiState.update { state ->
@@ -1467,9 +1479,17 @@ class PlayerViewModel(
         }
     }
 
-    /** 切换单集吐槽排序规则（热门 / 楼层 / 最新） */
+    /**
+     * 切换单集吐槽排序规则（热门 / 楼层 / 最新）。
+     *
+     * 这是播放页与分集详情页**共用**的长期偏好：只写设置仓库、由快照投影回读（见 [applyRepoSnapshot]），
+     * 严禁就地驱动 delegate 形成第二事实源——两处各持一份会话状态时，这里改成「最新」、详情页仍是「热门」，
+     * 重启又双双回默认。
+     */
     fun setCommentSortOrder(order: CommentSortOrder) {
-        commentsDelegate.setSortOrder(order)
+        viewModelScope.launch {
+            settingsRepository.setCommentSortOrder(order.sortKey)
+        }
     }
 
     /** 切换对吐槽短评的表情表态 */

@@ -20,13 +20,28 @@ import com.infinitezerone.minibgm.feature.subject.R
 
 /**
  * 评论/讨论版回复排序规则（贴吧/论坛通用标准：热门、正序、倒序）
+ *
+ * [sortKey] 是这条偏好的持久化键（[com.infinitezerone.minibgm.core.data.repository.SettingsRepository.setCommentSortOrder]），
+ * 枚举名不参与持久化——改名不该让用户已保存的排序静默回到默认值。
  */
 enum class CommentSortOrder(
     @StringRes val labelRes: Int,
+    val sortKey: String,
 ) {
-    HOT(R.string.feature_subject_comment_sort_hot),
-    ASCENDING(R.string.feature_subject_comment_sort_asc),
-    DESCENDING(R.string.feature_subject_comment_sort_desc),
+    HOT(R.string.feature_subject_comment_sort_hot, "hot"),
+    ASCENDING(R.string.feature_subject_comment_sort_asc, "asc"),
+    DESCENDING(R.string.feature_subject_comment_sort_desc, "desc"),
+    ;
+
+    companion object {
+        /**
+         * 由持久化键还原排序规则；未知/空串一律回落热门。
+         *
+         * 播放页与分集详情页共用这条偏好，两处都必须经这里解析——各自 `valueOf` 或各自写默认值，
+         * 正是"同一语义两套降级"的温床。
+         */
+        fun fromKey(sortKey: String): CommentSortOrder = entries.firstOrNull { it.sortKey == sortKey } ?: HOT
+    }
 }
 
 /**

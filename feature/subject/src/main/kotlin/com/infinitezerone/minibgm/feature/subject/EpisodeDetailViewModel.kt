@@ -43,10 +43,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -198,8 +200,18 @@ class EpisodeDetailViewModel(
     /** 种子/磁力 BT 资源状态（列表 + 加载中标记） */
     private val torrentState = MutableStateFlow(Pair(emptyList<TorrentMediaResource>(), false))
 
-    /** 评论排序模式（默认热门优先） */
-    private val commentSortOrder = MutableStateFlow(CommentSortOrder.HOT)
+    /**
+     * 评论排序模式：唯一真源是设备侧偏好（与播放页共用同一条，两页默认值也必须同源）。
+     *
+     * 此前这里是一份 `MutableStateFlow(HOT)` 会话状态：改成「最新」后重进页面即回热门，
+     * 而且同一组件在播放页还有另一份，两处互不知情。
+     */
+    private val commentSortOrder: Flow<CommentSortOrder> =
+        settingsRepository
+            ?.settings
+            ?.map { CommentSortOrder.fromKey(it.commentSortOrder) }
+            ?.distinctUntilChanged()
+            ?: flowOf(CommentSortOrder.HOT)
 
     private val isLoggedIn =
         authRepository.isLoggedIn
@@ -619,8 +631,10 @@ class EpisodeDetailViewModel(
         loginPromptVisible.value = false
     }
 
-    /** 切换单集吐槽排序规则（热门 / 楼层 / 最新） */
+    /** 切换单集吐槽排序规则（热门 / 楼层 / 最新）：只写共用的设备侧偏好，由投影回读 */
     fun setCommentSortOrder(order: CommentSortOrder) {
-        commentSortOrder.value = order
+        viewModelScope.launch {
+            settingsRepository?.setCommentSortOrder(order.sortKey)
+        }
     }
 }

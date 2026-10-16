@@ -129,6 +129,13 @@ description: >-
    * 反向同样要钉住：**播放速度与画面比例刻意不持久化**——它们跟着「这条视频/这次观看」走，持久化会让下一部番莫名被裁剪、被变速（B 站/YouTube 的倍速同样不跨视频记忆）。红线同一条测试里机械闭锁：`UserPreferences` 出现该字段、或 `SettingsRepository` 出现同名标识（字段/setter/投影）即失败，另有「速度/比例」关键词兜底防改名绕过（`preferredPlaybackSpeed` 之类同样报错）。
    * 关闭即零请求：弹幕关闭期间不得拉取；自动拉取闸口必须**同步**读投影 + 按 `episodeId:episodeSort` 请求键去重。兜底拉取的判据是「弹幕为空」，而空结果会一直为空，播放进度落盘、源健康度变化都会重放快照——没有请求键就是把同一分集重拉成无界重试；异步回读设置更糟：同一写入推来的两份快照会各自放行一次。「重开弹幕但没有弹幕」的提示只能由那次补拉的**真实空结果**给出，严禁在拨开关的瞬间预判为空。
 
+14. **同一组件在两页各持一份偏好＝改一处不动另一处**：
+   * 评论区组件（`CommentsSection`）同时挂在播放页与分集详情页，但两边各持一份会话状态：播放页在 `PlayerViewModel` 的 `commentsDelegate.state.sortOrder`，详情页是一份私有的 `MutableStateFlow(CommentSortOrder.HOT)`。于是「改成最新」只影响当前那一页，切到另一页仍是热门，重启又双双回默认。
+   * 正确形态：跨页共用的稳定立场必须**只写一条设备侧偏好**（`SettingsRepository.setCommentSortOrder`），两页各自用 `map { CommentSortOrder.fromKey(it.commentSortOrder) }` 投影回读；解析统一走 `fromKey`（枚举名不参与持久化，`sortKey` 才是持久化键），两页各自写默认值正是「同一语义两套降级」的温床。
+   * 判据仍是「稳定立场 vs 单次观看意图」：弹幕显示/自动连播/吐槽排序/字幕开关是稳定立场；播放速度、画面比例不是。
+   * 红线：`ArchitectureRulesTest#comment_sort_order_must_be_a_shared_persisted_preference`（两页都必须调 `setCommentSortOrder`、都不得再留 `MutableStateFlow(CommentSortOrder...)`、都必须经 `fromKey` 解析）。
+
+
 ---
 
 ## 剧本 8：原生流播与后台传输真实性规范（Stream Engine & Native Fidelity）

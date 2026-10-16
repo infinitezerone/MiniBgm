@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject
 
+import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.CommentReactionUser
 import com.infinitezerone.minibgm.core.model.CommentUser
@@ -12,6 +13,7 @@ import com.infinitezerone.minibgm.core.testing.data.sampleUserCollection
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import com.infinitezerone.minibgm.feature.subject.R
@@ -41,6 +43,7 @@ class EpisodeDetailViewModelTest {
         collectionRepository: com.infinitezerone.minibgm.core.data.repository.CollectionRepository,
         communityRepository: com.infinitezerone.minibgm.core.data.repository.CommunityRepository,
         authRepository: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
+        settingsRepository: com.infinitezerone.minibgm.core.data.repository.SettingsRepository = FakeSettingsRepository(),
     ): EpisodeDetailViewModel =
         EpisodeDetailViewModel(
             subjectId = subjectId,
@@ -49,6 +52,7 @@ class EpisodeDetailViewModelTest {
             collectionRepository = collectionRepository,
             communityRepository = communityRepository,
             authRepository = authRepository,
+            settingsRepository = settingsRepository,
             defaultDispatcher = mainDispatcherRule.testDispatcher,
         )
 
@@ -542,6 +546,7 @@ class EpisodeDetailViewModelTest {
                     setEpisodeComments(episodeId, listOf(comment1, comment2, comment3))
                 }
             val subjectRepository = FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) }
+            val settingsRepository = FakeSettingsRepository()
             val viewModel =
                 createEpisodeDetailViewModel(
                     subjectId = subjectId,
@@ -549,6 +554,7 @@ class EpisodeDetailViewModelTest {
                     subjectRepository = subjectRepository,
                     collectionRepository = FakeCollectionRepository(),
                     communityRepository = communityRepository,
+                    settingsRepository = settingsRepository,
                 )
             advanceUntilIdle()
 
@@ -560,14 +566,75 @@ class EpisodeDetailViewModelTest {
 
             // 2. 切换为 ASCENDING（正序）：comment1 (#1) -> comment2 (#2) -> comment3 (#3)
             viewModel.setCommentSortOrder(CommentSortOrder.ASCENDING)
+            advanceUntilIdle()
             assertEquals(CommentSortOrder.ASCENDING, viewModel.uiState.value.commentSortOrder)
             val ascComments = viewModel.uiState.value.comments
             assertEquals(listOf(1L, 2L, 3L), ascComments.map { it.id })
 
             // 3. 切换为 DESCENDING（倒序）：comment3 (#3) -> comment2 (#2) -> comment1 (#1)
             viewModel.setCommentSortOrder(CommentSortOrder.DESCENDING)
+            advanceUntilIdle()
             assertEquals(CommentSortOrder.DESCENDING, viewModel.uiState.value.commentSortOrder)
             val descComments = viewModel.uiState.value.comments
             assertEquals(listOf(3L, 2L, 1L), descComments.map { it.id })
+            // 排序是设备侧长期偏好：每次切换都落库（不再只在内存里转一圈）
+            assertEquals(2, settingsRepository.setCommentSortOrderCallCount)
+            assertEquals("desc", settingsRepository.settings.first().commentSortOrder)
+        }
+
+    @Test
+    fun commentSortOrder_survivesPageReentry() =
+        runTest {
+            val communityRepository =
+                FakeCommunityRepository().apply {
+                    setEpisodeComments(episodeId, listOf(EpisodeComment(id = 1L, content = "吐槽", floor = 1)))
+                }
+            val settingsRepository = FakeSettingsRepository()
+            val first =
+                createEpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) },
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = communityRepository,
+                    settingsRepository = settingsRepository,
+                )
+            advanceUntilIdle()
+
+            first.setCommentSortOrder(CommentSortOrder.DESCENDING)
+            advanceUntilIdle()
+            assertEquals("desc", settingsRepository.settings.first().commentSortOrder)
+
+            // 重进页面（重建 VM）：唯一真源是设置仓库，不再回落热门
+            val second =
+                createEpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) },
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = communityRepository,
+                    settingsRepository = settingsRepository,
+                )
+            advanceUntilIdle()
+            assertEquals(CommentSortOrder.DESCENDING, second.uiState.value.commentSortOrder)
+        }
+
+    @Test
+    fun commentSortOrder_unknownPersistedKeyFallsBackToHot() =
+        runTest {
+            // 存量/异常键（含从未设置过的空串）必须回落热门，而不是抛异常或静默截断
+            val settingsRepository = FakeSettingsRepository(UserSettings(commentSortOrder = "not-a-sort-key"))
+            val viewModel =
+                createEpisodeDetailViewModel(
+                    subjectId = subjectId,
+                    episodeId = episodeId,
+                    subjectRepository = FakeSubjectRepository().apply { sendEpisodes(subjectId, sampleEpisodeList) },
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                    settingsRepository = settingsRepository,
+                )
+            advanceUntilIdle()
+
+            assertEquals(CommentSortOrder.HOT, viewModel.uiState.value.commentSortOrder)
         }
 }

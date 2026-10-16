@@ -1440,6 +1440,37 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun setCommentSortOrder_writesTheSharedDevicePreference() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val vm = viewModel(settingsRepository = settings)
+            advanceUntilIdle()
+
+            // 从未设置过（空串）即默认热门；这条默认值必须与分集详情页同源
+            assertEquals(CommentSortOrder.HOT, vm.uiState.value.commentSortOrder)
+
+            vm.setCommentSortOrder(CommentSortOrder.ASCENDING)
+            advanceUntilIdle()
+
+            assertEquals(1, settings.setCommentSortOrderCallCount)
+            assertEquals("asc", settings.settings.first().commentSortOrder)
+            assertEquals(CommentSortOrder.ASCENDING, vm.uiState.value.commentSortOrder)
+        }
+
+    @Test
+    fun commentSortOrder_readsPreferenceWrittenByTheOtherPage() =
+        runTest {
+            // 分集详情页写入的那条设备侧偏好，播放页必须原样读到（同一组件两处共用一条偏好）
+            val settings = FakeSettingsRepository(UserSettings(commentSortOrder = "desc"))
+            val vm = viewModel(settingsRepository = settings)
+            advanceUntilIdle()
+
+            assertEquals(CommentSortOrder.DESCENDING, vm.uiState.value.commentSortOrder)
+            // 只读不写：投影回读不得反过来把偏好改写成自己的默认值
+            assertEquals(0, settings.setCommentSortOrderCallCount)
+        }
+
+    @Test
     fun toggleCommentReaction_optimisticUpdate() =
         runTest {
             val communityRepo = FakeCommunityRepository()

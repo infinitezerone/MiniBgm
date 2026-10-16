@@ -208,6 +208,21 @@ class UserPreferencesDataSourceTest {
         }
 
     @Test
+    fun `setCommentSortOrder persists sort key without touching other preferences`() =
+        runTest {
+            val (dataSource, dataStore) = createDataSource()
+            assertEquals("", dataStore.data.first().commentSortOrder, "default should be blank (hot)")
+
+            dataSource.setCommentSortOrder("desc")
+            assertEquals("desc", dataStore.data.first().commentSortOrder)
+            assertTrue(dataStore.data.first().danmakuEnabled, "danmaku flag must be preserved")
+            assertEquals("rank", dataStore.data.first().exploreSortPreference, "explore sort must be preserved")
+
+            dataSource.setCommentSortOrder("asc")
+            assertEquals("asc", dataStore.data.first().commentSortOrder)
+        }
+
+    @Test
     fun `notification sub-switches toggle independently`() =
         runTest {
             val (dataSource, dataStore) = createDataSource()
