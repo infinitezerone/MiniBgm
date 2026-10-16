@@ -629,13 +629,17 @@ internal class ScheduleRepositoryImpl(
 
             val offset =
                 if (anchorMillis != null && anchorEp != null && anchorEp.episode > 1) {
-                    val daysDiff = abs(anchorEp.airAtEpochSeconds * 1000 - anchorMillis) / DAY_MILLIS
-                    if (daysDiff <= 14) {
+                    val daysFromPremiere = abs(anchorEp.airAtEpochSeconds * 1000 - anchorMillis) / DAY_MILLIS
+                    if (daysFromPremiere <= 3) {
+                        // 该样本集数 > 1 且紧邻开播日（时差容差 <= 3 天），表明此样本自身即为拆季首播集（如 AniList 12 话对应本季第 1 话）
                         anchorEp.episode - 1
                     } else {
+                        // 该样本不是首播集（首播日已播完且被历史窗口裁剪，或为季中样本）：
+                        // 基于周播周期反推 AniList 第 1 话理论开播时刻
                         val estimatedEp1Millis = anchorEp.airAtEpochSeconds * 1000 - (anchorEp.episode - 1L) * WEEK_MILLIS
                         val diffMillis = anchorMillis - estimatedEp1Millis
                         if (diffMillis > 14 * DAY_MILLIS) {
+                            // 只有当开播日与反推第 1 话相差超过 2 周时，才表明 AniList 顺延了前序季度的集数（排除了单周停播/特别篇/时差抖动）
                             val offsetWeeks = kotlin.math.round(diffMillis.toDouble() / WEEK_MILLIS).toInt()
                             if (offsetWeeks in 1..<anchorEp.episode) offsetWeeks else 0
                         } else {

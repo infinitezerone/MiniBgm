@@ -783,6 +783,75 @@ class ScheduleRepositoryImplTest {
         }
 
     @Test
+    fun syncAirEvents_normalAnimeWithPrunedEarlyEpisodes_preservesAccurateEpisodeNumber() =
+        runTest {
+            // 常规季番（如 JOJO）：开播日 9/24，AniList 正常从第 1 话起播。
+            // 当远端快照因滑动窗口裁剪掉已播完的第 1 话，只保留第 2、3、4 话时：
+            // 严禁将首个样本（第 2 话）误判为拆季偏移，必须保持 offset = 0，使得今日播出的第 4 话精准保留为第 4 话
+            val beginIso = "2026-09-24T08:00:00Z"
+            val anilist =
+                FakeScheduleSnapshotService().apply {
+                    schedules =
+                        mapOf(
+                            210482L to
+                                listOf(
+                                    AniListAiringEpisode(
+                                        episode = 2,
+                                        airAtEpochSeconds = TimeUtils.epochMillisOfIso("2026-10-02T08:00:00Z")!! / 1000,
+                                    ),
+                                    AniListAiringEpisode(
+                                        episode = 3,
+                                        airAtEpochSeconds = TimeUtils.epochMillisOfIso("2026-10-09T08:00:00Z")!! / 1000,
+                                    ),
+                                    AniListAiringEpisode(
+                                        episode = 4,
+                                        airAtEpochSeconds = TimeUtils.epochMillisOfIso("2026-10-16T08:00:00Z")!! / 1000,
+                                    ),
+                                ),
+                        )
+                }
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            AirScheduleEntity(
+                                bgmId = 639938L,
+                                title = "ジョジョの奇妙な冒険 スティール・ボール・ラン 2nd＆3rd STAGE",
+                                titleCn = "飙马野郎 JOJO的奇妙冒险 第二&第三赛段",
+                                coverUrl = "",
+                                ratingScore = 0.0,
+                                airDate = beginIso.substringBefore("T"),
+                                beginAtUtc = beginIso,
+                                weekday = 5,
+                                timeCst = "16:00",
+                                timeJst = "17:00",
+                                sitesJson = "[]",
+                                anilistId = 210482L,
+                                broadcastRule = "format=ONA",
+                            ),
+                        ),
+                    )
+                }
+            val airEventDao = FakeAirEventDao()
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    scheduleDao = dao,
+                    airEventDao = airEventDao,
+                    snapshotService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData()
+
+            assertIs<AppResult.Success<Unit>>(result)
+            val storedEvents = airEventDao.getAllAirEvents().sortedBy { it.episode }
+            assertEquals(listOf(2, 3, 4), storedEvents.map { it.episode })
+            val ep4Event = storedEvents.first { it.episode == 4 }
+            assertEquals("2026-10-16T08:00:00Z", ep4Event.airAtUtc)
+        }
+
+    @Test
     fun syncAirEvents_uncoveredSubjectsWithoutSources_haveNoAirEvents() =
         runTest {
             // 无 anilist 且无 bilibili 站点的条目：不生成任何机械推算或虚假事件
