@@ -40,13 +40,15 @@ import kotlin.test.fail
  *     「默认值为 null」的构造器参数（可选依赖）——漏传既不编译报错、Koin 也照常解析（默认值兜住）、
  *     单测又自己传 fake，最终只在真机上静默退化成「功能没接上」（源自 SubjectModule 漏传
  *     playbackHistoryRepository，让播放历史与续播兜底整条链路在真机上死掉的复盘）
- * 22. 播放页偏好必须落库、单次观看意图必须不落库：判据是「稳定立场 vs 单次观看意图」——弹幕显示 /
- *     自动连播 / 画中画这类稳定立场必须写 SettingsRepository 并由快照投影回读；播放速度 / 画面比例
- *     这类「这一次要多快、要什么画幅」的意图刻意不持久化（落库等于让上一部调成 2 倍速/被裁剪的画幅
- *     静默作用到下一部毫不相干的番上）
+ * 22. 播放页偏好必须落库、会话级状态必须不落库：判据是「稳定立场 vs 单次观看意图 / 引擎会话态」——
+ *     弹幕显示 / 自动连播 / 画中画 / 关闭字幕这类稳定立场必须写 SettingsRepository 并由快照投影回读；
+ *     播放速度 / 画面比例这类「这一次要多快、要什么画幅」的意图、以及单集循环这类引擎会话态（由
+ *     `repeatMode` 持有）刻意不持久化（落库等于让上一部调成 2 倍速/被裁剪的画幅、开着循环静默作用到
+ *     下一部毫不相干的番上）
  * 23. 跨页共用偏好必须只有一份真源：同一个评论区组件在播放页与分集详情页各持一份会话状态时，
- *     一处改成「最新」另一处仍是「热门」、重启又双双回默认——吐槽排序必须写共用的设备侧偏好、
- *     由两页各自的投影回读，解析统一走 CommentSortOrder.fromKey（枚举名不参与持久化）
+ *     一处改成「最新」另一处仍是「热门」、重启又双双回默认——排序必须写三处共用的设备侧偏好、
+ *     由各页自己的投影回读，解析统一走 CommentSortOrder.fromKey（枚举名不参与持久化；未表态时
+ *     由 fallback 表达各页自己的阅读默认，例如讨论帖回帖按楼层正序）
  * 24. 弹幕关闭即零请求必须连「分集纠正」入口一起收：该入口最终会 saveDanmakuOverride +
  *     拉一次弹幕，弹幕关掉后入口仍亮着等于给「已关闭的功能」写持久化覆盖（两个入口
  *     ——控制栏 DanmakuMatchEntryButton 与设置面板行——都必须随开关收起，VM 侧再兜一层竞态闸口）
@@ -1971,7 +1973,7 @@ class ArchitectureRulesTest {
         val viewModelPath =
             "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewModel.kt"
         val viewModelCode = KotlinSourceScanner.sanitize(File(projectRoot, viewModelPath).readText())
-        PLAYER_PERSISTED_PREFERENCES.forEach { (field, setter) ->
+        playerPersistedPreferences.forEach { (field, setter) ->
             if (Regex("""_uiState\s*\.update\s*\{\s*it\.copy\(\s*$field\s*=""").containsMatchIn(viewModelCode)) {
                 violations.add(
                     "$viewModelPath 就地翻转 $field：偏好开关必须写设置仓库（$setter）并由快照投影回读，" +
@@ -1988,8 +1990,8 @@ class ArchitectureRulesTest {
         val screenPath =
             "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt"
         val screenCode = KotlinSourceScanner.sanitize(File(projectRoot, screenPath).readText())
-        PLAYER_SCREEN_LOCAL_STATE.findAll(screenCode).map { it.groupValues[1] }.forEach { name ->
-            if (name !in PLAYER_SCREEN_TRANSIENT_STATE) {
+        screenLocalStateDeclaration.findAll(screenCode).map { it.groupValues[1] }.forEach { name ->
+            if (name !in playerScreenTransientState) {
                 violations.add(
                     "$screenPath 新增局部状态 `$name`：用户偏好必须持久化（经 SettingsRepository 与快照投影），" +
                         "只有瞬态交互才允许留在 UI 局部状态",
@@ -1997,27 +1999,28 @@ class ArchitectureRulesTest {
             }
         }
 
-        // ③ 反向：单次观看意图（播放速度 / 画面比例）严禁落库。它们跟着「这一条视频、这一次观看」走，
-        //    持久化等于让「上一部调到 2 倍速 / 拉伸成裁切」静默作用到下一部毫不相干的番上
-        //    （B 站 / YouTube 的倍速同样不跨视频记忆）。落库只可能从这两处发生：偏好模型的数据类，
-        //    或设置仓库的字段/setter——两处都闭锁。
+        // ③ 反向：会话级状态（播放速度 / 画面比例这类单次观看意图，单集循环这类引擎会话态）严禁落库。
+        //    速度与画幅跟着「这一条视频、这一次观看」走，持久化等于让「上一部调到 2 倍速 / 拉伸成裁切」
+        //    静默作用到下一部毫不相干的番上（B 站 / YouTube 的倍速同样不跨视频记忆）；循环由引擎
+        //    repeatMode 持有，重启后自己记得"还在循环"是用户没要的意外。落库只可能从这两处发生：
+        //    偏好模型的数据类，或设置仓库的字段/setter——两处都闭锁。
         val preferencesPath =
             "core/datastore/src/commonMain/kotlin/com/infinitezerone/minibgm/core/datastore/UserPreferences.kt"
         val repositoryPath =
             "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/SettingsRepository.kt"
         val preferencesCode = KotlinSourceScanner.sanitize(File(projectRoot, preferencesPath).readText())
         val repositoryCode = KotlinSourceScanner.sanitize(File(projectRoot, repositoryPath).readText())
-        PLAYER_TRANSIENT_INTENT_STATE.forEach { name ->
+        nonPersistedPlayerState.forEach { (name, reason) ->
             if (Regex("""\b(?:val|var)\s+$name\b""").containsMatchIn(preferencesCode)) {
                 violations.add(
-                    "$preferencesPath 出现偏好字段 `$name`：播放速度/画面比例属单次观看意图，" +
-                        "落库会把上一次的选择静默带到下一个毫不相干的视频",
+                    "$preferencesPath 出现偏好字段 `$name`：$reason，" +
+                        "落库会把上一次的选择静默带到下一个毫不相干的视频 / 下一次播放",
                 )
             }
             if (Regex("""\b$name\b""").containsMatchIn(repositoryCode)) {
                 violations.add(
-                    "$repositoryPath 出现 `$name`：单次观看意图不得进入设置仓库（字段/setter/投影都不行），" +
-                        "它只允许活在播放页的局部状态里",
+                    "$repositoryPath 出现 `$name`：$reason，不得进入设置仓库（字段/setter/投影都不行），" +
+                        "它只允许活在播放页的局部状态 / 引擎会话里",
                 )
             }
         }
@@ -2029,6 +2032,9 @@ class ArchitectureRulesTest {
             }
             Regex("""\b(?:val|var|fun)\s+\w*(?:[Rr]esize|[Aa]spect)\w*\b""").findAll(code).forEach { match ->
                 violations.add("$path 出现画面比例类偏好声明 ${match.value.trim()}：画面比例属单次观看意图，严禁落库")
+            }
+            Regex("""\b(?:val|var|fun)\s+\w*[Ll]oop\w*\b""").findAll(code).forEach { match ->
+                violations.add("$path 出现循环播放类偏好声明 ${match.value.trim()}：单集循环属引擎会话态，严禁落库")
             }
         }
 
@@ -2046,6 +2052,7 @@ class ArchitectureRulesTest {
             listOf(
                 "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewModel.kt",
                 "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/EpisodeDetailViewModel.kt",
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/TopicDetailViewModel.kt",
             )
         sharedConsumers.forEach { path ->
             val code = KotlinSourceScanner.sanitize(File(projectRoot, path).readText())
@@ -2143,14 +2150,16 @@ class ArchitectureRulesTest {
     }
 
     /** 播放页必须落库的偏好字段 → 对应的 SettingsRepository 写入方法 */
-    private val PLAYER_PERSISTED_PREFERENCES: Map<String, String> =
+    private val playerPersistedPreferences: Map<String, String> =
         mapOf(
             "isDanmakuEnabled" to "setDanmakuEnabled",
             "autoNextEnabled" to "setAutoNextEnabled",
+            // 关闭字幕：稳定立场，重启后仍要「字幕关」（引擎参数只表达本次播放）
+            "subtitlesDisabled" to "setSubtitlesDisabled",
         )
 
     /** PlayerScreen 允许保留的 UI 局部状态（全部是瞬态交互，不是用户偏好） */
-    private val PLAYER_SCREEN_TRANSIENT_STATE: Set<String> =
+    private val playerScreenTransientState: Set<String> =
         setOf(
             "areControlsVisible",
             "isLandscape",
@@ -2168,17 +2177,24 @@ class ArchitectureRulesTest {
         )
 
     /** PlayerScreen 里的 `var x by remember { mutableStateOf(...) }` 声明 */
-    private val PLAYER_SCREEN_LOCAL_STATE =
+    private val screenLocalStateDeclaration =
         Regex(
             """^\s*var\s+(\w+)\s+by\s+remember(?:Saveable)?\s*\{\s*mutable\w*StateOf""",
             RegexOption.MULTILINE,
         )
 
-    /** 刻意不落库的播放页单次观看意图（对应 PlayerScreen 上同名的局部状态） */
-    private val PLAYER_TRANSIENT_INTENT_STATE: Set<String> =
-        setOf(
-            "playbackSpeed",
-            "resizeMode",
+    /**
+     * 刻意不落库的播放页会话级状态。
+     *
+     * 两类：① 单次观看意图（播放速度 / 画面比例——跟着「这一条视频、这一次观看」走）；
+     * ② 引擎会话态（单集循环 `isLooping`——由引擎 `repeatMode` 持有，进程内跨换集/换源保留，
+     * 但刻意不跨重启记忆；B 站/YouTube 的循环同样不跨视频）。
+     */
+    private val nonPersistedPlayerState: Map<String, String> =
+        mapOf(
+            "playbackSpeed" to "播放速度属单次观看意图（B 站 / YouTube 的倍速同样不跨视频记忆）",
+            "resizeMode" to "画面比例属单次观看意图（跟着「这一条视频、这一次观看」走）",
+            "isLooping" to "单集循环属引擎会话态（由 repeatMode 持有，刻意不跨重启记忆）",
         )
 
     @Test
@@ -2518,7 +2534,7 @@ class ArchitectureRulesTest {
                     val scanner = KotlinSourceScanner.fromFile(file)
                     val text = scanner.sanitizedContent
                     val relPath = file.relativeTo(projectRoot).path
-                    MANUAL_VIEW_MODEL_BLOCK.findAll(text).forEach { block ->
+                    manualViewModelBlock.findAll(text).forEach { block ->
                         val className = block.groupValues[1]
                         val argsOpen = block.range.last
                         val argsClose = text.indexOfCloseDelimiter(argsOpen) ?: return@forEach
@@ -2558,7 +2574,7 @@ class ArchitectureRulesTest {
     }
 
     /** 手工构造 ViewModel 的 Koin 块；`{ params -> ... }`、`{ (arg: T) -> ... }` 与单行写法都要覆盖 */
-    private val MANUAL_VIEW_MODEL_BLOCK = Regex("""\bviewModel\s*\{[\s\S]{0,600}?\b([A-Z]\w*ViewModel)\s*\(""")
+    private val manualViewModelBlock = Regex("""\bviewModel\s*\{[\s\S]{0,600}?\b([A-Z]\w*ViewModel)\s*\(""")
 
     /** 返回 [open] 处 `(` 对应的 `)` 下标（只统计圆括号嵌套；找不到返回 null） */
     private fun String.indexOfCloseDelimiter(open: Int): Int? {
@@ -2584,10 +2600,11 @@ class ArchitectureRulesTest {
             when (list[i]) {
                 '(', '[', '{' -> depth++
                 ')', ']', '}' -> depth--
-                ',' -> if (depth == 0) {
-                    parts.add(list.substring(start, i))
-                    start = i + 1
-                }
+                ',' ->
+                    if (depth == 0) {
+                        parts.add(list.substring(start, i))
+                        start = i + 1
+                    }
             }
         }
         parts.add(list.substring(start))
@@ -2595,8 +2612,7 @@ class ArchitectureRulesTest {
     }
 
     /** 顶层命名实参的参数名（`foo = get()` → foo）；位置实参返回 null */
-    private fun topLevelNamedArgumentName(segment: String): String? =
-        Regex("""^\s*(\w+)\s*=(?!=)""").find(segment)?.groupValues?.get(1)
+    private fun topLevelNamedArgumentName(segment: String): String? = Regex("""^\s*(\w+)\s*=(?!=)""").find(segment)?.groupValues?.get(1)
 
     /** 取 `class X(` 主构造器里所有「默认值为 null」的可选依赖参数名 */
     private fun nullDefaultedConstructorParams(

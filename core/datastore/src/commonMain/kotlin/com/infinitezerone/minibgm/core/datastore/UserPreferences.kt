@@ -67,6 +67,14 @@ data class UserPreferences(
      * 用户在一处改成「最新」、另一处仍是「热门」，重启又双双回默认。空串表示尚未设置（按热门）。
      */
     val commentSortOrder: String = "",
+    /**
+     * 关闭字幕（长期偏好：进页即按它把引擎的字幕轨关掉）。
+     *
+     * 只记「关不关」这条立场，不记用户选了哪条轨道——轨道 override 跟着具体媒体走，换源/换集
+     * 由 `PlayerController.resetTrackOverridesOnMediaChange()` 收敛，落库等于把上一部的轨道选择
+     * 带到下一部毫不相干的番上。
+     */
+    val subtitlesDisabled: Boolean = false,
     /** 题材标签排除黑名单 */
     val blockedSubjectTags: List<String> = emptyList(),
     /** 囤番（待全剧终开刷）条目 ID 集合：普通集数静默通知，仅完结最终话提醒 */

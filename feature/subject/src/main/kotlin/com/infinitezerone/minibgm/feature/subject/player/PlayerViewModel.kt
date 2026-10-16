@@ -192,6 +192,13 @@ data class PlayerUiState(
     val isDanmakuLoading: Boolean = false,
     /** 弹幕分集匹配元信息（用户覆盖 / 自动命中 / 回退兜底 + 全部候选） */
     val danmakuMatch: DanmakuMatch? = null,
+    /**
+     * 「关闭字幕」的长期偏好（真值来自设置仓库投影）。
+     *
+     * 只记录用户"要不要字幕"的立场，不记录具体轨道——轨道选择仍由引擎按系统语言/用户当场选择持有。
+     * 界面据此把引擎字幕轨按偏好关掉，避免重启后用户被迫重新关一次。
+     */
+    val subtitlesDisabled: Boolean = false,
 ) {
     val hasNext: Boolean
         get() {
@@ -256,23 +263,25 @@ private data class PlayerRepoSnapshot(
     val danmakuEnabled: Boolean = true,
     val autoNextEnabled: Boolean = true,
     val commentSortOrder: String = "",
+    val subtitlesDisabled: Boolean = false,
     val collection: UserCollection? = null,
     val totalEpisodes: Int = 0,
     val hasMoreEpisodes: Boolean = false,
 )
 
 /**
- * 内容消费侧长期偏好投影（画中画 / 弹幕显示 / 自动连播 / 吐槽排序），唯一真源是设置仓库。
+ * 内容消费侧长期偏好投影（画中画 / 弹幕显示 / 自动连播 / 吐槽排序 / 关闭字幕），唯一真源是设置仓库。
  *
  * 几者必须走**同一条**流：一份偏好拆进两条 combine 支路时，一次写入会各推一次、产出两份快照，
- * 无卡口的下游（弹幕兜底拉取）就会被重复触发。吐槽排序是播放页与分集详情页**共用**的一条偏好
- * （这里只投影，写入侧两页共用同一个 setter），故两处的默认值也必须同源（[CommentSortOrder.fromKey]）。
+ * 无卡口的下游（弹幕兜底拉取）就会被重复触发。吐槽排序是三个评论区页面**共用**的一条偏好
+ * （这里只投影，写入侧各处共用同一个 setter），故解析必须统一走 [CommentSortOrder.fromKey]。
  */
 private data class PlayViewPreferences(
     val pipEnabled: Boolean = true,
     val danmakuEnabled: Boolean = true,
     val autoNextEnabled: Boolean = true,
     val commentSortOrder: String = "",
+    val subtitlesDisabled: Boolean = false,
 )
 
 private data class RepoSubjectData(
@@ -586,6 +595,7 @@ class PlayerViewModel(
                 danmakuEnabled = it.danmakuEnabled,
                 autoNextEnabled = it.autoNextEnabled,
                 commentSortOrder = it.commentSortOrder,
+                subtitlesDisabled = it.subtitlesDisabled,
             )
         }
 
@@ -645,6 +655,7 @@ class PlayerViewModel(
                 danmakuEnabled = playView.danmakuEnabled,
                 autoNextEnabled = playView.autoNextEnabled,
                 commentSortOrder = playView.commentSortOrder,
+                subtitlesDisabled = playView.subtitlesDisabled,
                 collection = subjectData.collection,
                 totalEpisodes = subjectData.totalEpisodes,
                 hasMoreEpisodes = subjectData.hasMoreEpisodes,
@@ -884,6 +895,10 @@ class PlayerViewModel(
             // 播放结束自动连播（长期偏好）
             if (snapshot.autoNextEnabled != next.autoNextEnabled) {
                 next = next.copy(autoNextEnabled = snapshot.autoNextEnabled)
+            }
+            // 关闭字幕（长期偏好）：界面只投影，UI 侧据此按偏好把引擎字幕轨关掉
+            if (snapshot.subtitlesDisabled != next.subtitlesDisabled) {
+                next = next.copy(subtitlesDisabled = snapshot.subtitlesDisabled)
             }
             // 尚无可恢复点时跟随位置表刷新当前分集（已下发/消费过的不回退）
             if (next.resumePositionMs == 0L && next.streamUrl.isNotBlank()) {
@@ -1495,6 +1510,18 @@ class PlayerViewModel(
     fun setCommentSortOrder(order: CommentSortOrder) {
         viewModelScope.launch {
             settingsRepository.setCommentSortOrder(order.sortKey)
+        }
+    }
+
+    /**
+     * 记录「关闭字幕」长期偏好（长期偏好，进页即按它把引擎的字幕轨关掉）。
+     *
+     * 只记立场、不记具体轨道：引擎侧动作由 UI 当场驱动（与清晰度同形——动作当场生效 + 立场落库），
+     * 这里负责写库；进页时由 [PlayerUiState.subtitlesDisabled] 投影回读到引擎，重启后仍是「字幕关」。
+     */
+    fun setSubtitlesDisabled(disabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setSubtitlesDisabled(disabled)
         }
     }
 

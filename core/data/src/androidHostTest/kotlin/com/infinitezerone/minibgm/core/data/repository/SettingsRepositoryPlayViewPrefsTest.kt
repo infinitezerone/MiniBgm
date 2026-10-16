@@ -201,6 +201,36 @@ class SettingsRepositoryPlayViewPrefsTest {
         }
 
     @Test
+    fun `setSubtitlesDisabled 写入设置流并持久化`() =
+        runTest {
+            val h = Harness()
+            assertFalse(
+                h.repository.settings
+                    .first()
+                    .subtitlesDisabled,
+            )
+
+            h.repository.setSubtitlesDisabled(true)
+
+            assertTrue(
+                h.repository.settings
+                    .first()
+                    .subtitlesDisabled,
+            )
+            assertTrue(h.storage.snapshot().subtitlesDisabled, "stance must persist to preferences")
+
+            h.repository.setSubtitlesDisabled(false)
+            assertFalse(h.storage.snapshot().subtitlesDisabled)
+            assertEquals(
+                "",
+                h.repository.settings
+                    .first()
+                    .commentSortOrder,
+                "改字幕立场不得重置排序偏好",
+            )
+        }
+
+    @Test
     fun `两个播放页偏好互不串写`() =
         runTest {
             val h = Harness()

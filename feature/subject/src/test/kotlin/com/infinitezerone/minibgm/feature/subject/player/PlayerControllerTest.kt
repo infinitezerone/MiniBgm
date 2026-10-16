@@ -437,6 +437,22 @@ class PlayerControllerTest {
         }
 
     @Test
+    fun applySubtitlesDisabledPreference_closesOnlyAndIsIdempotent() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+
+            // 「未关闭」只代表用户没要求关，不代表"要强制打开并清掉轨道选择"——不能动引擎
+            controller.applySubtitlesDisabledPreference(disabled = false)
+            assertFalse(engine.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+
+            // 进页按偏好恢复「字幕关」，重复调用幂等（每次快照重放都会走一遍）
+            controller.applySubtitlesDisabledPreference(disabled = true)
+            controller.applySubtitlesDisabledPreference(disabled = true)
+            assertTrue(engine.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+        }
+
+    @Test
     fun selectAutoVideoQuality_clearsVideoOverridesWithoutAndroidTypes() =
         runTest {
             val engine = FakePlayerEngine()

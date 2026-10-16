@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.subject
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.CommentReactionUser
 import com.infinitezerone.minibgm.core.model.CommentUser
@@ -10,6 +11,7 @@ import com.infinitezerone.minibgm.core.model.TopicParentSubject
 import com.infinitezerone.minibgm.core.model.TopicReply
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCommunityRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.components.CommentSortOrder
@@ -365,10 +367,11 @@ class TopicDetailViewModelTest {
                         )
                     setTopicDetail(sampleTopicId, detail)
                 }
-            val viewModel = TopicDetailViewModel(sampleTopicId, "subject", communityRepository)
+            val settingsRepository = FakeSettingsRepository()
+            val viewModel = TopicDetailViewModel(sampleTopicId, "subject", communityRepository, settingsRepository = settingsRepository)
             advanceUntilIdle()
 
-            // 默认正序
+            // 从未表态（空串）时按讨论帖自己的阅读默认「正序」，而不是视频吐槽那边的「热门」
             assertEquals(CommentSortOrder.ASCENDING, viewModel.uiState.value.sortOrder)
             val ascFloors = viewModel.uiState.value.sortedFloorReplies
             assertEquals(2, ascFloors.size)
@@ -387,6 +390,10 @@ class TopicDetailViewModelTest {
             assertEquals(2, descFloors[1].first) // #2 楼后显示
             assertEquals(1002L, descFloors[1].second.id)
 
+            // 排序是设备侧长期偏好：每次切换都落库（不再只在帖子会话里转一圈）
+            assertEquals(1, settingsRepository.setCommentSortOrderCallCount)
+            assertEquals("desc", settingsRepository.settings.first().commentSortOrder)
+
             // 切换热门
             viewModel.setSortOrder(CommentSortOrder.HOT)
             advanceUntilIdle()
@@ -396,6 +403,55 @@ class TopicDetailViewModelTest {
             assertEquals(1004L, hotFloors[0].second.id)
             assertEquals(2, hotFloors[1].first)
             assertEquals(1002L, hotFloors[1].second.id)
+            // 连续切换持续落库，最后一次写入即当前立场
+            assertEquals(2, settingsRepository.setCommentSortOrderCallCount)
+            assertEquals("hot", settingsRepository.settings.first().commentSortOrder)
+        }
+
+    @Test
+    fun sortOrder_isTheSharedDevicePreference() =
+        runTest {
+            val communityRepository =
+                FakeCommunityRepository().apply { setTopicDetail(sampleTopicId, sampleTopicDetail) }
+            val settingsRepository = FakeSettingsRepository()
+            val first =
+                TopicDetailViewModel(
+                    topicId = sampleTopicId,
+                    type = "subject",
+                    communityRepository = communityRepository,
+                    settingsRepository = settingsRepository,
+                )
+            advanceUntilIdle()
+
+            // 未表态时是讨论帖自己的默认（正序），不是视频吐槽那边的「热门」
+            assertEquals(CommentSortOrder.ASCENDING, first.uiState.value.sortOrder)
+
+            first.setSortOrder(CommentSortOrder.DESCENDING)
+            advanceUntilIdle()
+            assertEquals("desc", settingsRepository.settings.first().commentSortOrder)
+
+            // 重进帖子：不再回正序（唯一真源是设备侧偏好）
+            val second =
+                TopicDetailViewModel(
+                    topicId = sampleTopicId,
+                    type = "subject",
+                    communityRepository = communityRepository,
+                    settingsRepository = settingsRepository,
+                )
+            advanceUntilIdle()
+            assertEquals(CommentSortOrder.DESCENDING, second.uiState.value.sortOrder)
+
+            // 与视频评论区共用同一条：在播放页/分集详情页选过的排序，讨论帖照样沿用
+            val sharedElsewhere = FakeSettingsRepository(UserSettings(commentSortOrder = "hot"))
+            val third =
+                TopicDetailViewModel(
+                    topicId = sampleTopicId,
+                    type = "subject",
+                    communityRepository = communityRepository,
+                    settingsRepository = sharedElsewhere,
+                )
+            advanceUntilIdle()
+            assertEquals(CommentSortOrder.HOT, third.uiState.value.sortOrder)
         }
 
     @Test

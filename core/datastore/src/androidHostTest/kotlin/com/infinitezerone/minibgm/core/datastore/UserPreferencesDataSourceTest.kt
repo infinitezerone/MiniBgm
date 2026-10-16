@@ -223,6 +223,21 @@ class UserPreferencesDataSourceTest {
         }
 
     @Test
+    fun `setSubtitlesDisabled persists stance without touching other preferences`() =
+        runTest {
+            val (dataSource, dataStore) = createDataSource()
+            assertFalse(dataStore.data.first().subtitlesDisabled, "default should be false")
+
+            dataSource.setSubtitlesDisabled(true)
+            assertTrue(dataStore.data.first().subtitlesDisabled)
+            assertTrue(dataStore.data.first().danmakuEnabled, "danmaku flag must be preserved")
+            assertEquals("", dataStore.data.first().commentSortOrder, "comment sort must be preserved")
+
+            dataSource.setSubtitlesDisabled(false)
+            assertFalse(dataStore.data.first().subtitlesDisabled)
+        }
+
+    @Test
     fun `notification sub-switches toggle independently`() =
         runTest {
             val (dataSource, dataStore) = createDataSource()

@@ -125,16 +125,18 @@ description: >-
 
 13. **关掉的开关自己长回来：播放页偏好只活在会话内存里**：
    * `toggleDanmaku()` 曾只做 `_uiState.update { it.copy(isDanmakuEnabled = ...) }`：换集/重进播放页就悄悄回到「开」，用户关掉的弹幕自己长回来，关闭期间还在后台按集拉弹幕；自动连播是同一形态（关掉后换一集又自动连播）。反向的坑在 UI 侧——画面比例/播放速度私藏在 `remember { mutableStateOf }` 里，仓库层完全不知情，重启即丢。
-   * 正确形态：UI 可见偏好一律写 `SettingsRepository`（`UserPreferences.danmakuEnabled` / `autoNextEnabled`），再由**快照投影**回读，保持单一真源（`PlayViewPreferences` 承载画中画/弹幕/连播三条偏好——同一份偏好拆进两条 combine 支路时，一次写入会各推一次、产出两份快照）；UI 局部状态只留瞬态交互。红线 `ArchitectureRulesTest#player_view_preferences_must_be_persisted_not_held_in_session_state` 物理闭锁：既禁 VM 就地翻转偏好字段/漏写 setter，也含 PlayerScreen 局部状态白名单（新增一处就要显式回答「它该不该持久化」）。
-   * 反向同样要钉住：**播放速度与画面比例刻意不持久化**——它们跟着「这条视频/这次观看」走，持久化会让下一部番莫名被裁剪、被变速（B 站/YouTube 的倍速同样不跨视频记忆）。红线同一条测试里机械闭锁：`UserPreferences` 出现该字段、或 `SettingsRepository` 出现同名标识（字段/setter/投影）即失败，另有「速度/比例」关键词兜底防改名绕过（`preferredPlaybackSpeed` 之类同样报错）。
+   * 正确形态：UI 可见偏好一律写 `SettingsRepository`（`UserPreferences.danmakuEnabled` / `autoNextEnabled` / `subtitlesDisabled`），再由**快照投影**回读，保持单一真源（`PlayViewPreferences` 承载画中画/弹幕/连播/字幕四条偏好——同一份偏好拆进两条 combine 支路时，一次写入会各推一次、产出两份快照）；UI 局部状态只留瞬态交互。红线 `ArchitectureRulesTest#player_view_preferences_must_be_persisted_not_held_in_session_state` 物理闭锁：既禁 VM 就地翻转偏好字段/漏写 setter，也含 PlayerScreen 局部状态白名单（新增一处就要显式回答「它该不该持久化」）。
+   * **「关闭字幕」落库的是立场、不是轨道**：`subtitlesDisabled` 只记用户"要不要字幕"，不记选了哪条轨（轨道 override 跟着具体媒体走，换源/换集由 `resetTrackOverridesOnMediaChange()` 收敛）。恢复只能走 `PlayerController.applySubtitlesDisabledPreference(disabled)` 的**单向**语义——`disabled == false` 直接 return，只处理「关」；若反向无条件 `setTrackTypeDisabled(TEXT, false)` + `clearOverridesOfType(TEXT)`，进页那一刻就会把用户刚选的轨道抹掉。UI 侧形态与清晰度一致：引擎动作当场生效（`disableSubtitles()` / `selectSubtitleTrack()` / `autoSelectSubtitles()`）+ 立场落库（`setSubtitlesDisabled(true/false)`）。
+   * 反向同样要钉住：**播放速度与画面比例刻意不持久化**——它们跟着「这条视频/这次观看」走，持久化会让下一部番莫名被裁剪、被变速（B 站/YouTube 的倍速同样不跨视频记忆）；**单集循环 `isLooping` 同样刻意不落库**——它由引擎 `repeatMode` 持有，是进程内的会话态（换集/换源保留、重启即回默认，B 站/YouTube 的循环也不跨视频）。红线同一条测试里机械闭锁：`UserPreferences` 出现该字段、或 `SettingsRepository` 出现同名标识（字段/setter/投影）即失败，另有「速度/比例/循环」三组关键词兜底防改名绕过（`preferredPlaybackSpeed` / `autoLoopEpisode` 之类同样报错）。
    * 关闭即零请求：弹幕关闭期间不得拉取；自动拉取闸口必须**同步**读投影 + 按 `episodeId:episodeSort` 请求键去重。兜底拉取的判据是「弹幕为空」，而空结果会一直为空，播放进度落盘、源健康度变化都会重放快照——没有请求键就是把同一分集重拉成无界重试；异步回读设置更糟：同一写入推来的两份快照会各自放行一次。「重开弹幕但没有弹幕」的提示只能由那次补拉的**真实空结果**给出，严禁在拨开关的瞬间预判为空。
    * **「分集纠正」入口同样属于这条闸口**：该入口（控制栏 `DanmakuMatchEntryButton` 与播放设置面板里的那一行）会 `saveDanmakuOverride` + 立即拉一次弹幕，弹幕关掉后入口还亮着，用户点下去就是给「已关闭的功能」写持久化覆盖并发请求。两处入口都必须一并按 `isDanmakuEnabled` 收起（`hasCandidates = isDanmakuEnabled && ...` / `takeIf { isDanmakuEnabled && ... }`），`selectDanmakuCandidate` 再兜一层竞态闸口（关掉开关的那一帧里旧入口可能尚未重组掉）。红线：`ArchitectureRulesTest#danmaku_match_entry_must_be_gated_by_the_danmaku_toggle`。
 
-14. **同一组件在两页各持一份偏好＝改一处不动另一处**：
-   * 评论区组件（`CommentsSection`）同时挂在播放页与分集详情页，但两边各持一份会话状态：播放页在 `PlayerViewModel` 的 `commentsDelegate.state.sortOrder`，详情页是一份私有的 `MutableStateFlow(CommentSortOrder.HOT)`。于是「改成最新」只影响当前那一页，切到另一页仍是热门，重启又双双回默认。
-   * 正确形态：跨页共用的稳定立场必须**只写一条设备侧偏好**（`SettingsRepository.setCommentSortOrder`），两页各自用 `map { CommentSortOrder.fromKey(it.commentSortOrder) }` 投影回读；解析统一走 `fromKey`（枚举名不参与持久化，`sortKey` 才是持久化键），两页各自写默认值正是「同一语义两套降级」的温床。
-   * 判据仍是「稳定立场 vs 单次观看意图」：弹幕显示/自动连播/吐槽排序/字幕开关是稳定立场；播放速度、画面比例不是。
-   * 红线：`ArchitectureRulesTest#comment_sort_order_must_be_a_shared_persisted_preference`（两页都必须调 `setCommentSortOrder`、都不得再留 `MutableStateFlow(CommentSortOrder...)`、都必须经 `fromKey` 解析）。
+14. **同一组件在多页各持一份偏好＝改一处不动另一处**：
+   * 评论区组件（`CommentsSection`）同时挂在播放页、分集详情页与讨论帖详情页，但每边各持一份会话状态：播放页在 `PlayerViewModel` 的 `commentsDelegate.state.sortOrder`，详情页是一份私有的 `MutableStateFlow(CommentSortOrder.HOT)`，讨论帖页又是 `MutableStateFlow(CommentSortOrder.ASCENDING)`。于是「改成最新」只影响当前那一页，切到另一页仍是热门/正序，重启又双双回默认。
+   * 正确形态：跨页共用的稳定立场必须**只写一条设备侧偏好**（`SettingsRepository.setCommentSortOrder`），各页各自用 `map { CommentSortOrder.fromKey(it.commentSortOrder) }` 投影回读；解析统一走 `fromKey`（枚举名不参与持久化，`sortKey` 才是持久化键），各页各自写默认值正是「同一语义两套降级」的温床。
+   * `fromKey(sortKey, fallback)` 的 `fallback` 只在**用户从未表态（空串）**时生效，表达的是各页自己的阅读默认：视频吐槽默认「热门」、讨论帖回帖默认楼层正序（论坛按楼层读）。一旦在任何一处选过，三处共享同一个选择——不要用 `fallback` 去表达"这一页的默认"，更不要在页面里补写默认值落库（那会把「没选过」变成「选过热门」，把别的页面的默认一起改掉）。
+   * 判据仍是「稳定立场 vs 单次观看意图」：弹幕显示/自动连播/吐槽排序/字幕开关是稳定立场；播放速度、画面比例、单集循环不是。
+   * 红线：`ArchitectureRulesTest#comment_sort_order_must_be_a_shared_persisted_preference`（三页都必须调 `setCommentSortOrder`、都不得再留 `MutableStateFlow(CommentSortOrder...)`、都必须经 `fromKey` 解析）。
 
 
 ---

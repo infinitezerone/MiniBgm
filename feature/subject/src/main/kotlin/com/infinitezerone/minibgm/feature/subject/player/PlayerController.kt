@@ -309,6 +309,24 @@ class PlayerController(
                 .build()
     }
 
+    /**
+     * 应用「关闭字幕」的长期偏好（进页时按设备侧偏好恢复；幂等）。
+     *
+     * 只处理「关」这一个方向：偏好为「未关闭」时不动引擎——`false` 只代表"用户没有要求关闭"，
+     * 并不代表"要强制打开并清掉轨道选择"，引擎该按系统语言自动选轨（`autoSelectSubtitles`）。
+     * 与 [resetTrackOverridesOnMediaChange] 同一立场：轨道 override 跟着具体媒体走，
+     * 这条偏好只表达"关不关"。
+     */
+    fun applySubtitlesDisabledPreference(disabled: Boolean) {
+        if (!disabled) return
+        if (engine.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) return
+        engine.trackSelectionParameters =
+            engine.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
+    }
+
     /** 主动刷新轨道快照（供打开设置面板等场景确保轨道列表最新）。 */
     fun refreshTracksSnapshot() {
         runCatching {

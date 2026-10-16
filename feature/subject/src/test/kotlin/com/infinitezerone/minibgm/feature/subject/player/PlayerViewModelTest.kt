@@ -1764,6 +1764,32 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun subtitlesDisabled_isPersisted_andRestoredOnReentry() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val first = viewModel(settingsRepository = settings)
+            advanceUntilIdle()
+            assertFalse("默认不关闭字幕", first.uiState.value.subtitlesDisabled)
+
+            first.setSubtitlesDisabled(true)
+            advanceUntilIdle()
+
+            assertEquals("关闭字幕必须落到设置仓库", 1, settings.setSubtitlesDisabledCallCount)
+            assertTrue(first.uiState.value.subtitlesDisabled)
+
+            // 重建播放页（等价于换条目/重进页面）：立场必须保持，UI 才能据此把引擎字幕轨关掉
+            val second = viewModel(settingsRepository = settings)
+            advanceUntilIdle()
+            assertTrue("关闭字幕必须跨播放页重建保持", second.uiState.value.subtitlesDisabled)
+
+            // 选轨/自动选轨 = 用户不再要求关闭
+            second.setSubtitlesDisabled(false)
+            advanceUntilIdle()
+            assertFalse(second.uiState.value.subtitlesDisabled)
+            assertFalse(settings.settings.first().subtitlesDisabled)
+        }
+
+    @Test
     fun selectDanmakuCandidate_whileDanmakuDisabled_isIgnored() =
         runTest {
             // 弹幕关掉后两个入口都会收起（控制栏按钮 / 设置面板行），但关掉开关的那一帧里旧入口

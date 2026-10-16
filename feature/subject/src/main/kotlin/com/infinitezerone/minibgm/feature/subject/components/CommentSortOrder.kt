@@ -35,12 +35,18 @@ enum class CommentSortOrder(
 
     companion object {
         /**
-         * 由持久化键还原排序规则；未知/空串一律回落热门。
+         * 由持久化键还原排序规则；未知/空串按 [fallback] 回落。
          *
-         * 播放页与分集详情页共用这条偏好，两处都必须经这里解析——各自 `valueOf` 或各自写默认值，
-         * 正是"同一语义两套降级"的温床。
+         * 三处评论区（播放页 / 分集详情页 / 讨论帖详情页）共用同一条偏好，任何一处都必须经这里解析
+         * ——各自 `valueOf` 或各自写默认值，正是"同一语义两套降级"的温床。
+         *
+         * [fallback] 只在**用户从未表态**（空串）时生效，表达的是各页自己的阅读默认：视频吐槽按[热门]，
+         * 讨论帖回帖按楼层[ASCENDING]（论坛正序）。用户一旦在任何一处选过，三处共享同一个选择。
          */
-        fun fromKey(sortKey: String): CommentSortOrder = entries.firstOrNull { it.sortKey == sortKey } ?: HOT
+        fun fromKey(
+            sortKey: String,
+            fallback: CommentSortOrder = HOT,
+        ): CommentSortOrder = entries.firstOrNull { it.sortKey == sortKey } ?: fallback
     }
 }
 

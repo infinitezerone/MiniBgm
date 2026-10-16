@@ -47,6 +47,8 @@ val subjectModule =
                 type = type,
                 communityRepository = get(),
                 authRepository = get(),
+                // 必填：漏传会静默退化成"回帖排序不落库"（默认值兜住、Koin 与单测都不报错）
+                settingsRepository = get(),
             )
         }
 

@@ -239,6 +239,13 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 更新「关闭字幕」长期偏好（只记立场，不记具体轨道） */
+    suspend fun setSubtitlesDisabled(disabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(subtitlesDisabled = disabled)
+        }
+    }
+
     /** 更新题材标签排除黑名单 */
     suspend fun setBlockedSubjectTags(tags: List<String>) {
         dataStore.updateData { current ->

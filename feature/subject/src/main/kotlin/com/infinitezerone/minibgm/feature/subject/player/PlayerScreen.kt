@@ -411,6 +411,13 @@ fun PlayerScreen(
         controller.setPlaybackSpeed(playbackSpeed)
     }
 
+    // 「关闭字幕」是设备侧长期偏好（引擎参数只表达本次播放，重启即丢）：
+    // 偏好投影一到位就把引擎字幕轨按它关掉。只处理「关闭」方向——偏好为「未关闭」时
+    // 绝不反向强制打开并清轨道选择（那会抹掉用户刚选的轨道），交由引擎按系统语言自动选轨。
+    LaunchedEffect(uiState.subtitlesDisabled, controller) {
+        controller.applySubtitlesDisabledPreference(uiState.subtitlesDisabled)
+    }
+
     // 控制栏自动隐藏
     LaunchedEffect(areControlsVisible, playback.isPlaying, isScrubbing) {
         if (areControlsVisible && playback.isPlaying && !isScrubbing) {
@@ -850,9 +857,19 @@ fun PlayerScreen(
                     controller.selectAutoVideoQuality()
                     viewModel.onQualitySelected(0)
                 },
-                onSelectSubtitle = controller::selectSubtitleTrack,
-                onDisableSubtitles = controller::disableSubtitles,
-                onAutoSubtitles = controller::autoSelectSubtitles,
+                // 字幕：引擎动作当场生效 + 立场落库（与清晰度同一形态），进页由偏好投影恢复
+                onSelectSubtitle = {
+                    controller.selectSubtitleTrack(it)
+                    viewModel.setSubtitlesDisabled(false)
+                },
+                onDisableSubtitles = {
+                    controller.disableSubtitles()
+                    viewModel.setSubtitlesDisabled(true)
+                },
+                onAutoSubtitles = {
+                    controller.autoSelectSubtitles()
+                    viewModel.setSubtitlesDisabled(false)
+                },
                 onSelectAudio = controller::selectAudioTrack,
             )
             playerEpisodeQueuePanel(

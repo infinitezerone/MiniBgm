@@ -44,6 +44,8 @@ class FakeSettingsRepository(
         private set
     var setCommentSortOrderCallCount: Int = 0
         private set
+    var setSubtitlesDisabledCallCount: Int = 0
+        private set
     var setShowRestrictedContentCallCount: Int = 0
         private set
 
@@ -136,6 +138,11 @@ class FakeSettingsRepository(
     override suspend fun setCommentSortOrder(sortKey: String) {
         setCommentSortOrderCallCount++
         settingsState.value = settingsState.value.copy(commentSortOrder = sortKey)
+    }
+
+    override suspend fun setSubtitlesDisabled(disabled: Boolean) {
+        setSubtitlesDisabledCallCount++
+        settingsState.value = settingsState.value.copy(subtitlesDisabled = disabled)
     }
 
     override suspend fun setPreferredQualityHeight(height: Int) {

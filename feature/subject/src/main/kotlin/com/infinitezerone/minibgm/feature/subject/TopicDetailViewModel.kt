@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CommunityRepository
+import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.CommunityLikeTarget
 import com.infinitezerone.minibgm.core.model.TopicDetail
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -68,6 +70,7 @@ class TopicDetailViewModel(
     val type: String = "subject",
     private val communityRepository: CommunityRepository,
     private val authRepository: AuthRepository? = null,
+    private val settingsRepository: SettingsRepository? = null,
 ) : ViewModel() {
     private val _events = Channel<TopicDetailUiEvent>(Channel.BUFFERED)
     val events: Flow<TopicDetailUiEvent> = _events.receiveAsFlow()
@@ -95,7 +98,19 @@ class TopicDetailViewModel(
                     }.onStart { emit(TopicLoad(isLoading = true, isRefreshing = isUserPull)) }
             }
 
-    private val sortOrder = MutableStateFlow(CommentSortOrder.ASCENDING)
+    /**
+     * 回帖排序：唯一真源是与播放页 / 分集详情页**共用**的那条设备侧偏好。
+     *
+     * 未表态（空串）时回落讨论帖自己的阅读默认「正序」（论坛按楼层读），用户一旦在任意一处选过排序，
+     * 三处共享同一个选择——此前这里是一份 `MutableStateFlow(ASCENDING)` 会话态：改成「最新」后
+     * 退出帖子即回正序，而且与播放页里的同一组件互不知情。
+     */
+    private val sortOrder: Flow<CommentSortOrder> =
+        settingsRepository
+            ?.settings
+            ?.map { CommentSortOrder.fromKey(it.commentSortOrder, fallback = CommentSortOrder.ASCENDING) }
+            ?.distinctUntilChanged()
+            ?: flowOf(CommentSortOrder.ASCENDING)
 
     val uiState: StateFlow<TopicDetailUiState> =
         combine(
@@ -119,9 +134,11 @@ class TopicDetailViewModel(
         refreshIntent.tryEmit(isUserPullToRefresh)
     }
 
-    /** 切换楼层回帖排序规则 */
+    /** 切换楼层回帖排序规则：只写共用的设备侧偏好，由投影回读 */
     fun setSortOrder(order: CommentSortOrder) {
-        sortOrder.value = order
+        viewModelScope.launch {
+            settingsRepository?.setCommentSortOrder(order.sortKey)
+        }
     }
 
     /**
