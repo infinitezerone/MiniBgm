@@ -1428,12 +1428,18 @@ class PlayerViewModel(
                     )
                 }
             } else {
+                val errorMessage =
+                    when (currentTab.kind) {
+                        PlayerSourceKind.TORRENT_STREAM -> "当前 BT 资源仅包含单集，请切换线路或重新选源"
+                        PlayerSourceKind.LOCAL_FILE -> "当前离线缓存仅包含单集，请切换线路或重新选源"
+                        else -> "直链列表中没有该分集，请切换到其他播放源"
+                    }
                 _uiState.update {
                     it.copy(
                         streamUrl = "",
                         requestHeaders = emptyMap(),
                         isResolvingSource = false,
-                        error = "直链列表中没有该分集，请切换到其他播放源",
+                        error = errorMessage,
                     )
                 }
             }
