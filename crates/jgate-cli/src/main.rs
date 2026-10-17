@@ -204,7 +204,8 @@ fn print_usage() {
 选项：
   -s, --stack   验证当前本地变更栈（trunk()..@ 逐个提交格式与全栈改动汇总）
   -a, --all     强制验证全部模块（跨切面改动、PR 前）
-  -f, --fast    跳过截图测试（等价 -Pminibgm.skipScreenshots=true）
+  -f, --fast    仅为本机减负：跳过截图测试（等价 -Pminibgm.skipScreenshots=true）。
+                本机绿 != CI 绿——提交前必须再跑一次不带 --fast 的
   -n, --plan    只打印本次验证目标与将要执行的 gradle 任务，不执行命令（别名 --dry-run）
   -o, --only    在 quick 模式下仅执行目标模块测试，跳过架构红线
   -h, --help    显示本帮助
@@ -212,6 +213,23 @@ fn print_usage() {
 子命令 / 模式：
   quick         快速自检模式（秒级执行架构红线，可附加模块微验证）
   native        原生库编译与指纹校验模式（编译 libminibgm_ech / libminibgm_torrent）
+
+门禁做什么（默认模式）：
+  素材体积 → Rust 门禁（仅触及 crates/ 时）→ spotlessApply → 架构红线
+  → 触及模块测试 + :app:testDebugUnitTest + :app:assembleDebug → 结果真实性校验 → 结构化诊断
+
+  目标推断：工作副本 @ → 最近提交 @-，按改动路径推导模块；触及
+  :core:model/common/data/network/database/datastore/designsystem/navigation、
+  build-logic 与根配置时自动提升为全量。
+  纯 *.md / docs/ / .agents/ / .github/ / LICENSE 改动显式跳过装配门 :app:assembleDebug
+  （白名单而非"未落到模块目录就跳"：native/、tools/、crates/ 仍照常跑装配门）。
+  :app:testDebugUnitTest 承载 AppModuleTest 的 DI 契约红线，横跨全部模块，
+  因此任何模块代码改动都会一并复跑。
+  失败时打印自愈诊断卡，并写出 build/reports/jgate/diagnostic.json。
+
+与提交的关系：
+  tools/jcommit（Windows: .\tools\jcommit.ps1 -m "feat: ..."）强制「先验后提」：
+  先跑本门禁，绿了才 jj commit。日常提交不跑 release。
 
 示例：
   jgate                          # 按工作副本/最近提交自动推断门禁

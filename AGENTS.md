@@ -12,20 +12,13 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 ## 构建与验证
 
-提交前唯一入口（含"绿≠测过"的 XML 真实性校验与提交拦截）：
+提交前唯一入口：`.\tools\jgate.ps1`（Linux/CI `bash tools/jgate`）；提交用 `tools/jcommit.ps1 -m "feat: ..."`（强制先验后提）。门禁做什么、目标如何推断、md 改动的白名单跳过、`--fast` 与 CI 的差异、诊断产物在哪——全部由 `.\tools\jgate.ps1 --help` 自述，本文件不复述——`--help` 就是门禁的用法规格，改 jgate 行为必须同 commit 改 help。
 
-```bash
-# 门禁校验：Windows: .\tools\jgate.ps1  |  Linux/CI: bash tools/jgate
-# 门禁绑定提交（拦截器）：Windows: .\tools\jcommit.ps1  |  Linux/CI: bash tools/jcommit -m "feat: ..."
-# 流程：Conventional Commits 预检 → 素材体积 → Rust 门禁 → spotlessApply → 架构红线 → 触及模块测试 → :app:assembleDebug → 结果校验 → 结构化诊断
-```
+- `--fast` 只是本机减负：本机绿 != CI 绿，提交前必须复跑一次不带 `--fast` 的。
+- 素材体积门：单张 > 200 KB 或合计 > 1 MB 硬拦（压 800px WebP）；单元测试配置唯一真源 `configureAndroidUnitTests()`，禁止各自手抄 `tasks.withType<Test>`；依赖图变更后 `./gradlew graphUpdate`，Lint 存量基线用 `updateLintBaseline`，质量门 `./gradlew :core:testing:crapCheck`（CRAP ≤ 30）。
+- Rust 原生库：ABI 集合唯一真源 `native/abis.txt`（构建脚本、release workflow、`SUPPORTED_ABIS` 全与它对齐）；Gradle 绝不跨界调度 Cargo/NDK，只经 `registerPrebuiltJniLibs` 挂载产物并在缺库时硬失败；`libminibgm_torrent.so` 在 release 由 `configureOnDemandNativePackaging` 排除、按需下载。
 
-- 目标按改动自动推断（工作副本 `@` → 最近提交 `@-`）；支持 `bash tools/jgate --stack`（`-s`）校验当前本地 JJ 变更栈（`trunk()..@`）；触及底层基础层（`:core:model/common/data/network/database/datastore/designsystem/navigation`、`build-logic`、根配置）自动提升为全量；门禁失败自动打印自愈诊断卡并输出结构化诊断报告（`build/reports/jgate/diagnostic.json`）辅助 Agent 自主自愈。日常提交不跑 release；编码中间态秒级红线自检与定向模块微验证（Micro-Eval）使用 `.\tools\quick-check.ps1`（支持传入模块如 `core/network`，`-o` 仅测目标）。推荐使用 `tools/jcommit` 提交代码，强制先验后提。`:app:testDebugUnitTest`（承载 `AppModuleTest` 的 DI 契约红线）横跨全部模块，因此任何模块代码改动都会一并复跑它——只按"改动路径落在哪个模块"推导会漏掉它（`feature/user` 的改动曾让 `DownloadViewModel` 构造期扫盘的回归静默通过门禁）。
-- **本机减负开关（两处都显式、都不静默，且会在 jgate 输出里标注）**：① 纯 `*.md` / `docs/` / `.agents/` / `.github/` / LICENSE 改动会自动跳过装配门 `:app:assembleDebug`（架构红线照跑）——这是**显式白名单**而非"没落到模块目录就跳"，`native/`、`tools/`、`crates/` 等真能影响产物的路径仍照常跑装配门；② `bash tools/jgate --fast`（等价 `-Pminibgm.skipScreenshots=true`）跳过截图测试，实测省掉占单测耗时 **43%（59s/137s，仅 15 例）** 的 Roborazzi/Robolectric NATIVE 冷启动开销，但**本机绿 != CI 绿**，提交前必须复跑一次不带 `--fast` 的。
-- 单元测试配置（测试 JVM=21、`-Proborazzi.record`、`-Pminibgm.skipScreenshots`）的唯一真源是 `build-logic` 的 `configureAndroidUnitTests()`：带 Robolectric/Roborazzi 的模块直接调用，禁止再各自手抄 `tasks.withType<Test>` 块（历史上三份副本各自漂移）。
-- 素材体积门：图片单张 > 200 KB 或合计 > 1 MB 硬拦（必须压为 800px WebP）。jj 不运行 git 钩子，门禁由 jgate 兜底。
-- 模块依赖变化后跑 `./gradlew graphUpdate` 重建依赖图；Android Lint 增量基线在各模块 `lint-baseline.xml`，存量基线漂移通过 `./gradlew updateLintBaseline` 增量收敛；CRAP 质量门禁（`./gradlew :core:testing:crapCheck`）机械限制全仓方法 CRAP $\le 30.0$（$CC > 30$ 时任何覆盖率均不可达标，必须拆分子纯函数；平台/IO边界方法必须补齐单测杜绝零覆盖）。
-- Rust 原生库（`crates/minibgm-ech` + `crates/minibgm-torrent`）：构建解耦，底层由原生 CLI `jgate native`（`tools/build-native` 为跨平台薄壳转调）内置确定性 SHA-256 源码指纹缓存并跨平台调度 `cargo-ndk` 产出 `.so`，彻底消灭 Windows 借壳 Git Bash 的二级公民反模式；Gradle 绝不跨界调度 Cargo / NDK，仅通过 `registerPrebuiltJniLibs` 挂载产物并在缺库时硬失败，禁止静默回退。目标 ABI 集合的唯一真源是 `native/abis.txt`——构建脚本、release workflow、`ProjectExtensions` 的产物校验与客户端 `SUPPORTED_ABIS`（`NativeAbiContractTest` 强制）全部与它对齐，改 ABI 只改这一处。`libminibgm_torrent.so` 在 release 中被 `configureOnDemandNativePackaging` 排除出 APK，改由 GitHub Release 资产按需动态下载装载。
+编码中间态用 `.\tools\quick-check.ps1` 秒级自查（等价 `jgate quick`）。
 
 ## 硬红线
 

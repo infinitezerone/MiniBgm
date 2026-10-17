@@ -2907,7 +2907,7 @@ class ArchitectureRulesTest {
          * 棘轮语义：只允许「删等量再写」；确需上调时必须把这个数字改大，并在提交说明里写明
          * 为什么这笔上下文值得占用——涨幅会出现在 diff 里，而不是悄悄长胖。
          */
-        const val AGENTS_MD_CHAR_BUDGET = 11_200
+        const val AGENTS_MD_CHAR_BUDGET = 9_600
 
         /** `AGENTS.md` 单行字符上限：巨型 bullet 既没人读，也拆不出可评审的 diff */
         const val AGENTS_MD_MAX_LINE_CHARS = 900
