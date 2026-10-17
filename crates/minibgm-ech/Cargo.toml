@@ -8,7 +8,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rustls = { version = "0.23", features = ["aws_lc_rs"] }
-tokio = { version = "1", features = ["net", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time"] }
 tokio-rustls = "0.26"
 hyper = { version = "1", features = ["client", "http1", "http2"] }
 hyper-util = { version = "0.1", features = ["tokio"] }

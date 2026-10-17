@@ -25,6 +25,10 @@ const MAX_REQUEST_BODY_SIZE: usize = 16 * 1024 * 1024;
 const MAX_REQUEST_HEADERS: usize = 128;
 const MAX_HEADER_VALUE_SIZE: usize = 16 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(2000);
+/// RFC 8305 的 Connection Attempt Delay：交错起跑间隔（推荐值 250ms）。
+const HEDGE_STAGGER: Duration = Duration::from_millis(250);
+/// 同时在飞的连接尝试上限：再多只会摊薄每条连接的带宽与预算。
+const HEDGE_MAX_INFLIGHT: usize = 3;
 const ECH_CONFIG_TTL: Duration = Duration::from_secs(60 * 60);
 const H2_CONNECTION_MAX_AGE: Duration = Duration::from_secs(120);
 
@@ -827,171 +831,237 @@ async fn async_try_fetch_with_config(
         .map_err(AttemptError::before_request)?;
     let mut last_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
 
+    // 候选先全部解析（本地行为，受总预算约束），再交给交错连接器竞速：
+    // 串行解析不会把连接预算耗在排队上，真正的并行收益在握手阶段。
+    let mut resolved: Vec<SocketAddr> = Vec::new();
     for addr_str in addrs_to_try {
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {
+            break;
+        }
+        match timeout(remaining, tokio::net::lookup_host(addr_str.as_str())).await {
+            Ok(Ok(iter)) => resolved.extend(iter),
+            Ok(Err(error)) => last_error = Some(Box::new(error)),
+            Err(_) => break,
+        }
+    }
+    let mut candidates = resolved.into_iter();
+
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
             return Err(AttemptError::before_request(
-                "request timed out while resolving candidate addresses".to_owned(),
+                "request timed out before connecting to candidate address".to_owned(),
             ));
         }
-        let resolved_addrs: Vec<SocketAddr> =
-            match timeout(remaining, tokio::net::lookup_host(addr_str.as_str())).await {
-                Ok(Ok(iter)) => iter.collect(),
-                Ok(Err(error)) => {
-                    last_error = Some(Box::new(error));
-                    continue;
+        // RFC 8305：候选按 250ms 交错起跑并行握手，谁先成功用谁（只竞速连接，绝不重放请求）
+        let (tls, socket_addr) =
+            match connect_wave(&mut candidates, &tls_config, &server_name, deadline).await {
+                Ok(pair) => pair,
+                Err(error) => {
+                    return Err(AttemptError::before_request(last_error.unwrap_or(error)))
                 }
-                Err(error) => return Err(AttemptError::before_request(error)),
+            };
+        let mut tls_slot = Some(tls);
+        // 一旦请求已交给 hyper，换候选地址重发就可能重复非幂等 POST/PUT：
+        // 只有连接与 TLS 握手阶段的失败才允许换下一个候选。
+        let mut request_started = false;
+        let result = timeout(remaining, async {
+            let tls = tls_slot
+                .take()
+                .ok_or_else(|| std::io::Error::other("hedged TLS stream already consumed"))?;
+            let ech_accepted = tls.get_ref().1.ech_status() == EchStatus::Accepted;
+            let is_h2 = tls.get_ref().1.alpn_protocol() == Some(b"h2");
+            let io = TokioIo::new(tls);
+
+            let (status_code, response_headers, hyper_response) = if is_h2 {
+                let (mut sender, connection) = http2::Builder::new(TokioExecutor::new())
+                    .handshake(io)
+                    .await?;
+                tokio::spawn(async move {
+                    if let Err(error) = connection.await {
+                        log::debug!("HTTP/2 connection closed: {error}");
+                    }
+                });
+
+                if let Some(pool) = pool {
+                    let pool_key = PoolKey {
+                        host: host.to_owned(),
+                        port: parsed_url.port_or_known_default().unwrap_or(443),
+                        is_ech: ech_accepted,
+                    };
+                    let mut guard = pool.write().unwrap_or_else(|p| p.into_inner());
+                    guard.insert(
+                        pool_key,
+                        Http2ConnectionEntry {
+                            sender: sender.clone(),
+                            ech_accepted,
+                            connected_addr: socket_addr.to_string(),
+                            created_at: Instant::now(),
+                        },
+                    );
+                }
+
+                let mut request = Request::builder().method(method.clone()).uri(uri.clone());
+                for (name, value) in headers {
+                    if is_disallowed_header(name, true) {
+                        continue;
+                    }
+                    request = request.header(name, value);
+                }
+                request = request.header("host", &authority);
+                let request =
+                    request.body(Full::new(Bytes::copy_from_slice(body.unwrap_or_default())))?;
+                request_started = true;
+                let resp = sender.send_request(request).await?;
+                let status = resp.status().as_u16();
+                let resp_headers = resp
+                    .headers()
+                    .iter()
+                    .map(|(name, value)| {
+                        (name.to_string(), value.to_str().unwrap_or("").to_string())
+                    })
+                    .collect();
+                (status, resp_headers, resp)
+            } else {
+                let (mut sender, connection) = http1::handshake(io).await?;
+                tokio::spawn(async move {
+                    if let Err(error) = connection.await {
+                        log::debug!("HTTP/1.1 connection closed: {error}");
+                    }
+                });
+
+                let mut request = Request::builder().method(method.clone()).uri(uri.clone());
+                for (name, value) in headers {
+                    if is_disallowed_header(name, false) {
+                        continue;
+                    }
+                    request = request.header(name, value);
+                }
+                request = request.header("host", &authority);
+                request = request.header("connection", "close");
+                let request =
+                    request.body(Full::new(Bytes::copy_from_slice(body.unwrap_or_default())))?;
+                request_started = true;
+                let resp = sender.send_request(request).await?;
+                let status = resp.status().as_u16();
+                let resp_headers = resp
+                    .headers()
+                    .iter()
+                    .map(|(name, value)| {
+                        (name.to_string(), value.to_str().unwrap_or("").to_string())
+                    })
+                    .collect();
+                (status, resp_headers, resp)
             };
 
-        for socket_addr in resolved_addrs {
-            // 一旦请求已交给 hyper，换候选地址重发就可能重复非幂等 POST/PUT：
-            // 只有连接与 TLS 握手阶段的失败才允许换下一个候选。
-            let mut request_started = false;
-            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-            if remaining.is_zero() {
-                return Err(AttemptError::before_request(
-                    "request timed out before connecting to candidate address".to_owned(),
-                ));
+            process_hyper_response(
+                status_code,
+                response_headers,
+                hyper_response,
+                ech_accepted,
+                Some(socket_addr.to_string()),
+                updated_ech_config.clone(),
+                stream.as_ref(),
+            )
+            .await
+        })
+        .await;
+
+        match result {
+            Ok(Ok(response)) => return Ok(response),
+            Ok(Err(error)) => {
+                if request_started {
+                    // 请求已经发出：把这个事实原样上抛，禁止上层换配置/换地址重发
+                    return Err(AttemptError::after_request(error));
+                }
+                if extract_retry_configs(&*error).is_some() {
+                    // 服务端已明确拒绝当前 ECH 配置并下发了 retry_configs。
+                    // 由于 Cloudflare 是 Anycast 架构，所有边缘使用同一套 ECHConfig，
+                    // 继续尝试下一个 IP 依然会被拒绝且徒增 RTT / 耗尽超时，
+                    // 立即中断候选循环并返回该错误（附带当前已证实可达的节点地址）以触发自愈重试。
+                    return Err(AttemptError::before_request_at(
+                        error,
+                        socket_addr.to_string(),
+                    ));
+                }
+                last_error = Some(error);
             }
-            let result = timeout(remaining, async {
-                let connector = TlsConnector::from(tls_config.clone());
-                let tls = timeout(CONNECT_TIMEOUT.min(remaining), async {
-                    let socket = tokio::net::TcpStream::connect(socket_addr).await?;
-                    socket.set_nodelay(true)?;
-                    connector.connect(server_name.clone(), socket).await
-                })
-                .await??;
-                let ech_accepted = tls.get_ref().1.ech_status() == EchStatus::Accepted;
-                let is_h2 = tls.get_ref().1.alpn_protocol() == Some(b"h2");
-                let io = TokioIo::new(tls);
-
-                let (status_code, response_headers, hyper_response) = if is_h2 {
-                    let (mut sender, connection) = http2::Builder::new(TokioExecutor::new())
-                        .handshake(io)
-                        .await?;
-                    tokio::spawn(async move {
-                        if let Err(error) = connection.await {
-                            log::debug!("HTTP/2 connection closed: {error}");
-                        }
-                    });
-
-                    if let Some(pool) = pool {
-                        let pool_key = PoolKey {
-                            host: host.to_owned(),
-                            port: parsed_url.port_or_known_default().unwrap_or(443),
-                            is_ech: ech_accepted,
-                        };
-                        let mut guard = pool.write().unwrap_or_else(|p| p.into_inner());
-                        guard.insert(
-                            pool_key,
-                            Http2ConnectionEntry {
-                                sender: sender.clone(),
-                                ech_accepted,
-                                connected_addr: socket_addr.to_string(),
-                                created_at: Instant::now(),
-                            },
-                        );
-                    }
-
-                    let mut request = Request::builder().method(method.clone()).uri(uri.clone());
-                    for (name, value) in headers {
-                        if is_disallowed_header(name, true) {
-                            continue;
-                        }
-                        request = request.header(name, value);
-                    }
-                    request = request.header("host", &authority);
-                    let request = request
-                        .body(Full::new(Bytes::copy_from_slice(body.unwrap_or_default())))?;
-                    request_started = true;
-                    let resp = sender.send_request(request).await?;
-                    let status = resp.status().as_u16();
-                    let resp_headers = resp
-                        .headers()
-                        .iter()
-                        .map(|(name, value)| {
-                            (name.to_string(), value.to_str().unwrap_or("").to_string())
-                        })
-                        .collect();
-                    (status, resp_headers, resp)
-                } else {
-                    let (mut sender, connection) = http1::handshake(io).await?;
-                    tokio::spawn(async move {
-                        if let Err(error) = connection.await {
-                            log::debug!("HTTP/1.1 connection closed: {error}");
-                        }
-                    });
-
-                    let mut request = Request::builder().method(method.clone()).uri(uri.clone());
-                    for (name, value) in headers {
-                        if is_disallowed_header(name, false) {
-                            continue;
-                        }
-                        request = request.header(name, value);
-                    }
-                    request = request.header("host", &authority);
-                    request = request.header("connection", "close");
-                    let request = request
-                        .body(Full::new(Bytes::copy_from_slice(body.unwrap_or_default())))?;
-                    request_started = true;
-                    let resp = sender.send_request(request).await?;
-                    let status = resp.status().as_u16();
-                    let resp_headers = resp
-                        .headers()
-                        .iter()
-                        .map(|(name, value)| {
-                            (name.to_string(), value.to_str().unwrap_or("").to_string())
-                        })
-                        .collect();
-                    (status, resp_headers, resp)
-                };
-
-                process_hyper_response(
-                    status_code,
-                    response_headers,
-                    hyper_response,
-                    ech_accepted,
-                    Some(socket_addr.to_string()),
-                    updated_ech_config.clone(),
-                    stream.as_ref(),
-                )
-                .await
-            })
-            .await;
-
-            match result {
-                Ok(Ok(response)) => return Ok(response),
-                Ok(Err(error)) => {
-                    if request_started {
-                        // 请求已经发出：把这个事实原样上抛，禁止上层换配置/换地址重发
-                        return Err(AttemptError::after_request(error));
-                    }
-                    if extract_retry_configs(&*error).is_some() {
-                        // 服务端已明确拒绝当前 ECH 配置并下发了 retry_configs。
-                        // 由于 Cloudflare 是 Anycast 架构，所有边缘使用同一套 ECHConfig，
-                        // 继续尝试下一个 IP 依然会被拒绝且徒增 RTT / 耗尽超时，
-                        // 立即中断候选循环并返回该错误（附带当前已证实可达的节点地址）以触发自愈重试。
-                        return Err(AttemptError::before_request_at(
-                            error,
-                            socket_addr.to_string(),
-                        ));
-                    }
-                    last_error = Some(error);
+            Err(elapsed) => {
+                if request_started {
+                    return Err(AttemptError::after_request(elapsed));
                 }
-                Err(elapsed) => {
-                    if request_started {
-                        return Err(AttemptError::after_request(elapsed));
-                    }
-                    last_error = Some(Box::new(elapsed));
-                }
+                last_error = Some(Box::new(elapsed));
             }
         }
     }
+}
 
-    Err(AttemptError::before_request(last_error.unwrap_or_else(
-        || "All candidate connections failed".into(),
-    )))
+/// RFC 8305 交错连接：候选按 [HEDGE_STAGGER] 起跳并行握手，谁先成功用谁。
+///
+/// 只竞速「TCP + TLS 握手」这一段——请求本身绝不重放（非幂等语义由调用方守护）。
+/// 一波最多 [HEDGE_MAX_INFLIGHT] 个在飞；全灭后由调用方用下一波候选重试，
+/// 因此既拿到并行收益，又保留「换候选」的语义。
+async fn connect_wave(
+    candidates: &mut std::vec::IntoIter<SocketAddr>,
+    tls_config: &Arc<ClientConfig>,
+    server_name: &ServerName<'static>,
+    deadline: tokio::time::Instant,
+) -> Result<
+    (
+        tokio_rustls::client::TlsStream<tokio::net::TcpStream>,
+        SocketAddr,
+    ),
+    Box<dyn std::error::Error + Send + Sync>,
+> {
+    let mut in_flight = tokio::task::JoinSet::new();
+    let mut last_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
+    let mut next_launch = tokio::time::Instant::now();
+
+    loop {
+        // 到点补位：首个立即起跑，其后每个 STAGGER 起一个（RFC 8305 §5）
+        while in_flight.len() < HEDGE_MAX_INFLIGHT && tokio::time::Instant::now() >= next_launch {
+            let Some(addr) = candidates.next() else { break };
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            next_launch = tokio::time::Instant::now() + HEDGE_STAGGER;
+            let config = tls_config.clone();
+            let name = server_name.clone();
+            in_flight.spawn(async move {
+                let attempt = timeout(CONNECT_TIMEOUT.min(remaining), async move {
+                    let socket = tokio::net::TcpStream::connect(addr).await?;
+                    socket.set_nodelay(true)?;
+                    let connector = TlsConnector::from(config);
+                    connector.connect(name, socket).await
+                })
+                .await;
+                (addr, attempt)
+            });
+        }
+
+        if in_flight.is_empty() {
+            return Err(last_error.unwrap_or_else(|| "no reachable candidate address".into()));
+        }
+
+        tokio::select! {
+            joined = in_flight.join_next() => {
+                match joined {
+                    Some(Ok((addr, Ok(Ok(stream))))) => {
+                        // 赢家已定：其余尝试随 JoinSet drop 一起中止，避免泄漏 fd 与后台握手
+                        in_flight.abort_all();
+                        return Ok((stream, addr));
+                    }
+                    Some(Ok((_, Ok(Err(error))))) => last_error = Some(Box::new(error)),
+                    Some(Ok((_, Err(elapsed)))) => last_error = Some(Box::new(elapsed)),
+                    Some(Err(join_error)) => last_error = Some(Box::new(join_error)),
+                    None => {}
+                }
+            }
+            _ = tokio::time::sleep_until(next_launch), if in_flight.len() < HEDGE_MAX_INFLIGHT => {}
+        }
+    }
 }
 
 /// 过滤不允许向远端发送的伪头、连接专属头或与全量 Body 冲突的传输编码头
