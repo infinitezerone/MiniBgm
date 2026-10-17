@@ -32,7 +32,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 ## 领域规则
 
-每条规则的完整复盘都在对应红线测试的 KDoc 里（测试名即规则名，见 `ArchitectureRulesTest`）；此处只留可执行的约束。
+每条规则的完整复盘都在对应红线测试的 KDoc 里（测试名即规则名，见 `ArchitectureRulesTest`）；这里只留可执行的约束。动手前先读 `.agents/skills/minibgm-playbooks/` 的路由表，只打开命中任务的 1-2 个 `references/` 剧本，禁止通读。
 
 - 装饰性功能 fail-open：光晕/动效/横幅等内部异常一律 `runCatching` 降级为「没有装饰」，绝不崩宿主页面；读硬件位图像素前先 `copy` 成软件位图。
 - 排期真值只来自 AniList 已验证播出事件；禁止算术预测与合成剧集；bangumi-data 只做元数据与平台映射（`schedule_repository_uses_anilist_as_the_only_roster_source`）。
