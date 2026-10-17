@@ -291,6 +291,159 @@ class ArchitectureRulesTest {
         )
     }
 
+    /** 只校验我们自己的 skill：Google 侧 vendored 的 skill 不归本仓维护 */
+    private fun minibgmSkillDirs(): List<File> =
+        File(projectRoot, ".agents/skills")
+            .listFiles()
+            .orEmpty()
+            .filter { it.isDirectory && it.name.startsWith("minibgm-") }
+
+    /**
+     * 保守判定「这看起来是仓库内相对路径」：纯 ASCII、首段是已知顶层目录、不含生成目录。
+     *
+     * 宁可不查，也不要误报：文档里大量出现命令（带空格）、URL、代码片段、BBCode，
+     * 把它们当路径去校验只会制造噪音，最后逼人不信这条红线。
+     */
+    private fun looksLikeRepoPath(path: String): Boolean {
+        if (path.isEmpty() || path.startsWith("/") || ".." in path) return false
+        if (!path.matches(Regex("""^[A-Za-z0-9._/\-]+$"""))) return false
+        if (' ' in path) return false
+        if ('/' !in path) return false
+        val first = path.substringBefore('/')
+        return first in setOf("feature", "core", "app", "crates", "tools", "native", "build-logic", ".agents", "docs", "gradle")
+    }
+
+    /** 抽取反引号包裹的片段（避免用含反引号的正则，减少转义噪音） */
+    private fun backtickedSpans(text: String): List<String> {
+        val spans = mutableListOf<String>()
+        var index = 0
+        while (index < text.length) {
+            val open = text.indexOf((96).toChar(), index)
+            if (open < 0) break
+            val close = text.indexOf((96).toChar(), open + 1)
+            if (close < 0) break
+            spans.add(text.substring(open + 1, close))
+            index = close + 1
+        }
+        return spans
+    }
+
+    /**
+     * 文档只能说「真话」：AGENTS.md 与各 skill 用反引号引用的测试名、仓库路径、reference 文件
+     * 必须真实存在。
+     *
+     * 为什么必须机械化：这类漂移是**静默**的——文档写着「见 xxx 红线」「细节在 references/yyy.md」，
+     * 而那个测试早已改名、文件早已挪走；读者白跑一趟，且没有任何红灯。文档说谎比写长更糟。
+     */
+    @Test
+    fun docs_must_only_reference_things_that_exist() {
+        val rulesFile =
+            File(
+                projectRoot,
+                "core/testing/src/androidHostTest/kotlin/com/infinitezerone/minibgm/core/testing/ArchitectureRulesTest.kt",
+            )
+        val knownTests =
+            Regex("""\n    fun ([a-z0-9_]+)\(\)""")
+                .findAll(rulesFile.readText())
+                .map { it.groupValues[1] }
+                .toSet()
+
+        val docs = mutableListOf<Pair<File, String>>()
+        File(projectRoot, "AGENTS.md").takeIf { it.isFile }?.let { docs.add(it to it.readText()) }
+        minibgmSkillDirs().forEach { skillDir ->
+            File(skillDir, "SKILL.md").takeIf { it.isFile }?.let { docs.add(it to it.readText()) }
+            File(skillDir, "references")
+                .listFiles()
+                .orEmpty()
+                .filter { it.isFile && it.extension == "md" }
+                .forEach { docs.add(it to it.readText()) }
+        }
+
+        val violations = mutableListOf<String>()
+        docs.forEach { (file, text) ->
+            val rel = file.relativeTo(projectRoot).path
+            val parent = file.parentFile
+            // references/ 里的文件把 skill 目录当作「仓库根」，SKILL.md 则取自身所在目录
+            val skillDir =
+                when {
+                    parent == null -> projectRoot
+                    parent.name == "references" -> parent.parentFile ?: projectRoot
+                    else -> parent
+                }
+            backtickedSpans(text).forEach { token ->
+                val path = token.replace((92).toChar(), (47).toChar()).removePrefix("./")
+                when {
+                    // Class#method 形式的红线引用
+                    Regex("""^[A-Za-z]+#([a-z0-9_]+)$""").matches(token) -> {
+                        val method = token.substringAfter((35).toChar())
+                        if (method !in knownTests) violations.add(rel + " -> 引用了不存在的红线 " + token)
+                    }
+                    // 纯 snake_case：AGENTS 里只应是测试名
+                    file.name == "AGENTS.md" && Regex("""^[a-z][a-z0-9_]{11,}$""").matches(token) -> {
+                        if (token !in knownTests) violations.add(rel + " -> 引用了不存在的测试/标识符 " + token)
+                    }
+                    // references/ 相对所在 skill 目录
+                    path.startsWith("references/") && file.absolutePath.contains(".agents/skills") -> {
+                        if (!File(skillDir, path).exists()) violations.add(rel + " -> 引用了不存在的 reference " + token)
+                    }
+                    // 我们的 skill 目录：minibgm-xxx/references/...
+                    path.startsWith("minibgm-") -> {
+                        if (!File(File(projectRoot, ".agents/skills"), path).exists()) {
+                            violations.add(rel + " -> 引用了不存在的 skill 路径 " + token)
+                        }
+                    }
+                    // 仓库相对路径（保守判据：纯 ASCII、首段必须是已知顶层目录、非生成目录）
+                    looksLikeRepoPath(path) -> {
+                        if (!File(projectRoot, path).exists()) violations.add(rel + " -> 引用了不存在的路径 " + token)
+                    }
+                }
+            }
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "文档引用了不存在的东西（测试名 / 路径 / reference）——文档说谎比写长更糟，请改成真实存在的名字：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
+    /**
+     * skill 必须**渐进披露**：SKILL.md 只做路由与铁律，细节进 `references/`，按需读取。
+     *
+     * 反例是 4.2 万字符的单文件 SKILL.md——命中一次就全文注入，比常驻的 AGENTS.md 还贵。
+     */
+    @Test
+    fun minibgm_skills_must_stay_progressively_disclosed() {
+        val violations = mutableListOf<String>()
+        minibgmSkillDirs().forEach { dir ->
+            val skill = File(dir, "SKILL.md")
+            if (!skill.isFile) {
+                violations.add(dir.name + " -> 缺 SKILL.md")
+                return@forEach
+            }
+            val chars = skill.readText().replace("\r\n", "\n").length
+            if (chars > SKILL_MAX_CHARS) {
+                violations.add(dir.name + "/SKILL.md 有 " + chars + " 字符，超过上限 " + SKILL_MAX_CHARS)
+            }
+            val refs = File(dir, "references").listFiles().orEmpty().filter { it.isFile && it.extension == "md" }
+            refs.forEach { ref ->
+                val refChars = ref.readText().replace("\r\n", "\n").length
+                if (refChars > SKILL_REFERENCE_MAX_CHARS) {
+                    violations.add(dir.name + "/references/" + ref.name + " 有 " + refChars + " 字符，超过上限 " + SKILL_REFERENCE_MAX_CHARS)
+                }
+            }
+            if (chars > 2_000 && refs.isEmpty()) {
+                violations.add(dir.name + " -> SKILL.md 超过 2000 字符却没有 references/ 分流")
+            }
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "skill 必须渐进披露（SKILL.md 做路由 + 铁律，细节进 references/ 按需读）：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
     @Test
     fun feature_sources_never_hardcode_compose_colors() {
         val featureDir = File(projectRoot, "feature")
@@ -2911,5 +3064,11 @@ class ArchitectureRulesTest {
 
         /** `AGENTS.md` 单行字符上限：巨型 bullet 既没人读，也拆不出可评审的 diff */
         const val AGENTS_MD_MAX_LINE_CHARS = 900
+
+        /** 单个 `SKILL.md` 的上限：路由 + 铁律够用，细节必须进 references/ */
+        const val SKILL_MAX_CHARS = 6_000
+
+        /** 单个 reference 的上限：一次 read 不该把上下文顶爆 */
+        const val SKILL_REFERENCE_MAX_CHARS = 14_000
     }
 }
