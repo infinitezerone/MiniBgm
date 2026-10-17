@@ -354,7 +354,23 @@ fun PlayerScreen(
                 val text =
                     event.message?.takeIf { it.isNotBlank() }
                         ?: context.getString(event.messageRes, *event.formatArgs.toTypedArray())
-                snackbarHostState.showSnackbar(text)
+                // 动作按钮文案以 @StringRes 下发，非 Composable 回调内必须经 resources 解析（配置变更才刷新）
+                val actionLabel =
+                    event.action
+                        ?.takeIf { event.actionRes != 0 }
+                        ?.let { context.resources.getString(event.actionRes) }
+                val result =
+                    snackbarHostState.showSnackbar(
+                        message = text,
+                        actionLabel = actionLabel,
+                        duration = if (actionLabel != null) SnackbarDuration.Long else SnackbarDuration.Short,
+                    )
+                // 换线失败的「切换线路」直接把用户送回统一线路面板，省掉「先找入口再点线路」那一次点击
+                if (result == SnackbarResult.ActionPerformed &&
+                    event.action == PlayerUiEvent.PlayerSnackbarAction.OPEN_SOURCES
+                ) {
+                    openSourcesPanel()
+                }
             }
             is PlayerUiEvent.MarkedWatched -> Unit
         }

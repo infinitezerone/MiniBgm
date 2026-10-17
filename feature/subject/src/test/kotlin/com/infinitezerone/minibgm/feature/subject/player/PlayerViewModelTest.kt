@@ -2176,7 +2176,15 @@ class PlayerViewModelTest {
             assertEquals("切源失败后选中项必须回退到仍在播的线路", 0, state.selectedSourceIndex)
             assertEquals("direct", state.playingSourceId)
             assertNull("仍在播放时禁止落全屏错误态", state.error)
-            assertTrue("失败原因必须以轻提示透出", vm.events.first() is PlayerUiEvent.ShowSnackbar)
+            val event = vm.events.first()
+            assertTrue("失败原因必须以轻提示透出", event is PlayerUiEvent.ShowSnackbar)
+            val snackbar = event as PlayerUiEvent.ShowSnackbar
+            assertEquals(
+                "换线失败的提示必须带「切换线路」动作：面板收起前提下把重试从 2 击降到 1 击",
+                PlayerUiEvent.PlayerSnackbarAction.OPEN_SOURCES,
+                snackbar.action,
+            )
+            assertEquals(R.string.feature_subject_player_switch_source, snackbar.actionRes)
         }
 
     @Test

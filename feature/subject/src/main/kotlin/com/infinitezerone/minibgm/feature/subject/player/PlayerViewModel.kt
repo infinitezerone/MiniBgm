@@ -239,11 +239,30 @@ sealed interface PlayerUiEvent {
         @StringRes val messageRes: Int = 0,
         /** [messageRes] 的格式化参数 */
         val formatArgs: List<String> = emptyList(),
+        /**
+         * 可选动作按钮的文案资源（如换线失败后的「切换线路」）；0 表示这条提示没有动作。
+         *
+         * 只带资源 ID 与语义、不塞 lambda：UI 侧据此映射到本页已有入口，
+         * ViewModel 不持有 UI 回调，配置变更后重新投递也依然成立。
+         */
+        @StringRes val actionRes: Int = 0,
+        /** 动作语义；null 表示纯告知型提示 */
+        val action: PlayerSnackbarAction? = null,
     ) : PlayerUiEvent
 
     data class MarkedWatched(
         val epNumber: Int,
     ) : PlayerUiEvent
+
+    /**
+     * 一次性提示上可携带的动作语义。
+     *
+     * 只枚举「要做什么」，具体入口由 UI 侧映射（避免事件携带 ViewModel / Composable 引用）。
+     */
+    enum class PlayerSnackbarAction {
+        /** 换个播放线路：重新打开统一线路面板（横竖屏各走自己的形态） */
+        OPEN_SOURCES,
+    }
 }
 
 /**
@@ -1771,7 +1790,16 @@ class PlayerViewModel(
                     resolveAttemptTotal = 0,
                 )
             }
-            _events.send(PlayerUiEvent.ShowSnackbar(message))
+            // 换线失败后用户的下一个动作几乎必然是「换一条线」：把面板入口做成这条提示的动作按钮。
+            // 面板仍然是「选中即收起」语义，但重试路径从 2 击（点线路入口 + 点线路）降到 1 击。
+            val canSwitch = state.sources.size > 1
+            _events.send(
+                PlayerUiEvent.ShowSnackbar(
+                    message = message,
+                    actionRes = if (canSwitch) R.string.feature_subject_player_switch_source else 0,
+                    action = PlayerUiEvent.PlayerSnackbarAction.OPEN_SOURCES.takeIf { canSwitch },
+                ),
+            )
         } else {
             _uiState.update {
                 it.copy(
