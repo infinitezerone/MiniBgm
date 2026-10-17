@@ -21,6 +21,8 @@ class PlayerViewComponentsTest {
     fun formatDuration_formatsHoursCorrectly() {
         assertEquals("01:00:00", formatDuration(3600 * 1000L))
         assertEquals("01:01:05", formatDuration((3600 + 65) * 1000L))
+        assertEquals("00:05:00", formatDuration(5 * 60 * 1000L, forceHours = true))
+        assertEquals("00:00:00", formatDuration(0L, forceHours = true))
     }
 
     @Test
@@ -285,5 +287,26 @@ class PlayerViewComponentsTest {
         assertEquals(0.5f, calculateProgressBarFraction(500f, 1000f), 0.0001f)
         assertEquals(0f, calculateProgressBarFraction(500f, 0f), 0.0001f)
         assertEquals(0f, calculateProgressBarFraction(500f, -100f), 0.0001f)
+    }
+
+    @Test
+    fun calculateProgressBarFraction_withThumbRadiusAlignsGeometry() {
+        val totalWidth = 500f
+        val thumbRadiusPx = 20f
+        // Start of travel: touch <= thumbRadiusPx -> exactly 0f
+        assertEquals(0f, calculateProgressBarFraction(0f, totalWidth, thumbRadiusPx), 0.0001f)
+        assertEquals(0f, calculateProgressBarFraction(20f, totalWidth, thumbRadiusPx), 0.0001f)
+        assertEquals(0f, calculateProgressBarFraction(10f, totalWidth, thumbRadiusPx), 0.0001f)
+
+        // End of travel: touch >= totalWidth - thumbRadiusPx (480f) -> exactly 1f
+        assertEquals(1f, calculateProgressBarFraction(480f, totalWidth, thumbRadiusPx), 0.0001f)
+        assertEquals(1f, calculateProgressBarFraction(500f, totalWidth, thumbRadiusPx), 0.0001f)
+        assertEquals(1f, calculateProgressBarFraction(520f, totalWidth, thumbRadiusPx), 0.0001f)
+
+        // Middle of travel: touch = 250f -> exactly 0.5f
+        assertEquals(0.5f, calculateProgressBarFraction(250f, totalWidth, thumbRadiusPx), 0.0001f)
+
+        // Quarter of travel: 20 + 0.25 * 460 = 135f -> exactly 0.25f
+        assertEquals(0.25f, calculateProgressBarFraction(135f, totalWidth, thumbRadiusPx), 0.0001f)
     }
 }

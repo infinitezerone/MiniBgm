@@ -443,7 +443,13 @@ private class PlayerGesturesNode(
                         when (dragMode) {
                             DragMode.HORIZONTAL_SEEK -> {
                                 if (total > 0L) {
-                                    val deltaMs = calculateSeekDeltaMs(dragAccumulatedX, width.toFloat(), total)
+                                    val effectiveDragX =
+                                        if (dragAccumulatedX > 0f) {
+                                            (dragAccumulatedX - thresholdPx).coerceAtLeast(0f)
+                                        } else {
+                                            (dragAccumulatedX + thresholdPx).coerceAtMost(0f)
+                                        }
+                                    val deltaMs = calculateSeekDeltaMs(effectiveDragX, width.toFloat(), total)
                                     seekTargetMs = (initialPositionMs + deltaMs).coerceIn(0L, total)
                                     val currentProgress = (seekTargetMs.toFloat() / total.toFloat()).coerceIn(0f, 1f)
                                     onScrubbing(true, currentProgress)

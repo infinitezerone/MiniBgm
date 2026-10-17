@@ -40,13 +40,16 @@ import java.util.Locale
 /**
  * 格式化时间毫秒为 mm:ss 或 hh:mm:ss 格式
  */
-internal fun formatDuration(millis: Long): String {
-    if (millis <= 0L) return "00:00"
+internal fun formatDuration(
+    millis: Long,
+    forceHours: Boolean = false,
+): String {
+    if (millis <= 0L) return if (forceHours) "00:00:00" else "00:00"
     val totalSeconds = millis / 1000L
     val seconds = totalSeconds % 60
     val minutes = (totalSeconds / 60) % 60
     val hours = totalSeconds / 3600
-    return if (hours > 0) {
+    return if (hours > 0 || forceHours) {
         String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, seconds)
     } else {
         String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)

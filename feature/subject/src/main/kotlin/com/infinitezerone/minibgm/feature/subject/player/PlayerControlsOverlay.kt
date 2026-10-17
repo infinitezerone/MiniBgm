@@ -16,10 +16,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -302,28 +302,6 @@ internal fun PlayerControlsOverlay(
                     0f
                 }
 
-            // 拖拽悬停浮动时间气泡（居中悬浮）
-            if (isScrubbing && totalDuration > 0L) {
-                val scrubMs = (scrubProgress * totalDuration).toLong()
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color.Black.copy(alpha = 0.88f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopCenter)
-                            .offset(y = (-36).dp),
-                ) {
-                    Text(
-                        text = "${formatDuration(scrubMs)} / ${formatDuration(totalDuration)}",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
-                }
-            }
-
             // 纯粹的单行控制栏（Single-Row Inline Controls）
             Row(
                 modifier =
@@ -359,14 +337,22 @@ internal fun PlayerControlsOverlay(
 
                 Spacer(modifier = Modifier.width(4.dp))
 
-                // 2. 当前时间
+                // 2. 当前时间（启用 tnum 等宽数字并固定最小占位，杜绝数字跳动挤压进度条产生肉眼可见的伸缩抖动）
                 val displayPosition =
                     if (isScrubbing) (scrubProgress * totalDuration).toLong() else currentPosition
+                val hasHours = totalDuration >= 3600_000L
+                val timeMinWidth = if (hasHours) 56.dp else 40.dp
+                val timeTextStyle =
+                    MaterialTheme.typography.labelSmall.copy(
+                        fontFeatureSettings = "tnum",
+                    )
                 Text(
-                    text = formatDuration(displayPosition),
-                    style = MaterialTheme.typography.labelSmall,
+                    text = formatDuration(displayPosition, forceHours = hasHours),
+                    style = timeTextStyle,
                     fontWeight = FontWeight.Medium,
                     color = Color.White.copy(alpha = 0.95f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.widthIn(min = timeMinWidth),
                 )
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -390,10 +376,12 @@ internal fun PlayerControlsOverlay(
 
                 // 4. 总时间
                 Text(
-                    text = formatDuration(totalDuration),
-                    style = MaterialTheme.typography.labelSmall,
+                    text = formatDuration(totalDuration, forceHours = hasHours),
+                    style = timeTextStyle,
                     fontWeight = FontWeight.Medium,
                     color = Color.White.copy(alpha = 0.75f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.widthIn(min = timeMinWidth),
                 )
 
                 // 5. 横屏全屏扩展控件（竖屏收拢至右上角设置）

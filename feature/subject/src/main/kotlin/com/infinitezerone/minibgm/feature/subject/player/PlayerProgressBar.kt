@@ -76,7 +76,8 @@ internal fun PlayerProgressBar(
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val width = size.width.toFloat()
-                        val fraction = calculateProgressBarFraction(down.position.x, width)
+                        val thumbRadiusPx = 7.dp.toPx()
+                        val fraction = calculateProgressBarFraction(down.position.x, width, thumbRadiusPx)
                         currentOnScrubStart()
                         currentOnScrubbing(fraction)
 
@@ -85,7 +86,7 @@ internal fun PlayerProgressBar(
                             drag(down.id) { change ->
                                 if (change.positionChange() != Offset.Zero) {
                                     change.consume()
-                                    currentFraction = calculateProgressBarFraction(change.position.x, width)
+                                    currentFraction = calculateProgressBarFraction(change.position.x, width, thumbRadiusPx)
                                     currentOnScrubbing(currentFraction)
                                 }
                             }
@@ -160,13 +161,18 @@ internal fun PlayerProgressBar(
 
 /**
  * 屏幕/触摸 X 坐标映射为 [0f, 1f] 进度比例纯函数
+ *
+ * 几何对齐：有效行程为 [thumbRadiusPx, totalWidth - thumbRadiusPx]，
+ * 使得 Thumb 圆心始终精确锁定在用户手指落点下方，彻底杜绝起点跳字、终点无法拉满与手指 Thumb 漂移问题。
  */
 internal fun calculateProgressBarFraction(
     touchX: Float,
     totalWidth: Float,
+    thumbRadiusPx: Float = 0f,
 ): Float {
-    if (totalWidth <= 0f) return 0f
-    return (touchX / totalWidth).coerceIn(0f, 1f)
+    val travel = totalWidth - 2f * thumbRadiusPx
+    if (travel <= 0f) return 0f
+    return ((touchX - thumbRadiusPx) / travel).coerceIn(0f, 1f)
 }
 
 /**
