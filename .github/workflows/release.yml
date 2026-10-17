@@ -176,6 +176,23 @@ jobs:
           done < native/abis.txt
           ls -la release-artifacts/
 
+      # 客户端内置的是构建期从同一批 .so 算出的 SHA-256 清单。
+      # 这里对最终上传资产做逐字节复核，任何收集/复制漂移都会在发布前 fail-closed。
+      - name: Verify native plugin hashes
+        run: |
+          manifest="core/data/build/generated/nativePluginHashes/native-plugin-sha256.txt"
+          [ -f "$manifest" ] || { echo "::error::缺少原生扩展哈希清单 $manifest"; exit 1; }
+          while read -r abi expected; do
+            [ -n "$abi" ] || continue
+            asset="release-artifacts/libminibgm_torrent-${abi}.so"
+            [ -f "$asset" ] || { echo "::error::缺少原生扩展资产 $asset"; exit 1; }
+            actual=$(sha256sum "$asset" | awk '{print $1}')
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::$asset SHA-256 与 APK 内置清单不一致：expected=$expected actual=$actual"
+              exit 1
+            fi
+          done < "$manifest"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')

@@ -22,6 +22,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 internal interface NativeTorrentBridge {
@@ -60,6 +61,7 @@ class AndroidTorrentStreamEngine internal constructor(
     private val pluginVersionProvider: () -> String = { resolveAppVersion(context) },
     private val supportedAbisProvider: () -> Array<String> = { android.os.Build.SUPPORTED_ABIS },
     private val nativeBridge: NativeTorrentBridge = JniNativeTorrentBridge,
+    private val expectedPluginHashes: Map<String, String> = NativePluginHashes.BY_ABI,
     private val statsPollIntervalMs: Long = DEFAULT_STATS_POLL_INTERVAL_MS,
 ) : TorrentStreamEngine {
     constructor(
@@ -170,6 +172,13 @@ class AndroidTorrentStreamEngine internal constructor(
                             IllegalStateException("当前设备架构 (${supportedDeviceAbis.joinToString()}) 不支持 BT 原生扩展"),
                         )
 
+                val expectedHash = expectedPluginHashes[abi]?.trim().orEmpty()
+                if (expectedHash.isEmpty()) {
+                    val message = "当前版本未内置 $abi 的 BT 原生扩展校验清单，已拒绝安装"
+                    _streamState.value = TorrentStreamState.Error(message)
+                    return@withLock Result.failure(IllegalStateException(message))
+                }
+
                 val currentVersion = pluginVersionProvider()
                 val modulesRoot = File(context.filesDir, PLUGIN_DIR_REL_PATH).apply { mkdirs() }
                 cleanStalePluginDirs(modulesRoot, expectedDirName = versionDirName(currentVersion))
@@ -178,11 +187,10 @@ class AndroidTorrentStreamEngine internal constructor(
                 val targetSoFile = File(versionDir, PLUGIN_SO_NAME)
                 val stagingFile = File(versionDir, "$PLUGIN_SO_NAME$STAGING_SUFFIX")
 
+                // 固定版本 URL 是唯一合法来源：latest 会在 app 与插件版本错位时
+                // 装入 ABI/JNI 契约不匹配的原生库，且无法与 APK 内置哈希清单对齐。
                 val candidateReleaseUrls =
-                    listOf(
-                        "$RELEASE_REPO_BASE_URL/download/v$currentVersion/libminibgm_torrent-$abi.so",
-                        "$RELEASE_PLUGIN_BASE_URL/libminibgm_torrent-$abi.so",
-                    ).distinct()
+                    listOf("$RELEASE_REPO_BASE_URL/download/v$currentVersion/libminibgm_torrent-$abi.so")
 
                 _streamState.value = TorrentStreamState.InstallingPlugin(0f)
 
@@ -212,10 +220,15 @@ class AndroidTorrentStreamEngine internal constructor(
                                 .first()
 
                         if (dlState is DownloadState.Completed && stagingFile.isFile && stagingFile.length() > 0L) {
-                            downloaded = true
-                            break
+                            if (verifyPluginIntegrity(stagingFile, abi)) {
+                                downloaded = true
+                                break
+                            }
+                            lastErrMsg = "BT 原生扩展完整性校验失败（$abi），已删除不可信文件"
+                            cleanStagingLeftovers(stagingFile)
+                        } else {
+                            lastErrMsg = (dlState as? DownloadState.Failed)?.message ?: lastErrMsg
                         }
-                        lastErrMsg = (dlState as? DownloadState.Failed)?.message ?: lastErrMsg
                     }
                 }
 
@@ -520,17 +533,24 @@ class AndroidTorrentStreamEngine internal constructor(
             cleanStalePluginDirs(modulesRoot, expectedDirName = versionDirName(currentVersion))
         }
 
+        val abi = supportedAbisProvider().firstOrNull { it in SUPPORTED_ABIS }
         val dynamicSo = File(modulesRoot, "${versionDirName(currentVersion)}/$PLUGIN_SO_NAME")
-        if (dynamicSo.isFile && dynamicSo.length() > 0L) {
-            val loaded =
-                runCatching {
-                    dynamicSo.setReadOnly()
-                    nativeBridge.loadFromPath(dynamicSo.absolutePath)
-                }.getOrDefault(false)
-            if (loaded) {
-                loadedVersion = currentVersion
-                loadedDynamicFile = dynamicSo
-                return true
+        if (abi != null && dynamicSo.isFile && dynamicSo.length() > 0L) {
+            if (!verifyPluginIntegrity(dynamicSo, abi)) {
+                logger.w { "已缓存的 BT 原生扩展完整性校验失败，删除后回退内置库: ${dynamicSo.absolutePath}" }
+                dynamicSo.setWritable(true)
+                dynamicSo.delete()
+            } else {
+                val loaded =
+                    runCatching {
+                        dynamicSo.setReadOnly()
+                        nativeBridge.loadFromPath(dynamicSo.absolutePath)
+                    }.getOrDefault(false)
+                if (loaded) {
+                    loadedVersion = currentVersion
+                    loadedDynamicFile = dynamicSo
+                    return true
+                }
             }
         }
 
@@ -555,6 +575,32 @@ class AndroidTorrentStreamEngine internal constructor(
                 leftover.delete()
             }
         }
+    }
+
+    /**
+     * 校验动态原生扩展的 SHA-256。
+     *
+     * 期望值来自构建期生成并写入签名 APK 的 [NativePluginHashes]；
+     * 缺失期望值、读取失败或哈希不一致一律 fail-closed，绝不越过校验去 `System.load`。
+     */
+    private fun verifyPluginIntegrity(
+        file: File,
+        abi: String,
+    ): Boolean {
+        val expected = expectedPluginHashes[abi]?.trim()?.lowercase()
+        if (expected.isNullOrEmpty()) {
+            logger.e { "缺少 $abi 的 BT 原生扩展期望哈希，拒绝装载: ${file.absolutePath}" }
+            return false
+        }
+        val actual = runCatching { sha256Hex(file) }.getOrNull()
+        if (actual == null || actual != expected) {
+            logger.e {
+                "BT 原生扩展 SHA-256 校验失败 ($abi): expected=${expected.take(16)}…, " +
+                    "actual=${actual?.take(16) ?: "读取失败"}…, file=${file.absolutePath}"
+            }
+            return false
+        }
+        return true
     }
 
     private fun cleanStalePluginDirs(
@@ -592,7 +638,12 @@ class AndroidTorrentStreamEngine internal constructor(
             extractedSo.copyTo(stagingFile, overwrite = true)
             _streamState.value = TorrentStreamState.InstallingPlugin(0.95f)
             delay(100)
-            return stagingFile.isFile && stagingFile.length() > 0L
+            val verified =
+                stagingFile.isFile &&
+                    stagingFile.length() > 0L &&
+                    verifyPluginIntegrity(stagingFile, abi)
+            if (!verified) cleanStagingLeftovers(stagingFile)
+            return verified
         }
 
         val apkPaths =
@@ -629,7 +680,9 @@ class AndroidTorrentStreamEngine internal constructor(
                 }.getOrDefault(false)
             if (extracted && stagingFile.isFile && stagingFile.length() > 0L) {
                 delay(150)
-                return true
+                val verified = verifyPluginIntegrity(stagingFile, abi)
+                if (!verified) cleanStagingLeftovers(stagingFile)
+                return verified
             }
         }
         return false
@@ -692,8 +745,6 @@ class AndroidTorrentStreamEngine internal constructor(
         internal const val DEFAULT_PLUGIN_VERSION = "0.2.8"
         internal const val RELEASE_REPO_BASE_URL =
             "https://github.com/infinitezerone/MiniBgm/releases"
-        internal const val RELEASE_PLUGIN_BASE_URL =
-            "$RELEASE_REPO_BASE_URL/latest/download"
 
         /** 可接受的插件架构集合，真源为仓库根 `native/abis.txt`（由 NativeAbiContractTest 强制一致） */
         internal val SUPPORTED_ABIS = setOf("arm64-v8a", "x86_64")
@@ -708,6 +759,21 @@ class AndroidTorrentStreamEngine internal constructor(
                     .substringBefore(".debug")
                     .trim()
             return cleaned.ifEmpty { DEFAULT_PLUGIN_VERSION }
+        }
+
+        internal fun sha256Hex(file: File): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read <= 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            return digest.digest().joinToString(separator = "") { byte ->
+                (byte.toInt() and 0xFF).toString(16).padStart(2, '0')
+            }
         }
 
         private fun resolveAppVersion(context: Context): String {

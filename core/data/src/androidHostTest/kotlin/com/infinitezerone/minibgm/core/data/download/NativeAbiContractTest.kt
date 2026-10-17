@@ -22,6 +22,24 @@ class NativeAbiContractTest {
         )
     }
 
+    @Test
+    fun embeddedPluginHashes_matchPrebuiltBinaries() {
+        val manifestAbis = readNativeAbiManifest()
+        assertEquals(
+            manifestAbis,
+            NativePluginHashes.BY_ABI.keys,
+            "内置 SHA-256 清单必须覆盖 native/abis.txt 的全部 ABI。",
+        )
+        manifestAbis.forEach { abi ->
+            val so = findFromRepoRoot("core/data/build/torrent-native/jniLibs/$abi/libminibgm_torrent.so")
+            assertEquals(
+                NativePluginHashes.BY_ABI.getValue(abi),
+                AndroidTorrentStreamEngine.sha256Hex(so),
+                "$abi 的内置 SHA-256 与实际预构建 .so 不一致：哈希清单生成未接线或被绕过。",
+            )
+        }
+    }
+
     private fun readNativeAbiManifest(): Set<String> =
         findFromRepoRoot("native/abis.txt")
             .readLines()

@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.nio.file.Files
-import java.util.concurrent.atomic.AtomicInteger
+import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -89,12 +89,13 @@ class TorrentStreamEngineTest {
                 assertTrue(staleSo.exists())
 
                 val requestedUrls = mutableListOf<String>()
+                val payload = ByteArray(1024) { 0x7F }
                 val downloader =
                     StubAssetDownloader { url, destinationPath ->
                         requestedUrls += url
                         File(destinationPath).apply {
                             parentFile?.mkdirs()
-                            writeBytes(ByteArray(1024) { 0x7F })
+                            writeBytes(payload)
                         }
                         DownloadState.Completed(filePath = destinationPath, totalBytes = 1024L)
                     }
@@ -108,6 +109,7 @@ class TorrentStreamEngineTest {
                         pluginVersionProvider = { currentVersion },
                         supportedAbisProvider = { arrayOf("arm64-v8a") },
                         nativeBridge = bridge,
+                        expectedPluginHashes = mapOf("arm64-v8a" to sha256Hex(payload)),
                     )
 
                 assertFalse(engine.isPluginInstalled())
@@ -137,25 +139,17 @@ class TorrentStreamEngineTest {
         }
 
     @Test
-    fun androidEngine_installPlugin_fallsBackToLatestWhenVersionedTag404s_andSerializesConcurrentCalls() =
+    fun androidEngine_installPlugin_versionedTag404_failsClosedWithoutLatestFallback_andSerializesConcurrentCalls() =
         runTest {
-            val tempRoot = Files.createTempDirectory("minibgm_torrent_fallback_test").toFile()
+            val tempRoot = Files.createTempDirectory("minibgm_torrent_missing_tag_test").toFile()
             try {
                 val context = StubDirContext(tempRoot)
-                val downloadCalls = AtomicInteger(0)
+                val requestedUrls = mutableListOf<String>()
                 val downloader =
-                    StubAssetDownloader { url, destinationPath ->
-                        downloadCalls.incrementAndGet()
+                    StubAssetDownloader { url, _ ->
+                        requestedUrls += url
                         delay(20)
-                        if (url.contains("/download/v0.9.9/")) {
-                            DownloadState.Failed("HTTP 404")
-                        } else {
-                            File(destinationPath).apply {
-                                parentFile?.mkdirs()
-                                writeBytes(ByteArray(512) { 1 })
-                            }
-                            DownloadState.Completed(filePath = destinationPath, totalBytes = 512L)
-                        }
+                        DownloadState.Failed("HTTP 404")
                     }
                 val bridge = StubNativeTorrentBridge()
                 val engine =
@@ -165,35 +159,19 @@ class TorrentStreamEngineTest {
                         pluginVersionProvider = { "0.9.9" },
                         supportedAbisProvider = { arrayOf("x86_64") },
                         nativeBridge = bridge,
+                        expectedPluginHashes = mapOf("x86_64" to sha256Hex(ByteArray(512) { 1 })),
                     )
 
-                // Launch two concurrent installPlugin() calls; Mutex should ensure second sees installed state
+                // 两个并发调用都会被 Mutex 串行化；每个调用只尝试固定版本 URL。
                 val first = async { engine.installPlugin() }
                 val second = async { engine.installPlugin() }
 
-                assertTrue(first.await().isSuccess)
-                assertTrue(second.await().isSuccess)
-                // Only 2 HTTP attempts total (1 failed tag URL + 1 succeeded latest fallback), not 4
-                assertEquals(2, downloadCalls.get())
-
-                val streamRes =
-                    engine.startStream(
-                        title = "[Sub] Ep 01",
-                        magnetUrl = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
-                        torrentUrl = "https://example.com/ep01.torrent",
-                    )
-                assertTrue(streamRes.isSuccess)
-                assertEquals("http://127.0.0.1:18080/stream/0", streamRes.getOrNull())
-
-                // Second call hits cached .torrent file
-                val cachedStreamRes =
-                    engine.startStream(
-                        title = "[Sub] Ep 01",
-                        magnetUrl = "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
-                        torrentUrl = "https://example.com/ep01.torrent",
-                    )
-                assertTrue(cachedStreamRes.isSuccess)
-                engine.stopStream()
+                assertTrue(first.await().isFailure)
+                assertTrue(second.await().isFailure)
+                assertEquals(2, requestedUrls.size)
+                assertTrue(requestedUrls.all { it.contains("/download/v0.9.9/") })
+                assertFalse(requestedUrls.any { it.contains("/latest/") })
+                assertTrue(engine.streamState.value is TorrentStreamState.Error)
             } finally {
                 tempRoot.walkBottomUp().forEach {
                     it.setWritable(true)
@@ -216,11 +194,12 @@ class TorrentStreamEngineTest {
             val tempRoot = Files.createTempDirectory("minibgm_torrent_debug_panel").toFile()
             try {
                 val context = StubDirContext(tempRoot)
+                val payload = ByteArray(256) { 1 }
                 val downloader =
                     StubAssetDownloader { _, destinationPath ->
                         File(destinationPath).apply {
                             parentFile?.mkdirs()
-                            writeBytes(ByteArray(256) { 1 })
+                            writeBytes(payload)
                         }
                         DownloadState.Completed(filePath = destinationPath, totalBytes = 256L)
                     }
@@ -232,6 +211,7 @@ class TorrentStreamEngineTest {
                         pluginVersionProvider = { "0.2.8" },
                         supportedAbisProvider = { arrayOf("arm64-v8a") },
                         nativeBridge = bridge,
+                        expectedPluginHashes = mapOf("arm64-v8a" to sha256Hex(payload)),
                     )
 
                 // Default in Debug APK: embedded library is available
@@ -505,9 +485,88 @@ class TorrentStreamEngineTest {
                 }
             }
         }
+
+    @Test
+    fun androidEngine_installPlugin_rejectsHashMismatch_andDeletesStaging() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_torrent_hash_mismatch").toFile()
+            try {
+                val context = StubDirContext(tempRoot)
+                val downloadedPayload = ByteArray(1024) { 0x42 }
+                val downloader =
+                    StubAssetDownloader { _, destinationPath ->
+                        File(destinationPath).apply {
+                            parentFile?.mkdirs()
+                            writeBytes(downloadedPayload)
+                        }
+                        DownloadState.Completed(filePath = destinationPath, totalBytes = 1024L)
+                    }
+                val engine =
+                    AndroidTorrentStreamEngine(
+                        context = context,
+                        assetDownloader = downloader,
+                        pluginVersionProvider = { "0.2.8" },
+                        supportedAbisProvider = { arrayOf("arm64-v8a") },
+                        nativeBridge = StubNativeTorrentBridge(),
+                        expectedPluginHashes = mapOf("arm64-v8a" to "00".repeat(32)),
+                    )
+
+                assertTrue(engine.installPlugin().isFailure)
+                assertFalse(engine.isPluginInstalled())
+
+                val versionedSo = File(context.filesDir, "modules/torrent/v0.2.8/libminibgm_torrent.so")
+                assertFalse(versionedSo.exists(), "哈希不匹配的 .so 绝不能落到最终加载路径")
+                assertFalse(
+                    File(context.filesDir, "modules/torrent/v0.2.8/libminibgm_torrent.so.staging").exists(),
+                    "哈希不匹配的 staging 文件必须被清理",
+                )
+                assertTrue(engine.streamState.value is TorrentStreamState.Error)
+            } finally {
+                tempRoot.walkBottomUp().forEach {
+                    it.setWritable(true)
+                    it.delete()
+                }
+            }
+        }
+
+    @Test
+    fun androidEngine_isPluginInstalled_deletesTamperedCachedSo() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_torrent_tampered_cache").toFile()
+            try {
+                val context = StubDirContext(tempRoot)
+                val tamperedPayload = ByteArray(1024) { 0x24 }
+                val versionedSo =
+                    File(context.filesDir, "modules/torrent/v0.2.8/libminibgm_torrent.so").apply {
+                        parentFile?.mkdirs()
+                        writeBytes(tamperedPayload)
+                    }
+                val engine =
+                    AndroidTorrentStreamEngine(
+                        context = context,
+                        pluginVersionProvider = { "0.2.8" },
+                        supportedAbisProvider = { arrayOf("arm64-v8a") },
+                        nativeBridge = StubNativeTorrentBridge(),
+                        expectedPluginHashes = mapOf("arm64-v8a" to sha256Hex(ByteArray(1024) { 0x7F })),
+                    )
+
+                assertFalse(engine.isPluginInstalled(), "被篡改的已缓存 .so 不得被装载")
+                assertFalse(versionedSo.exists(), "校验失败的缓存文件必须删除，避免下次启动再次命中")
+            } finally {
+                tempRoot.walkBottomUp().forEach {
+                    it.setWritable(true)
+                    it.delete()
+                }
+            }
+        }
 }
 
 private fun validTorrentBytes(): ByteArray = "d8:announce14:http://tracker4:infod6:lengthi1e4:name3:abcee".toByteArray(Charsets.ISO_8859_1)
+
+private fun sha256Hex(bytes: ByteArray): String =
+    MessageDigest.getInstance("SHA-256").digest(bytes).joinToString(separator = "") { byte ->
+        (byte.toInt() and 0xFF).toString(16).padStart(2, '0')
+    }
 
 private class StubDirContext(
     private val rootDir: File,
