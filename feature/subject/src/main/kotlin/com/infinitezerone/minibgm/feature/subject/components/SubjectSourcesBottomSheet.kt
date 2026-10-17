@@ -719,11 +719,10 @@ fun SubjectSourcesBottomSheet(
                         Spacer(modifier = Modifier.height(4.dp))
                     }
                 } else {
-                    Text(
-                        text = stringResource(R.string.feature_subject_source_no_online_routes),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+                    SourceEmptyStateCard(
+                        title = stringResource(R.string.feature_subject_source_no_online_routes),
+                        subtitle = stringResource(R.string.feature_subject_source_manage_desc),
+                        iconVector = BgmIcons.Settings,
                     )
                 }
                 if (onManageRules != null) {
@@ -1370,14 +1369,13 @@ fun TorrentMediaResourcesSection(
         },
     )
     if (!hasTorrentRules) {
-        Text(
-            text = stringResource(R.string.feature_subject_source_torrent_no_rules),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+        SourceEmptyStateCard(
+            title = stringResource(R.string.feature_subject_source_torrent_no_rules),
+            subtitle = stringResource(R.string.feature_subject_source_manage_desc),
+            iconVector = BgmIcons.Settings,
         )
         if (onManageRules != null) {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             BgmSourceActionCard(
                 title = stringResource(R.string.feature_subject_source_torrent_configure_rules),
                 subtitle = stringResource(R.string.feature_subject_source_manage_desc),
@@ -1390,20 +1388,30 @@ fun TorrentMediaResourcesSection(
                 },
             )
         }
-    } else if (isTorrentLoading) {
-        Text(
-            text = stringResource(R.string.feature_subject_source_torrent_loading),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
-        )
+    } else if (isTorrentLoading && torrentResources.isEmpty()) {
+        SourceLoadingSkeleton(count = 3)
     } else if (torrentResources.isEmpty()) {
-        Text(
-            text = stringResource(R.string.feature_subject_source_torrent_empty),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+        SourceEmptyStateCard(
+            title = stringResource(R.string.feature_subject_source_torrent_empty),
+            subtitle = stringResource(R.string.feature_subject_source_manage_desc),
+            iconVector = BgmIcons.Search,
+            actionText = if (onRefreshTorrent != null) stringResource(R.string.feature_subject_source_torrent_refresh) else null,
+            onActionClick = onRefreshTorrent,
         )
+        if (onManageRules != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            BgmSourceActionCard(
+                title = stringResource(R.string.feature_subject_source_torrent_configure_rules),
+                subtitle = stringResource(R.string.feature_subject_source_manage_desc),
+                iconVector = BgmIcons.Settings,
+                iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                onClick = {
+                    onDismissAndRun {
+                        onManageRules()
+                    }
+                },
+            )
+        }
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val visibleResources =

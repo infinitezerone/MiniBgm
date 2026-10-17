@@ -254,13 +254,12 @@ class TorrentFeedRepositoryImpl(
         val xmlContent = fetched.html
         if (xmlContent.isBlank()) {
             logger.d { "Empty response for torrent feed: $targetUrl" }
+            writeCache(cacheKey, emptyList())
             return FeedFetchResult.Success(emptyList())
         }
 
         val parsed = TorrentRssParser.parse(xmlContent, fallbackHost = host)
-        if (parsed.isNotEmpty()) {
-            writeCache(cacheKey, parsed)
-        }
+        writeCache(cacheKey, parsed)
         return FeedFetchResult.Success(parsed)
     }
 
@@ -273,7 +272,7 @@ class TorrentFeedRepositoryImpl(
             runCatching {
                 BgmHttpClient.jsonConfig.decodeFromString<List<TorrentMediaResource>>(diskJson)
             }.getOrNull()
-        if (decoded != null && decoded.isNotEmpty()) {
+        if (decoded != null) {
             cacheMutex.withLock {
                 memoryCache[key] = decoded
             }
@@ -295,7 +294,7 @@ class TorrentFeedRepositoryImpl(
             }
         }
         val targetDiskCache = diskCache
-        if (targetDiskCache != null && value.isNotEmpty()) {
+        if (targetDiskCache != null) {
             runCatching {
                 val encoded = BgmHttpClient.jsonConfig.encodeToString(value)
                 targetDiskCache.put(key, encoded)

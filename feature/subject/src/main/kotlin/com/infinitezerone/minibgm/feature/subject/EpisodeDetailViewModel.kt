@@ -394,6 +394,7 @@ class EpisodeDetailViewModel(
     }
 
     private var torrentJob: Job? = null
+    private var lastLoadedTorrentEpisodeId: Long? = null
 
     /**
      * 检索通用 P2P 种子与磁力链接资源。
@@ -413,6 +414,15 @@ class EpisodeDetailViewModel(
             return
         }
 
+        val targetEpisodeId = targetEpisode?.id ?: -1L
+        if (!forceRefresh &&
+            lastLoadedTorrentEpisodeId == targetEpisodeId &&
+            torrentState.value.first.isNotEmpty()
+        ) {
+            // 同一分集已就绪且非强制刷新：0ms 立即复用现有状态，杜绝重复调度与界面闪烁
+            return
+        }
+
         val title = subject.displayName
         val primaryEpSort = targetEpisode?.episodeNumber
         val altTitles =
@@ -424,7 +434,13 @@ class EpisodeDetailViewModel(
             ).distinct()
 
         torrentJob?.cancel()
-        torrentState.value = Pair(emptyList(), true)
+        val currentResources = torrentState.value.first
+        torrentState.value =
+            Pair(
+                if (currentResources.isNotEmpty() && lastLoadedTorrentEpisodeId == targetEpisodeId) currentResources else emptyList(),
+                true,
+            )
+        lastLoadedTorrentEpisodeId = targetEpisodeId
         torrentJob =
             viewModelScope.launch {
                 val feedRepo = torrentFeedRepository
