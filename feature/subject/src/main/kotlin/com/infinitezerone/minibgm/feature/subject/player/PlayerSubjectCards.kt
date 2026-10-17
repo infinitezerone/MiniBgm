@@ -331,6 +331,7 @@ internal fun PlayerCurrentSourceCard(
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
 
                     // 线路类型徽标（自动防叠词：若名称已有对应词则不重复贴徽标）

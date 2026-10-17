@@ -20,6 +20,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -281,10 +282,14 @@ fun BgmOverlayHost(
     hostState: OverlayHostState,
     builder: OverlayProviderScope.() -> Unit,
 ) {
-    val scope = remember(builder) { OverlayProviderScope().apply(builder) }
     val current = hostState.currentEntry
 
     if (current != null) {
+        val currentBuilder by rememberUpdatedState(builder)
+        val scope =
+            remember(current.request, currentBuilder) {
+                OverlayProviderScope().apply(currentBuilder)
+            }
         val renderer =
             scope.handlers[current.request::class]
                 ?: error(

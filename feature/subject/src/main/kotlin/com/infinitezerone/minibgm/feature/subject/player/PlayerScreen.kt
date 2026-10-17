@@ -839,18 +839,18 @@ fun PlayerScreen(
         BgmOverlayHost(hostState = overlayHostState) {
             danmakuCandidatePicker()
             playerSettingsPanel(
-                tracksSnapshot = tracksSnapshot,
-                playbackSpeed = playbackSpeed,
+                tracksSnapshot = { tracksSnapshot },
+                playbackSpeed = { playbackSpeed },
                 onSelectSpeed = { playbackSpeed = it },
-                resizeMode = resizeMode,
+                resizeMode = { resizeMode },
                 onSelectResizeMode = { resizeMode = it },
-                isDanmakuEnabled = uiState.isDanmakuEnabled,
+                isDanmakuEnabled = { uiState.isDanmakuEnabled },
                 onToggleDanmaku = viewModel::toggleDanmaku,
                 onOpenDanmakuPicker =
                     openDanmakuPicker.takeIf {
                         uiState.isDanmakuEnabled && !uiState.danmakuMatch?.candidates.isNullOrEmpty()
                     },
-                isLooping = playback.isLooping,
+                isLooping = { playback.isLooping },
                 onToggleLoop = { controller.setLooping(!playback.isLooping) },
                 onSelectQuality = {
                     controller.selectVideoQuality(it)
@@ -876,20 +876,20 @@ fun PlayerScreen(
                 onSelectAudio = controller::selectAudioTrack,
             )
             playerEpisodeQueuePanel(
-                uiState = uiState,
+                uiState = { uiState },
                 onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
                 onToggleAutoNext = viewModel::toggleAutoNext,
                 onSelectEpisode = viewModel::selectEpisode,
                 onSelectQueueIndex = viewModel::switchTo,
             )
             playerEpisodesPanel(
-                uiState = uiState,
+                uiState = { uiState },
                 onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
                 onSelectEpisode = viewModel::selectEpisode,
             )
             playerSourcesPanel(
-                uiState = uiState,
-                isLandscape = isLandscape,
+                uiState = { uiState },
+                isLandscape = { isLandscape },
                 onSelectSource = viewModel::selectSource,
                 onManageRules = onManageRules,
                 onRequestOpenSources = onRequestOpenSources,

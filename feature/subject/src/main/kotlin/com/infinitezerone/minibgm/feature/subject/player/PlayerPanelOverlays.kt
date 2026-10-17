@@ -44,15 +44,15 @@ data object PlayerSourcesRequest : OverlayRequest<Unit>
  * 右侧抽屉形态需要依赖舞台 BoxScope 且退出动画要与 respond 时序耦合，收益不抵复杂度。
  */
 fun OverlayProviderScope.playerSettingsPanel(
-    tracksSnapshot: PlayerTracksSnapshot,
-    playbackSpeed: Float,
+    tracksSnapshot: () -> PlayerTracksSnapshot,
+    playbackSpeed: () -> Float,
     onSelectSpeed: (Float) -> Unit,
-    resizeMode: PlayerResizeMode,
+    resizeMode: () -> PlayerResizeMode,
     onSelectResizeMode: (PlayerResizeMode) -> Unit,
-    isDanmakuEnabled: Boolean,
+    isDanmakuEnabled: () -> Boolean,
     onToggleDanmaku: () -> Unit,
     onOpenDanmakuPicker: (() -> Unit)?,
-    isLooping: Boolean,
+    isLooping: () -> Boolean,
     onToggleLoop: () -> Unit,
     onSelectQuality: (PlayerQualityOption) -> Unit,
     onAutoQuality: () -> Unit,
@@ -64,18 +64,18 @@ fun OverlayProviderScope.playerSettingsPanel(
     overlay<PlayerSettingsRequest, Unit> { _, onRespond ->
         PlayerTrackSelectionSheet(
             isOpen = true,
-            tracksSnapshot = tracksSnapshot,
+            tracksSnapshot = tracksSnapshot(),
             onSelectQuality = onSelectQuality,
             onAutoQuality = onAutoQuality,
             onSelectSubtitle = onSelectSubtitle,
             onDisableSubtitles = onDisableSubtitles,
             onAutoSubtitles = onAutoSubtitles,
             onSelectAudio = onSelectAudio,
-            playbackSpeed = playbackSpeed,
+            playbackSpeed = playbackSpeed(),
             onSelectSpeed = onSelectSpeed,
-            resizeMode = resizeMode,
+            resizeMode = resizeMode(),
             onSelectResizeMode = onSelectResizeMode,
-            isDanmakuEnabled = isDanmakuEnabled,
+            isDanmakuEnabled = isDanmakuEnabled(),
             onToggleDanmaku = onToggleDanmaku,
             onOpenDanmakuPicker =
                 onOpenDanmakuPicker?.let { open ->
@@ -84,7 +84,7 @@ fun OverlayProviderScope.playerSettingsPanel(
                         open()
                     }
                 },
-            isLooping = isLooping,
+            isLooping = isLooping(),
             onToggleLoop = onToggleLoop,
             onDismiss = { onRespond(Unit) },
         )
@@ -96,13 +96,14 @@ fun OverlayProviderScope.playerSettingsPanel(
  * 由 [MutableTransitionState] 驱动，BackHandler/点击遮罩都只是收起动画的触发器。
  */
 fun OverlayProviderScope.playerEpisodeQueuePanel(
-    uiState: PlayerUiState,
+    uiState: () -> PlayerUiState,
     onLoadMoreEpisodes: () -> Unit,
     onToggleAutoNext: () -> Unit,
     onSelectEpisode: (PlayerEpisodeItem) -> Unit,
     onSelectQueueIndex: (Int) -> Unit,
 ) {
     overlay<PlayerEpisodeQueueRequest, Unit> { _, onRespond ->
+        val state = uiState()
         val visibleState =
             remember {
                 MutableTransitionState(initialState = false).apply { targetState = true }
@@ -148,16 +149,16 @@ fun OverlayProviderScope.playerEpisodeQueuePanel(
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
             ) {
                 PlayerEpisodeQueueDrawer(
-                    queue = uiState.queue,
-                    currentIndex = uiState.currentIndex,
-                    episodes = uiState.episodes,
-                    selectedEpisodeSort = uiState.episodeSort,
-                    selectedEpisodeId = uiState.episodeId,
-                    selectedEpisodeType = uiState.episodeType,
-                    autoNextEnabled = uiState.autoNextEnabled,
-                    totalEpisodes = uiState.totalEpisodes,
-                    hasMoreEpisodes = uiState.hasMoreEpisodes,
-                    isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
+                    queue = state.queue,
+                    currentIndex = state.currentIndex,
+                    episodes = state.episodes,
+                    selectedEpisodeSort = state.episodeSort,
+                    selectedEpisodeId = state.episodeId,
+                    selectedEpisodeType = state.episodeType,
+                    autoNextEnabled = state.autoNextEnabled,
+                    totalEpisodes = state.totalEpisodes,
+                    hasMoreEpisodes = state.hasMoreEpisodes,
+                    isLoadingMoreEpisodes = state.isLoadingMoreEpisodes,
                     onLoadMoreEpisodes = onLoadMoreEpisodes,
                     onToggleAutoNext = onToggleAutoNext,
                     onSelectEpisode = {
@@ -179,18 +180,19 @@ fun OverlayProviderScope.playerEpisodeQueuePanel(
  * 竖屏全量选集底部弹层（Material 3 弹层自带返回键与下滑关闭语义）。
  */
 fun OverlayProviderScope.playerEpisodesPanel(
-    uiState: PlayerUiState,
+    uiState: () -> PlayerUiState,
     onLoadMoreEpisodes: () -> Unit,
     onSelectEpisode: (PlayerEpisodeItem) -> Unit,
 ) {
     overlay<PlayerEpisodesRequest, Unit> { _, onRespond ->
+        val state = uiState()
         PlayerEpisodesBottomSheet(
-            episodes = uiState.episodes,
-            selectedEpisodeSort = uiState.episodeSort,
-            selectedEpisodeId = uiState.episodeId,
-            totalEpisodes = uiState.totalEpisodes,
-            hasMoreEpisodes = uiState.hasMoreEpisodes,
-            isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
+            episodes = state.episodes,
+            selectedEpisodeSort = state.episodeSort,
+            selectedEpisodeId = state.episodeId,
+            totalEpisodes = state.totalEpisodes,
+            hasMoreEpisodes = state.hasMoreEpisodes,
+            isLoadingMoreEpisodes = state.isLoadingMoreEpisodes,
             onLoadMoreEpisodes = onLoadMoreEpisodes,
             onSelectEpisode = {
                 onSelectEpisode(it)
@@ -205,14 +207,16 @@ fun OverlayProviderScope.playerEpisodesPanel(
  * 统一播放线路选择弹层：竖屏底部弹窗，横屏右侧抽屉（与选集抽屉对齐风格，避免宽屏遮挡画面）。
  */
 fun OverlayProviderScope.playerSourcesPanel(
-    uiState: PlayerUiState,
+    uiState: () -> PlayerUiState,
     onSelectSource: (Int) -> Unit,
     onManageRules: (() -> Unit)?,
     onRequestOpenSources: (() -> Unit)? = null,
-    isLandscape: Boolean = false,
+    isLandscape: () -> Boolean = { false },
 ) {
     overlay<PlayerSourcesRequest, Unit> { _, onRespond ->
-        if (isLandscape) {
+        val state = uiState()
+        val landscape = isLandscape()
+        if (landscape) {
             val visibleState = remember { MutableTransitionState(false) }
             androidx.compose.runtime.LaunchedEffect(Unit) { visibleState.targetState = true }
             BackHandler { visibleState.targetState = false }
@@ -255,14 +259,14 @@ fun OverlayProviderScope.playerSourcesPanel(
                     modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
                 ) {
                     PlayerSourcesDrawer(
-                        sources = uiState.sources,
-                        selectedIndex = uiState.selectedSourceIndex,
-                        playingSourceId = uiState.playingSourceId,
-                        sourceFailureCounts = uiState.sourceFailureCounts,
-                        isResolvingSource = uiState.isResolvingSource,
-                        resolveAttempt = uiState.resolveAttempt,
-                        resolveAttemptTotal = uiState.resolveAttemptTotal,
-                        matchedVodName = uiState.matchedVodName,
+                        sources = state.sources,
+                        selectedIndex = state.selectedSourceIndex,
+                        playingSourceId = state.playingSourceId,
+                        sourceFailureCounts = state.sourceFailureCounts,
+                        isResolvingSource = state.isResolvingSource,
+                        resolveAttempt = state.resolveAttempt,
+                        resolveAttemptTotal = state.resolveAttemptTotal,
+                        matchedVodName = state.matchedVodName,
                         onSelectSource = { index ->
                             onSelectSource(index)
                             visibleState.targetState = false
@@ -287,14 +291,14 @@ fun OverlayProviderScope.playerSourcesPanel(
             }
         } else {
             PlayerSourcesBottomSheet(
-                sources = uiState.sources,
-                selectedIndex = uiState.selectedSourceIndex,
-                playingSourceId = uiState.playingSourceId,
-                sourceFailureCounts = uiState.sourceFailureCounts,
-                isResolvingSource = uiState.isResolvingSource,
-                resolveAttempt = uiState.resolveAttempt,
-                resolveAttemptTotal = uiState.resolveAttemptTotal,
-                matchedVodName = uiState.matchedVodName,
+                sources = state.sources,
+                selectedIndex = state.selectedSourceIndex,
+                playingSourceId = state.playingSourceId,
+                sourceFailureCounts = state.sourceFailureCounts,
+                isResolvingSource = state.isResolvingSource,
+                resolveAttempt = state.resolveAttempt,
+                resolveAttemptTotal = state.resolveAttemptTotal,
+                matchedVodName = state.matchedVodName,
                 onSelectSource = { index ->
                     onSelectSource(index)
                     onRespond(Unit)
