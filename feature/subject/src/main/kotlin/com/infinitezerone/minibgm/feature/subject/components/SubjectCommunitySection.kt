@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.model.SubjectTopic
@@ -149,110 +152,49 @@ fun SubjectCommunitySection(
 
                         if (!isExpanded && (comments.size > 5 || commentTotal > 5)) {
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { isExpanded = true }
-                                        .padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.feature_subject_community_view_more_short_reviews, commentTotal),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Icon(
-                                    imageVector = BgmIcons.KeyboardArrowDown,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
+                            ShortReviewsFooterAction(
+                                text = stringResource(R.string.feature_subject_community_view_more_short_reviews, commentTotal),
+                                onClick = { isExpanded = true },
+                                icon = BgmIcons.KeyboardArrowDown,
+                            )
                         } else if (isExpanded) {
-                            if (hasMoreComments) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                                Row(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clickable(enabled = !isLoadingMoreComments) { onLoadMoreComments() }
-                                            .padding(vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.Center,
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    if (isLoadingMoreComments) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = stringResource(R.string.feature_subject_community_short_reviews_loading),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    } else {
-                                        Text(
-                                            text =
-                                                stringResource(
-                                                    R.string.feature_subject_community_load_more_short_reviews,
-                                                    comments.size,
-                                                    commentTotal,
-                                                ),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.SemiBold,
-                                        )
-                                        Icon(
-                                            imageVector = BgmIcons.KeyboardArrowDown,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
-                                }
-                            } else if (comments.size >= commentTotal && commentTotal > 5) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                                Box(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.feature_subject_community_all_short_reviews_shown, commentTotal),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    )
-                                }
-                            }
-
+                            // 展开态只留一条分隔线收口：三种动作行统一由 ShortReviewsFooterAction 渲染，
+                            // 不再各自一套字号 / 内边距 / 箭头尺寸，也不再出现「禁用后仍是主色」的假可点
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { isExpanded = false }
-                                        .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.feature_subject_community_collapse_short_reviews),
-                                    style = MaterialTheme.labelMediumSmallOrFallback(),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            if (hasMoreComments) {
+                                ShortReviewsFooterAction(
+                                    text =
+                                        if (isLoadingMoreComments) {
+                                            stringResource(R.string.feature_subject_community_short_reviews_loading)
+                                        } else {
+                                            stringResource(
+                                                R.string.feature_subject_community_load_more_short_reviews,
+                                                comments.size,
+                                                commentTotal,
+                                            )
+                                        },
+                                    onClick = onLoadMoreComments,
+                                    icon = BgmIcons.KeyboardArrowDown,
+                                    isLoading = isLoadingMoreComments,
                                 )
-                                Icon(
-                                    imageVector = BgmIcons.KeyboardArrowUp,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(14.dp),
+                            } else if (comments.size >= commentTotal && commentTotal > 5) {
+                                ShortReviewsFooterAction(
+                                    text =
+                                        stringResource(
+                                            R.string.feature_subject_community_all_short_reviews_shown,
+                                            commentTotal,
+                                        ),
+                                    onClick = {},
+                                    emphasized = false,
+                                    enabled = false,
                                 )
                             }
+                            ShortReviewsFooterAction(
+                                text = stringResource(R.string.feature_subject_community_collapse_short_reviews),
+                                onClick = { isExpanded = false },
+                                icon = BgmIcons.KeyboardArrowUp,
+                                emphasized = false,
+                            )
                         }
                     }
                 }
@@ -502,6 +444,73 @@ fun SubjectTopicItem(
                     )
                 }
             }
+        }
+    }
+}
+
+/** 短评底部动作行的最小热区：对齐无障碍推荐值，避免「加载更多」只有一行字那么高 */
+private const val SHORT_REVIEW_FOOTER_MIN_TOUCH_DP = 44
+
+/**
+ * 短评列表底部的统一动作行（展开更多 / 加载更多 / 已全部显示 / 收起）。
+ *
+ * 此前三种状态各写一套：加载更多是 labelMedium + 8dp 内边距 + primary 加粗，收起却是
+ * labelMediumSmall + 4dp 内边距 + onSurfaceVariant，箭头还一大一小——展开与收起看起来像两个组件；
+ * 加载中又把主色文字换成灰色、行高跟着跳变，禁用后仍留着主色让人以为还能点。
+ * 统一后：同一字号与间距、≥44dp 热区、同样 16dp 箭头；加载/禁用态老实降级为次要色。
+ */
+@Composable
+private fun ShortReviewsFooterAction(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    isLoading: Boolean = false,
+    emphasized: Boolean = true,
+    enabled: Boolean = true,
+) {
+    val contentColor =
+        when {
+            isLoading -> MaterialTheme.colorScheme.onSurfaceVariant
+            emphasized -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
+        }
+
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(BgmShapes.small)
+                .heightIn(min = SHORT_REVIEW_FOOTER_MIN_TOUCH_DP.dp)
+                .clickable(enabled = enabled && !isLoading, onClick = onClick)
+                .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(14.dp),
+                strokeWidth = 2.dp,
+                color = contentColor,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (emphasized && !isLoading) FontWeight.SemiBold else FontWeight.Normal,
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (icon != null && !isLoading) {
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }
