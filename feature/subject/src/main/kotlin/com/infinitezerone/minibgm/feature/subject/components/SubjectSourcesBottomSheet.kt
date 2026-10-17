@@ -622,101 +622,103 @@ fun SubjectSourcesBottomSheet(
             onlineCount = onlineRules.size,
             torrentCount = torrentResources.size,
         )
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // 3. 📄 对应 Tab 下的纯净内容
         when (selectedTab) {
             SourceSheetTab.ONLINE -> {
                 if (onlineRules.isNotEmpty()) {
                     BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_online_routes))
-                    for (rule in onlineRules) {
-                        val epStr =
-                            episode?.let { if (it.isMain) it.formattedNumber else it.episodeInt.toString() } ?: "1"
-                        val epId = episode?.id ?: 0L
-                        val resolvedUrl =
-                            remember(rule, displayName, epStr, subject.id, epId) {
-                                rule.resolveUrl(
-                                    title = displayName,
-                                    ep = epStr,
-                                    subjectId = subject.id,
-                                    episodeId = epId,
-                                )
-                            }
-                        val isMedia =
-                            remember(resolvedUrl, rule.description, rule.kind, rule.parserType) {
-                                if (rule.kind == PlaybackRuleKind.SOURCE && rule.parserType != RuleParserType.AUTO) {
-                                    false
-                                } else {
-                                    isLikelyMediaStream(resolvedUrl, rule.description)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (rule in onlineRules) {
+                            val epStr =
+                                episode?.let { if (it.isMain) it.formattedNumber else it.episodeInt.toString() } ?: "1"
+                            val epId = episode?.id ?: 0L
+                            val resolvedUrl =
+                                remember(rule, displayName, epStr, subject.id, epId) {
+                                    rule.resolveUrl(
+                                        title = displayName,
+                                        ep = epStr,
+                                        subjectId = subject.id,
+                                        episodeId = epId,
+                                    )
                                 }
-                            }
-                        val ruleFailure = failedSourceReasons[resolvedUrl]
-                        BgmSourceActionCard(
-                            title = rule.name,
-                            subtitle =
-                                playbackSourceSubtitle(
-                                    rule.description.ifBlank {
-                                        if (onInternalPlayClick != null || isMedia) {
-                                            stringResource(R.string.feature_subject_source_internal_sniff)
-                                        } else {
-                                            stringResource(R.string.feature_subject_source_open_link)
-                                        }
-                                    },
-                                    ruleFailure,
-                                ),
-                            iconVector =
-                                if (onInternalPlayClick != null || isMedia) {
-                                    BgmIcons.PlayCircle
-                                } else {
-                                    BgmIcons.OpenInNew
-                                },
-                            iconTint =
-                                when {
-                                    ruleFailure != null -> MaterialTheme.colorScheme.error
-                                    onInternalPlayClick != null || isMedia -> MaterialTheme.colorScheme.primary
-                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            trailingContent = {
-                                val trailingIcon =
+                            val isMedia =
+                                remember(resolvedUrl, rule.description, rule.kind, rule.parserType) {
+                                    if (rule.kind == PlaybackRuleKind.SOURCE && rule.parserType != RuleParserType.AUTO) {
+                                        false
+                                    } else {
+                                        isLikelyMediaStream(resolvedUrl, rule.description)
+                                    }
+                                }
+                            val ruleFailure = failedSourceReasons[resolvedUrl]
+                            BgmSourceActionCard(
+                                title = rule.name,
+                                subtitle =
+                                    playbackSourceSubtitle(
+                                        rule.description.ifBlank {
+                                            if (onInternalPlayClick != null || isMedia) {
+                                                stringResource(R.string.feature_subject_source_internal_sniff)
+                                            } else {
+                                                stringResource(R.string.feature_subject_source_open_link)
+                                            }
+                                        },
+                                        ruleFailure,
+                                    ),
+                                iconVector =
                                     if (onInternalPlayClick != null || isMedia) {
-                                        BgmIcons.KeyboardArrowRight
+                                        BgmIcons.PlayCircle
                                     } else {
                                         BgmIcons.OpenInNew
-                                    }
-                                Icon(
-                                    imageVector = trailingIcon,
-                                    contentDescription =
+                                    },
+                                iconTint =
+                                    when {
+                                        ruleFailure != null -> MaterialTheme.colorScheme.error
+                                        onInternalPlayClick != null || isMedia -> MaterialTheme.colorScheme.primary
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                trailingContent = {
+                                    val trailingIcon =
                                         if (onInternalPlayClick != null || isMedia) {
-                                            stringResource(R.string.feature_subject_source_action_play)
+                                            BgmIcons.KeyboardArrowRight
                                         } else {
-                                            stringResource(R.string.feature_subject_source_action_open)
-                                        },
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            },
-                            onClick = {
-                                runAfterDismiss {
-                                    if (onInternalPlayClick != null) {
-                                        val route =
-                                            PlayerRoute(
-                                                subjectId = subject.id,
-                                                episodeId = episode?.id ?: 0L,
-                                                streamUrl = if (isMedia) resolvedUrl else "",
-                                                episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: "",
-                                                subjectName = displayName,
-                                                episodeSort = episode?.episodeNumber ?: 0f,
-                                                episodeType = episode?.type ?: 0,
-                                                initialRuleId = rule.id,
-                                            )
-                                        onInternalPlayClick(route)
-                                    } else {
-                                        onOpenUrl(resolvedUrl)
+                                            BgmIcons.OpenInNew
+                                        }
+                                    Icon(
+                                        imageVector = trailingIcon,
+                                        contentDescription =
+                                            if (onInternalPlayClick != null || isMedia) {
+                                                stringResource(R.string.feature_subject_source_action_play)
+                                            } else {
+                                                stringResource(R.string.feature_subject_source_action_open)
+                                            },
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                },
+                                onClick = {
+                                    runAfterDismiss {
+                                        if (onInternalPlayClick != null) {
+                                            val route =
+                                                PlayerRoute(
+                                                    subjectId = subject.id,
+                                                    episodeId = episode?.id ?: 0L,
+                                                    streamUrl = if (isMedia) resolvedUrl else "",
+                                                    episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: "",
+                                                    subjectName = displayName,
+                                                    episodeSort = episode?.episodeNumber ?: 0f,
+                                                    episodeType = episode?.type ?: 0,
+                                                    initialRuleId = rule.id,
+                                                )
+                                            onInternalPlayClick(route)
+                                        } else {
+                                            onOpenUrl(resolvedUrl)
+                                        }
                                     }
-                                }
-                            },
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
+                                },
+                            )
+                        }
                     }
                 } else {
                     SourceEmptyStateCard(
@@ -726,7 +728,7 @@ fun SubjectSourcesBottomSheet(
                     )
                 }
                 if (onManageRules != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     BgmSourceActionCard(
                         title = stringResource(R.string.feature_subject_source_manage),
                         subtitle = stringResource(R.string.feature_subject_source_manage_desc),
@@ -740,7 +742,7 @@ fun SubjectSourcesBottomSheet(
                     )
                 }
                 if (onAiSourceSearch != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     BgmSourceActionCard(
                         title = stringResource(R.string.feature_subject_source_ai_search_desc),
                         subtitle = stringResource(R.string.feature_subject_source_ai_search_hint),
@@ -768,71 +770,71 @@ fun SubjectSourcesBottomSheet(
             }
             SourceSheetTab.EXTERNAL -> {
                 BgmSourcesSectionLabel(stringResource(R.string.feature_subject_source_external_nav))
-                BgmSourceActionCard(
-                    title = stringResource(R.string.feature_subject_source_bilibili),
-                    subtitle =
-                        if (episode != null) {
-                            stringResource(R.string.feature_subject_source_bilibili_ep_desc)
-                        } else {
-                            stringResource(R.string.feature_subject_source_bilibili_desc)
+                Spacer(modifier = Modifier.height(6.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    BgmSourceActionCard(
+                        title = stringResource(R.string.feature_subject_source_bilibili),
+                        subtitle =
+                            if (episode != null) {
+                                stringResource(R.string.feature_subject_source_bilibili_ep_desc)
+                            } else {
+                                stringResource(R.string.feature_subject_source_bilibili_desc)
+                            },
+                        iconVector = BgmIcons.Tv,
+                        onClick = {
+                            runAfterDismiss {
+                                onOpenUrl(bilibiliTarget.deepLinkUri ?: bilibiliTarget.webFallbackUrl)
+                            }
                         },
-                    iconVector = BgmIcons.Tv,
-                    onClick = {
-                        runAfterDismiss {
-                            onOpenUrl(bilibiliTarget.deepLinkUri ?: bilibiliTarget.webFallbackUrl)
+                    )
+                    if (episode != null) {
+                        for (target in externalPlayerTargets) {
+                            val installed = target.packageName in installedExternalPlayerPackages
+                            BgmSourceActionCard(
+                                title = stringResource(R.string.feature_subject_source_open_with_app, target.appName),
+                                subtitle =
+                                    if (installed) {
+                                        stringResource(R.string.feature_subject_source_open_with_app_hint, target.appName)
+                                    } else {
+                                        stringResource(R.string.feature_subject_source_app_not_detected, target.appName)
+                                    },
+                                iconVector = BgmIcons.PlayCircle,
+                                iconTint =
+                                    if (installed) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                onClick = {
+                                    runAfterDismiss {
+                                        context.launchExternalPlayer(target)
+                                    }
+                                },
+                            )
                         }
-                    },
-                )
-                if (episode != null) {
-                    for (target in externalPlayerTargets) {
-                        val installed = target.packageName in installedExternalPlayerPackages
-                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                    if (onAiSourceSearch != null) {
                         BgmSourceActionCard(
-                            title = stringResource(R.string.feature_subject_source_open_with_app, target.appName),
-                            subtitle =
-                                if (installed) {
-                                    stringResource(R.string.feature_subject_source_open_with_app_hint, target.appName)
-                                } else {
-                                    stringResource(R.string.feature_subject_source_app_not_detected, target.appName)
-                                },
-                            iconVector = BgmIcons.PlayCircle,
-                            iconTint =
-                                if (installed) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
+                            title = stringResource(R.string.feature_subject_source_ai_search_desc),
+                            subtitle = stringResource(R.string.feature_subject_source_ai_search_hint),
+                            iconVector = BgmIcons.AutoAwesome,
+                            iconTint = MaterialTheme.colorScheme.primary,
+                            onClick = { runAfterDismiss(onAiSourceSearch) },
+                        )
+                    }
+                    if (onManageRules != null) {
+                        BgmSourceActionCard(
+                            title = stringResource(R.string.feature_subject_source_manage),
+                            subtitle = stringResource(R.string.feature_subject_source_manage_desc),
+                            iconVector = BgmIcons.Settings,
+                            iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                             onClick = {
                                 runAfterDismiss {
-                                    context.launchExternalPlayer(target)
+                                    onManageRules()
                                 }
                             },
                         )
                     }
-                }
-                if (onAiSourceSearch != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    BgmSourceActionCard(
-                        title = stringResource(R.string.feature_subject_source_ai_search_desc),
-                        subtitle = stringResource(R.string.feature_subject_source_ai_search_hint),
-                        iconVector = BgmIcons.AutoAwesome,
-                        iconTint = MaterialTheme.colorScheme.primary,
-                        onClick = { runAfterDismiss(onAiSourceSearch) },
-                    )
-                }
-                if (onManageRules != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    BgmSourceActionCard(
-                        title = stringResource(R.string.feature_subject_source_manage),
-                        subtitle = stringResource(R.string.feature_subject_source_manage_desc),
-                        iconVector = BgmIcons.Settings,
-                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        onClick = {
-                            runAfterDismiss {
-                                onManageRules()
-                            }
-                        },
-                    )
                 }
             }
         }
@@ -1336,7 +1338,6 @@ fun TorrentMediaResourcesSection(
         }
     }
 
-    Spacer(modifier = Modifier.height(4.dp))
     BgmSourcesSectionLabel(
         label = stringResource(R.string.feature_subject_source_torrent_fansub_section),
         trailingContent = {
@@ -1352,9 +1353,12 @@ fun TorrentMediaResourcesSection(
                             color = MaterialTheme.colorScheme.primary,
                         )
                     } else if (onRefreshTorrent != null) {
-                        IconButton(
-                            onClick = onRefreshTorrent,
-                            modifier = Modifier.size(24.dp),
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(24.dp)
+                                    .clickable(onClick = onRefreshTorrent),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 imageVector = BgmIcons.Refresh,
@@ -1368,6 +1372,7 @@ fun TorrentMediaResourcesSection(
             }
         },
     )
+    Spacer(modifier = Modifier.height(6.dp))
     if (!hasTorrentRules) {
         SourceEmptyStateCard(
             title = stringResource(R.string.feature_subject_source_torrent_no_rules),

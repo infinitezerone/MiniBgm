@@ -109,7 +109,8 @@ fun BgmSourcesSectionLabel(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 2.dp),
+                .height(32.dp)
+                .padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
