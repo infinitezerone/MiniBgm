@@ -52,6 +52,9 @@ import kotlin.test.fail
  * 24. 弹幕关闭即零请求必须连「分集纠正」入口一起收：该入口最终会 saveDanmakuOverride +
  *     拉一次弹幕，弹幕关掉后入口仍亮着等于给「已关闭的功能」写持久化覆盖（两个入口
  *     ——控制栏 DanmakuMatchEntryButton 与设置面板行——都必须随开关收起，VM 侧再兜一层竞态闸口）
+ * 25. 索引文件必须受机械上下文预算约束：`AGENTS.md` 是每轮会话都会注入的索引，新行为约束的落点
+ *     永远是本测试，文档只留一句指向它；总字数与单行长度都设硬上限（想加文字必须先删等量文字），
+ *     否则文档会退化成没人读、也拆不出可评审 diff 的巨型单行（源自两次规则追加只靠追加长句的复盘）
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -247,6 +250,44 @@ class ArchitectureRulesTest {
                     violations.joinToString("\n"),
             )
         }
+    }
+
+    /**
+     * `AGENTS.md` 是每轮会话都会被注入上下文的索引文件，失控膨胀会直接吃掉可用上下文。
+     *
+     * 两条机械闸口（棘轮：想加文字就必须先删等量文字）：
+     * 1. 总字数预算——新行为约束的落点永远是本文件的 ArchitectureRulesTest，文档只留一句索引；
+     * 2. 单行上限——把十条规则塞进同一行，既没人愿意读，也拆不出可评审的 diff。
+     *
+     * 历史教训：硬红线第 2 条与「播放器分集会话」曾各自长成 1.4k / 2.5k 字符的巨型单行，
+     * 一次改动只能在整面文字里凭肉眼找落点。
+     */
+    @Test
+    fun agents_doc_must_stay_an_index_under_context_budget() {
+        val file = File(projectRoot, "AGENTS.md")
+        assertTrue(file.isFile, "AGENTS.md 未找到")
+
+        // 统一按 LF 归一：Windows 检出的 \r\n 不该算进上下文预算
+        val text = file.readText().replace("\r\n", "\n")
+        val violations = mutableListOf<String>()
+
+        if (text.length > AGENTS_MD_CHAR_BUDGET) {
+            violations.add(
+                "总字数 ${text.length} 超出上下文预算 $AGENTS_MD_CHAR_BUDGET（超出 ${text.length - AGENTS_MD_CHAR_BUDGET} 字符）",
+            )
+        }
+        text.split("\n").forEachIndexed { index, line ->
+            if (line.length > AGENTS_MD_MAX_LINE_CHARS) {
+                violations.add("第 ${index + 1} 行 ${line.length} 字符超过单行上限 $AGENTS_MD_MAX_LINE_CHARS")
+            }
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "AGENTS.md 只能做索引不能做说明书：新约束先写进 ArchitectureRulesTest，文档只留一句指向它；" +
+                "要加文字必须先删等量文字（确需扩写请显式上调常量并在提交说明里写明理由）。\n" +
+                violations.joinToString("\n"),
+        )
     }
 
     @Test
@@ -2858,5 +2899,16 @@ class ArchitectureRulesTest {
         /** 红线只约束生产源码：build 产物与各测试源集目录一律不下钻 */
         val NON_SOURCE_DIR_NAMES =
             setOf("build", "test", "androidTest", "androidHostTest", "androidDeviceTest", "commonTest")
+
+        /**
+         * `AGENTS.md` 上下文预算（字符数，按 LF 归一后计量）。
+         *
+         * 棘轮语义：只允许「删等量再写」；确需上调时必须把这个数字改大，并在提交说明里写明
+         * 为什么这笔上下文值得占用——涨幅会出现在 diff 里，而不是悄悄长胖。
+         */
+        const val AGENTS_MD_CHAR_BUDGET = 22_800
+
+        /** `AGENTS.md` 单行字符上限：巨型 bullet 既没人读，也拆不出可评审的 diff */
+        const val AGENTS_MD_MAX_LINE_CHARS = 1_000
     }
 }
