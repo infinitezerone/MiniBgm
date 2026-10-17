@@ -5,6 +5,7 @@ import io.ktor.client.engine.HttpClientEngineBase
 import io.ktor.client.engine.HttpClientEngineCapability
 import io.ktor.client.engine.HttpClientEngineConfig
 import io.ktor.client.engine.callContext
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.HttpTimeoutCapability
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
@@ -166,6 +167,15 @@ class EchHttpClientEngine(
                             (deadlineNanos != Long.MAX_VALUE && remainingMillis(deadlineNanos) <= 0L)
                     if (isRequestTimeout) {
                         AdaptiveDnsResolver.recordFailure(host)
+                        // 自有超时必须翻译成 HttpRequestTimeoutException（IOException）：
+                        // 直接抛 CancellationException 会被上层当成「调用方主动取消」——重试插件显式排除取消语义，
+                        // 于是「一次超时」直接判死整次请求；调用方也无法区分「我们等超时了」和「用户取消了」。
+                        // 与本文件 body 读取处（translate 成 IOException）保持同一套契约。
+                        throw HttpRequestTimeoutException(
+                            url = urlString,
+                            timeoutMillis = requestBudgetMillis,
+                            cause = cancellation,
+                        )
                     }
                     throw cancellation
                 } catch (t: Throwable) {

@@ -8,6 +8,7 @@ import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.HttpResponseValidator
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
@@ -21,6 +22,7 @@ import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CancellationException
@@ -64,8 +66,9 @@ object BgmHttpClient {
             retryIf { _, response ->
                 response.status == HttpStatusCode.TooManyRequests || response.status.value in 500..599
             }
-            retryOnExceptionIf { _, cause ->
-                cause !is CancellationException
+            // 超时只对幂等方法重试（写操作超时重试可能重复落库），取消语义永不重试
+            retryOnExceptionIf { request, cause ->
+                shouldRetryAfterException(request.method, cause)
             }
             exponentialDelay(
                 base = 2.0,
@@ -204,3 +207,29 @@ object BgmHttpClient {
             ?: HttpClient(CIO) { bgmConfiguration() }
     }
 }
+
+/**
+ * 异常是否值得重试（纯函数，便于单测）。
+ *
+ * - **取消语义永不重试**：那是调用方主动放弃（或引擎翻译失败的超时），重试只会让取消失效；
+ * - **超时只对幂等方法重试**：GET/HEAD/PUT/DELETE/OPTIONS 可安全重放，POST 超时重试可能重复落库，
+ *   而「一切写操作止于 PENDING_CONFIRMATION」的前提正是写请求不会被悄悄发两遍；
+ * - 其余异常（连接重置、5xx 等）沿用原策略。
+ */
+internal fun shouldRetryAfterException(
+    method: HttpMethod,
+    cause: Throwable,
+): Boolean =
+    when {
+        cause is CancellationException -> false
+        cause is HttpRequestTimeoutException -> method.isIdempotent()
+        else -> true
+    }
+
+/** RFC 9110 §9.2.2 的幂等方法（TRACE 未在 Ktor 暴露常量，故不列入）。 */
+internal fun HttpMethod.isIdempotent(): Boolean =
+    this == HttpMethod.Get ||
+        this == HttpMethod.Head ||
+        this == HttpMethod.Put ||
+        this == HttpMethod.Delete ||
+        this == HttpMethod.Options

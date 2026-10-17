@@ -458,6 +458,30 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * ECH 引擎必须把「自有请求超时」翻译成 Ktor 的 `HttpRequestTimeoutException`（IOException）。
+     *
+     * 直接抛 `CancellationException` 的后果（详情页整页失败的复盘）：重试插件显式排除取消语义，
+     * 一次超时就判死整次请求；调用方也无法区分「我们等超时了」与「用户取消了」。
+     * 同一个文件里 body 读取处早就翻译成 IOException，请求阶段却原样抛取消——两套相反契约。
+     */
+    @Test
+    fun ech_engine_must_translate_its_own_timeout() {
+        val file =
+            File(
+                projectRoot,
+                "core/network/src/androidMain/kotlin/com/infinitezerone/minibgm/core/network/ech/EchHttpClientEngine.kt",
+            )
+        if (!file.isFile) return
+
+        val text = file.readText()
+        assertTrue(
+            text.contains("HttpRequestTimeoutException("),
+            "EchHttpClientEngine 必须把自有超时翻译成 HttpRequestTimeoutException（IOException），" +
+                "严禁直接 throw cancellation——重试插件会把它当成调用方取消",
+        )
+    }
+
     @Test
     fun feature_sources_never_hardcode_compose_colors() {
         val featureDir = File(projectRoot, "feature")
