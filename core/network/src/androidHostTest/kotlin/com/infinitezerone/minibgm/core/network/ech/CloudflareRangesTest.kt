@@ -31,11 +31,32 @@ class CloudflareRangesTest {
     }
 
     @Test
-    fun rejects_anything_that_is_not_an_ipv4_literal() {
-        assertFalse(CloudflareRanges.contains("2606:4700::1"))
-        assertFalse(CloudflareRanges.contains("example.com"))
-        assertFalse(CloudflareRanges.contains("104.16.0"))
-        assertFalse(CloudflareRanges.contains("104.16.0.256"))
+    fun accepts_cloudflare_ipv6_addresses() {
+        listOf(
+            "2606:4700::1",
+            "2606:4700:50::1",
+            "2400:cb00:2048:1::c629:d7a2",
+            "2a06:98c0:3600::103",
+            "[2606:4700::1]",
+        ).forEach { ip ->
+            assertTrue(CloudflareRanges.contains(ip), "$ip should fall inside a Cloudflare IPv6 range")
+        }
+    }
+
+    @Test
+    fun rejects_non_cloudflare_ipv6_and_invalid_literals() {
+        listOf(
+            "2001:4860:4860::8888",
+            "2400:3200::1",
+            "::1",
+            "fe80::1",
+            "example.com",
+            "104.16.0",
+            "104.16.0.256",
+            "2606:4700:::1",
+        ).forEach { ip ->
+            assertFalse(CloudflareRanges.contains(ip), "$ip must not be treated as Cloudflare")
+        }
     }
 
     @Test

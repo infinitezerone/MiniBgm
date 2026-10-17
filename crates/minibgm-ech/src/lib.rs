@@ -400,3 +400,13 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativ
         }
     }
 }
+
+#[no_mangle]
+pub extern "system" fn Java_com_infinitezerone_minibgm_core_network_ech_EchNativeClient_nativeClearConnectionPool(
+    _env: JNIEnv,
+    _class: JClass,
+) {
+    if let Ok(client) = get_client() {
+        client.clear_connection_pool();
+    }
+}

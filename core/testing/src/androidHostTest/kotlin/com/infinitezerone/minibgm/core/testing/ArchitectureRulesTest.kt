@@ -512,6 +512,10 @@ class ArchitectureRulesTest {
             "换网必须丢弃旧网络的 DNS 与候选缓存",
         )
         assertTrue(
+            monitorText.contains("EchRuntime.clearConnectionPool()"),
+            "换网必须清空底层长连接池，否则会在已失效的旧网络 Socket 上死等超时",
+        )
+        assertTrue(
             app.readText().contains("startNetworkMonitor("),
             "监听器写了却没在 App 启动时注册，等于没有——必须调用 EchRuntime.startNetworkMonitor",
         )

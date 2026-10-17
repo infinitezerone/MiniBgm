@@ -25,6 +25,27 @@ internal object CloudflareRanges {
         fun contains(value: Long): Boolean = (value ushr (32 - prefix)) == (base ushr (32 - prefix))
     }
 
+    private class Ipv6Range(
+        val base: ByteArray,
+        val prefix: Int,
+    ) {
+        fun contains(ipBytes: ByteArray): Boolean {
+            if (ipBytes.size != 16) return false
+            val fullBytes = prefix / 8
+            val remainingBits = prefix % 8
+            for (i in 0 until fullBytes) {
+                if (ipBytes[i] != base[i]) return false
+            }
+            if (remainingBits > 0) {
+                val mask = (0xFF shl (8 - remainingBits)) and 0xFF
+                if ((ipBytes[fullBytes].toInt() and mask) != (base[fullBytes].toInt() and mask)) {
+                    return false
+                }
+            }
+            return true
+        }
+    }
+
     private val WHITELIST: List<Range> =
         listOf(
             range("172.64.0.0", 13),
@@ -38,16 +59,34 @@ internal object CloudflareRanges {
             range("141.101.0.0", 16),
         )
 
+    private val IPV6_WHITELIST: List<Ipv6Range> =
+        listOf(
+            ipv6Range("2606:4700::", 32),
+            ipv6Range("2400:cb00::", 32),
+            ipv6Range("2803:f800::", 32),
+            ipv6Range("2405:b500::", 32),
+            ipv6Range("2405:8100::", 32),
+            ipv6Range("2a06:98c0::", 29),
+            ipv6Range("2c0f:f248::", 32),
+        )
+
     private val SAMPLING: List<Range> =
         listOf(
             range("104.16.0.0", 12),
             range("172.64.0.0", 13),
         )
 
-    /** 该 IP 是否落在 Cloudflare 网段内。非 IPv4 字面量一律返回 false（无法判定即不采信）。 */
+    /** 该 IP 是否落在 Cloudflare 网段内（支持 IPv4 与 IPv6）。非 IP 字面量一律返回 false。 */
     fun contains(ip: String): Boolean {
-        val value = ipv4ToLong(ip) ?: return false
-        return WHITELIST.any { it.contains(value) }
+        val ipv4 = ipv4ToLong(ip)
+        if (ipv4 != null) {
+            return WHITELIST.any { it.contains(ipv4) }
+        }
+        val ipv6 = ipv6ToBytes(ip)
+        if (ipv6 != null) {
+            return IPV6_WHITELIST.any { it.contains(ipv6) }
+        }
+        return false
     }
 
     /**
@@ -107,4 +146,57 @@ internal object CloudflareRanges {
 
     private fun longToIpv4(value: Long): String =
         listOf(24, 16, 8, 0).joinToString(".") { shift -> ((value shr shift) and 0xFF).toString() }
+
+    private fun ipv6Range(
+        base: String,
+        prefix: Int,
+    ): Ipv6Range =
+        Ipv6Range(
+            requireNotNull(ipv6ToBytes(base)) { "invalid CIDR base IPv6 address: $base" },
+            prefix,
+        )
+
+    private fun ipv6ToBytes(ip: String): ByteArray? {
+        val trimmed = ip.trim().removePrefix("[").removeSuffix("]")
+        if (!trimmed.contains(':')) return null
+        if (!trimmed.all { it.isDigit() || (it in 'a'..'f') || (it in 'A'..'F') || it == ':' }) {
+            return null
+        }
+        val parts = trimmed.split("::")
+        if (parts.size > 2) return null
+
+        val leftParts = if (parts[0].isEmpty()) emptyList() else parts[0].split(':')
+        val rightParts = if (parts.size == 2 && parts[1].isNotEmpty()) parts[1].split(':') else emptyList()
+
+        val totalSupplied = leftParts.size + rightParts.size
+        if (parts.size == 1 && totalSupplied != 8) return null
+        if (parts.size == 2 && totalSupplied >= 8) return null
+
+        val result = ByteArray(16)
+        var byteIdx = 0
+
+        fun parseGroup(part: String): Int? {
+            if (part.isEmpty() || part.length > 4) return null
+            return part.toIntOrNull(16)
+        }
+
+        for (part in leftParts) {
+            val v = parseGroup(part) ?: return null
+            result[byteIdx++] = (v shr 8).toByte()
+            result[byteIdx++] = (v and 0xFF).toByte()
+        }
+
+        if (parts.size == 2) {
+            val missingGroups = 8 - totalSupplied
+            byteIdx += missingGroups * 2
+        }
+
+        for (part in rightParts) {
+            val v = parseGroup(part) ?: return null
+            result[byteIdx++] = (v shr 8).toByte()
+            result[byteIdx++] = (v and 0xFF).toByte()
+        }
+
+        return if (byteIdx == 16) result else null
+    }
 }

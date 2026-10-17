@@ -137,4 +137,6 @@ object EchNativeClient {
     external fun nativeReadBodyChunk(requestId: Long): ByteArray?
 
     external fun nativeCancel(requestId: Long)
+
+    external fun nativeClearConnectionPool()
 }

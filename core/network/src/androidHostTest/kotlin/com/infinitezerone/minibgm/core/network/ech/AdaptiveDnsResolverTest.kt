@@ -1,5 +1,7 @@
 package com.infinitezerone.minibgm.core.network.ech
 
+import com.infinitezerone.minibgm.core.common.TimeUtils
+import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -127,4 +129,35 @@ class AdaptiveDnsResolverTest {
                 .isEmpty(),
         )
     }
+
+    @Test
+    fun resolveTargetAddrs_uses_fresh_cached_entry() =
+        runTest {
+            val now = TimeUtils.nowEpochMillis()
+            AdaptiveDnsResolver.injectCacheEntryForTest(
+                host = "example.com",
+                ips = listOf("93.184.216.34"),
+                freshUntil = now + 600_000L,
+                staleUntil = now + 86_400_000L,
+            )
+
+            val addrs = AdaptiveDnsResolver.resolveTargetAddrs("example.com", 443)
+            assertEquals(listOf("93.184.216.34:443"), addrs?.toList())
+        }
+
+    @Test
+    fun resolveTargetAddrs_returns_stale_cached_entry_under_stale_window() =
+        runTest {
+            val now = TimeUtils.nowEpochMillis()
+            // 已过 10 分钟鲜活期，但在 24 小时陈旧可用期内
+            AdaptiveDnsResolver.injectCacheEntryForTest(
+                host = "example.com",
+                ips = listOf("93.184.216.34"),
+                freshUntil = now - 1_000L,
+                staleUntil = now + 86_400_000L,
+            )
+
+            val addrs = AdaptiveDnsResolver.resolveTargetAddrs("example.com", 443)
+            assertEquals(listOf("93.184.216.34:443"), addrs?.toList(), "RFC 8767: 处于陈旧可用期时立即返回旧地址")
+        }
 }

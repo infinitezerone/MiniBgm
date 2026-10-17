@@ -820,16 +820,15 @@ fn run_gradle(root: &Path, tasks: &[String], fast_mode: bool) -> ExitStatus {
     }
     args.push("--console=plain".to_string());
 
-    let gradlew = if cfg!(windows) {
-        root.join("gradlew.bat")
-    } else {
-        root.join("gradlew")
-    };
     println!("[jgate] gradle {}", args.join(" "));
-    Command::new(gradlew)
-        .args(&args)
-        .status()
-        .expect("无法启动 gradlew")
+    let mut cmd = if cfg!(windows) {
+        let mut c = Command::new("cmd.exe");
+        c.arg("/c").arg(root.join("gradlew.bat"));
+        c
+    } else {
+        Command::new(root.join("gradlew"))
+    };
+    cmd.args(&args).status().expect("无法启动 gradlew")
 }
 
 fn verify_test_results(

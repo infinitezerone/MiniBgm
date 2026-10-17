@@ -42,15 +42,20 @@ internal object AdaptiveDnsResolver {
      */
     private const val MAX_CANDIDATES_PER_REQUEST = 4
 
-    /** 内存 DNS 缓存 TTL（10 分钟）：消除并发图片请求重复进行同步网络 DNS 查询的巨大开销。 */
-    private const val DNS_CACHE_TTL_MILLIS = 10L * 60 * 1000
+    /** 内存 DNS 缓存鲜活期（10 分钟）：完全信任缓存，无需后台刷新。 */
+    private const val DNS_CACHE_FRESH_MILLIS = 10L * 60 * 1000
+
+    /** 内存 DNS 缓存陈旧可用期（24 小时）：RFC 8767 Stale-While-Revalidate 容灾与平滑更新。 */
+    private const val DNS_CACHE_STALE_MILLIS = 24L * 60 * 60 * 1000
 
     private data class DnsCacheEntry(
         val ips: List<String>,
-        val expiresAt: Long,
+        val freshUntil: Long,
+        val staleUntil: Long,
     )
 
     private val dnsCache = ConcurrentHashMap<String, DnsCacheEntry>()
+    private val refreshingHosts = ConcurrentHashMap.newKeySet<String>()
 
     /** public_name 之外的候选来源都可能为空，兜底探测需要能在后台跑，不阻塞请求。 */
     private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -262,8 +267,15 @@ internal object AdaptiveDnsResolver {
     private fun resolveStandardHostIps(host: String): List<String> {
         val now = TimeUtils.nowEpochMillis()
         val cached = dnsCache[host]
-        if (cached != null && cached.expiresAt > now && cached.ips.isNotEmpty()) {
-            return cached.ips
+        if (cached != null && cached.ips.isNotEmpty()) {
+            if (now <= cached.freshUntil) {
+                return cached.ips
+            }
+            if (now <= cached.staleUntil) {
+                // RFC 8767: 处于陈旧期时，立刻返回旧数据竞速起跑，后台静默平滑刷新
+                launchBackgroundDnsRefresh(host, filterCloudflare = false)
+                return cached.ips
+            }
         }
         val ips =
             runCatching { InetAddress.getAllByName(host).mapNotNull { it.hostAddress } }
@@ -271,7 +283,12 @@ internal object AdaptiveDnsResolver {
                 .getOrDefault(emptyList())
 
         if (ips.isNotEmpty()) {
-            dnsCache[host] = DnsCacheEntry(ips, now + DNS_CACHE_TTL_MILLIS)
+            dnsCache[host] =
+                DnsCacheEntry(
+                    ips = ips,
+                    freshUntil = now + DNS_CACHE_FRESH_MILLIS,
+                    staleUntil = now + DNS_CACHE_STALE_MILLIS,
+                )
         }
         return ips
     }
@@ -279,8 +296,15 @@ internal object AdaptiveDnsResolver {
     private fun resolveHostIps(host: String): List<String> {
         val now = TimeUtils.nowEpochMillis()
         val cached = dnsCache[host]
-        if (cached != null && cached.expiresAt > now && cached.ips.isNotEmpty()) {
-            return cached.ips
+        if (cached != null && cached.ips.isNotEmpty()) {
+            if (now <= cached.freshUntil) {
+                return cached.ips
+            }
+            if (now <= cached.staleUntil) {
+                // RFC 8767: 处于陈旧期时，立刻返回旧数据竞速起跑，后台静默平滑刷新
+                launchBackgroundDnsRefresh(host, filterCloudflare = true)
+                return cached.ips
+            }
         }
         val ips =
             runCatching { InetAddress.getAllByName(host).mapNotNull { it.hostAddress } }
@@ -289,9 +313,44 @@ internal object AdaptiveDnsResolver {
                 .filterNot { isPoisonedIp(it) }
 
         if (ips.isNotEmpty()) {
-            dnsCache[host] = DnsCacheEntry(ips, now + DNS_CACHE_TTL_MILLIS)
+            dnsCache[host] =
+                DnsCacheEntry(
+                    ips = ips,
+                    freshUntil = now + DNS_CACHE_FRESH_MILLIS,
+                    staleUntil = now + DNS_CACHE_STALE_MILLIS,
+                )
         }
         return ips
+    }
+
+    private fun launchBackgroundDnsRefresh(
+        host: String,
+        filterCloudflare: Boolean,
+    ) {
+        if (!refreshingHosts.add(host)) return
+        backgroundScope.launch {
+            try {
+                val now = TimeUtils.nowEpochMillis()
+                val rawIps =
+                    runCatching { InetAddress.getAllByName(host).mapNotNull { it.hostAddress } }
+                        .getOrDefault(emptyList())
+                val ips = if (filterCloudflare) rawIps.filterNot { isPoisonedIp(it) } else rawIps
+                if (ips.isNotEmpty()) {
+                    dnsCache[host] =
+                        DnsCacheEntry(
+                            ips = ips,
+                            freshUntil = now + DNS_CACHE_FRESH_MILLIS,
+                            staleUntil = now + DNS_CACHE_STALE_MILLIS,
+                        )
+                    if (filterCloudflare) {
+                        EchEdgePool.absorb(ips, now)
+                    }
+                    logger.d { "[DNS] background refresh updated $host -> $ips" }
+                }
+            } finally {
+                refreshingHosts.remove(host)
+            }
+        }
     }
 
     private fun launchBackgroundProbe() {
@@ -325,8 +384,20 @@ internal object AdaptiveDnsResolver {
         resolvedCandidates.clear()
         dnsCache.clear()
         dynamicEchHosts.clear()
+        refreshingHosts.clear()
         hostsFile = null
     }
+
+    internal fun injectCacheEntryForTest(
+        host: String,
+        ips: List<String>,
+        freshUntil: Long,
+        staleUntil: Long,
+    ) {
+        dnsCache[host] = DnsCacheEntry(ips, freshUntil, staleUntil)
+    }
+
+    internal fun getCacheEntryForTest(host: String): Pair<List<String>, Long>? = dnsCache[host]?.let { it.ips to it.freshUntil }
 
 /**
      * 交错装配单次请求的候选地址（纯函数，便于单测）。

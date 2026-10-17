@@ -29,6 +29,13 @@ object EchRuntime {
         EchNetworkMonitor.start(context)
     }
 
+    /** 清空 HTTP/2 活跃长连接池（换网时丢弃旧接口上的失效 Socket）。 */
+    fun clearConnectionPool() {
+        if (EchNativeClient.isAvailable()) {
+            runCatching { EchNativeClient.nativeClearConnectionPool() }
+        }
+    }
+
     /** 优选池的落盘是节流的，应用退到后台时补一次强制刷写。 */
     fun flush() {
         EchEdgePool.flush()

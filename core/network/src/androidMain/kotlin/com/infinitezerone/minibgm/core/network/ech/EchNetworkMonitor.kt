@@ -37,8 +37,9 @@ internal object EchNetworkMonitor {
 
     /** 收敛成一次显式动作，便于单测（不依赖真实网络回调）。 */
     internal fun onNetworkSwitched(reason: String) {
-        logger.i { "[NET] $reason -> reset probe cooldown and drop cached resolution" }
+        logger.i { "[NET] $reason -> reset probe cooldown, drop cached resolution, and clear connection pool" }
         CloudflareEdgeProbe.resetCooldown()
         AdaptiveDnsResolver.invalidateCaches()
+        EchRuntime.clearConnectionPool()
     }
 }

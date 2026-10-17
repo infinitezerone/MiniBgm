@@ -340,6 +340,13 @@ impl EchHttpClient {
         }
     }
 
+    /// 清空 HTTP/2 活跃长连接池（网络切换等生命周期调用）
+    pub fn clear_connection_pool(&self) {
+        let mut pool = self.h2_pool.write().unwrap_or_else(|p| p.into_inner());
+        pool.clear();
+        log::info!("HTTP/2 connection pool cleared (network changed)");
+    }
+
     /// 经由既有 h2 连接池条目发起一次发送尝试；参数与单次尝试的决策上下文一一对应，
     /// 收拢成结构体只是把同一份契约换个位置，故显式放行 clippy 的参数个数检查。
     #[allow(clippy::too_many_arguments)]
@@ -1432,5 +1439,14 @@ mod tests {
                 "172.67.192.203:443".to_owned(),
             ]
         );
+    }
+
+    #[test]
+    fn test_clear_connection_pool_empties_pool() {
+        let client = EchHttpClient::new().unwrap();
+        // 初始为空
+        client.clear_connection_pool();
+        let guard = client.h2_pool.read().unwrap();
+        assert!(guard.is_empty());
     }
 }
