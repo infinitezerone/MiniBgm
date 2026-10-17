@@ -260,7 +260,8 @@ class ArchitectureRulesTest {
      * 2. 单行上限——把十条规则塞进同一行，既没人愿意读，也拆不出可评审的 diff。
      *
      * 历史教训：硬红线第 2 条与「播放器分集会话」曾各自长成 1.4k / 2.5k 字符的巨型单行，
-     * 一次改动只能在整面文字里凭肉眼找落点。
+     * 一次改动只能在整面文字里凭肉眼找落点。预算首次压到 11.2k 的做法是把「事故复盘叙述」搬回
+     * 各红线测试的 KDoc（测试名即规则名），AGENTS 只留可执行约束 + 测试名。
      */
     @Test
     fun agents_doc_must_stay_an_index_under_context_budget() {
@@ -2906,9 +2907,9 @@ class ArchitectureRulesTest {
          * 棘轮语义：只允许「删等量再写」；确需上调时必须把这个数字改大，并在提交说明里写明
          * 为什么这笔上下文值得占用——涨幅会出现在 diff 里，而不是悄悄长胖。
          */
-        const val AGENTS_MD_CHAR_BUDGET = 22_800
+        const val AGENTS_MD_CHAR_BUDGET = 11_200
 
         /** `AGENTS.md` 单行字符上限：巨型 bullet 既没人读，也拆不出可评审的 diff */
-        const val AGENTS_MD_MAX_LINE_CHARS = 1_000
+        const val AGENTS_MD_MAX_LINE_CHARS = 900
     }
 }
