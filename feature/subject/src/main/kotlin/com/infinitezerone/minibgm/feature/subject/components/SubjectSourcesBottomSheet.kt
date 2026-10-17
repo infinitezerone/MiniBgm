@@ -27,7 +27,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -1605,28 +1604,6 @@ fun TorrentMediaResourceCard(
             stringResource(R.string.feature_subject_source_torrent_batch_badge)
         }
 
-    val (channelText, channelColor, channelOnColor) =
-        when {
-            resource.isDualSource ->
-                Triple(
-                    stringResource(R.string.feature_subject_source_torrent_channel_dual),
-                    MaterialTheme.colorScheme.primaryContainer,
-                    MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            resource.hasTorrent ->
-                Triple(
-                    stringResource(R.string.feature_subject_source_torrent_channel_torrent),
-                    MaterialTheme.colorScheme.secondaryContainer,
-                    MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            else ->
-                Triple(
-                    stringResource(R.string.feature_subject_source_torrent_channel_magnet),
-                    MaterialTheme.colorScheme.surfaceContainerHighest,
-                    MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-        }
-
     Surface(
         shape = BgmShapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -1635,7 +1612,7 @@ fun TorrentMediaResourceCard(
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
-            // 顶栏：分集标识 + 字幕组 + 来源通道 + 体积 + 日期
+            // 顶栏：分集标识 + 字幕组 + 体积 + 日期（彻底去除技术细节的"双源可用/磁力/种子"伪概念徽章）
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
@@ -1677,19 +1654,6 @@ fun TorrentMediaResourceCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-
-                    Surface(
-                        shape = BgmShapes.small,
-                        color = channelColor,
-                    ) {
-                        Text(
-                            text = channelText,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = channelOnColor,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                        )
-                    }
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -1702,6 +1666,7 @@ fun TorrentMediaResourceCard(
                         Text(
                             text = displaySize,
                             style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -1718,13 +1683,14 @@ fun TorrentMediaResourceCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // 标题行：清晰展示发布名称，限制 2 行，消除截断伪重复
+            // 标题行：清晰展示发布名称，限制 1~2 行并支持展开
             Text(
                 text = resource.title,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
+                maxLines = if (isExpanded) 4 else 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable { onToggleExpand() },
             )
 
             // 特性与规格胶囊（清晰度 / 编码 / 语言 / 修正）+ 已下载状态
@@ -1770,17 +1736,17 @@ fun TorrentMediaResourceCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // 4 大核心操作横排（显式 contentPadding，坚决杜绝截断中文）
+            // 核心操作横排（主动作播放 + 辅动作下载 + 更多折叠菜单，收敛高频意图）
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                // 1. 边下边播 (主动作)
+                // 1. 边下边播 (主动作，占主要宽度)
                 Button(
                     onClick = onStreamPlay,
                     enabled = !isAnyBusy && resource.hasPlayableSource,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
                     modifier = Modifier.height(34.dp).weight(1f),
                 ) {
                     Icon(
@@ -1804,7 +1770,7 @@ fun TorrentMediaResourceCard(
                     )
                 }
 
-                // 2. 离线下载
+                // 2. 离线下载 (辅助动作)
                 val inAppDownloadLabel = stringResource(R.string.feature_subject_source_torrent_in_app_download)
                 FilledTonalButton(
                     onClick = onInAppDownload,
@@ -1824,91 +1790,93 @@ fun TorrentMediaResourceCard(
                     )
                 }
 
-                // 3. 外部打开 (115/网盘/播放器)
-                OutlinedIconButton(
-                    onClick = onExternalLaunch,
-                    enabled = !isAnyBusy && resource.hasPlayableSource,
-                    modifier = Modifier.size(34.dp),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.OpenInNew,
-                        contentDescription = stringResource(R.string.feature_subject_source_torrent_external_app),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
+                // 3. 更多操作折叠菜单 (收纳：外部打开、复制磁力、保存种子文件、复制哈希)
+                Box {
+                    IconButton(
+                        onClick = { showMoreMenu = true },
+                        modifier = Modifier.size(34.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.MoreVert,
+                            contentDescription = stringResource(R.string.feature_subject_source_torrent_more_actions),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
 
-                // 4. 复制磁力
-                OutlinedIconButton(
-                    onClick = onCopyMagnet,
-                    enabled = !isAnyBusy && resource.hasMagnet,
-                    modifier = Modifier.size(34.dp),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.ContentCopy,
-                        contentDescription = stringResource(R.string.feature_subject_source_torrent_copy_magnet),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-
-                // 5. 更多菜单 (下载种子文件 / 复制 InfoHash)
-                if (resource.hasTorrent || resource.infoHash.isNotBlank()) {
-                    Box {
-                        IconButton(
-                            onClick = { showMoreMenu = true },
-                            modifier = Modifier.size(34.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.MoreVert,
-                                contentDescription = stringResource(R.string.feature_subject_source_torrent_more_actions),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp),
+                    DropdownMenu(
+                        expanded = showMoreMenu,
+                        onDismissRequest = { showMoreMenu = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.feature_subject_source_torrent_external_app)) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = BgmIcons.OpenInNew,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            },
+                            onClick = {
+                                showMoreMenu = false
+                                onExternalLaunch()
+                            },
+                            enabled = !isAnyBusy && resource.hasPlayableSource,
+                        )
+                        if (resource.hasMagnet) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.feature_subject_source_torrent_copy_magnet)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = BgmIcons.ContentCopy,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                },
+                                onClick = {
+                                    showMoreMenu = false
+                                    onCopyMagnet()
+                                },
+                                enabled = !isAnyBusy,
                             )
                         }
-
-                        DropdownMenu(
-                            expanded = showMoreMenu,
-                            onDismissRequest = { showMoreMenu = false },
-                        ) {
-                            if (resource.hasTorrent) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.feature_subject_source_torrent_save_file)) },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = BgmIcons.FolderOpen,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                    },
-                                    onClick = {
-                                        showMoreMenu = false
-                                        onDownloadTorrent()
-                                    },
-                                )
-                            }
-                            if (resource.infoHash.isNotBlank()) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.feature_subject_source_torrent_copy_infohash)) },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = BgmIcons.ContentCopy,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                    },
-                                    onClick = {
-                                        showMoreMenu = false
-                                        onCopyInfoHash()
-                                        Toast
-                                            .makeText(
-                                                context,
-                                                context.getString(R.string.feature_subject_source_torrent_hash_copied),
-                                                Toast.LENGTH_SHORT,
-                                            ).show()
-                                    },
-                                )
-                            }
+                        if (resource.hasTorrent) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.feature_subject_source_torrent_save_file)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = BgmIcons.FolderOpen,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                },
+                                onClick = {
+                                    showMoreMenu = false
+                                    onDownloadTorrent()
+                                },
+                            )
+                        }
+                        if (resource.infoHash.isNotBlank()) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.feature_subject_source_torrent_copy_infohash)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = BgmIcons.ContentCopy,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                },
+                                onClick = {
+                                    showMoreMenu = false
+                                    onCopyInfoHash()
+                                    Toast
+                                        .makeText(
+                                            context,
+                                            context.getString(R.string.feature_subject_source_torrent_hash_copied),
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                },
+                            )
                         }
                     }
                 }

@@ -97,6 +97,7 @@ val dataModule =
         single<TorrentFeedRepository> {
             TorrentFeedRepositoryImpl(
                 pageFetchService = get<PageFetchService>(),
+                diskCache = getOrNull(),
             )
         }
         single<DanmakuRepository> {

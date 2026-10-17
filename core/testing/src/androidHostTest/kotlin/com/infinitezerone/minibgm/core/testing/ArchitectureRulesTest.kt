@@ -2688,6 +2688,44 @@ class ArchitectureRulesTest {
         )
     }
 
+    @Test
+    fun torrent_resource_card_must_not_expose_technical_dual_source_badges_and_use_lean_actions() {
+        val sheetFile =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectSourcesBottomSheet.kt",
+            )
+        assertTrue(sheetFile.isFile, "SubjectSourcesBottomSheet.kt 未找到")
+        val rawContent = sheetFile.readText()
+        val content = KotlinSourceScanner.sanitize(rawContent)
+
+        val violations = mutableListOf<String>()
+
+        // 1. 严禁展示"双源可用"这类给用户制造认知负担的抓取技术细节徽章
+        if (rawContent.contains("feature_subject_source_torrent_channel_dual") ||
+            content.contains("resource.isDualSource")
+        ) {
+            violations.add("SubjectSourcesBottomSheet 违规暴露了技术细节徽标「双源可用」，增加了用户的认知负担")
+        }
+
+        // 2. 种子卡片必须具备 TorrentFeedDiskCache 磁盘缓存契约
+        val repoFile =
+            File(
+                projectRoot,
+                "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/TorrentFeedRepository.kt",
+            )
+        assertTrue(repoFile.isFile, "TorrentFeedRepository.kt 未找到")
+        val repoContent = repoFile.readText()
+        if (!repoContent.contains("TorrentFeedDiskCache")) {
+            violations.add("TorrentFeedRepository 缺少 TorrentFeedDiskCache 磁盘持久化缓存支持，无法保证离线秒开")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反种子资源卡片去噪与持久化缓存红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
     /** 手工构造 ViewModel 的 Koin 块；`{ params -> ... }`、`{ (arg: T) -> ... }` 与单行写法都要覆盖 */
     private val manualViewModelBlock = Regex("""\bviewModel\s*\{[\s\S]{0,600}?\b([A-Z]\w*ViewModel)\s*\(""")
 

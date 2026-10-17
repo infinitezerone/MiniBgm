@@ -1,5 +1,7 @@
 package com.infinitezerone.minibgm.core.data.di
 
+import com.infinitezerone.minibgm.core.data.cache.FileTorrentFeedDiskCache
+import com.infinitezerone.minibgm.core.data.cache.TorrentFeedDiskCache
 import com.infinitezerone.minibgm.core.data.crash.CrashLogRepository
 import com.infinitezerone.minibgm.core.data.crash.FileCrashLogRepository
 import com.infinitezerone.minibgm.core.data.crash.crashLogDir
@@ -29,6 +31,7 @@ val platformDataModule =
         single<NetworkMonitor> { ConnectivityManagerNetworkMonitor(androidContext()) }
         single<CrashLogRepository> { FileCrashLogRepository(crashLogDir(androidContext())) }
         single<SeasonalDiskCache> { FileSeasonalDiskCache(androidContext().cacheDir.resolve("seasonal_cache")) }
+        single<TorrentFeedDiskCache> { FileTorrentFeedDiskCache(androidContext().cacheDir.resolve("torrent_feed_cache")) }
         single<AssetDownloader> {
             AndroidAssetDownloader(
                 assetDownloadService = get(),

@@ -1,15 +1,18 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.bgmLogger
+import com.infinitezerone.minibgm.core.data.cache.TorrentFeedDiskCache
 import com.infinitezerone.minibgm.core.data.repository.resolver.TorrentRssParser
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.TorrentMediaResource
+import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.encodeToString
 
 /**
  * 通用 P2P 种子 / 磁力 RSS 资源检索仓库接口。
@@ -38,6 +41,7 @@ interface TorrentFeedRepository {
 
 class TorrentFeedRepositoryImpl(
     private val pageFetchService: PageFetchService,
+    private val diskCache: TorrentFeedDiskCache? = null,
 ) : TorrentFeedRepository {
     private val logger = bgmLogger("Bgm/TorrentFeed")
 
@@ -260,7 +264,23 @@ class TorrentFeedRepositoryImpl(
         return FeedFetchResult.Success(parsed)
     }
 
-    private suspend fun readCache(key: String): List<TorrentMediaResource>? = cacheMutex.withLock { memoryCache[key] }
+    private suspend fun readCache(key: String): List<TorrentMediaResource>? {
+        cacheMutex.withLock {
+            memoryCache[key]?.let { return it }
+        }
+        val diskJson = diskCache?.get(key) ?: return null
+        val decoded =
+            runCatching {
+                BgmHttpClient.jsonConfig.decodeFromString<List<TorrentMediaResource>>(diskJson)
+            }.getOrNull()
+        if (decoded != null && decoded.isNotEmpty()) {
+            cacheMutex.withLock {
+                memoryCache[key] = decoded
+            }
+            return decoded
+        }
+        return null
+    }
 
     private suspend fun writeCache(
         key: String,
@@ -272,6 +292,13 @@ class TorrentFeedRepositoryImpl(
             while (memoryCache.size > MAX_CACHE_ENTRIES) {
                 val oldestKey = memoryCache.keys.firstOrNull() ?: break
                 memoryCache.remove(oldestKey)
+            }
+        }
+        val targetDiskCache = diskCache
+        if (targetDiskCache != null && value.isNotEmpty()) {
+            runCatching {
+                val encoded = BgmHttpClient.jsonConfig.encodeToString(value)
+                targetDiskCache.put(key, encoded)
             }
         }
     }

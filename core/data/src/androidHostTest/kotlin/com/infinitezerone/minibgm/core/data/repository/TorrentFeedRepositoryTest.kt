@@ -516,4 +516,46 @@ class TorrentFeedRepositoryTest {
             repository.getTorrentResources(title = "葬送的芙莉莲", episodeSort = 3f, rule = rule, forceRefresh = true)
             assertEquals(2, fake.requestedUrls.size)
         }
+
+    @Test
+    fun getTorrentResources_usesDiskCacheWhenAvailable() =
+        runTest {
+            val fake = FakeFeedFetchService(null)
+            val diskMap = mutableMapOf<String, String>()
+            val fakeDiskCache =
+                object : com.infinitezerone.minibgm.core.data.cache.TorrentFeedDiskCache {
+                    override suspend fun get(key: String): String? = diskMap[key]
+
+                    override suspend fun put(
+                        key: String,
+                        jsonContent: String,
+                    ) {
+                        diskMap[key] = jsonContent
+                    }
+
+                    override suspend fun clear() {
+                        diskMap.clear()
+                    }
+                }
+            val rule =
+                PlaybackSourceRule(
+                    id = "test-torrent-rule",
+                    name = "Test Torrent Feed",
+                    urlTemplate = "https://feed.example.com/rss?keyword={title}",
+                    kind = PlaybackRuleKind.TORRENT,
+                    parserType = RuleParserType.RSS_TORRENT,
+                )
+            val cachedJson =
+                """[{"title":"[ANi] 葬送的芙莉莲 - 03 [1080P]","fansubName":"ANi","episodeSort":3.0,"resolution":"1080P","magnetUrl":"magnet:?xt=urn:btih:test"}]"""
+            fakeDiskCache.put(
+                "feed:test-torrent-rule:https://feed.example.com/rss?keyword=%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2",
+                cachedJson,
+            )
+
+            val repository = TorrentFeedRepositoryImpl(fake, diskCache = fakeDiskCache)
+            val results = repository.getTorrentResources(title = "葬送的芙莉莲", episodeSort = 3f, rule = rule)
+            assertEquals(1, results.size)
+            assertEquals("ANi", results[0].fansubName)
+            assertEquals(0, fake.requestedUrls.size)
+        }
 }
