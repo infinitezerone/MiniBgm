@@ -56,7 +56,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.subject.R
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -258,11 +260,66 @@ private class PlayerGesturesNode(
     private var initialBrightness = 0.5f
     private var initialVolume = 0f
 
-    // 连续双击累加状态（对齐 YouTube 连续双击 +10s, +20s, +30s ... 累加）
+    // 连续双击累加状态（对齐 YouTube 连续双击 +10s, +20s, +30s ... 累加与防抖提交）
     private var lastDoubleTapSide: DoubleTapSide? = null
     private var lastDoubleTapTime: Long = 0L
     private var accumulatedSeconds: Int = 0
     private var lastSeekBasePositionMs: Long = 0L
+    private var pendingSeekJob: Job? = null
+    private var pendingSeekTargetMs: Long = 0L
+
+    private fun handleQuickSeek(side: DoubleTapSide) {
+        val now = System.currentTimeMillis()
+        val total = totalDurationMs()
+        val isSameSideInWindow =
+            lastDoubleTapSide == side && (now - lastDoubleTapTime) <= DOUBLE_TAP_WINDOW_MS
+        val basePos =
+            if (isSameSideInWindow) lastSeekBasePositionMs else currentPositionMs()
+        accumulatedSeconds =
+            if (isSameSideInWindow) accumulatedSeconds + 10 else 10
+        lastDoubleTapSide = side
+        lastDoubleTapTime = now
+        lastSeekBasePositionMs = basePos
+
+        val deltaMs =
+            if (side == DoubleTapSide.RIGHT) accumulatedSeconds * 1000L else -accumulatedSeconds * 1000L
+        val maxPos = if (total > 0L) total else Long.MAX_VALUE
+        val target = (basePos + deltaMs).coerceIn(0L, maxPos)
+        pendingSeekTargetMs = target
+
+        // 视觉与触觉反馈即时响应（数字累加、气泡波纹、HUD提示）
+        onDoubleTapAction(side, accumulatedSeconds)
+        onHaptic(HapticFeedbackType.LongPress)
+        onHudStateChange(GestureHudState.Seek(target, total, deltaMs))
+        onTriggerHudDismiss()
+
+        // 防抖延迟提交：连续点击期间保持平稳不跳针，停手冷却后一次性提交跳转
+        pendingSeekJob?.cancel()
+        pendingSeekJob =
+            coroutineScope.launch {
+                delay(DOUBLE_TAP_COMMIT_DELAY_MS)
+                onDoubleTapSeek(target)
+                lastDoubleTapSide = null
+                accumulatedSeconds = 0
+                pendingSeekJob = null
+            }
+    }
+
+    private fun commitPendingQuickSeek() {
+        if (pendingSeekJob?.isActive == true) {
+            pendingSeekJob?.cancel()
+            pendingSeekJob = null
+            onDoubleTapSeek(pendingSeekTargetMs)
+            lastDoubleTapSide = null
+            accumulatedSeconds = 0
+        }
+    }
+
+    override fun onDetach() {
+        pendingSeekJob?.cancel()
+        pendingSeekJob = null
+        super.onDetach()
+    }
 
     fun update(
         context: Context,
@@ -305,52 +362,37 @@ private class PlayerGesturesNode(
         delegate(
             SuspendingPointerInputModifierNode {
                 detectTapGestures(
-                    onTap = { onSingleTap() },
+                    onTap = { offset ->
+                        if (isLocked) return@detectTapGestures
+                        val now = System.currentTimeMillis()
+                        val width = size.width
+                        val isLeftActive =
+                            lastDoubleTapSide == DoubleTapSide.LEFT &&
+                                (now - lastDoubleTapTime) <= DOUBLE_TAP_WINDOW_MS &&
+                                offset.x < width * 0.35f
+                        val isRightActive =
+                            lastDoubleTapSide == DoubleTapSide.RIGHT &&
+                                (now - lastDoubleTapTime) <= DOUBLE_TAP_WINDOW_MS &&
+                                offset.x > width * 0.65f
+
+                        when {
+                            isLeftActive -> handleQuickSeek(DoubleTapSide.LEFT)
+                            isRightActive -> handleQuickSeek(DoubleTapSide.RIGHT)
+                            else -> {
+                                commitPendingQuickSeek()
+                                onSingleTap()
+                            }
+                        }
+                    },
                     onDoubleTap = { offset ->
                         if (isLocked) return@detectTapGestures
                         val width = size.width
                         val x = offset.x
-                        val now = System.currentTimeMillis()
-                        val total = totalDurationMs()
                         when {
-                            x < width * 0.35f -> {
-                                val isSameSideInWindow =
-                                    lastDoubleTapSide == DoubleTapSide.LEFT && (now - lastDoubleTapTime) <= 900L
-                                val basePos =
-                                    if (isSameSideInWindow) lastSeekBasePositionMs else currentPositionMs()
-                                accumulatedSeconds =
-                                    if (isSameSideInWindow) accumulatedSeconds + 10 else 10
-                                lastDoubleTapSide = DoubleTapSide.LEFT
-                                lastDoubleTapTime = now
-                                lastSeekBasePositionMs = basePos
-
-                                val target = (basePos - accumulatedSeconds * 1000L).coerceAtLeast(0L)
-                                onDoubleTapSeek(target)
-                                onDoubleTapAction(DoubleTapSide.LEFT, accumulatedSeconds)
-                                onHaptic(HapticFeedbackType.LongPress)
-                                onHudStateChange(GestureHudState.Seek(target, total, -accumulatedSeconds * 1000L))
-                                onTriggerHudDismiss()
-                            }
-                            x > width * 0.65f -> {
-                                val isSameSideInWindow =
-                                    lastDoubleTapSide == DoubleTapSide.RIGHT && (now - lastDoubleTapTime) <= 900L
-                                val basePos =
-                                    if (isSameSideInWindow) lastSeekBasePositionMs else currentPositionMs()
-                                accumulatedSeconds =
-                                    if (isSameSideInWindow) accumulatedSeconds + 10 else 10
-                                lastDoubleTapSide = DoubleTapSide.RIGHT
-                                lastDoubleTapTime = now
-                                lastSeekBasePositionMs = basePos
-
-                                val maxPos = if (total > 0L) total else Long.MAX_VALUE
-                                val target = (basePos + accumulatedSeconds * 1000L).coerceAtMost(maxPos)
-                                onDoubleTapSeek(target)
-                                onDoubleTapAction(DoubleTapSide.RIGHT, accumulatedSeconds)
-                                onHaptic(HapticFeedbackType.LongPress)
-                                onHudStateChange(GestureHudState.Seek(target, total, accumulatedSeconds * 1000L))
-                                onTriggerHudDismiss()
-                            }
+                            x < width * 0.35f -> handleQuickSeek(DoubleTapSide.LEFT)
+                            x > width * 0.65f -> handleQuickSeek(DoubleTapSide.RIGHT)
                             else -> {
+                                commitPendingQuickSeek()
                                 onHaptic(HapticFeedbackType.LongPress)
                                 onDoubleTapPlayPause()
                             }
@@ -358,6 +400,7 @@ private class PlayerGesturesNode(
                     },
                     onLongPress = {
                         if (!isLocked && isPlaying) {
+                            commitPendingQuickSeek()
                             isFastForwarding = true
                             onHaptic(HapticFeedbackType.LongPress)
                             onFastForwardStart()
@@ -391,6 +434,7 @@ private class PlayerGesturesNode(
                             dragMode = DragMode.NONE
                             return@detectDragGestures
                         }
+                        commitPendingQuickSeek()
                         startOffset = offset
                         dragMode = DragMode.NONE
                         dragAccumulatedX = 0f
@@ -832,3 +876,6 @@ private fun YouTubeDoubleTapIndicator(
         }
     }
 }
+
+private const val DOUBLE_TAP_WINDOW_MS = 800L
+private const val DOUBLE_TAP_COMMIT_DELAY_MS = 650L

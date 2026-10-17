@@ -41,6 +41,9 @@ class EchCapabilityDetectorTest {
 
         assertFalse(EchCapabilityDetector.isSeedHost("i0.hdslb.com"))
         assertFalse(EchCapabilityDetector.isSeedHost("sinaimg.cn"))
+
+        assertTrue(EchCapabilityDetector.isEchEligible("p.sda1.dev"))
+        assertFalse(EchCapabilityDetector.isEchEligible("i0.hdslb.com"))
     }
 
     @Test

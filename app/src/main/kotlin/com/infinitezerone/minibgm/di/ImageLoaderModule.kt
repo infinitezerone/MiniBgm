@@ -34,6 +34,7 @@ import io.ktor.utils.io.InternalAPI
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeout
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -61,17 +62,6 @@ private class ImageRoutingEngine(
     // 第三方图床 ECH 并发配额隔离（最多 8 个并发槽位，杜绝抢占核心业务 API）
     private val thirdPartyEchSemaphore = Semaphore(permits = 8)
 
-    // DoH 嗅探专用轻量客户端（基于 fallbackEngine 建立，短超时）
-    private val dohProbeClient by lazy {
-        HttpClient(fallbackEngine) {
-            install(HttpTimeout) {
-                requestTimeoutMillis = 2_500
-                connectTimeoutMillis = 1_500
-                socketTimeoutMillis = 1_500
-            }
-        }
-    }
-
     override suspend fun execute(data: HttpRequestData): HttpResponseData {
         val host = data.url.host
         val isCoreHost =
@@ -83,25 +73,30 @@ private class ImageRoutingEngine(
             return primaryEngine.execute(data)
         }
 
-        val useEch = EchCapabilityDetector.isEchSupported(host, dohProbeClient)
-        return if (useEch) {
-            try {
+        // 已在种子白名单或已由后台成功探测到 ECH 记录的第三方域名走 primaryEngine
+        val isKnownEch = EchCapabilityDetector.isEchEligible(host)
+        if (isKnownEch) {
+            return try {
                 thirdPartyEchSemaphore.withPermit {
-                    primaryEngine.execute(data)
+                    withTimeout(4_000L) {
+                        primaryEngine.execute(data)
+                    }
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Throwable) {
                 fallbackEngine.execute(data)
             }
-        } else {
-            fallbackEngine.execute(data)
         }
+
+        // 未知域名：fail-open 直接直连发流，绝不让 DoH 探测阻塞首图渲染！
+        // 后台触发异步探测（若探测支持，后续请求自动升级走 ECH）
+        EchCapabilityDetector.probeAsyncIfUnknown(host)
+        return fallbackEngine.execute(data)
     }
 
     override fun close() {
         super.close()
-        dohProbeClient.close()
         primaryEngine.close()
         fallbackEngine.close()
     }
@@ -153,9 +148,9 @@ val imageLoaderModule =
                 ) {
                     install(HttpRedirect)
                     install(HttpTimeout) {
-                        connectTimeoutMillis = 10_000
-                        socketTimeoutMillis = 15_000
-                        requestTimeoutMillis = 20_000
+                        connectTimeoutMillis = 8_000
+                        socketTimeoutMillis = 12_000
+                        requestTimeoutMillis = 30_000
                     }
                     install(DefaultRequest) {
                         header(HttpHeaders.Accept, "image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
@@ -171,6 +166,8 @@ val imageLoaderModule =
                         if (host.isBgmDomain) {
                             request.header("Referer", "https://bgm.tv/")
                         } else {
+                            request.headers.remove(HttpHeaders.Referrer)
+                            request.headers.remove("Referer")
                             request.headers.remove(HttpHeaders.UserAgent)
                             request.header(
                                 HttpHeaders.UserAgent,

@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -239,6 +240,7 @@ private fun BgmBbCodeImage(
     var isRevealed by rememberSaveable(image.url) { mutableStateOf(!image.isMasked) }
     var retryCount by remember(image.url) { mutableIntStateOf(0) }
     var isLoadFailed by remember(image.url, retryCount) { mutableStateOf(false) }
+    var isLoading by remember(image.url, retryCount) { mutableStateOf(true) }
     val logger = remember { bgmLogger("Bgm/BbCode") }
     val aspectRatio = image.aspectRatio
     val imageModifier =
@@ -319,6 +321,7 @@ private fun BgmBbCodeImage(
                                 onClick = {
                                     retryCount++
                                     isLoadFailed = false
+                                    isLoading = true
                                 },
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                 modifier = Modifier.height(32.dp),
@@ -360,12 +363,26 @@ private fun BgmBbCodeImage(
                                 stringResource(R.string.core_designsystem_bbcode_image_comment_cd)
                             },
                         contentScale = ContentScale.Fit,
+                        onLoading = {
+                            isLoading = true
+                        },
                         onError = { state ->
+                            isLoading = false
                             isLoadFailed = true
                             logger.w { "BBCode image load failed for ${image.url}: ${state.result.throwable.message}" }
                         },
-                        onSuccess = { isLoadFailed = false },
+                        onSuccess = {
+                            isLoading = false
+                            isLoadFailed = false
+                        },
                         modifier = imageModifier,
+                    )
+                }
+                if (isLoading && !isLoadFailed && isRevealed) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                     )
                 }
             }
