@@ -333,6 +333,16 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun onPlaybackEnded_doesNotAdvanceWhenStreamUrlIsBlank() {
+        val viewModel = viewModel(route = route(streamUrl = ""))
+
+        val advanced = viewModel.onPlaybackEnded()
+
+        assertFalse(advanced)
+        assertFalse(viewModel.uiState.value.isWatched)
+    }
+
+    @Test
     fun onPlaybackEnded_doesNotAdvanceWhenNextEpisodeIsDifferentType() =
         runTest {
             val episodes =

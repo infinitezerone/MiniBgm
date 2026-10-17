@@ -1099,6 +1099,7 @@ class PlayerViewModel(
      */
     fun onPlaybackEnded(): Boolean {
         val state = _uiState.value
+        if (state.streamUrl.isBlank()) return false
         markWatched(state.episodeSort.toInt())
         val finishedUrl = state.streamUrl
         session.resetProgressTracking()

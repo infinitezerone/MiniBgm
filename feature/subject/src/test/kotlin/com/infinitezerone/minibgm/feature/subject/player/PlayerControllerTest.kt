@@ -208,6 +208,30 @@ class PlayerControllerTest {
         }
 
     @Test
+    fun retry_doesNothingWhenMediaUrlIsBlank() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+            controller.setMedia("", emptyMap())
+
+            controller.retry()
+
+            assertEquals(0, engine.retryCalls)
+        }
+
+    @Test
+    fun engineEnded_ignoredWhenMediaUrlIsBlank() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+            controller.setMedia("", emptyMap())
+
+            engine.emitPlaybackState(EnginePlaybackState.ENDED)
+
+            assertFalse(controller.state.value.isEnded)
+        }
+
+    @Test
     fun engineError_isSurfacedAndStopsBuffering() =
         runTest {
             val engine = FakePlayerEngine()

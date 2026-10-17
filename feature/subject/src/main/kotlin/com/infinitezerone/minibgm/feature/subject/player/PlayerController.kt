@@ -106,10 +106,11 @@ class PlayerController(
             }
 
             override fun onPlaybackStateChanged(state: EnginePlaybackState) {
+                val hasMedia = _state.value.mediaUrl.isNotBlank()
                 _state.update {
                     it.copy(
                         isBuffering = state == EnginePlaybackState.BUFFERING,
-                        isEnded = state == EnginePlaybackState.ENDED,
+                        isEnded = state == EnginePlaybackState.ENDED && hasMedia,
                         durationMs = engine.durationMs,
                     )
                 }
@@ -122,7 +123,9 @@ class PlayerController(
 
                     EnginePlaybackState.ENDED -> {
                         stopPositionPolling()
-                        _events.trySend(PlayerEngineEvent.Ended)
+                        if (hasMedia) {
+                            _events.trySend(PlayerEngineEvent.Ended)
+                        }
                     }
 
                     EnginePlaybackState.IDLE -> stopPositionPolling()
@@ -220,6 +223,7 @@ class PlayerController(
 
     /** 重试当前地址（保留 URL 与请求头）。 */
     fun retry() {
+        if (_state.value.mediaUrl.isBlank()) return
         _state.update { it.copy(error = null, isBuffering = true, isEnded = false) }
         engine.retry()
     }

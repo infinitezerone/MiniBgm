@@ -371,8 +371,11 @@ fun PlayerScreen(
                 }
 
                 PlayerEngineEvent.Ended -> {
+                    val wasReady = playerReady
                     playerReady = false
-                    viewModel.onPlaybackEnded()
+                    if (wasReady) {
+                        viewModel.onPlaybackEnded()
+                    }
                 }
 
                 is PlayerEngineEvent.Error -> viewModel.onPlaybackError(event.message)
