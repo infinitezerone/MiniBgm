@@ -9,6 +9,8 @@ import androidx.compose.foundation.gestures.DraggableAnchors
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.anchoredDraggable
 import androidx.compose.foundation.gestures.animateTo
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,6 +50,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -79,6 +82,7 @@ import com.infinitezerone.minibgm.feature.schedule.components.TIMELINE_SLOT_SPAC
 import com.infinitezerone.minibgm.feature.schedule.components.TimelineSlotRow
 import com.infinitezerone.minibgm.feature.schedule.components.getCurrentMinutesCst
 import com.infinitezerone.minibgm.feature.schedule.components.parseTimeMinutesCst
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.isActive
@@ -140,6 +144,8 @@ fun ScheduleScreen(
             animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         )
 
+    var animationJob by remember { mutableStateOf<Job?>(null) }
+
     val filterNestedScrollConnection =
         remember(filterBarState, filterBarFlingBehavior) {
             object : NestedScrollConnection {
@@ -147,6 +153,11 @@ fun ScheduleScreen(
                     available: Offset,
                     source: NestedScrollSource,
                 ): Offset {
+                    // 当用户手指开始滑动触控输入时，若存在正在运行的动画或沉降，立即取消以无缝接管
+                    if (source == NestedScrollSource.UserInput && animationJob?.isActive == true) {
+                        animationJob?.cancel()
+                        animationJob = null
+                    }
                     val deltaY = available.y
                     val minPos = filterBarState.anchors.positionOf(FilterBarValue.COLLAPSED)
                     val maxPos = filterBarState.anchors.positionOf(FilterBarValue.EXPANDED)
@@ -171,7 +182,11 @@ fun ScheduleScreen(
 
                     val isMidway = currentOffset > (minPos + 0.5f) && currentOffset < (maxPos - 0.5f)
                     if (isMidway) {
-                        filterBarState.settle(spring(stiffness = Spring.StiffnessMediumLow))
+                        animationJob?.cancel()
+                        animationJob =
+                            coroutineScope.launch {
+                                filterBarState.settle(spring(stiffness = Spring.StiffnessMediumLow))
+                            }
                     }
                     return super.onPostFling(consumed, available)
                 }
@@ -181,7 +196,8 @@ fun ScheduleScreen(
     // 监听底栏「放送」Tab 再次点击回顶（非今天先平滑滚回今天，已经在今天则滚回列表顶部）
     if (scrollToTop != null) {
         ObserveAsEvents(scrollToTop) {
-            coroutineScope.launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
+            animationJob?.cancel()
+            animationJob = coroutineScope.launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
             if (pagerState.currentPage != ScheduleViewModel.TODAY_PAGE_INDEX) {
                 pagerState.animateScrollToPage(ScheduleViewModel.TODAY_PAGE_INDEX)
             } else {
@@ -201,7 +217,8 @@ fun ScheduleScreen(
             viewModel.selectPage(pagerState.settledPage)
         }
         if (filterBarState.currentValue != FilterBarValue.EXPANDED) {
-            filterBarState.animateTo(FilterBarValue.EXPANDED)
+            animationJob?.cancel()
+            animationJob = launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
         }
     }
 
@@ -248,7 +265,15 @@ fun ScheduleScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .nestedScroll(filterNestedScrollConnection),
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            if (animationJob?.isActive == true) {
+                                animationJob?.cancel()
+                                animationJob = null
+                            }
+                        }
+                    }.nestedScroll(filterNestedScrollConnection),
         ) {
             val watchingCountMap =
                 remember(uiState.daySchedules, uiState.watchingSubjectIds) {
@@ -268,14 +293,16 @@ fun ScheduleScreen(
                     pagerState = pagerState,
                     onSelectPage = { page ->
                         if (page == pagerState.currentPage) {
+                            animationJob?.cancel()
                             coroutineScope.launch {
-                                launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
+                                animationJob = launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
                                 pageListStates.getOrNull(page)?.animateScrollToItem(0)
                             }
                         } else {
                             viewModel.selectPage(page)
+                            animationJob?.cancel()
                             coroutineScope.launch {
-                                launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
+                                animationJob = launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
                                 pagerState.scrollToPage(page)
                             }
                         }
