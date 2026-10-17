@@ -348,6 +348,16 @@ class ArchitectureRulesTest {
                 .map { it.groupValues[1] }
                 .toSet()
 
+        // 全仓测试类文件名索引：文档里点名的 `XxxTest` 必须真有这个文件
+        val testClassFiles =
+            projectRoot
+                .walkTopDown()
+                // 注意：这里**不能**跳过 test / androidHostTest 目录——测试类恰恰住在那里
+                .onEnter { it.name !in setOf("build", ".git", ".jj", "node_modules", ".gradle", "target") }
+                .filter { it.isFile && it.name.endsWith("Test.kt") }
+                .map { it.name.removeSuffix(".kt") }
+                .toSet()
+
         val docs = mutableListOf<Pair<File, String>>()
         File(projectRoot, "AGENTS.md").takeIf { it.isFile }?.let { docs.add(it to it.readText()) }
         minibgmSkillDirs().forEach { skillDir ->
@@ -377,6 +387,10 @@ class ArchitectureRulesTest {
                     Regex("""^[A-Za-z]+#([a-z0-9_]+)$""").matches(token) -> {
                         val method = token.substringAfter((35).toChar())
                         if (method !in knownTests) violations.add(rel + " -> 引用了不存在的红线 " + token)
+                    }
+                    // 点名的测试类：必须存在同名 .kt 文件
+                    Regex("""^[A-Z][A-Za-z0-9]*Test$""").matches(token) -> {
+                        if (token !in testClassFiles) violations.add(rel + " -> 引用了不存在的测试类 " + token)
                     }
                     // 纯 snake_case：AGENTS 里只应是测试名
                     file.name == "AGENTS.md" && Regex("""^[a-z][a-z0-9_]{11,}$""").matches(token) -> {
@@ -3069,6 +3083,6 @@ class ArchitectureRulesTest {
         const val SKILL_MAX_CHARS = 6_000
 
         /** 单个 reference 的上限：一次 read 不该把上下文顶爆 */
-        const val SKILL_REFERENCE_MAX_CHARS = 14_000
+        const val SKILL_REFERENCE_MAX_CHARS = 10_000
     }
 }
