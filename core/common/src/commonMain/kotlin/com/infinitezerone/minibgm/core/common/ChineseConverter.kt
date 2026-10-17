@@ -59,8 +59,20 @@ object ChineseConverter {
     ): List<String> {
         val ordered =
             buildList {
-                primary.takeIf { it.isNotBlank() }?.let(::add)
-                addAll(aliases.filter { it.isNotBlank() }.sortedBy { if (it.hasCjk()) 0 else 1 })
+                if (primary.isNotBlank()) {
+                    val derivatives = TitleSanitizer.extractDerivatives(primary)
+                    if (derivatives.isNotEmpty()) {
+                        // 若主标题含有子短语或季数/赛段限定词，将提炼出的核心词排在首发位，
+                        // 确保进入 Fast Track 并发竞速提升首发命中率
+                        addAll(derivatives.filter { it.isNotBlank() })
+                    }
+                    add(primary)
+                }
+                for (alias in aliases.filter { it.isNotBlank() }.sortedBy { if (it.hasCjk()) 0 else 1 }) {
+                    add(alias)
+                    val aliasDerivatives = TitleSanitizer.extractDerivatives(alias)
+                    addAll(aliasDerivatives.filter { it.isNotBlank() })
+                }
                 origin.takeIf { it.isNotBlank() }?.let(::add)
             }
         return queryVariants(*ordered.toTypedArray()).take(max)
