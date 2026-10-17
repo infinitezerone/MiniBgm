@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -53,6 +54,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.subject.R
@@ -733,9 +735,14 @@ private fun TopCapsuleIndicator(
             }
             Text(
                 text = "$percent%",
-                style = MaterialTheme.typography.labelSmall,
+                style =
+                    MaterialTheme.typography.labelSmall.copy(
+                        fontFeatureSettings = "tnum",
+                    ),
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
+                textAlign = TextAlign.End,
+                modifier = Modifier.width(36.dp),
             )
         }
     }
@@ -761,7 +768,10 @@ private fun SeekFeedbackCard(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
+            modifier =
+                Modifier
+                    .widthIn(min = 160.dp)
+                    .padding(horizontal = 22.dp, vertical = 12.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -776,14 +786,20 @@ private fun SeekFeedbackCard(
                 val deltaSec = (abs(deltaMs) / 1000).toInt()
                 Text(
                     text = "${if (deltaMs >= 0) "+" else "-"}${deltaSec}s",
-                    style = MaterialTheme.typography.titleMedium,
+                    style =
+                        MaterialTheme.typography.titleMedium.copy(
+                            fontFeatureSettings = "tnum",
+                        ),
                     fontWeight = FontWeight.Bold,
                     color = if (deltaMs >= 0) MaterialTheme.colorScheme.primary else Color.White,
                 )
             }
             Text(
                 text = "${formatDuration(targetMs)} / ${formatDuration(totalMs)}",
-                style = MaterialTheme.typography.bodyMedium,
+                style =
+                    MaterialTheme.typography.bodyMedium.copy(
+                        fontFeatureSettings = "tnum",
+                    ),
                 fontWeight = FontWeight.Medium,
                 color = Color.White.copy(alpha = 0.9f),
             )
@@ -819,7 +835,10 @@ private fun FastForwardChip(
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = stringResource(R.string.feature_subject_player_speed_fast_forward, speed),
-                style = MaterialTheme.typography.labelMedium,
+                style =
+                    MaterialTheme.typography.labelMedium.copy(
+                        fontFeatureSettings = "tnum",
+                    ),
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
             )
@@ -866,7 +885,10 @@ private fun YouTubeDoubleTapIndicator(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = stringResource(R.string.feature_subject_player_seek_seconds_format, state.seconds),
-                    style = MaterialTheme.typography.labelLarge,
+                    style =
+                        MaterialTheme.typography.labelLarge.copy(
+                            fontFeatureSettings = "tnum",
+                        ),
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                 )
