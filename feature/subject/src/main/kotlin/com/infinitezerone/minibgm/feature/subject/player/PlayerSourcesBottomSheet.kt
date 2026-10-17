@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -25,6 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -123,7 +125,7 @@ internal fun PlayerSourcesDrawer(
             onManageRules = onManageRules,
             onRequestOpenSources = onRequestOpenSources,
             onClose = onClose,
-            modifier = Modifier.padding(top = 16.dp),
+            modifier = Modifier.fillMaxHeight().padding(top = 16.dp),
         )
     }
 }
@@ -145,12 +147,18 @@ internal fun PlayerSourcesListContent(
     onRequestOpenSources: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
 ) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex in sources.indices) {
+            listState.scrollToItem(selectedIndex)
+        }
+    }
+
     Column(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp),
+                .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // 标题栏：左侧标题与线路数，右侧独立的管理规则操作入口 (+ 可选关闭按钮)
@@ -226,7 +234,9 @@ internal fun PlayerSourcesListContent(
 
         // 线路垂直列表
         LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
+            state = listState,
+            modifier = Modifier.fillMaxWidth().weight(1f, fill = false),
+            contentPadding = PaddingValues(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             itemsIndexed(sources, key = { _, s -> s.id }) { index, source ->
