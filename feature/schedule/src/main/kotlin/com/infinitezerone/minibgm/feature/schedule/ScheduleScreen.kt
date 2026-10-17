@@ -1,7 +1,14 @@
 package com.infinitezerone.minibgm.feature.schedule
 
-import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.AnchoredDraggableDefaults
+import androidx.compose.foundation.gestures.AnchoredDraggableState
+import androidx.compose.foundation.gestures.DraggableAnchors
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.anchoredDraggable
+import androidx.compose.foundation.gestures.animateTo
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,7 +34,6 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -37,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -78,7 +83,13 @@ import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** 筛选条折叠状态锚点 */
+private enum class FilterBarValue {
+    EXPANDED,
+    COLLAPSED,
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ScheduleScreen(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
@@ -94,8 +105,6 @@ fun ScheduleScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
-    val filterBarHeight = 44.dp
-    val filterBarHeightPx = with(density) { filterBarHeight.toPx() }
     val overlayHostState = rememberOverlayHostState()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -108,21 +117,82 @@ fun ScheduleScreen(
 
     val pageListStates = List(ScheduleViewModel.TOTAL_SCHEDULE_DAYS) { rememberLazyListState() }
 
-    val filterCollapseState =
-        remember(filterBarHeightPx) {
-            FilterBarCollapseState(
-                limitPx = filterBarHeightPx,
-                canScroll = {
-                    val state = pageListStates.getOrNull(pagerState.currentPage)
-                    state != null && (state.canScrollForward || state.canScrollBackward)
-                },
+    val initialFilterBarHeightPx = with(density) { 44.dp.toPx() }
+    val filterBarState =
+        remember {
+            AnchoredDraggableState(
+                initialValue = FilterBarValue.EXPANDED,
+                anchors =
+                    DraggableAnchors {
+                        FilterBarValue.EXPANDED at 0f
+                        FilterBarValue.COLLAPSED at -initialFilterBarHeightPx
+                    },
             )
+        }
+
+    val filterBarFlingBehavior =
+        AnchoredDraggableDefaults.flingBehavior(
+            state = filterBarState,
+            positionalThreshold = { totalDistance -> totalDistance * 0.5f },
+            animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        )
+
+    val filterNestedScrollConnection =
+        remember(filterBarState, pageListStates, pagerState) {
+            object : NestedScrollConnection {
+                override fun onPreScroll(
+                    available: Offset,
+                    source: NestedScrollSource,
+                ): Offset {
+                    // 关键防冲突：仅响应用户真实触控输入，忽略系统边缘拉伸与弹性回弹（SideEffect）
+                    if (source != NestedScrollSource.UserInput) {
+                        return Offset.Zero
+                    }
+                    val deltaY = available.y
+                    val canScroll = {
+                        val state = pageListStates.getOrNull(pagerState.currentPage)
+                        state != null && (state.canScrollForward || state.canScrollBackward)
+                    }
+
+                    return when {
+                        // 手指上滑（列表内容上移）：仅当列表有足够内容可滚动时才优先折叠筛选栏
+                        deltaY < 0f && canScroll() -> {
+                            val consumedY = filterBarState.dispatchRawDelta(deltaY)
+                            Offset(0f, consumedY)
+                        }
+                        // 手指下滑（列表内容下移，enterAlways 模式）：优先展开筛选栏
+                        deltaY > 0f && filterBarState.offset < 0f -> {
+                            val consumedY = filterBarState.dispatchRawDelta(deltaY)
+                            Offset(0f, consumedY)
+                        }
+                        else -> Offset.Zero
+                    }
+                }
+
+                override suspend fun onPostFling(
+                    consumed: Velocity,
+                    available: Velocity,
+                ): Velocity {
+                    val currentOffset = filterBarState.offset
+                    val collapsedOffset = filterBarState.anchors.positionOf(FilterBarValue.COLLAPSED)
+                    if (currentOffset < 0f && currentOffset > collapsedOffset) {
+                        val target =
+                            when {
+                                available.y < -100f || consumed.y < -100f -> FilterBarValue.COLLAPSED
+                                available.y > 100f || consumed.y > 100f -> FilterBarValue.EXPANDED
+                                else -> if (currentOffset < collapsedOffset / 2f) FilterBarValue.COLLAPSED else FilterBarValue.EXPANDED
+                            }
+                        filterBarState.animateTo(target)
+                    }
+                    return super.onPostFling(consumed, available)
+                }
+            }
         }
 
     // 监听底栏「放送」Tab 再次点击回顶（非今天先平滑滚回今天，已经在今天则滚回列表顶部）
     if (scrollToTop != null) {
         ObserveAsEvents(scrollToTop) {
-            coroutineScope.launch { filterCollapseState.animateTo(0f) }
+            coroutineScope.launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
             if (pagerState.currentPage != ScheduleViewModel.TODAY_PAGE_INDEX) {
                 pagerState.animateScrollToPage(ScheduleViewModel.TODAY_PAGE_INDEX)
             } else {
@@ -141,8 +211,8 @@ fun ScheduleScreen(
         if (uiState.selectedPageIndex != pagerState.settledPage) {
             viewModel.selectPage(pagerState.settledPage)
         }
-        if (filterCollapseState.offset > 0f) {
-            filterCollapseState.animateTo(0f)
+        if (filterBarState.currentValue != FilterBarValue.EXPANDED) {
+            filterBarState.animateTo(FilterBarValue.EXPANDED)
         }
     }
 
@@ -189,7 +259,7 @@ fun ScheduleScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .nestedScroll(filterCollapseState),
+                    .nestedScroll(filterNestedScrollConnection),
         ) {
             val watchingCountMap =
                 remember(uiState.daySchedules, uiState.watchingSubjectIds) {
@@ -210,13 +280,13 @@ fun ScheduleScreen(
                     onSelectPage = { page ->
                         if (page == pagerState.currentPage) {
                             coroutineScope.launch {
-                                launch { filterCollapseState.animateTo(0f) }
+                                launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
                                 pageListStates.getOrNull(page)?.animateScrollToItem(0)
                             }
                         } else {
                             viewModel.selectPage(page)
-                            filterCollapseState.snapTo(0f)
                             coroutineScope.launch {
+                                launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
                                 pagerState.scrollToPage(page)
                             }
                         }
@@ -229,24 +299,34 @@ fun ScheduleScreen(
             val currentPageTotal = uiState.getTotalCountForPage(pagerState.currentPage)
             val currentPageWatching = uiState.getWatchingCountForPage(pagerState.currentPage)
 
-            // 随列表滚动收起的筛选条：高度与平移全部在 Layout/Draw 阶段读取，消除滚动过程中的重组开销
+            // 随列表滚动收起的筛选条：自然测量 + 摆放阶段 GPU 硬件平移，消除重测抖动，自适应大字体
             Box(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .layout { measurable, constraints ->
-                            val visibleHeightPx = (filterBarHeightPx - filterCollapseState.offset).coerceAtLeast(0f).roundToInt()
-                            val placeable =
-                                measurable.measure(
-                                    constraints.copy(
-                                        minHeight = 0,
-                                        maxHeight = visibleHeightPx,
-                                    ),
+                        .clipToBounds()
+                        .anchoredDraggable(
+                            state = filterBarState,
+                            orientation = Orientation.Vertical,
+                            flingBehavior = filterBarFlingBehavior,
+                        ).layout { measurable, constraints ->
+                            val placeable = measurable.measure(constraints)
+                            val barHeight = placeable.height.toFloat()
+                            if (barHeight > 0f) {
+                                filterBarState.updateAnchors(
+                                    DraggableAnchors {
+                                        FilterBarValue.EXPANDED at 0f
+                                        FilterBarValue.COLLAPSED at -barHeight
+                                    },
                                 )
-                            layout(placeable.width, visibleHeightPx) {
-                                placeable.place(0, 0)
                             }
-                        }.clipToBounds(),
+                            val currentOffset = filterBarState.offset
+                            val visibleHeight = (barHeight + currentOffset).roundToInt().coerceIn(0, placeable.height)
+
+                            layout(placeable.width, visibleHeight) {
+                                placeable.placeRelativeWithLayer(0, currentOffset.roundToInt())
+                            }
+                        },
                 contentAlignment = Alignment.TopCenter,
             ) {
                 FilterAndMetaBar(
@@ -256,10 +336,7 @@ fun ScheduleScreen(
                     onToggleOnlyWatching = viewModel::toggleOnlyWatching,
                     isLoggedIn = uiState.isLoggedIn,
                     onPromptLogin = viewModel::promptLogin,
-                    modifier =
-                        Modifier
-                            .widthIn(max = 840.dp)
-                            .graphicsLayer { translationY = -filterCollapseState.offset },
+                    modifier = Modifier.widthIn(max = 840.dp),
                 )
             }
 
@@ -444,75 +521,6 @@ private fun DayScheduleList(
                     }
                 }
             }
-        }
-    }
-}
-
-/** 筛选条滚动收起控制器（enterAlways 模式）：上滑先收起再滚列表，下滑先展开（B站时间表模式），松手后吸附到两端 */
-private class FilterBarCollapseState(
-    private val limitPx: Float,
-    private val canScroll: () -> Boolean,
-) : NestedScrollConnection {
-    var offset by mutableFloatStateOf(0f)
-        private set
-
-    override fun onPreScroll(
-        available: Offset,
-        source: NestedScrollSource,
-    ): Offset {
-        // 关键防冲突：仅响应用户真实触控输入，忽略系统边缘拉伸与弹性回弹（SideEffect），
-        // 避免列表触底时 Android 12+ Stretch Overscroll 回弹物理动画与顶部展开动画互相拉扯抽搐。
-        if (source != NestedScrollSource.UserInput) {
-            return Offset.Zero
-        }
-
-        return when {
-            // 手指上滑（列表内容上移）：仅当列表有足够内容可滚动时才收起筛选条
-            available.y < 0f && canScroll() -> {
-                val prev = offset
-                offset = (prev - available.y).coerceIn(0f, limitPx)
-                Offset(0f, prev - offset)
-            }
-            // 手指下滑（列表内容下移）：先展开筛选条
-            available.y > 0f && offset > 0f -> {
-                val prev = offset
-                offset = (prev - available.y).coerceIn(0f, limitPx)
-                Offset(0f, prev - offset)
-            }
-            else -> Offset.Zero
-        }
-    }
-
-    override suspend fun onPostFling(
-        consumed: Velocity,
-        available: Velocity,
-    ): Velocity {
-        // 仅在处于半收起/半展开的中间悬空态时，才执行两端吸附过渡；
-        // 若已完全展开 (0f) 或完全收起 (limitPx)，不触发任何动画，避免干扰列表本身的惯性滑动或触底回弹。
-        if (offset > 0f && offset < limitPx) {
-            val target =
-                when {
-                    available.y < -100f || consumed.y < -100f -> limitPx
-                    available.y > 100f || consumed.y > 100f -> 0f
-                    else -> if (offset > limitPx / 2f) limitPx else 0f
-                }
-            animateTo(target)
-        }
-        return super.onPostFling(consumed, available)
-    }
-
-    fun snapTo(target: Float) {
-        offset = target.coerceIn(0f, limitPx)
-    }
-
-    suspend fun animateTo(target: Float) {
-        if (offset == target) return
-        animate(
-            initialValue = offset,
-            targetValue = target,
-            animationSpec = tween(durationMillis = 150),
-        ) { value, _ ->
-            offset = value
         }
     }
 }
