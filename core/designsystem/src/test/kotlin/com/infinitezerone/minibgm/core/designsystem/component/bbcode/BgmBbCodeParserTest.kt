@@ -521,4 +521,53 @@ class BgmBbCodeParserTest {
         assertNull(parsed.replyToUser)
         assertEquals("这是一条普通的直接回复", parsed.content)
     }
+
+    @Test
+    fun parseBlocks_extractsLinkedImageAndCleansNestedMalformedImgTags() {
+        val input = "蓝色美甲好骚哦[img][url=https://ibb.co/XxgWyn2H][img]https://i.ibb.co/fd5X831J/20261009193413-393-26.png[/img][/url][/img]"
+        val blocks = BgmBbCodeParser.parseBlocks(input)
+
+        assertEquals(2, blocks.size)
+
+        val p = blocks[0] as BbCodeBlock.Paragraph
+        assertEquals("蓝色美甲好骚哦", p.rawText)
+
+        val img = blocks[1] as BbCodeBlock.Image
+        assertEquals("https://i.ibb.co/fd5X831J/20261009193413-393-26.png", img.url)
+        assertEquals("https://ibb.co/XxgWyn2H", img.linkUrl)
+        assertFalse(img.isMasked)
+    }
+
+    @Test
+    fun parseBlocks_extractsStandardLinkedImage() {
+        val input = "[url=https://bgm.tv/subject/1][img]https://example.com/cover.jpg[/img][/url]"
+        val blocks = BgmBbCodeParser.parseBlocks(input)
+
+        assertEquals(1, blocks.size)
+        val img = blocks[0] as BbCodeBlock.Image
+        assertEquals("https://example.com/cover.jpg", img.url)
+        assertEquals("https://bgm.tv/subject/1", img.linkUrl)
+    }
+
+    @Test
+    fun parseBlocks_extractsLinkedMaskedImage() {
+        val input = "[mask][url=https://bgm.tv/subject/1][img]https://example.com/spoiler.jpg[/img][/url][/mask]"
+        val blocks = BgmBbCodeParser.parseBlocks(input)
+
+        assertEquals(1, blocks.size)
+        val img = blocks[0] as BbCodeBlock.Image
+        assertEquals("https://example.com/spoiler.jpg", img.url)
+        assertEquals("https://bgm.tv/subject/1", img.linkUrl)
+        assertTrue(img.isMasked)
+    }
+
+    @Test
+    fun parseBlocks_handlesRedundantNestedImgTags() {
+        val input = "[img][img]https://example.com/pic.jpg[/img][/img]"
+        val blocks = BgmBbCodeParser.parseBlocks(input)
+
+        assertEquals(1, blocks.size)
+        val img = blocks[0] as BbCodeBlock.Image
+        assertEquals("https://example.com/pic.jpg", img.url)
+    }
 }

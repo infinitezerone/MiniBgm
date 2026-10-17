@@ -270,7 +270,7 @@ private fun BgmBbCodeImage(
         color = MaterialTheme.colorScheme.surfaceVariant,
         onClick = {
             if (isRevealed && !isLoadFailed) {
-                onUrlClick?.invoke(image.url)
+                onUrlClick?.invoke(image.linkUrl ?: image.url)
             }
         },
         enabled = isRevealed && !isLoadFailed,
@@ -336,7 +336,7 @@ private fun BgmBbCodeImage(
                             }
                             if (onUrlClick != null) {
                                 TextButton(
-                                    onClick = { onUrlClick.invoke(image.url) },
+                                    onClick = { onUrlClick.invoke(image.linkUrl ?: image.url) },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                     modifier = Modifier.height(32.dp),
                                 ) {

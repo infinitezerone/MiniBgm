@@ -24,6 +24,7 @@ sealed interface BbCodeBlock {
         val width: Int? = null,
         val height: Int? = null,
         val isMasked: Boolean = false,
+        val linkUrl: String? = null,
     ) : BbCodeBlock {
         val aspectRatio: Float?
             get() =
@@ -116,6 +117,11 @@ object BgmBbCodeParser {
     private val FULL_IMG_REGEX = Regex("""\[img((?:\s*=[^\]]*|\s+[^\]]*)?)\]([\s\S]*?)\[/img\]""", RegexOption.IGNORE_CASE)
     private val MASKED_IMG_REGEX =
         Regex("""\[__bgm_masked_img__((?:\s*=[^\]]*|\s+[^\]]*)?)\]([\s\S]*?)\[/__bgm_masked_img__\]""", RegexOption.IGNORE_CASE)
+    private val LINKED_OR_STANDALONE_IMG_REGEX =
+        Regex(
+            """\[url(?:=([^\]]*))?\]\s*(\[(?:__bgm_masked_img__|img)(?:\s*=[^\]]*|\s+[^\]]*)?\][\s\S]*?\[/(?:__bgm_masked_img__|img)\])\s*\[/url\]|(\[(?:__bgm_masked_img__|img)(?:\s*=[^\]]*|\s+[^\]]*)?\][\s\S]*?\[/(?:__bgm_masked_img__|img)\])""",
+            RegexOption.IGNORE_CASE,
+        )
     private val QUOTE_AUTHOR_REGEX = Regex("""^(?:\[b\])?(.*?)(?:\[/b\])?\s*(?:说|:)\s*:\s*([\s\S]*)$""", RegexOption.DOT_MATCHES_ALL)
     private val STRIPPED_TAGS_REGEX = Regex("""\[/?(?:photo=\d+|right)\]""", RegexOption.IGNORE_CASE)
     private val INLINE_TOKEN_REGEX =
@@ -126,16 +132,71 @@ object BgmBbCodeParser {
     private val SUPPORTED_INLINE_TAGS = setOf("b", "i", "u", "s", "mask", "color", "size", "url")
 
     /**
+     * 清理论坛常见的畸形嵌套图片标签（如用户从外部图床复制代码后再次包裹 [img]，
+     * 产生 [img][url=...][img]...[/img][/url][/img]、[img][img]...[/img][/img]
+     * 或将 [mask] 标签置于 [url] 内部导致的解析割裂）。
+     */
+    private fun normalizeMalformedImageTags(text: String): String {
+        var result = text
+
+        // 1. [img][url=TARGET][img]IMG[/img][/url][/img] -> [url=TARGET][img]IMG[/img][/url]
+        val nestedImgUrlImg =
+            Regex(
+                """\[img(?:\s*=[^\]]*)?\]\s*(\[url(?:=[^\]]*)?\]\s*\[img(?:\s*=[^\]]*)?\][\s\S]*?\[/img\]\s*\[/url\])\s*\[/img\]""",
+                RegexOption.IGNORE_CASE,
+            )
+        result = nestedImgUrlImg.replace(result, "$1")
+
+        // 2. [img][img]IMG[/img][/img] -> [img]IMG[/img]
+        val nestedImg =
+            Regex(
+                """\[img(?:\s*=[^\]]*)?\]\s*(\[img(?:\s*=[^\]]*)?\][\s\S]*?\[/img\])\s*\[/img\]""",
+                RegexOption.IGNORE_CASE,
+            )
+        result = nestedImg.replace(result, "$1")
+
+        // 3. [img][url=TARGET]IMG[/url][/img] -> [url=TARGET][img]IMG[/img][/url]
+        val imgUrl =
+            Regex(
+                """\[img(?:\s*=[^\]]*)?\]\s*\[url(?:=([^\]]*))?\]\s*([\s\S]*?)\s*\[/url\]\s*\[/img\]""",
+                RegexOption.IGNORE_CASE,
+            )
+        result =
+            imgUrl.replace(result) { m ->
+                val target = m.groupValues[1].trim()
+                val inner = m.groupValues[2].trim()
+                val imgUrlVal = if (inner.startsWith("http", ignoreCase = true)) inner else target
+                val linkUrlVal = if (target.isNotBlank() && target != imgUrlVal) target else null
+                if (linkUrlVal != null) {
+                    "[url=$linkUrlVal][img]$imgUrlVal[/img][/url]"
+                } else {
+                    "[img]$imgUrlVal[/img]"
+                }
+            }
+
+        // 4. [mask][url=TARGET][img]IMG[/img][/url][/mask] -> [url=TARGET][mask][img]IMG[/img][/mask][/url]
+        val maskUrlImg =
+            Regex(
+                """\[mask\]\s*(\[url(?:=[^\]]*)?\])\s*(\[img(?:\s*=[^\]]*)?\][\s\S]*?\[/img\])\s*(\[/url\])\s*\[/mask\]""",
+                RegexOption.IGNORE_CASE,
+            )
+        result = maskUrlImg.replace(result, "$1[mask]$2[/mask]$3")
+
+        return result
+    }
+
+    /**
      * 将包含 [img] 的 [mask] 标签解构转换：使其中的图片标记为 [__bgm_masked_img__]，
      * 并确保 mask 内部包裹的其他伴随文本仍保留为 [mask] 标签以便在段落中作为黑幕剧透渲染。
      */
     private fun preprocessMaskedImages(text: String): String {
-        if (!text.contains("[mask", ignoreCase = true) || !text.contains("[img", ignoreCase = true)) {
-            return text
+        val normalized = normalizeMalformedImageTags(text)
+        if (!normalized.contains("[mask", ignoreCase = true) || !normalized.contains("[img", ignoreCase = true)) {
+            return normalized
         }
 
         val maskWithImgRegex = Regex("""\[mask\]([\s\S]*?)(?:\[/mask\]|$)""", RegexOption.IGNORE_CASE)
-        return maskWithImgRegex.replace(text) { matchResult ->
+        return maskWithImgRegex.replace(normalized) { matchResult ->
             val inner = matchResult.groupValues[1]
             if (!inner.contains("[img", ignoreCase = true)) {
                 matchResult.value
@@ -282,16 +343,9 @@ object BgmBbCodeParser {
         val blocks = mutableListOf<BbCodeBlock>()
         var currentIndex = 0
 
-        // 非引用块级元素（屏蔽图 / 普通图片）
-        val imgBlockRegex =
-            Regex(
-                """(\[__bgm_masked_img__(?:\s*=[^\]]*|\s+[^\]]*)?\][\s\S]*?\[/__bgm_masked_img__\]|\[img(?:\s*=[^\]]*|\s+[^\]]*)?\][\s\S]*?\[/img\])""",
-                RegexOption.IGNORE_CASE,
-            )
-
         while (currentIndex <= preprocessed.lastIndex) {
             val quote = findBalancedQuote(preprocessed, currentIndex)
-            val imgMatch = imgBlockRegex.find(preprocessed, currentIndex)
+            val imgMatch = LINKED_OR_STANDALONE_IMG_REGEX.find(preprocessed, currentIndex)
             val nextQuoteStart = quote?.first?.first ?: Int.MAX_VALUE
             val nextImgStart = imgMatch?.range?.first ?: Int.MAX_VALUE
 
@@ -330,20 +384,35 @@ object BgmBbCodeParser {
                         blocks.add(parseParagraph(textSegment))
                     }
                 }
-                val matchedStr = match.value
-                val isMasked = matchedStr.startsWith("[__bgm_masked_img__", ignoreCase = true)
+                val linkUrlFromMatch = match.groupValues[1].trim().takeIf { it.isNotBlank() }
+                val matchedImgTag =
+                    if (match.groupValues[2].isNotBlank()) {
+                        match.groupValues[2]
+                    } else {
+                        match.groupValues[3]
+                    }
+                val isMasked = matchedImgTag.startsWith("[__bgm_masked_img__", ignoreCase = true)
                 val matchResult =
                     if (isMasked) {
-                        MASKED_IMG_REGEX.find(matchedStr)
+                        MASKED_IMG_REGEX.find(matchedImgTag)
                     } else {
-                        FULL_IMG_REGEX.find(matchedStr)
+                        FULL_IMG_REGEX.find(matchedImgTag)
                     }
                 if (matchResult != null) {
                     val tagArgs = matchResult.groupValues[1]
-                    val imgUrl = matchResult.groupValues[2].trim()
+                    val rawImgUrl = matchResult.groupValues[2].trim()
+                    val cleanImgUrl = extractCleanImageUrl(rawImgUrl)
                     val (w, h) = parseImageDimensions(tagArgs)
-                    if (imgUrl.isNotBlank()) {
-                        blocks.add(BbCodeBlock.Image(url = imgUrl, width = w, height = h, isMasked = isMasked))
+                    if (cleanImgUrl.isNotBlank()) {
+                        blocks.add(
+                            BbCodeBlock.Image(
+                                url = cleanImgUrl,
+                                width = w,
+                                height = h,
+                                isMasked = isMasked,
+                                linkUrl = linkUrlFromMatch,
+                            ),
+                        )
                     }
                 }
                 currentIndex = match.range.last + 1
@@ -351,6 +420,32 @@ object BgmBbCodeParser {
         }
 
         return blocks
+    }
+
+    /**
+     * 针对部分用户在 [img] 标签内部残留畸形文本或嵌套标签时提取纯净可用的图片 URL
+     */
+    private fun extractCleanImageUrl(raw: String): String {
+        val trimmed = raw.trim()
+        if (!trimmed.contains("[") && !trimmed.contains("]")) {
+            return trimmed
+        }
+        val urlRegex = Regex("""https?://[^\s\[\]"'>]+""", RegexOption.IGNORE_CASE)
+        val matches = urlRegex.findAll(trimmed).map { it.value }.toList()
+        return matches.lastOrNull { isLikelyImageUrl(it) } ?: matches.lastOrNull() ?: trimmed
+    }
+
+    private fun isLikelyImageUrl(url: String): Boolean {
+        val lower = url.lowercase()
+        return lower.endsWith(".png") ||
+            lower.endsWith(".jpg") ||
+            lower.endsWith(".jpeg") ||
+            lower.endsWith(".gif") ||
+            lower.endsWith(".webp") ||
+            lower.endsWith(".bmp") ||
+            lower.contains("/i.ibb.co/") ||
+            lower.contains("/img.") ||
+            lower.contains("/pic.")
     }
 
     /**
