@@ -31,8 +31,16 @@ internal object AdaptiveDnsResolver {
     private const val HOSTS_FILE_NAME = "ech_dynamic_hosts.txt"
     private var hostsFile: File? = null
 
-    /** 单次请求最多交给底层尝试的池内候选数，避免用坏节点摊薄请求预算。 */
+    /** 池里最多取多少个候选参与装配（装配后还会被 [MAX_CANDIDATES_PER_REQUEST] 截断）。 */
     private const val MAX_POOL_CANDIDATES = 8
+
+    /**
+     * 单次请求最多交给底层尝试的候选数。
+     *
+     * Rust 侧单候选连接预算是 2s，业务 client 的请求预算是 15s：10 个候选（20s）必然超时，
+     * 且真正可能通的候选排在后面永远轮不到。取 4 个（8s）保证每个候选都被真正尝试过。
+     */
+    private const val MAX_CANDIDATES_PER_REQUEST = 4
 
     /** 内存 DNS 缓存 TTL（10 分钟）：消除并发图片请求重复进行同步网络 DNS 查询的巨大开销。 */
     private const val DNS_CACHE_TTL_MILLIS = 10L * 60 * 1000
@@ -148,25 +156,20 @@ internal object AdaptiveDnsResolver {
             }
         }
 
-        val result = LinkedHashSet<String>()
+        val poolIps = EchEdgePool.snapshot().take(MAX_POOL_CANDIDATES)
 
-        // **池排在 DNS 结果之前**：白名单只能判定"是不是 Cloudflare"，判不了"通不通"。
-        // 实测（2026-10-01，移动网络）cloudflare-dns.com 的系统解析给出 104.16.249.249/248.249——
-        // 货真价实的 CF 地址，却在 TCP 层被黑洞。它们若排在最前，会先把请求预算耗光，
-        // 让后面已验证可达的池节点根本没机会被尝试。池里的节点是**实测握过手**的，可信度更高。
-        EchEdgePool.snapshot().take(MAX_POOL_CANDIDATES).forEach { result.add(formatAddress(it, port)) }
-
+        val publicNameIps = mutableListOf<String>()
         if (isEchEligible(host)) {
             // public_name 取自当前生效的 ECH 配置（内置种子）。它不再来自任何写死的域名常量。
             val publicName = EchConfigStore.activePublicName
             if (publicName == null) {
                 logger.w { "[DNS] $host has no readable ECH public_name; skipping that entry point" }
             } else {
-                val publicNameIps = resolveHostIps(publicName)
-                if (publicNameIps.isNotEmpty()) {
-                    EchEdgePool.absorb(publicNameIps)
-                    publicNameIps.forEach { result.add(formatAddress(it, port)) }
-                    logger.d { "[DNS] $host via ECH public_name $publicName -> $publicNameIps" }
+                val ips = resolveHostIps(publicName)
+                if (ips.isNotEmpty()) {
+                    EchEdgePool.absorb(ips)
+                    publicNameIps.addAll(ips)
+                    logger.d { "[DNS] $host via ECH public_name $publicName -> $ips" }
                 }
             }
         }
@@ -174,31 +177,32 @@ internal object AdaptiveDnsResolver {
         val hostIps = resolveHostIps(host)
         if (hostIps.isNotEmpty()) {
             EchEdgePool.absorb(hostIps)
-            hostIps.forEach { result.add(formatAddress(it, port)) }
             logger.d { "[DNS] $host system DNS -> $hostIps" }
         } else {
             logger.w { "[DNS] $host produced no Cloudflare-range answer (poisoned or unreachable)" }
         }
 
-        if (result.isEmpty()) {
+        var candidates = assembleCandidates(poolIps, hostIps, publicNameIps)
+        if (candidates.isEmpty()) {
             // 池空 + 解析全毒：这次请求本来也无从发起，就地探测是唯一有意义的动作。
             // 探测自带硬预算（24 个候选 / 每个 1.2s / 并发 8），最坏情况可控。
-            val recovered = CloudflareEdgeProbe.probe()
-            recovered.forEach { result.add(formatAddress(it, port)) }
+            val recovered = CloudflareEdgeProbe.probe().take(MAX_CANDIDATES_PER_REQUEST)
             logger.i { "[DNS] $host had zero candidates; probe recovered ${recovered.size}" }
+            candidates = recovered
         } else if (!EchEdgePool.hasFreshNodes()) {
             // 还有候选可用，就不让这次请求为探测买单：后台补池，下一次请求受益。
             launchBackgroundProbe()
         }
 
-        if (result.isEmpty()) {
+        if (candidates.isEmpty()) {
             logger.w { "[DNS] $host has no candidate after probe; delegating to the native resolver" }
             return null
         }
 
-        val candidates = result.toList()
-        resolvedCandidates[host] = candidates
-        return candidates.toTypedArray()
+        val formatted = candidates.map { formatAddress(it, port) }
+        resolvedCandidates[host] = formatted
+        logger.d { "[DNS] $host candidates=${formatted.size} $formatted" }
+        return formatted.toTypedArray()
     }
 
     /**
@@ -223,7 +227,10 @@ internal object AdaptiveDnsResolver {
             logger.d { "[DNS] $host connected via non-Cloudflare $succeededIp; not pooled" }
         }
 
-        val candidates = resolvedCandidates[host].orEmpty()
+        val candidates = resolvedCandidates.remove(host).orEmpty()
+        // 一并清掉该 host 的 DNS 缓存：下一次请求重新解析 / 重新探测，
+        // 而不是把刚失败的同一批候选原样再送一遍（那会让页面永久卡在超时）
+        dnsCache.remove(host)
         val index = candidates.indexOfFirst { EchEdgePool.normalizeIp(it) == succeededIp }
         if (index <= 0) return
         candidates.take(index).forEach { candidate ->
@@ -248,7 +255,7 @@ internal object AdaptiveDnsResolver {
             }
         }
         if (candidates.isNotEmpty()) {
-            logger.w { "[DNS] $host request failed completely; demoted ${candidates.size} candidate(s)" }
+            logger.w { "[DNS] $host request failed completely; demoted ${candidates.size} candidate(s) and dropped the cached list" }
         }
     }
 
@@ -307,5 +314,41 @@ internal object AdaptiveDnsResolver {
         dnsCache.clear()
         dynamicEchHosts.clear()
         hostsFile = null
+    }
+
+/**
+     * 交错装配单次请求的候选地址（纯函数，便于单测）。
+     *
+     * 为什么必须交错：池按健康分排序、最多 [MAX_POOL_CANDIDATES] 条，若整段排在最前再截断，
+     * 「刚解析到的真实 IP」与「ECH 入口 IP」会被全部挤出预算——而这两类恰恰最可能通。
+     * 槽位顺序：池前 2（实测握过手）→ 目标 host 真实 IP 1（最贴近目标）→ ECH 入口 IP 1；
+     * 某一类不足时按「池 → host → ECH」补齐，最后截到 [max]。
+     */
+    internal fun assembleCandidates(
+        poolIps: List<String>,
+        hostIps: List<String>,
+        publicNameIps: List<String>,
+        max: Int = MAX_CANDIDATES_PER_REQUEST,
+    ): List<String> {
+        if (max <= 0) return emptyList()
+        val picked = LinkedHashSet<String>()
+
+        fun takeFirst(
+            source: List<String>,
+            count: Int,
+        ) {
+            source
+                .asSequence()
+                .filter { it.isNotBlank() }
+                .take(count)
+                .forEach { picked.add(it) }
+        }
+        takeFirst(poolIps, 2)
+        takeFirst(hostIps, 1)
+        takeFirst(publicNameIps, 1)
+        if (picked.size < max) takeFirst(poolIps, poolIps.size)
+        if (picked.size < max) takeFirst(hostIps, hostIps.size)
+        if (picked.size < max) takeFirst(publicNameIps, publicNameIps.size)
+        return picked.take(max)
     }
 }
