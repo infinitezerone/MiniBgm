@@ -2618,6 +2618,76 @@ class ArchitectureRulesTest {
         )
     }
 
+    @Test
+    fun player_gesture_hud_must_not_jitter_and_use_tnum_and_avoid_dual_hud_conflict() {
+        val gestureFile =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerGestureDetector.kt",
+            )
+        assertTrue(gestureFile.isFile, "PlayerGestureDetector.kt 未找到")
+        val rawContent = gestureFile.readText()
+        val content = KotlinSourceScanner.sanitize(rawContent)
+
+        val violations = mutableListOf<String>()
+
+        // 1. 顶部胶囊必须带 tnum 与固定槽位宽度
+        if (!rawContent.contains("""fontFeatureSettings = "tnum"""")) {
+            violations.add("PlayerGestureDetector.kt 缺少 fontFeatureSettings = \"tnum\" 配置，数字宽度跳变会导致 HUD 剧烈抖动")
+        }
+        if (!content.contains("Modifier.width(36.dp)")) {
+            violations.add("TopCapsuleIndicator 缺少固定文本宽度 Modifier.width(36.dp)，百分比字符数变化会导致胶囊忽长忽短")
+        }
+
+        // 2. SeekFeedbackCard 必须有最小宽度约束
+        if (!content.contains("widthIn(min = 160.dp)")) {
+            violations.add("SeekFeedbackCard 缺少 widthIn(min = 160.dp) 最小宽度约束，拖动快进快退时卡片容易晃动")
+        }
+
+        // 3. 双击快进 handleQuickSeek 严禁向中央派发 GestureHudState.Seek，杜绝侧边 YouTube 药丸与中央卡片双重浮窗打架
+        val handleQuickSeekBody =
+            Regex("""fun handleQuickSeek\([\s\S]*?\{([\s\S]*?)\n\s*\}""")
+                .find(content)
+                ?.groupValues
+                ?.get(1)
+        if (handleQuickSeekBody != null && handleQuickSeekBody.contains("GestureHudState.Seek")) {
+            violations.add("handleQuickSeek 违规调用了 GestureHudState.Seek，导致双击快进时侧边药丸与中央卡片两层浮窗重叠打架")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反播放器手势 HUD 稳定性与防冲突红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    @Test
+    fun image_loader_routing_must_fail_open_for_unknown_third_party_hosts() {
+        val moduleFile =
+            File(
+                projectRoot,
+                "app/src/main/kotlin/com/infinitezerone/minibgm/di/ImageLoaderModule.kt",
+            )
+        assertTrue(moduleFile.isFile, "ImageLoaderModule.kt 未找到")
+        val content = KotlinSourceScanner.sanitize(moduleFile.readText())
+
+        val violations = mutableListOf<String>()
+
+        // 未知域名必须 fail-open：严禁在 execute 内同步阻塞调用 isEchSupported
+        if (content.contains("EchCapabilityDetector.isEchSupported(host")) {
+            violations.add("ImageRoutingEngine 在主请求路径违规同步调用了 isEchSupported，阻断了首图立即加载")
+        }
+
+        // 必须通过 probeAsyncIfUnknown 异步探测
+        if (!content.contains("EchCapabilityDetector.probeAsyncIfUnknown(host)")) {
+            violations.add("ImageRoutingEngine 缺少 probeAsyncIfUnknown(host) 异步探测，未知图床无法自愈升级走 ECH")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反第三方图床 Fail-Open 路由红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
     /** 手工构造 ViewModel 的 Koin 块；`{ params -> ... }`、`{ (arg: T) -> ... }` 与单行写法都要覆盖 */
     private val manualViewModelBlock = Regex("""\bviewModel\s*\{[\s\S]{0,600}?\b([A-Z]\w*ViewModel)\s*\(""")
 
