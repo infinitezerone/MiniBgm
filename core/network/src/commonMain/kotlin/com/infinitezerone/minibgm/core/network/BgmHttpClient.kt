@@ -68,7 +68,7 @@ object BgmHttpClient {
             }
             // 超时只对幂等方法重试（写操作超时重试可能重复落库），取消语义永不重试
             retryOnExceptionIf { request, cause ->
-                shouldRetryAfterException(request.method, cause)
+                shouldRetryAfterException(request.method, cause, retryCount)
             }
             exponentialDelay(
                 base = 2.0,
@@ -219,12 +219,17 @@ object BgmHttpClient {
 internal fun shouldRetryAfterException(
     method: HttpMethod,
     cause: Throwable,
+    retryCount: Int,
 ): Boolean =
     when {
         cause is CancellationException -> false
-        cause is HttpRequestTimeoutException -> method.isIdempotent()
+        // 超时只重试一次：抖动值得再试一把，死站点不值得让用户等满 3 个请求预算（约 45s）
+        cause is HttpRequestTimeoutException -> method.isIdempotent() && retryCount <= MAX_TIMEOUT_RETRIES
         else -> true
     }
+
+/** 超时类异常的最大重试次数（Ktor 回调里的 retryCount 从 1 起）。 */
+private const val MAX_TIMEOUT_RETRIES = 1
 
 /** RFC 9110 §9.2.2 的幂等方法（TRACE 未在 Ktor 暴露常量，故不列入）。 */
 internal fun HttpMethod.isIdempotent(): Boolean =
