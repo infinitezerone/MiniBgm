@@ -287,11 +287,9 @@ private class PlayerGesturesNode(
         val target = (basePos + deltaMs).coerceIn(0L, maxPos)
         pendingSeekTargetMs = target
 
-        // 视觉与触觉反馈即时响应（数字累加、气泡波纹、HUD提示）
+        // 视觉与触觉反馈即时响应（数字累加、侧边灵动药丸动效）
         onDoubleTapAction(side, accumulatedSeconds)
         onHaptic(HapticFeedbackType.LongPress)
-        onHudStateChange(GestureHudState.Seek(target, total, deltaMs))
-        onTriggerHudDismiss()
 
         // 防抖延迟提交：连续点击期间保持平稳不跳针，停手冷却后一次性提交跳转
         pendingSeekJob?.cancel()
