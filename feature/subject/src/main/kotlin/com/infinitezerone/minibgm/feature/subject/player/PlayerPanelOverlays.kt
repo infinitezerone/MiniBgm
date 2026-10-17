@@ -299,24 +299,11 @@ fun OverlayProviderScope.playerSourcesPanel(
                 resolveAttempt = state.resolveAttempt,
                 resolveAttemptTotal = state.resolveAttemptTotal,
                 matchedVodName = state.matchedVodName,
-                onSelectSource = { index ->
-                    onSelectSource(index)
-                    onRespond(Unit)
-                },
-                onManageRules =
-                    onManageRules?.let { manage ->
-                        {
-                            onRespond(Unit)
-                            manage()
-                        }
-                    },
-                onRequestOpenSources =
-                    onRequestOpenSources?.let { openAi ->
-                        {
-                            onRespond(Unit)
-                            openAi()
-                        }
-                    },
+                // 底栏自己负责「先播完收起动效再执行动作」，调用方只交真实动作，
+                // 否则同一处会调度两次收起时序（且第一次是瞬间消失、没有动效）
+                onSelectSource = onSelectSource,
+                onManageRules = onManageRules,
+                onRequestOpenSources = onRequestOpenSources,
                 onDismiss = { onRespond(Unit) },
             )
         }

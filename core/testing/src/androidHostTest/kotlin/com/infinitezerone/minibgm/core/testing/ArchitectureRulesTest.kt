@@ -277,6 +277,78 @@ class ArchitectureRulesTest {
         }
     }
 
+    /**
+     * 播放线路面板是**主题化**面板（竖屏底部弹层与横屏右侧抽屉共用同一份内容），
+     * 容器色与文字必须全部来自 `MaterialTheme.colorScheme`。
+     *
+     * 横屏抽屉曾硬编码 `color = Color.Black.copy(alpha = 0.92f)` + `contentColor = Color.White`，
+     * 而内部每一行文字又显式取 `onSurface` / `onSurfaceVariant`：浅色主题下标题、说明文案与
+     * 「共 N 条线路」整体变成「深灰字压黑底」，对用户等于抽屉顶部是空的；同时与右侧选集抽屉
+     * （surfaceContainerHigh + 左侧圆角）风格割裂。`Color.Black` / `Color.White` 这类语义色
+     * 绕开了 `Color(0x...)` 硬编码红线，必须单独把这条面板钉死。
+     */
+    @Test
+    fun player_sources_panel_must_be_theme_driven() {
+        val file =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerSourcesBottomSheet.kt",
+            )
+        if (!file.isFile) return
+
+        val scanner = KotlinSourceScanner.fromFile(file)
+        val violations = mutableListOf<String>()
+        listOf("Color.Black", "Color.White").forEach { token ->
+            scanner.containsToken(token).forEach { match ->
+                violations.add("PlayerSourcesBottomSheet.kt:${match.lineNumber} 硬编码 $token -> ${match.lineContent}")
+            }
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "播放线路面板必须整体走主题 token（浅色主题下黑底 + 深色 onSurface 会让标题与说明文案直接消失）：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
+    /**
+     * 播放线路面板必须复用设计系统现成组件，而不是在 feature 里手搓私有样式：
+     * 竖屏走 `BgmSourcesBottomSheet`（收起动效 / 导航栏 padding / 头部 / 滚动容器），
+     * 次级入口（播放源管理、AI 找源）与空态走 `BgmSourceActionCard` / `SourceEmptyStateCard`。
+     *
+     * 历史缺陷：手写 `BgmModalBottomSheet` + 私有标题行 + `TextButton`「播放源管理」+ 裸 Text 空态，
+     * 于是同一份内容横竖两套样式各自漂移——收起没有动效、空态也没有可达的配置入口。
+     */
+    @Test
+    fun player_sources_panel_must_reuse_design_system() {
+        val file =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerSourcesBottomSheet.kt",
+            )
+        if (!file.isFile) return
+
+        val scanner = KotlinSourceScanner.fromFile(file)
+        val violations = mutableListOf<String>()
+
+        listOf("BgmSourcesBottomSheet(", "BgmSourceActionCard(", "SourceEmptyStateCard(").forEach { token ->
+            if (scanner.containsToken(token).isEmpty()) {
+                violations.add("缺少设计系统组件 $token")
+            }
+        }
+        listOf("BgmModalBottomSheet(", "TextButton(").forEach { token ->
+            scanner.containsToken(token).forEach { match ->
+                violations.add("PlayerSourcesBottomSheet.kt:${match.lineNumber} 手搓容器/私有按钮 $token -> ${match.lineContent}")
+            }
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "播放线路面板必须复用设计系统现成组件（BgmSourcesBottomSheet / BgmSourceActionCard / SourceEmptyStateCard）：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
     @Test
     fun feature_sources_never_perform_raw_network_or_private_disk_io() {
         val featureDir = File(projectRoot, "feature")

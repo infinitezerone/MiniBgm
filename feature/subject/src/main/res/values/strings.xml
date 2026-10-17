@@ -408,7 +408,6 @@
     <string name="feature_subject_player_source_rule_badge">规则源</string>
     <string name="feature_subject_player_source_in_use">正在使用当前线路</string>
     <string name="feature_subject_player_source_selected_pending">已选中，等待生效…</string>
-    <string name="feature_subject_player_sources_empty">当前没有可用的在线线路。可在右上角「播放源管理」中启用或添加播放规则。</string>
     <string name="feature_subject_player_source_matched_format">已匹配：%1$s · 正在播放</string>
     <string name="feature_subject_player_source_resolving_format">正在解析线路 (第 %1$d/%2$d 次)…</string>
     <string name="feature_subject_player_source_error_hint">播放异常 · 点击可切换线路</string>
