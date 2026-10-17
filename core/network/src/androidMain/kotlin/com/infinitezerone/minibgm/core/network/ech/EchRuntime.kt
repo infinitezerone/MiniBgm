@@ -19,6 +19,16 @@ object EchRuntime {
         AdaptiveDnsResolver.init(filesDir)
     }
 
+    /**
+     * 注册网络切换监听：换网后清空解析缓存并立刻允许一次兜底探测。
+     *
+     * 与 [initialize] 分开：监听需要 `Context`，而 `initialize` 只依赖 `filesDir`，
+     * 这样单测与纯文件装配路径不必被 Android 组件绑住。
+     */
+    fun startNetworkMonitor(context: android.content.Context) {
+        EchNetworkMonitor.start(context)
+    }
+
     /** 优选池的落盘是节流的，应用退到后台时补一次强制刷写。 */
     fun flush() {
         EchEdgePool.flush()

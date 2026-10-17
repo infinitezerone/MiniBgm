@@ -106,6 +106,31 @@ internal object CloudflareEdgeProbe {
         }.isSuccess
 
     /**
+     * 冷却判定（纯函数，便于单测）：从未探测过不冷却；窗口内一律跳过。
+     */
+    internal fun shouldSkipProbe(
+        now: Long,
+        lastProbeAtMillis: Long,
+    ): Boolean = lastProbeAtMillis != 0L && now - lastProbeAtMillis < COOLDOWN_MILLIS
+
+    /**
+     * 网络切换时清零冷却：旧网络里「刚探过」不代表新网络没有可用边缘。
+     *
+     * 不重置的后果（真机复盘）：Wi-Fi ↔ 蜂窝切换后仍要等满 10 分钟才会重新发现边缘，
+     * 表现为「明明有网却一直超时」，而用户唯一的自救手段是杀进程重进。
+     */
+    internal fun resetCooldown() {
+        lastProbeAtMillis.set(0L)
+        logger.i { "[EDGE_PROBE:RESET] cooldown cleared" }
+    }
+
+    internal fun lastProbeAtForTest(): Long = lastProbeAtMillis.get()
+
+    internal fun markProbeAttemptForTest(now: Long) {
+        lastProbeAtMillis.set(now)
+    }
+
+    /**
      * 限流判定。任何一条不满足都直接放弃本次探测——放弃是安全的：调用方本来就没有候选，
      * 这里少探一次只会让这次请求按原有失败路径收场，不会引入新的失败。
      */
@@ -115,7 +140,7 @@ internal object CloudflareEdgeProbe {
             return false
         }
         val previous = lastProbeAtMillis.get()
-        if (previous != 0L && now - previous < COOLDOWN_MILLIS) {
+        if (shouldSkipProbe(now, previous)) {
             inFlight.set(false)
             logger.d { "[EDGE_PROBE:SKIP] cooling down for another ${COOLDOWN_MILLIS - (now - previous)}ms" }
             return false

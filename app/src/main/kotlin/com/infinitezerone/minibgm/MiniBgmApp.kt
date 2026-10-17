@@ -55,6 +55,10 @@ class MiniBgmApp :
         // 初始化 ECH 运行时：config 磁盘缓存 + CF 边缘节点优选池
         com.infinitezerone.minibgm.core.network.ech.EchRuntime
             .initialize(filesDir)
+        // 平台契约：网络切换后清空解析缓存并允许一次新的边缘探测，
+        // 否则 Wi-Fi ↔ 蜂窝切换后要等满 10 分钟冷却才会重新发现可用节点
+        com.infinitezerone.minibgm.core.network.ech.EchRuntime
+            .startNetworkMonitor(this)
 
         startKoin {
             // release 下仅记录错误，避免 DI 结构信息进入公共日志

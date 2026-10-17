@@ -308,6 +308,18 @@ internal object AdaptiveDnsResolver {
         }
     }
 
+    /**
+     * 网络切换后丢弃全部解析记忆：地址与可达性都绑定在「当前网络」上，
+     * 旧网络缓存的 DNS 结果与候选序列在新网络里可能全部不可达。
+     */
+    internal fun invalidateCaches() {
+        dnsCache.clear()
+        resolvedCandidates.clear()
+        logger.i { "[DNS] caches invalidated (network changed)" }
+    }
+
+    internal fun cachedHostCountForTest(): Int = dnsCache.size + resolvedCandidates.size
+
     /** 仅供测试：清空解析记忆，避免用例之间互相污染。 */
     fun resetForTest() {
         resolvedCandidates.clear()

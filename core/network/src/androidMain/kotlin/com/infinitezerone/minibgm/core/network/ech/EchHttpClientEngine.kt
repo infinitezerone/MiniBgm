@@ -191,7 +191,7 @@ class EchHttpClientEngine(
                 throw IOException("ECH connection failed: ${nativeResp.errorMessage}")
             }
 
-            // RFC 9849 §6.1.6 严格合规：
+            // RFC 9849 §6.1.8（Impact of Retry on Future Connections）严格合规：
             // 服务端下发的 retry_configs 仅用于 Rust 底层单连接重试，绝不回填内存、绝不跨连接复用、
             // 绝不落盘持久化，杜绝 config_id 明文跨连接追踪向量（Tracking Vector）。
             // 跨请求性能由 H2 连接池多路复用与底层握手快速自愈保障。

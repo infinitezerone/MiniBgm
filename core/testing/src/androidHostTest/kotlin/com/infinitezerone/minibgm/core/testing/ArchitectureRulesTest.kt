@@ -482,6 +482,41 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 网络切换必须真的重置探测冷却与解析缓存，并且**真的被注册**。
+     *
+     * 平台契约：地址与可达性绑定在「当前网络」上。监听器写了却没接线，等于换网后仍要等满
+     * 10 分钟冷却——这正是「明明有网却一直超时」的成因，而且静态上完全看不出来。
+     */
+    @Test
+    fun ech_network_switch_must_be_wired_and_reset_state() {
+        val monitor =
+            File(
+                projectRoot,
+                "core/network/src/androidMain/kotlin/com/infinitezerone/minibgm/core/network/ech/EchNetworkMonitor.kt",
+            )
+        val app = File(projectRoot, "app/src/main/kotlin/com/infinitezerone/minibgm/MiniBgmApp.kt")
+        if (!monitor.isFile || !app.isFile) return
+
+        val monitorText = monitor.readText()
+        assertTrue(
+            monitorText.contains("registerDefaultNetworkCallback"),
+            "网络监听必须走 ConnectivityManager.registerDefaultNetworkCallback（平台契约）",
+        )
+        assertTrue(
+            monitorText.contains("CloudflareEdgeProbe.resetCooldown()"),
+            "换网必须重置探测冷却，否则要等满 10 分钟才会重新发现边缘",
+        )
+        assertTrue(
+            monitorText.contains("AdaptiveDnsResolver.invalidateCaches()"),
+            "换网必须丢弃旧网络的 DNS 与候选缓存",
+        )
+        assertTrue(
+            app.readText().contains("startNetworkMonitor("),
+            "监听器写了却没在 App 启动时注册，等于没有——必须调用 EchRuntime.startNetworkMonitor",
+        )
+    }
+
     @Test
     fun feature_sources_never_hardcode_compose_colors() {
         val featureDir = File(projectRoot, "feature")
