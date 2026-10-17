@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -34,6 +35,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -46,9 +48,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -138,51 +141,37 @@ fun ScheduleScreen(
         )
 
     val filterNestedScrollConnection =
-        remember(filterBarState, pageListStates, pagerState) {
+        remember(filterBarState, filterBarFlingBehavior) {
             object : NestedScrollConnection {
                 override fun onPreScroll(
                     available: Offset,
                     source: NestedScrollSource,
                 ): Offset {
-                    // 关键防冲突：仅响应用户真实触控输入，忽略系统边缘拉伸与弹性回弹（SideEffect）
-                    if (source != NestedScrollSource.UserInput) {
-                        return Offset.Zero
-                    }
                     val deltaY = available.y
-                    val canScroll = {
-                        val state = pageListStates.getOrNull(pagerState.currentPage)
-                        state != null && (state.canScrollForward || state.canScrollBackward)
-                    }
+                    val minPos = filterBarState.anchors.positionOf(FilterBarValue.COLLAPSED)
+                    val maxPos = filterBarState.anchors.positionOf(FilterBarValue.EXPANDED)
+                    val currentOffset = filterBarState.offset
 
-                    return when {
-                        // 手指上滑（列表内容上移）：仅当列表有足够内容可滚动时才优先折叠筛选栏
-                        deltaY < 0f && canScroll() -> {
-                            val consumedY = filterBarState.dispatchRawDelta(deltaY)
-                            Offset(0f, consumedY)
+                    val consumedY =
+                        when {
+                            deltaY < 0f && currentOffset > minPos -> filterBarState.dispatchRawDelta(deltaY)
+                            deltaY > 0f && currentOffset < maxPos -> filterBarState.dispatchRawDelta(deltaY)
+                            else -> 0f
                         }
-                        // 手指下滑（列表内容下移，enterAlways 模式）：优先展开筛选栏
-                        deltaY > 0f && filterBarState.offset < 0f -> {
-                            val consumedY = filterBarState.dispatchRawDelta(deltaY)
-                            Offset(0f, consumedY)
-                        }
-                        else -> Offset.Zero
-                    }
+                    return Offset(0f, consumedY)
                 }
 
                 override suspend fun onPostFling(
                     consumed: Velocity,
                     available: Velocity,
                 ): Velocity {
+                    val minPos = filterBarState.anchors.positionOf(FilterBarValue.COLLAPSED)
+                    val maxPos = filterBarState.anchors.positionOf(FilterBarValue.EXPANDED)
                     val currentOffset = filterBarState.offset
-                    val collapsedOffset = filterBarState.anchors.positionOf(FilterBarValue.COLLAPSED)
-                    if (currentOffset < 0f && currentOffset > collapsedOffset) {
-                        val target =
-                            when {
-                                available.y < -100f || consumed.y < -100f -> FilterBarValue.COLLAPSED
-                                available.y > 100f || consumed.y > 100f -> FilterBarValue.EXPANDED
-                                else -> if (currentOffset < collapsedOffset / 2f) FilterBarValue.COLLAPSED else FilterBarValue.EXPANDED
-                            }
-                        filterBarState.animateTo(target)
+
+                    val isMidway = currentOffset > (minPos + 0.5f) && currentOffset < (maxPos - 0.5f)
+                    if (isMidway) {
+                        filterBarState.settle(spring(stiffness = Spring.StiffnessMediumLow))
                     }
                     return super.onPostFling(consumed, available)
                 }
@@ -299,109 +288,123 @@ fun ScheduleScreen(
             val currentPageTotal = uiState.getTotalCountForPage(pagerState.currentPage)
             val currentPageWatching = uiState.getWatchingCountForPage(pagerState.currentPage)
 
-            // 随列表滚动收起的筛选条：自然测量 + 摆放阶段 GPU 硬件平移，消除重测抖动，自适应大字体
+            var filterBarHeightPx by remember { mutableFloatStateOf(initialFilterBarHeightPx) }
+
+            // 内容视口：纯 GPU 摆放阶段平移（offset {}），完全无需 layout {} 重测与重组
             Box(
                 modifier =
                     Modifier
-                        .fillMaxWidth()
-                        .clipToBounds()
-                        .anchoredDraggable(
-                            state = filterBarState,
-                            orientation = Orientation.Vertical,
-                            flingBehavior = filterBarFlingBehavior,
-                        ).layout { measurable, constraints ->
-                            val placeable = measurable.measure(constraints)
-                            val barHeight = placeable.height.toFloat()
-                            if (barHeight > 0f) {
-                                filterBarState.updateAnchors(
-                                    DraggableAnchors {
-                                        FilterBarValue.EXPANDED at 0f
-                                        FilterBarValue.COLLAPSED at -barHeight
-                                    },
-                                )
-                            }
-                            val currentOffset = filterBarState.offset
-                            val visibleHeight = (barHeight + currentOffset).roundToInt().coerceIn(0, placeable.height)
-
-                            layout(placeable.width, visibleHeight) {
-                                placeable.placeRelativeWithLayer(0, currentOffset.roundToInt())
-                            }
-                        },
-                contentAlignment = Alignment.TopCenter,
+                        .fillMaxSize()
+                        .clipToBounds(),
             ) {
-                FilterAndMetaBar(
-                    totalCount = currentPageTotal,
-                    watchingCount = currentPageWatching,
-                    onlyWatching = uiState.onlyWatching,
-                    onToggleOnlyWatching = viewModel::toggleOnlyWatching,
-                    isLoggedIn = uiState.isLoggedIn,
-                    onPromptLogin = viewModel::promptLogin,
-                    modifier = Modifier.widthIn(max = 840.dp),
-                )
-            }
-
-            // 主体：左右手势丝滑翻页的 HorizontalPager（叠加「回到今天」浮钮）
-            Box(modifier = Modifier.fillMaxSize()) {
-                PullToRefreshBox(
-                    isRefreshing = uiState.isRefreshing || (!uiState.hasSchedules && uiState.isLoading),
-                    onRefresh = { viewModel.refresh(force = true) },
-                    modifier = Modifier.fillMaxSize(),
+                // 主体：左右手势丝滑翻页的 HorizontalPager，通过 offset {} 跟随筛选条折叠平滑上移
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .offset {
+                                val currentOffset = filterBarState.offset.takeIf { !it.isNaN() } ?: 0f
+                                IntOffset(0, (filterBarHeightPx + currentOffset).roundToInt())
+                            },
                 ) {
-                    when {
-                        !uiState.hasSchedules && uiState.isLoading -> {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.TopCenter,
-                            ) {
-                                ScheduleTimelineSkeleton(
-                                    modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
-                                )
+                    PullToRefreshBox(
+                        isRefreshing = uiState.isRefreshing || (!uiState.hasSchedules && uiState.isLoading),
+                        onRefresh = { viewModel.refresh(force = true) },
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        when {
+                            !uiState.hasSchedules && uiState.isLoading -> {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.TopCenter,
+                                ) {
+                                    ScheduleTimelineSkeleton(
+                                        modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
+                                    )
+                                }
                             }
-                        }
 
-                        !uiState.hasSchedules && uiState.error != null -> {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                ScheduleErrorState(
-                                    errorMessage = uiState.error ?: stringResource(R.string.feature_schedule_error_network),
-                                    onRetry = viewModel::refresh,
-                                    modifier = Modifier.widthIn(max = 840.dp),
-                                )
+                            !uiState.hasSchedules && uiState.error != null -> {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    ScheduleErrorState(
+                                        errorMessage = uiState.error ?: stringResource(R.string.feature_schedule_error_network),
+                                        onRetry = viewModel::refresh,
+                                        modifier = Modifier.widthIn(max = 840.dp),
+                                    )
+                                }
                             }
-                        }
 
-                        else -> {
-                            HorizontalPager(
-                                state = pagerState,
-                                modifier = Modifier.fillMaxSize(),
-                                key = { page -> page },
-                            ) { page ->
-                                val isTodayPage = page == ScheduleViewModel.TODAY_PAGE_INDEX
-                                val timeGrouped =
-                                    remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
-                                        uiState.getTimeGroupedSchedulesForPage(page)
-                                    }
-                                val allDaySchedules =
-                                    remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
-                                        uiState.getAllDaySchedulesForPage(page)
-                                    }
-                                val listState = pageListStates.getOrElse(page) { rememberLazyListState() }
+                            else -> {
+                                HorizontalPager(
+                                    state = pagerState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    key = { page -> page },
+                                ) { page ->
+                                    val isTodayPage = page == ScheduleViewModel.TODAY_PAGE_INDEX
+                                    val timeGrouped =
+                                        remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
+                                            uiState.getTimeGroupedSchedulesForPage(page)
+                                        }
+                                    val allDaySchedules =
+                                        remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
+                                            uiState.getAllDaySchedulesForPage(page)
+                                        }
+                                    val listState = pageListStates.getOrElse(page) { rememberLazyListState() }
 
-                                DayScheduleList(
-                                    pageIndex = page,
-                                    isTodayPage = isTodayPage,
-                                    timeGrouped = timeGrouped,
-                                    allDaySchedules = allDaySchedules,
-                                    uiState = uiState,
-                                    onSubjectClick = onSubjectClick,
-                                    onSwitchToAll = viewModel::toggleOnlyWatching,
-                                    listState = listState,
-                                )
+                                    DayScheduleList(
+                                        pageIndex = page,
+                                        isTodayPage = isTodayPage,
+                                        timeGrouped = timeGrouped,
+                                        allDaySchedules = allDaySchedules,
+                                        uiState = uiState,
+                                        onSubjectClick = onSubjectClick,
+                                        onSwitchToAll = viewModel::toggleOnlyWatching,
+                                        listState = listState,
+                                    )
+                                }
                             }
                         }
                     }
+                }
+
+                // 筛选条：自然尺寸测量，仅在尺寸变化时更新锚点；仅在 placement 阶段平移
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .onSizeChanged { size ->
+                                val height = size.height.toFloat()
+                                if (height > 0f && height != filterBarHeightPx) {
+                                    filterBarHeightPx = height
+                                    filterBarState.updateAnchors(
+                                        DraggableAnchors {
+                                            FilterBarValue.EXPANDED at 0f
+                                            FilterBarValue.COLLAPSED at -height
+                                        },
+                                    )
+                                }
+                            }.offset {
+                                val currentOffset = filterBarState.offset.takeIf { !it.isNaN() } ?: 0f
+                                IntOffset(0, currentOffset.roundToInt())
+                            }.anchoredDraggable(
+                                state = filterBarState,
+                                orientation = Orientation.Vertical,
+                                flingBehavior = filterBarFlingBehavior,
+                            ),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    FilterAndMetaBar(
+                        totalCount = currentPageTotal,
+                        watchingCount = currentPageWatching,
+                        onlyWatching = uiState.onlyWatching,
+                        onToggleOnlyWatching = viewModel::toggleOnlyWatching,
+                        isLoggedIn = uiState.isLoggedIn,
+                        onPromptLogin = viewModel::promptLogin,
+                        modifier = Modifier.widthIn(max = 840.dp),
+                    )
                 }
             }
         }
