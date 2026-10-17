@@ -1,0 +1,10 @@
+## 剧本 8C：原生流播·落盘隔离与磁力交互面（Magnet Interaction）
+  * **磁力交互面与业务闭环（列表去重 / 分集回退 / 下载确认 / 进度可见性复盘）**：
+    * **去重键必须逐级回退**：多规则源结果合并后的去重键必须是 `TorrentMediaResource.dedupeKey`（`infoHash → magnetUrl → torrentUrl → title`）。旧写法 `it.infoHash.ifBlank { it.magnetUrl }` 对未携带 40 位哈希的 `.torrent` 直链条目（如 `xxx/download/1234567.torrent`）会集体退化为空串，`distinctBy` 只保留第一条——同一 Feed 的其余分集/清晰度被静默丢弃且全程无提示。
+    * **分集未命中不得回退整份 Feed**：`TorrentFeedRepository.filterAndSort` 在 `episodeSort` 未命中时只允许回退合集整包项（`episodeSort == null`），仍为空则返回空列表。回退整份 Feed 时，请求第 5 集会列出第 1-4 集，点其中的单文件资源还会被 Rust 侧「多视频文件未命中即显式失败、单候选即选中」静默播成第 1 集。
+    * **条目级动作禁止伪造集数**：未选中分集时的 `episodeSort` 必须回退资源自身声明的 `episodeSort`（合集为 `0f`），严禁 `?: 1f`——伪造的 `sort:1.0` 会让所有条目级资源共用同一个 `episodeKey` 而互相复用落盘文件，并把 `episodeHint="1"` 喂给 Rust 的选片逻辑。
+    * **后台大任务必须显式确认并披露容量**：离线下载必须经 `overlayHostState.await(ConfirmDialogAction(...))` 确认，文案给出资源体积与 `getStorageUsage()` 的可用空间，空间不足直接拒绝；入队前调用 `rememberDownloadNotificationPermissionRequester()` 确保 Android 13+ 通知权限（通知栏是唯一的外部门控面）。组件安装失败必须用 `exceptionOrNull()?.message` 透出真实原因（ABI 不支持 / 镜像 404），严禁只 Toast 泛化文案。
+    * **已落盘资源的动作必须诚实**：`completedTaskFor` 命中（该分集 + 该源已完整落盘）时「离线下载」必须禁用——放行只会落进 `startDownload` 的「既有完成任务直接返回 taskId」分支，随后弹「已加入下载队列，可在通知栏查看进度」，用户盯着通知栏等一个永不出现的进度；「已下载」判据还必须排除 `isFileMissing`：只认 `status == COMPLETED` 时，文件被清理的任务会同时点亮「已下载」徽标、把播放入口指向不存在的 `file://`，并把下载入口禁掉，用户卡在既播不了也重下不了的死路（`verifyTaskFiles` 标出的 `isFileMissing` 必须参与判据）。
+    * **进度可见性与轮询韧性**：`TorrentStreamState`（`InstallingPlugin` / `Resolving` / `Buffering`）必须经 `TorrentRepository.streamState` 暴露给选源面板卡片（含取消入口），feature 严禁为此直引 `TorrentStreamEngine`；引擎轮询 `getStreamStats()` 的瞬时失败严禁 `?: break`（退出循环后 `streamState` 永不发射，下游 `first{}` 与死种看门狗双双无界挂起），只在连续失败超 `MAX_CONSECUTIVE_STAT_FAILURES` 时收敛为 `Error`。未配置 TORRENT 规则时该区块仍须渲染可达的配置引导，严禁整段隐藏。
+    * **前台服务时长上限**：`compileSdk` 已进入 Android 15+ 区间，`dataSync` 前台服务 6 小时硬上限要求 `TorrentDownloadService` 实现 `onTimeout`（暂停活动任务 + 摘除前台通知 + `stopSelf`），否则超时被系统判 `ForegroundServiceDidNotStopInTimeException` 直接崩进程。
+    * **红线兜底**：`ArchitectureRulesTest#torrent_ui_and_business_guards_enforce_confirmation_dedupe_and_stream_feedback` 对上述去重键、分集回退、`?: 1f` 禁用、下载确认与容量披露、轮询阈值与 `streamState` 契约做静态闭锁。

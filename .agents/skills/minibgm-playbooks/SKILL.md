@@ -25,7 +25,7 @@ description: >-
 | 弹窗 / 抽屉 / 一次性事件 / 分集抽屉与线路面板 | `references/playbook-04-transient-ui.md`、`references/playbook-14-unified-episode-drawer.md` |
 | 提交前的验证与闭环（改完怎么自证） | `references/playbook-06-verification-workflow.md` |
 | 模式级暗礁（跨模块通用坑，拿不准先读它） | `references/playbook-07-pattern-pitfalls.md` |
-| 原生流播 / librqbit / JNI / 按需 .so / 下载落盘 / 种子卡片 | `references/playbook-08-native-streaming.md`、`references/playbook-12-asset-download-mutex.md`、`references/playbook-18-torrent-card-cache.md`、`references/playbook-11-p2p-neutrality.md` |
+| 原生流播 / librqbit / JNI / 按需 .so / 下载落盘 / 种子卡片 | `references/playbook-08a-stream-fidelity.md`、`references/playbook-08b-native-plugin-jni.md`、`references/playbook-08c-magnet-interaction.md`、`references/playbook-12-asset-download-mutex.md`、`references/playbook-18-torrent-card-cache.md`、`references/playbook-11-p2p-neutrality.md` |
 | DI 契约 / 开发面板与运行时调试 | `references/playbook-09-di-fidelity.md`、`references/playbook-13-developer-panel.md` |
 | WebView 与本地代理 / 图床与富文本 | `references/playbook-10-webview-proxy.md`、`references/playbook-17-image-routing.md` |
 | 播放器手势 / 进度条 / HUD 稳定性 | `references/playbook-16-player-gestures.md` |
