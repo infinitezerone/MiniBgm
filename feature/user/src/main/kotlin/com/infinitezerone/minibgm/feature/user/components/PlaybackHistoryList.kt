@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -124,7 +125,19 @@ internal fun PlaybackHistoryCard(
                             modifier = Modifier.weight(1f),
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        HistoryTimeText(updatedAt = group.latest.updatedAt)
+                        Column(horizontalAlignment = Alignment.End) {
+                            HistoryTimeText(updatedAt = group.latest.updatedAt)
+                            if (group.latest.sourceName.isNotBlank()) {
+                                Text(
+                                    text = group.latest.sourceName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.widthIn(max = 108.dp),
+                                )
+                            }
+                        }
                     }
                 }
                 if (expandable) {

@@ -66,6 +66,7 @@ class PlayerViewModelTest {
         queue: List<PlayerQueueEntry> = emptyList(),
         startIndex: Int = 0,
         initialRuleId: String = "",
+        initialSourceName: String = "",
         episodeId: Long = this.episodeId,
     ) = PlayerRoute(
         subjectId = subjectId,
@@ -74,6 +75,7 @@ class PlayerViewModelTest {
         queue = queue,
         startIndex = startIndex,
         initialRuleId = initialRuleId,
+        initialSourceName = initialSourceName,
     )
 
     private fun viewModel(
@@ -82,6 +84,7 @@ class PlayerViewModelTest {
         failureStore: PlaybackFailureStore? = null,
         settingsRepository: FakeSettingsRepository = FakeSettingsRepository(),
         subjectRepository: SubjectRepository? = null,
+        playbackResolverRepository: PlaybackResolverRepository? = null,
         communityRepository: FakeCommunityRepository? = null,
         playbackHistoryRepository: FakePlaybackHistoryRepository? = null,
     ): PlayerViewModel =
@@ -92,6 +95,7 @@ class PlayerViewModelTest {
             settingsRepository = settingsRepository,
             failureStore = failureStore,
             subjectRepository = subjectRepository,
+            playbackResolverRepository = playbackResolverRepository,
             communityRepository = communityRepository,
             playbackHistoryRepository = playbackHistoryRepository,
         )
@@ -482,11 +486,49 @@ class PlayerViewModelTest {
             assertEquals(episodeId, entry.episodeId)
             assertEquals(subjectId, entry.subjectId)
             assertEquals(initialStreamUrl, entry.streamUrl)
+            // 伪源也要落库：历史面板据此区分「直链回放」与「规则重新解析」
+            assertEquals("direct", entry.sourceId)
+            assertEquals("", entry.sourceName)
             assertEquals(30_000L, entry.positionMs)
             assertEquals(240_000L, entry.durationMs)
             assertEquals(0.125f, entry.progress)
             assertEquals(false, entry.isCompleted)
         }
+
+    @Test
+    fun flushPlaybackPosition_recordsRuleSourceIdentityForHistory() =
+        runTest {
+            val historyRepo = FakePlaybackHistoryRepository()
+            val settings = FakeSettingsRepository()
+            settings.setPlaybackRules(rulesOf("r1"))
+            val viewModel =
+                viewModel(
+                    route = route(streamUrl = ""),
+                    settingsRepository = settings,
+                    playbackHistoryRepository = historyRepo,
+                    playbackResolverRepository = resolverReturning("https://example.com/r1.m3u8"),
+                )
+            advanceUntilIdle()
+
+            viewModel.onDurationChanged(240_000L)
+            viewModel.onProgressChanged(30_000L)
+            viewModel.flushPlaybackPosition()
+            advanceUntilIdle()
+
+            val entry = requireNotNull(historyRepo.getHistoryByEpisode(episodeId))
+            assertEquals("r1", entry.sourceId)
+            assertEquals("R1", entry.sourceName)
+        }
+
+    @Test
+    fun initialSourceName_labelsTheDirectTabWithoutChangingItsIdentity() {
+        val state = viewModel(route = route(initialSourceName = "AGE 动漫")).uiState.value
+
+        val direct = requireNotNull(state.sources.firstOrNull { it.isDirect })
+        assertEquals("AGE 动漫", direct.name)
+        assertEquals(null, direct.nameRes)
+        assertEquals("direct", direct.id)
+    }
 
     @Test
     fun unfinishedHistory_isRestoredAsResumePositionOnInit() =

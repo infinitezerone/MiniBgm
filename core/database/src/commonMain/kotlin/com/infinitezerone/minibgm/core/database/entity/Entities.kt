@@ -246,6 +246,10 @@ data class PlaybackHistoryEntity(
     val episodeSort: Float = 0f,
     val coverUrl: String = "",
     val streamUrl: String = "",
+    /** 产生该直链的播放源标识；"direct" 表示伪源（历史直链/本地/BT），空表示旧数据 */
+    val sourceId: String = "",
+    /** 播放源展示名（规则名）；伪源为空，界面回退到「默认直链」 */
+    val sourceName: String = "",
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val updatedAt: Long = 0L,

@@ -494,8 +494,14 @@ class PlayerViewModel(
                         R.string.feature_subject_player_source_local_file to "本地离线"
                     PlayerSourceKind.TORRENT_STREAM ->
                         R.string.feature_subject_player_source_torrent_stream to "BT 边下边播"
+                    // 观看记录回放时直链带着来源名：面板显示「源名 + 直链徽标」，
+                    // 与执行重新解析的同名规则源区分开，不再是一句无信息的「默认直链」
                     else ->
-                        R.string.feature_subject_player_source_default_direct to "默认直链"
+                        if (route.initialSourceName.isNotBlank()) {
+                            null to route.initialSourceName
+                        } else {
+                            R.string.feature_subject_player_source_default_direct to "默认直链"
+                        }
                 }
             list.add(
                 PlayerSourceTab(
@@ -963,6 +969,8 @@ class PlayerViewModel(
         val epId = if (state.episodeId > 0L) state.episodeId else route.episodeId
         if (epId <= 0L || position <= 0L) return
         session.episodePositions[epId] = position
+        // 记录"这条直链是谁给的"：历史里据此显示源名，播放器面板也据此给直链贴上来源标签
+        val playingTab = state.sources.firstOrNull { it.id == state.playingSourceId }
         viewModelScope.launch {
             playbackHistoryRepository?.saveHistory(
                 PlaybackHistory(
@@ -973,6 +981,8 @@ class PlayerViewModel(
                     episodeSort = state.episodeSort,
                     coverUrl = state.subjectCoverUrl,
                     streamUrl = state.streamUrl,
+                    sourceId = state.playingSourceId.orEmpty(),
+                    sourceName = playingTab?.rule?.name.orEmpty(),
                     positionMs = position,
                     durationMs = session.latestDurationMs,
                     updatedAt = System.currentTimeMillis(),

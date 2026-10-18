@@ -253,4 +253,5 @@ private fun PlaybackHistory.toPlayerRoute(): PlayerRoute =
         episodeName = episodeName,
         subjectName = subjectName,
         episodeSort = episodeSort,
+        initialSourceName = sourceName,
     )
