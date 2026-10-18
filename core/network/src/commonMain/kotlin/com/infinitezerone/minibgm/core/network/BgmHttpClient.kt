@@ -63,9 +63,9 @@ object BgmHttpClient {
         }
         install(HttpRequestRetry) {
             maxRetries = 2
-            retryIf { _, response ->
-                response.status == HttpStatusCode.TooManyRequests || response.status.value in 500..599
-            }
+            // 429 表示服务端未处理，任何方法都可安全重放；5xx 的处理结果未知，
+            // 只有幂等方法允许重试——否则「打卡/收藏/回复」可能被悄悄写两遍
+            retryIf { request, response -> shouldRetryAfterResponse(request.method, response.status) }
             // 超时只对幂等方法重试（写操作超时重试可能重复落库），取消语义永不重试
             retryOnExceptionIf { request, cause ->
                 shouldRetryAfterException(request.method, cause, retryCount)
@@ -225,11 +225,29 @@ internal fun shouldRetryAfterException(
         cause is CancellationException -> false
         // 超时只重试一次：抖动值得再试一把，死站点不值得让用户等满 3 个请求预算（约 45s）
         cause is HttpRequestTimeoutException -> method.isIdempotent() && retryCount <= MAX_TIMEOUT_RETRIES
-        else -> true
+        // 传输层异常无法证明「请求尚未发出」：写请求一律不自动重放（宁可让用户重试）
+        else -> method.isIdempotent()
     }
 
 /** 超时类异常的最大重试次数（Ktor 回调里的 retryCount 从 1 起）。 */
 private const val MAX_TIMEOUT_RETRIES = 1
+
+/**
+ * 响应状态是否值得重试（纯函数，便于单测）。
+ *
+ * - 429 Too Many Requests：服务端明确「没处理」，任何方法重放都安全；
+ * - 5xx：服务端可能已经处理过（只是回包失败），非幂等写请求重放会重复落库，一律不重试；
+ * - 其余状态不重试。
+ */
+internal fun shouldRetryAfterResponse(
+    method: HttpMethod,
+    status: HttpStatusCode,
+): Boolean =
+    when {
+        status == HttpStatusCode.TooManyRequests -> true
+        status.value in 500..599 -> method.isIdempotent()
+        else -> false
+    }
 
 /** RFC 9110 §9.2.2 的幂等方法（TRACE 未在 Ktor 暴露常量，故不列入）。 */
 internal fun HttpMethod.isIdempotent(): Boolean =

@@ -27,7 +27,6 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 
@@ -129,15 +128,13 @@ class EchHttpClientEngine(
 
             val host = data.url.host
             val port = data.url.port
-            var enableEch = AdaptiveDnsResolver.isEchEligible(host)
+            val enableEch = AdaptiveDnsResolver.isEchEligible(host)
             if (!enableEch) {
-                // 非种子域名：后台 DoH 探测 ECH 能力（Type 65）
-                // 首次探测预留短暂窗口（最多 1500ms），命中即就地升级当次请求走 ECH
-                val probeJob = EchCapabilityDetector.probeAsyncIfUnknown(host)
-                if (probeJob != null) {
-                    withTimeoutOrNull(1500L) { probeJob.join() }
-                    enableEch = AdaptiveDnsResolver.isEchEligible(host)
-                }
+                // 非种子域名：后台 DoH 探测 ECH 能力（Type 65），**fail-open**——
+                // 当前请求立刻按直连发出，探测命中后由后续请求自动升级走 ECH。
+                // 严禁在这里等待探测结果：那是把不可控的 DoH 往返塞进主请求路径，
+                // 未知图床首图会白等最多 1.5s（与「未知外部图床必须 Fail-Open 直连」红线冲突）。
+                EchCapabilityDetector.probeAsyncIfUnknown(host)
             }
             val targetAddrs = AdaptiveDnsResolver.resolveTargetAddrs(host, port)
             val echConfig = if (enableEch) EchConfigStore.getActiveConfig() else null

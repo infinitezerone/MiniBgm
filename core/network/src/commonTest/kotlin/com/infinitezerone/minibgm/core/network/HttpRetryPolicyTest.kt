@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.network
 
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -64,11 +65,27 @@ class HttpRetryPolicyTest {
     }
 
     @Test
-    fun non_timeout_exceptions_keep_the_original_policy() {
+    fun transport_exceptions_are_retried_only_for_idempotent_methods() {
         assertTrue(shouldRetryAfterException(HttpMethod.Get, IllegalStateException("connection reset"), retryCount = 1))
-        assertTrue(
+        assertFalse(
             shouldRetryAfterException(HttpMethod.Post, IllegalStateException("connection reset"), retryCount = 1),
-            "非超时异常沿用原策略：写请求遇到连接重置仍可重试（请求未发出）",
+            "传输层异常无法证明请求未发出：写请求自动重放可能重复落库",
         )
+    }
+
+    @Test
+    fun too_many_requests_is_retried_for_any_method() {
+        assertTrue(shouldRetryAfterResponse(HttpMethod.Post, HttpStatusCode.TooManyRequests))
+        assertTrue(shouldRetryAfterResponse(HttpMethod.Get, HttpStatusCode.TooManyRequests))
+    }
+
+    @Test
+    fun server_errors_are_retried_only_for_idempotent_methods() {
+        assertTrue(shouldRetryAfterResponse(HttpMethod.Get, HttpStatusCode.InternalServerError))
+        assertFalse(
+            shouldRetryAfterResponse(HttpMethod.Post, HttpStatusCode.InternalServerError),
+            "5xx 的处理结果未知：写请求重放可能重复落库",
+        )
+        assertFalse(shouldRetryAfterResponse(HttpMethod.Get, HttpStatusCode.NotFound))
     }
 }
