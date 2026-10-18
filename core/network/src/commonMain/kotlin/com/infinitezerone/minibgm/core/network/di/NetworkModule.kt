@@ -21,14 +21,17 @@ import org.koin.dsl.module
 /**
  * @param enableNetworkLogging 仅由 app 层传入 BuildConfig.DEBUG
  * @param userAgent 由 app 层以 BuildConfig.VERSION_NAME 拼装，随版本自动更新
+ * @param engine 底层 HTTP 引擎，单测时注入 MockEngine
+ * @param authConfig OAuth 认证配置，app 层注入由 CI / 本地配置提供的网关端点
  */
 fun networkModule(
     enableNetworkLogging: Boolean = false,
     userAgent: String,
     engine: HttpClientEngine? = null,
+    authConfig: BgmAuthConfig = BgmAuthConfig(),
 ): Module =
     module {
-        single { BgmAuthConfig() }
+        single { authConfig }
         single<HttpClientEngine> { engine ?: createPlatformHttpClientEngine() }
 
         // 未鉴权独立 client（无 Auth 插件），专供访问无需 Bearer Token 的外部静态 CDN 资源与 Worker 兑换/刷新

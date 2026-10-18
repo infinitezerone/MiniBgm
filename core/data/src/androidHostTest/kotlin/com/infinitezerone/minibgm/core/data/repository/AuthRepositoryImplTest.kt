@@ -127,7 +127,7 @@ class AuthRepositoryImplTest {
                                 )
                             },
                     ),
-                config = BgmAuthConfig(),
+                config = TEST_AUTH_CONFIG,
             )
     }
 
@@ -288,7 +288,7 @@ class AuthRepositoryImplTest {
                 tokenService = api.service,
                 tokenProvider = tokenProvider,
                 userPreferences = userPreferencesDataSource,
-                authConfig = BgmAuthConfig(),
+                authConfig = TEST_AUTH_CONFIG,
                 apiService = stubApiService,
                 userDataCleaner = userDataCleaner,
             )
@@ -304,6 +304,7 @@ class AuthRepositoryImplTest {
     private fun harness(api: FakeTokenApi) = Harness(api)
 
     private companion object {
+        val TEST_AUTH_CONFIG = BgmAuthConfig(tokenProxyUrl = "https://auth.minibgm.test/oauth/token")
         val SUCCESS_BODY =
             """{"access_token":"at1","refresh_token":"rt1","expires_in":604800,"token_type":"Bearer","user_id":42}"""
         val INVALID_GRANT_BODY = """{"error":"invalid_grant","error_description":"Authorization code doesn't exist"}"""
@@ -380,7 +381,7 @@ class AuthRepositoryImplTest {
             assertIs<AppResult.Success<Unit>>(result)
             assertEquals(1, api.requestCount)
             assertEquals(HttpMethod.Post, api.lastMethod)
-            assertEquals(BgmAuthConfig().tokenProxyUrl, api.lastUrl)
+            assertEquals(TEST_AUTH_CONFIG.tokenProxyUrl, api.lastUrl)
             // 兑换表单必须携带 code + state + verifier 三件套供 Worker 校验
             val verifier = api.lastForm?.get("verifier")
             assertEquals("auth-code", api.lastForm?.get("code"))

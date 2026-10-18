@@ -60,7 +60,7 @@ class BgmTokenServiceRefreshTest {
                     tokenProvider = noopTokenProvider,
                     engine = engine,
                 ),
-            config = BgmAuthConfig(),
+            config = BgmAuthConfig(tokenProxyUrl = "https://auth.minibgm.test/oauth/token"),
         )
 
     private fun serviceWith(
@@ -80,7 +80,7 @@ class BgmTokenServiceRefreshTest {
                 BgmHttpClient.createBaseClient(
                     engine = MockEngine { respond("", status) },
                 ),
-            config = BgmAuthConfig(),
+            config = BgmAuthConfig(tokenProxyUrl = "https://auth.minibgm.test/oauth/token"),
         )
 
     private val successBody =

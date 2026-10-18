@@ -17,10 +17,33 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// local.properties 不入库：本机开发或 CI 构建时注入私有网关与端点（OAuth 换票代理、弹弹play 缓存网关）
+val localProps =
+    Properties().apply {
+        rootProject
+            .file("local.properties")
+            .takeIf { it.exists() }
+            ?.inputStream()
+            ?.use { load(it) }
+    }
+
+fun resolveProperty(
+    key: String,
+    envKey: String,
+    defaultValue: String = "",
+): String =
+    (project.findProperty(key) as? String)
+        ?.takeIf { it.isNotBlank() }
+        ?: System.getenv(envKey)?.takeIf { it.isNotBlank() }
+        ?: localProps.getProperty(key)?.takeIf { it.isNotBlank() }
+        ?: defaultValue
+
 val tier = (project.findProperty("minibgm.tier") as? String) ?: "preview"
 val isPreview = tier == "preview"
 val enableAi = (project.findProperty("minibgm.enableAi") as? String)?.toBoolean() ?: true
 val enablePlayer = (project.findProperty("minibgm.enablePlayer") as? String)?.toBoolean() ?: true
+val oauthProxyUrl = resolveProperty("minibgm.oauthProxyUrl", "MINIBGM_OAUTH_PROXY_URL", "")
+val danmakuEndpoint = resolveProperty("minibgm.danmakuEndpoint", "MINIBGM_DANMAKU_ENDPOINT", "")
 
 // 原生库 ABI 唯一真源（native/abis.txt）：ndk.abiFilters 与 splits.abi 均由此派生
 val nativeLibAbis = nativeAbis()
@@ -39,6 +62,8 @@ androidApplication {
         buildConfigField("Boolean", "ENABLE_AI_ASSISTANT", enableAi.toString())
         buildConfigField("Boolean", "ENABLE_INTERNAL_PLAYER", enablePlayer.toString())
         buildConfigField("String", "BUILD_TIER", "\"$tier\"")
+        buildConfigField("String", "OAUTH_TOKEN_PROXY_URL", "\"$oauthProxyUrl\"")
+        buildConfigField("String", "DANMAKU_DEFAULT_ENDPOINT", "\"$danmakuEndpoint\"")
         ndk {
             abiFilters.addAll(nativeLibAbis)
         }

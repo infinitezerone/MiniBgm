@@ -65,7 +65,24 @@
 ---
 
 ## 客户端接入
-部署成功后，你将获得一个类似于 `https://minibgm-danmaku-proxy.<your-subdomain>.workers.dev` 的地址：
+
+部署成功后，你将获得一个类似于 `https://minibgm-danmaku-proxy.<your-subdomain>.workers.dev`（或自定义域名）的地址：
+
+### 方式 1：CI / 本地自动打入（推荐，分发包开箱即用，无需用户手动填）
+- **GitHub Actions Release CI**：
+  在仓库的 **Settings -> Secrets and variables -> Actions** 中添加密文：
+  - `MINIBGM_DANMAKU_ENDPOINT`：例如 `https://danmaku.example.com`
+  - `MINIBGM_OAUTH_PROXY_URL`：例如 `https://auth.example.com/oauth/token`
+  CI 打包时会自动将这两个私有网关编译进 APK，下载安装即可开箱即用，公网 Git 仓库不暴露任何私有域名与凭据。
+- **本地开发构建**：
+  在项目根目录 `local.properties`（该文件受 `.gitignore` 保护不入库）中配置：
+  ```properties
+  minibgm.oauthProxyUrl=https://auth.example.com/oauth/token
+  minibgm.danmakuEndpoint=https://danmaku.example.com
+  ```
+
+### 方式 2：App 运行时手动覆盖
 - 在 MiniBgm App 中打开 **「我的」->「设置」->「弹幕设置」**；
-- 在 **「API 端点」** 中填入你的 Worker 域名即可享受全自动签名与边缘极速秒开！
+- 在 **「API 端点」** 中填入你的 Worker 域名即可即时生效；留空则回退至安装包内置默认端点（或官方端点）。
+
 

@@ -36,3 +36,7 @@ target/
 # Agent 瞬态任务接力与发射架（多 Agent 协同 Mini-Spec，完工即删不入库）
 .task.md
 .task/
+
+# Cloudflare Wrangler CLI 临时与构建产物目录
+.wrangler/
+**/.wrangler/

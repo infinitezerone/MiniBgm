@@ -120,10 +120,19 @@ jobs:
           echo "tag $GITHUB_REF_NAME -> versionName=$VERSION versionCode=$CODE"
 
       - name: Build APK
+        env:
+          MINIBGM_OAUTH_PROXY_URL: ${{ secrets.MINIBGM_OAUTH_PROXY_URL }}
+          MINIBGM_DANMAKU_ENDPOINT: ${{ secrets.MINIBGM_DANMAKU_ENDPOINT }}
         run: |
           ARGS=(assembleRelease --stacktrace)
           # ABI 分包默认关闭（debug 只打 1 个包以省掉重复打包），发版必须显式开启
           ARGS+=("-Pminibgm.abiSplits=true")
+          if [ -n "$MINIBGM_OAUTH_PROXY_URL" ]; then
+            ARGS+=("-Pminibgm.oauthProxyUrl=$MINIBGM_OAUTH_PROXY_URL")
+          fi
+          if [ -n "$MINIBGM_DANMAKU_ENDPOINT" ]; then
+            ARGS+=("-Pminibgm.danmakuEndpoint=$MINIBGM_DANMAKU_ENDPOINT")
+          fi
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             ARGS+=("-Pminibgm.versionName=${{ steps.version.outputs.versionName }}" "-Pminibgm.versionCode=${{ steps.version.outputs.versionCode }}")
           fi

@@ -134,8 +134,15 @@ class BgmTokenService(
         grantType: String,
         vararg params: Pair<String, String>,
     ): BgmTokenResponse {
+        val proxyUrl = config.tokenProxyUrl.trim()
+        if (proxyUrl.isBlank()) {
+            throw BgmNetworkException.RequestRejected(
+                statusCode = 400,
+                message = "OAuth 代理未配置",
+            )
+        }
         val response =
-            client.post(config.tokenProxyUrl) {
+            client.post(proxyUrl) {
                 contentType(ContentType.Application.FormUrlEncoded)
                 setBody(
                     FormDataContent(

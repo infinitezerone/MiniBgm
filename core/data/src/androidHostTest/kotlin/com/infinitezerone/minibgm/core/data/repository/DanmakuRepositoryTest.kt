@@ -591,4 +591,26 @@ class DanmakuRepositoryTest {
         assertEquals(0.0, repo.episodeNameBonus("第01话 结束与开始", null), 0.0)
         assertEquals(0.0, repo.episodeNameBonus("第01话 结束与开始", "1"), 0.0)
     }
+
+    @Test
+    fun `用户未配置端点时回退至注入的 defaultEndpoint`() =
+        runTest {
+            val customDefault = "https://custom-danmaku.example.com"
+            val fetcher = FakeDanmakuPageFetchService(mapOf("/api/v2/search/episodes" to sampleDandanJson))
+            val repo =
+                DanmakuRepositoryImpl(
+                    pageFetchService = fetcher,
+                    defaultEndpoint = customDefault,
+                )
+
+            repo.getDanmaku(
+                bangumiEpisodeId = 1L,
+                subjectId = 1L,
+                title = "葬送的芙莉莲",
+                episodeSort = 1f,
+            )
+
+            assertTrue(fetcher.requestedUrls.isNotEmpty())
+            assertTrue(fetcher.requestedUrls.first().startsWith(customDefault))
+        }
 }

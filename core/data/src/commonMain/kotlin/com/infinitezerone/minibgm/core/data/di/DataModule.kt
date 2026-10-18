@@ -42,9 +42,10 @@ import com.infinitezerone.minibgm.core.network.BgmAuthConfig
 import com.infinitezerone.minibgm.core.network.BgmTokenService
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
+import org.koin.core.module.Module
 import org.koin.dsl.module
 
-val dataModule =
+fun dataModule(danmakuDefaultEndpoint: String = ""): Module =
     module {
         single<CollectionRepository> {
             CollectionRepositoryImpl(
@@ -106,6 +107,7 @@ val dataModule =
                 danmakuOverrideDao = getOrNull<com.infinitezerone.minibgm.core.database.dao.DanmakuOverrideDao>(),
                 settingsRepository = getOrNull<SettingsRepository>(),
                 danmakuDiskCache = getOrNull<com.infinitezerone.minibgm.core.data.cache.DanmakuDiskCache>(),
+                defaultEndpoint = danmakuDefaultEndpoint,
             )
         }
         single<PlaybackSourceVerifier> {
@@ -158,3 +160,5 @@ val dataModule =
             )
         }
     }
+
+val dataModule: Module = dataModule()

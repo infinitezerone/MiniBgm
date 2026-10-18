@@ -82,6 +82,7 @@ class DanmakuRepositoryImpl(
     private val danmakuOverrideDao: DanmakuOverrideDao? = null,
     private val settingsRepository: SettingsRepository? = null,
     private val danmakuDiskCache: DanmakuDiskCache? = null,
+    private val defaultEndpoint: String = DanmakuConfig.DEFAULT_ENDPOINT,
 ) : DanmakuRepository {
     private val logger = bgmLogger("Bgm/Danmaku")
 
@@ -113,8 +114,8 @@ class DanmakuRepositoryImpl(
         val effectiveAppSecret = appSecret?.trim()?.ifBlank { null } ?: config?.appSecret?.trim()?.ifBlank { null }
         val rawEndpoint =
             apiEndpoint?.trim()?.ifBlank { null }
-                ?: config?.effectiveEndpoint
-                ?: DanmakuConfig.DEFAULT_ENDPOINT
+                ?: config?.endpoint?.trim()?.ifBlank { null }
+                ?: defaultEndpoint.trim().ifBlank { DanmakuConfig.DEFAULT_ENDPOINT }
         val endpoint = rawEndpoint.removeSuffix("/")
 
         val hasAuth = !effectiveAppId.isNullOrBlank() && !effectiveAppSecret.isNullOrBlank()

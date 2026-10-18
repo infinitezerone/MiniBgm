@@ -2758,6 +2758,42 @@ class ArchitectureRulesTest {
     }
 
     /**
+     * 隐私与安全隔离红线：
+     * 开源仓库中严禁硬编码任何开发者个人私有域名、网关端点（如私有反代、私人 DDNS 域名）；
+     * OAuth 令牌兑换与弹幕网关等端点必须由 CI（GitHub Secrets）或本地 local.properties 注入，
+     * 避免个人凭据与域名随开源代码泄漏。
+     */
+    @Test
+    fun production_sources_must_not_hardcode_private_proxy_domains() {
+        val violations = mutableListOf<String>()
+        val checkedDirs = listOf("core", "feature", "app", "sync")
+        val forbiddenDomains = listOf("zero" + "nex", "dpdns" + ".org")
+
+        checkedDirs.forEach { dirPath ->
+            val dir = File(projectRoot, dirPath)
+            if (!dir.isDirectory) return@forEach
+            dir
+                .walkTopDown()
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                .filter { it.isFile && (it.extension == "kt" || it.extension == "kts") && it.name != "ArchitectureRulesTest.kt" }
+                .forEach { file ->
+                    val text = file.readText()
+                    forbiddenDomains.forEach { domain ->
+                        if (text.contains(domain, ignoreCase = true)) {
+                            violations.add(
+                                "${file.relativeTo(projectRoot).path} 违规硬编码私有代理域名 $domain，必须由 CI / local.properties 注入",
+                            )
+                        }
+                    }
+                }
+        }
+        assertTrue(
+            violations.isEmpty(),
+            "违反私有网关与域名隔离红线（严禁在源码中硬编码私有端点）：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    /**
      * 开发者面板「开关必须真实生效」红线（见 AGENTS.md 领域规则 & 剧本 8）：
      *
      * 面板里能拨的每一个开关都必须至少有一个**生产消费方**——只能写设置、只能读设置、

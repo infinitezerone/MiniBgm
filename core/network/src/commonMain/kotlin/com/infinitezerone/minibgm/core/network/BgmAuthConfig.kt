@@ -8,12 +8,12 @@ import io.ktor.http.URLBuilder
  * @property clientId Bangumi 开发者平台分配的公开 Client ID
  * @property redirectUri 客户端自定义 Scheme 回调地址（须与 Bangumi 开发者
  *   平台注册值以及 Worker 端注入的 REDIRECT_URI 常量一致）
- * @property tokenProxyUrl Cloudflare Worker 安全换票网关地址 (Client Secret 仅存储于 Worker 端)
+ * @property tokenProxyUrl Cloudflare Worker 安全换票网关地址 (Client Secret 仅存储于 Worker 端，生产包由 CI / 本地配置注入)
  */
 data class BgmAuthConfig(
     val clientId: String = "bgm69976a90e07dcf869",
     val redirectUri: String = "minibgm://oauth/callback",
-    val tokenProxyUrl: String = "https://bgmplus-auth.zeronex.dpdns.org/oauth/token",
+    val tokenProxyUrl: String = "",
 ) {
     /**
      * 构造供浏览器 / Custom Tabs 打开的 Bangumi 官方网页授权地址。

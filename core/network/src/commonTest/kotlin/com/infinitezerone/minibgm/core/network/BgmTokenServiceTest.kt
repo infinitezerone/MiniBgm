@@ -58,13 +58,13 @@ class BgmTokenServiceTest {
     private fun service(engine: MockEngine): BgmTokenService =
         BgmTokenService(
             client = BgmHttpClient.create(userAgent = "MiniBgm/test", tokenProvider = NoopTokenProvider(), engine = engine),
-            config = BgmAuthConfig(),
+            config = BgmAuthConfig(tokenProxyUrl = "https://auth.minibgm.test/oauth/token"),
         )
 
     private fun unauthenticatedService(engine: MockEngine): BgmTokenService =
         BgmTokenService(
             client = BgmHttpClient.createBaseClient(engine = engine, userAgent = "MiniBgm/test"),
-            config = BgmAuthConfig(),
+            config = BgmAuthConfig(tokenProxyUrl = "https://auth.minibgm.test/oauth/token"),
         )
 
     @Test
@@ -246,5 +246,22 @@ class BgmTokenServiceTest {
             val tokens = unauthenticatedService(engine).exchangeCode("auth-code", "state-123", "verifier-abc")
             assertEquals(STUB_ACCESS, tokens.accessToken)
             assertEquals("refresh-123", tokens.refreshToken)
+        }
+
+    @Test
+    fun `tokenProxyUrl 为空时 exchangeCode 快速失败拒绝请求`() =
+        runTest {
+            val engine = MockEngine { error("Should not be called") }
+            val service =
+                BgmTokenService(
+                    client = BgmHttpClient.createBaseClient(engine = engine, userAgent = "MiniBgm/test"),
+                    config = BgmAuthConfig(tokenProxyUrl = ""),
+                )
+
+            val error =
+                assertFailsWith<BgmNetworkException.RequestRejected> {
+                    service.exchangeCode("code", "state", "verifier")
+                }
+            assertEquals(400, error.statusCode)
         }
 }
