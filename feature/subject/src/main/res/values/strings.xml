@@ -223,6 +223,7 @@
     <string name="feature_subject_source_torrent_stream_buffering">正在解析种子元数据并预缓冲…</string>
     <string name="feature_subject_source_torrent_stream_failed">起播失败</string>
     <string name="feature_subject_source_torrent_download_started">已加入下载队列，可在通知栏查看进度</string>
+    <string name="feature_subject_source_torrent_view_downloads">查看</string>
     <string name="feature_subject_source_torrent_torrent_downloaded">种子文件已就绪</string>
     <string name="feature_subject_source_torrent_torrent_failed">种子文件下载失败</string>
     <string name="feature_subject_source_torrent_copied_magnet">已复制磁力链接，可粘贴至外部下载器或网盘</string>

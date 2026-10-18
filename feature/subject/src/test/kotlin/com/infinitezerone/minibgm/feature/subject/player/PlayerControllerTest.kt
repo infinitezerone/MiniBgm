@@ -59,13 +59,20 @@ class PlayerControllerTest {
             loadedHeaders = headers
         }
 
+        var loadedStartPositionMs: Long = 0L
+
         override fun load(
             url: String,
             headers: Map<String, String>,
+            startPositionMs: Long,
         ) {
             loadCalls++
             loadedUrl = url
             loadedHeaders = headers
+            loadedStartPositionMs = startPositionMs
+            if (startPositionMs > 0L) {
+                position = startPositionMs
+            }
         }
 
         override fun retry() {
@@ -134,6 +141,19 @@ class PlayerControllerTest {
             assertEquals(mapOf("Referer" to "https://site"), engine.loadedHeaders)
             assertEquals("https://cdn/a.m3u8", controller.state.value.mediaUrl)
             assertTrue(controller.state.value.isBuffering)
+        }
+
+    @Test
+    fun setMedia_withStartPosition_passesPositionToEngineAndInitializesState() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+
+            controller.setMedia("https://cdn/a.m3u8", emptyMap(), startPositionMs = 65_000L)
+
+            assertEquals(1, engine.loadCalls)
+            assertEquals(65_000L, engine.loadedStartPositionMs)
+            assertEquals(65_000L, controller.positionMs.value)
         }
 
     @Test

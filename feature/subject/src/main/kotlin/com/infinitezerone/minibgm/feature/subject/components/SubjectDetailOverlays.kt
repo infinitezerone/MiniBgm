@@ -83,6 +83,7 @@ internal fun SubjectDetailOverlays(
     onRequestNotificationPermission: (() -> Unit)? = null,
     onSelectEpisodeForSources: ((Episode) -> Unit)? = null,
     onRefreshTorrent: (() -> Unit)? = null,
+    onDownloadStarted: (() -> Unit)? = null,
 ) {
     if (showLoginPromptDialog) {
         BgmLoginPromptDialog(
@@ -280,6 +281,7 @@ internal fun SubjectDetailOverlays(
             isTorrentLoading = isTorrentLoading,
             onRequestNotificationPermission = onRequestNotificationPermission,
             onRefreshTorrent = onRefreshTorrent,
+            onDownloadStarted = onDownloadStarted,
         )
     }
 }

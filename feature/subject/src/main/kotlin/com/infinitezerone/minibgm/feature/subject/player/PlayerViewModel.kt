@@ -1008,7 +1008,7 @@ class PlayerViewModel(
     private fun consumePendingResumePositionForNewEpisode(url: String): Long? {
         if (!session.pendingResumeLookupForNewEpisode) return null
         session.pendingResumeLookupForNewEpisode = false
-        val memoryPosition = session.positionsMap[url] ?: 0L
+        val memoryPosition = session.positionsMap[url]?.takeIf { it >= MIN_RESUME_POSITION_MS }
         syncResumePositionForEpisode(_uiState.value.episodeId, url)
         return memoryPosition
     }

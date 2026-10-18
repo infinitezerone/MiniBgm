@@ -106,6 +106,7 @@ fun EpisodeDetailScreen(
     onSourceSearch: ((String) -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
     onLoginRequest: () -> Unit = {},
+    onDownloadsClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: EpisodeDetailViewModel =
         koinViewModel(
@@ -805,6 +806,23 @@ fun EpisodeDetailScreen(
             isTorrentLoading = uiState.isTorrentLoading,
             onRequestNotificationPermission = requestDownloadNotification,
             onRefreshTorrent = { viewModel.refreshTorrentResources() },
+            onDownloadStarted = {
+                coroutineScope.launch {
+                    val result =
+                        snackbarHostState.showSnackbar(
+                            message = context.getString(R.string.feature_subject_source_torrent_download_started),
+                            actionLabel =
+                                if (onDownloadsClick != null) {
+                                    context.getString(R.string.feature_subject_source_torrent_view_downloads)
+                                } else {
+                                    null
+                                },
+                        )
+                    if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                        onDownloadsClick?.invoke()
+                    }
+                }
+            },
         )
     }
 

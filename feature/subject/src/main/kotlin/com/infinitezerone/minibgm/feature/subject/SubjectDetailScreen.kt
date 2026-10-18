@@ -104,6 +104,7 @@ fun SubjectDetailScreen(
     onManageRules: (() -> Unit)? = null,
     onSourceSearch: ((String) -> Unit)? = null,
     onLoginRequest: () -> Unit = {},
+    onDownloadsClick: (() -> Unit)? = null,
     viewModel: SubjectDetailViewModel = koinViewModel(parameters = { parametersOf(subjectId) }),
 ) {
     val context = LocalContext.current
@@ -779,6 +780,23 @@ fun SubjectDetailScreen(
         isTorrentLoading = uiState.isTorrentLoading,
         onRequestNotificationPermission = requestDownloadNotification,
         onRefreshTorrent = { viewModel.refreshTorrentResources(selectedEpisodeForSources) },
+        onDownloadStarted = {
+            coroutineScope.launch {
+                val result =
+                    snackbarHostState.showSnackbar(
+                        message = context.getString(R.string.feature_subject_source_torrent_download_started),
+                        actionLabel =
+                            if (onDownloadsClick != null) {
+                                context.getString(R.string.feature_subject_source_torrent_view_downloads)
+                            } else {
+                                null
+                            },
+                    )
+                if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                    onDownloadsClick?.invoke()
+                }
+            }
+        },
     )
 
     if (activeTagForAction != null) {

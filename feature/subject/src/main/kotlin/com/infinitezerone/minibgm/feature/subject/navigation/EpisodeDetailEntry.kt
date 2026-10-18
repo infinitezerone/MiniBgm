@@ -21,6 +21,7 @@ fun EntryProviderScope<NavKey>.episodeDetailEntry(
     onSourceSearch: ((String) -> Unit)? = null,
     onManageRules: (() -> Unit)? = null,
     onLoginRequest: () -> Unit = {},
+    onDownloadsClick: (() -> Unit)? = null,
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<EpisodeDetailRoute>(metadata = metadata) { route ->
@@ -68,6 +69,7 @@ fun EntryProviderScope<NavKey>.episodeDetailEntry(
             onSourceSearch = onSourceSearch,
             onManageRules = onManageRules,
             onLoginRequest = onLoginRequest,
+            onDownloadsClick = onDownloadsClick,
         )
     }
 }

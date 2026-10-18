@@ -299,6 +299,7 @@ fun BgmNavHost(
                                     } else {
                                         null
                                     },
+                                onDownloadsClick = { navState.navigateTo(DownloadRoute) },
                                 metadata = bgmDetailPane(),
                             )
 
@@ -333,6 +334,7 @@ fun BgmNavHost(
                                     } else {
                                         null
                                     },
+                                onDownloadsClick = { navState.navigateTo(DownloadRoute) },
                                 metadata = bgmExtraPane(),
                             )
 
@@ -372,6 +374,7 @@ fun BgmNavHost(
                                     } else {
                                         null
                                     },
+                                onDownloadsClick = { navState.navigateTo(DownloadRoute) },
                                 metadata = bgmExtraPane(),
                             )
 

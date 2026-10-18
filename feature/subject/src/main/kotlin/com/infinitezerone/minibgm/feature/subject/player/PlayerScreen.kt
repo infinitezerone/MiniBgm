@@ -13,9 +13,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,10 +26,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -198,7 +203,8 @@ fun PlayerScreen(
     var isScreenLocked by remember { mutableStateOf(false) }
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubProgress by remember { mutableFloatStateOf(0f) }
-    var resumedForUrl by remember { mutableStateOf("") }
+    var lastResumedEpisodeId by remember { mutableStateOf<Long?>(null) }
+    var resumeOverlayPosition by remember { mutableStateOf<Long?>(null) }
     var playerReady by remember { mutableStateOf(false) }
     var selectedPortraitTab by rememberSaveable { mutableStateOf(PlayerPortraitTab.INTRO) }
 
@@ -232,26 +238,6 @@ fun PlayerScreen(
                 uiState.episodeSort.toInt(),
             )
         }
-
-    suspend fun resumeFromSavedPositionIfNeeded() {
-        val targetUrl = uiState.streamUrl
-        if (resumedForUrl == targetUrl || targetUrl.isBlank()) return
-        val resume = uiState.resumePositionMs
-        if (resume < MIN_RESUME_POSITION_MS) return
-        resumedForUrl = targetUrl
-        val duration = playback.durationMs
-        if (duration > 0L && resume >= duration * 0.95) return
-        controller.seekTo(resume)
-        val result =
-            snackbarHostState.showSnackbar(
-                message = context.getString(R.string.feature_subject_player_resume_position, formatDuration(resume)),
-                actionLabel = context.getString(R.string.feature_subject_player_start_from_beginning),
-                duration = SnackbarDuration.Long,
-            )
-        if (result == SnackbarResult.ActionPerformed && playback.mediaUrl == targetUrl) {
-            controller.seekTo(0L)
-        }
-    }
 
     fun toggleFullscreen(landscape: Boolean) {
         // 面板类浮层随形态切换收起（横竖两套布局不同，保留面板意义不大）
@@ -383,7 +369,6 @@ fun PlayerScreen(
                 PlayerEngineEvent.Ready -> {
                     playerReady = true
                     viewModel.onPlaybackReady()
-                    coroutineScope.launch { resumeFromSavedPositionIfNeeded() }
                 }
 
                 PlayerEngineEvent.Ended -> {
@@ -406,7 +391,8 @@ fun PlayerScreen(
             isScrubbing = false
             snackbarHostState.currentSnackbarData?.dismiss()
         }
-        controller.setMedia(uiState.streamUrl, uiState.requestHeaders)
+        val initialPosition = uiState.resumePositionMs.takeIf { it >= MIN_RESUME_POSITION_MS } ?: 0L
+        controller.setMedia(uiState.streamUrl, uiState.requestHeaders, initialPosition)
     }
 
     // 播放位置 → ViewModel 节流落盘（StateFlow 自身已去重，无需 distinctUntilChanged）
@@ -419,10 +405,23 @@ fun PlayerScreen(
         viewModel.onDurationChanged(playback.durationMs)
     }
 
-    // 断点位置迟到时补发
+    // 换集时重置续播提示状态
+    LaunchedEffect(uiState.episodeId) {
+        resumeOverlayPosition = null
+    }
+
+    // 续播断点恢复与内置浮层触发：仅对新分集且有此前记录时触发一次（同分集换线无缝继承进度，不重复提示）
     LaunchedEffect(uiState.resumePositionMs, uiState.streamUrl, playerReady) {
-        if (playerReady && uiState.resumePositionMs >= MIN_RESUME_POSITION_MS) {
-            coroutineScope.launch { resumeFromSavedPositionIfNeeded() }
+        if (playerReady && uiState.resumePositionMs >= MIN_RESUME_POSITION_MS && lastResumedEpisodeId != uiState.episodeId) {
+            lastResumedEpisodeId = uiState.episodeId
+            val resume = uiState.resumePositionMs
+            val duration = playback.durationMs
+            if (duration <= 0L || resume < duration * 0.95) {
+                if (position.value < MIN_RESUME_POSITION_MS) {
+                    controller.seekTo(resume)
+                }
+                resumeOverlayPosition = resume
+            }
         }
     }
 
@@ -650,6 +649,12 @@ fun PlayerScreen(
             onToggleDanmaku = viewModel::toggleDanmaku,
             danmakuMatch = uiState.danmakuMatch,
             onOpenDanmakuPicker = openDanmakuPicker,
+            resumeOverlayPosition = resumeOverlayPosition,
+            onResumeSeekToBeginning = {
+                controller.seekTo(0L)
+                resumeOverlayPosition = null
+            },
+            onResumeDismiss = { resumeOverlayPosition = null },
             modifier =
                 Modifier
                     .fillMaxSize()
@@ -977,6 +982,9 @@ private fun PlayerVideoStage(
     onToggleDanmaku: () -> Unit = {},
     danmakuMatch: DanmakuMatch? = null,
     onOpenDanmakuPicker: () -> Unit = {},
+    resumeOverlayPosition: Long? = null,
+    onResumeSeekToBeginning: () -> Unit = {},
+    onResumeDismiss: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
@@ -1131,6 +1139,38 @@ private fun PlayerVideoStage(
                 onToggleLock = onToggleLock,
                 onSingleTap = onSingleTap,
             )
+        }
+
+        val resumeOverlayBottomPadding by animateDpAsState(
+            targetValue =
+                if (controlsVisible) {
+                    if (isLandscape) 64.dp else 56.dp
+                } else {
+                    if (isLandscape) 28.dp else 16.dp
+                },
+            label = "resumeOverlayBottomPadding",
+        )
+
+        AnimatedVisibility(
+            visible = resumeOverlayPosition != null && !isLocked,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .then(if (isLandscape) Modifier.displayCutoutPadding() else Modifier)
+                    .padding(
+                        start = if (isLandscape) 24.dp else 16.dp,
+                        bottom = resumeOverlayBottomPadding,
+                    ),
+        ) {
+            resumeOverlayPosition?.let { resumeMs ->
+                PlayerResumeOverlay(
+                    positionMs = resumeMs,
+                    onSeekToBeginning = onResumeSeekToBeginning,
+                    onDismiss = onResumeDismiss,
+                )
+            }
         }
     }
 }

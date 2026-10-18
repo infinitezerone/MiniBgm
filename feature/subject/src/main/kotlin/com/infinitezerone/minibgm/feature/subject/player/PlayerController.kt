@@ -178,6 +178,7 @@ class PlayerController(
     fun setMedia(
         url: String,
         requestHeaders: Map<String, String>,
+        startPositionMs: Long = 0L,
     ) {
         engine.setRequestHeaders(requestHeaders)
         // 单集循环由引擎的 repeatMode 持有、且是用户级偏好：换源/换集只重置媒体相关字段，
@@ -192,8 +193,9 @@ class PlayerController(
             return
         }
         if (url == _state.value.mediaUrl && _state.value.error == null) return
-        _positionMs.value = 0L
-        _bufferedPositionMs.value = 0L
+        val validStartPos = startPositionMs.coerceAtLeast(0L)
+        _positionMs.value = validStartPos
+        _bufferedPositionMs.value = validStartPos
         _state.value =
             PlaybackState(
                 mediaUrl = url,
@@ -202,7 +204,7 @@ class PlayerController(
                 isLooping = looping,
             )
         resetTrackOverridesOnMediaChange()
-        engine.load(url, requestHeaders)
+        engine.load(url, requestHeaders, validStartPos)
     }
 
     private fun resetTrackOverridesOnMediaChange() {

@@ -59,6 +59,7 @@ interface PlayerEngine {
     fun load(
         url: String,
         headers: Map<String, String>,
+        startPositionMs: Long = 0L,
     )
 
     fun retry()

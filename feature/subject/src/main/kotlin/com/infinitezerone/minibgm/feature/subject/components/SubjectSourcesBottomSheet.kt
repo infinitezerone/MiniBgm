@@ -132,6 +132,7 @@ fun SubjectSourcesBottomSheet(
     isTorrentLoading: Boolean = false,
     onRequestNotificationPermission: (() -> Unit)? = null,
     onRefreshTorrent: (() -> Unit)? = null,
+    onDownloadStarted: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val displayName = subject.displayName
@@ -620,8 +621,6 @@ fun SubjectSourcesBottomSheet(
             onTabSelected = { selectedTab = it },
             onlineCount = onlineRules.size,
             torrentCount = torrentResources.size,
-            isTorrentLoading = isTorrentLoading,
-            onRefreshTorrent = onRefreshTorrent.takeIf { torrentRules.isNotEmpty() },
         )
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -765,6 +764,7 @@ fun SubjectSourcesBottomSheet(
                     onDismissAndRun = runAfterDismiss,
                     onRefreshTorrent = onRefreshTorrent,
                     onOpenUrl = onOpenUrl,
+                    onDownloadStarted = onDownloadStarted,
                 )
             }
             SourceSheetTab.EXTERNAL -> {
@@ -929,107 +929,74 @@ private fun SourceTabsRow(
     onTabSelected: (SourceSheetTab) -> Unit,
     onlineCount: Int,
     torrentCount: Int,
-    isTorrentLoading: Boolean = false,
-    onRefreshTorrent: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SourceSheetTab.entries.forEach { tab ->
-                val isSelected = tab == selectedTab
-                val count =
-                    when (tab) {
-                        SourceSheetTab.ONLINE -> onlineCount.takeIf { it > 0 }
-                        SourceSheetTab.TORRENT -> torrentCount.takeIf { it > 0 }
-                        SourceSheetTab.EXTERNAL -> null
-                    }
-                Surface(
-                    onClick = { onTabSelected(tab) },
-                    shape = CircleShape,
-                    color =
-                        if (isSelected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
-                        },
-                    contentColor =
-                        if (isSelected) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    modifier = Modifier.height(34.dp),
+        SourceSheetTab.entries.forEach { tab ->
+            val isSelected = tab == selectedTab
+            val count =
+                when (tab) {
+                    SourceSheetTab.ONLINE -> onlineCount.takeIf { it > 0 }
+                    SourceSheetTab.TORRENT -> torrentCount.takeIf { it > 0 }
+                    SourceSheetTab.EXTERNAL -> null
+                }
+            Surface(
+                onClick = { onTabSelected(tab) },
+                shape = CircleShape,
+                color =
+                    if (isSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    },
+                contentColor =
+                    if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                modifier = Modifier.height(34.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            text = stringResource(tab.labelRes),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        )
-                        if (count != null) {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (isSelected) {
-                                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.22f)
-                                            } else {
-                                                MaterialTheme.colorScheme.surfaceContainerHighest
-                                            },
-                                        ).padding(horizontal = 6.dp, vertical = 1.dp),
-                            ) {
-                                Text(
-                                    text = count.toString(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color =
+                    Text(
+                        text = stringResource(tab.labelRes),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                    )
+                    if (count != null) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .clip(CircleShape)
+                                    .background(
                                         if (isSelected) {
-                                            MaterialTheme.colorScheme.onPrimary
+                                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.22f)
                                         } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                            MaterialTheme.colorScheme.surfaceContainerHighest
                                         },
-                                )
-                            }
+                                    ).padding(horizontal = 6.dp, vertical = 1.dp),
+                        ) {
+                            Text(
+                                text = count.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color =
+                                    if (isSelected) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                            )
                         }
                     }
-                }
-            }
-        }
-        if (selectedTab == SourceSheetTab.TORRENT && onRefreshTorrent != null) {
-            if (isTorrentLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            } else {
-                Box(
-                    modifier =
-                        Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .clickable(onClick = onRefreshTorrent),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Refresh,
-                        contentDescription = stringResource(R.string.feature_subject_source_torrent_refresh),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
                 }
             }
         }
@@ -1117,6 +1084,7 @@ fun TorrentMediaResourcesSection(
     onDismissAndRun: (() -> Unit) -> Unit,
     onRefreshTorrent: (() -> Unit)? = null,
     onOpenUrl: ((String) -> Unit)? = null,
+    onDownloadStarted: (() -> Unit)? = null,
 ) {
     val torrentRepository: TorrentRepository = koinInject()
     val torrentIntentDispatcher: TorrentIntentDispatcher = koinInject()
@@ -1333,12 +1301,18 @@ fun TorrentMediaResourcesSection(
             episodeName = resourceEpisodeName(resource),
         )
         withContext(Dispatchers.Main) {
-            Toast
-                .makeText(
-                    context,
-                    context.getString(R.string.feature_subject_source_torrent_download_started),
-                    Toast.LENGTH_SHORT,
-                ).show()
+            if (onDownloadStarted != null) {
+                onDismissAndRun {
+                    onDownloadStarted()
+                }
+            } else {
+                Toast
+                    .makeText(
+                        context,
+                        context.getString(R.string.feature_subject_source_torrent_download_started),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+            }
         }
     }
 

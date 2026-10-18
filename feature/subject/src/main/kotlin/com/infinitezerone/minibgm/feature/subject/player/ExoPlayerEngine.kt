@@ -136,9 +136,14 @@ class ExoPlayerEngine(
     override fun load(
         url: String,
         headers: Map<String, String>,
+        startPositionMs: Long,
     ) {
         requestHeaders.set(headers)
-        exoPlayer.setMediaItem(MediaItem.fromUri(url))
+        if (startPositionMs > 0L) {
+            exoPlayer.setMediaItem(MediaItem.fromUri(url), startPositionMs)
+        } else {
+            exoPlayer.setMediaItem(MediaItem.fromUri(url))
+        }
         exoPlayer.prepare()
     }
 
