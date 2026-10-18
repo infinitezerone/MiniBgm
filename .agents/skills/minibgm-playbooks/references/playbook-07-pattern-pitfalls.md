@@ -18,6 +18,7 @@
    * 所以"debug 单包 / release 分包"只能靠**项目属性 + 工作流保证**：`app/build.gradle.kts` 里 `val enableAbiSplits = (project.findProperty("minibgm.abiSplits") as? String)?.toBoolean() ?: false`，发版时由 `release.yml` 传 `-Pminibgm.abiSplits=true`。改这类"默认关、发版开"的开关时，**必须在发版链路补产物断言**（缺包直接 exit 1），否则一改就静默退化成 fat APK，下游的分 ABI 资产与 universal 别名全部变形。
 10. **续播点严格与"分集（episodeId）"绑定，与媒体直链/源类型彻底解耦**：
    * 观看记录与断点续播的唯一真源是 `PlaybackHistoryRepository`，键为合法分集 ID（`episodeId > 0L`），不依赖 `streamUrl` 或设置仓库 DataStore；临时测试流不入库、不恢复历史。
+   * 观看记录在 UI 侧由独立二级页 `HistoryScreen` + `HistoryViewModel` 承载，入口直达「我的」（UserScreen）顶栏；严禁与「播放源与规则」(`PlaybackRulesScreen`) 混装页签，`PlaybackRulesViewModel` 严禁持有 `PlaybackHistoryRepository`，由红线 `playback_history_must_be_decoupled_from_playback_rules_view_model` 物理把关。
    * 任何换集入口（`selectEpisode` / `switchTo`）在点击分集的瞬间即可同步读取会话内分集位置并异步查 Room 补全下发 `resumePositionMs`；流嗅探（`resolveCurrentEpisodeStream`）仅负责获取视频直链，绝不修改 `resumePositionMs`；同分集内换线路沿用当前会话进度。
    * 严禁将未看过的分集回退至旧分集的进度（新分集无历史即下发 0L）；播放中途周期性自动落盘严禁反向冲刷回 `resumePositionMs`，避免未看过的视频播到中途突发「从上次开始播放」浮层与跳帧。
    * 新增换集入口时，同步补一条"换集后 `resumePositionMs` 等于新分集自己的记录"与"未看过视频续播点保持 0L"的回归单测。

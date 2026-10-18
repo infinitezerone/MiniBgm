@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.user.navigation
 
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
+import com.infinitezerone.minibgm.core.navigation.HistoryRoute
 import com.infinitezerone.minibgm.core.navigation.InAppLoginRoute
 import com.infinitezerone.minibgm.core.navigation.InAppWebRoute
 import com.infinitezerone.minibgm.core.navigation.PlaybackRulesRoute
@@ -9,6 +10,7 @@ import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SettingsRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.UserRoute
+import com.infinitezerone.minibgm.feature.user.HistoryScreen
 import com.infinitezerone.minibgm.feature.user.InAppLoginScreen
 import com.infinitezerone.minibgm.feature.user.InAppWebScreen
 import com.infinitezerone.minibgm.feature.user.PlaybackRulesScreen
@@ -26,6 +28,7 @@ fun EntryProviderScope<NavKey>.userEntry(
     onSubjectClick: (SubjectDetailRoute) -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onDownloadsClick: () -> Unit = {},
+    onHistoryClick: () -> Unit = {},
     onLoginRequest: () -> Unit = {},
     onOpenTokenPage: (String) -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
@@ -36,6 +39,7 @@ fun EntryProviderScope<NavKey>.userEntry(
             onSubjectClick = onSubjectClick,
             onSettingsClick = onSettingsClick,
             onDownloadsClick = onDownloadsClick,
+            onHistoryClick = onHistoryClick,
             onLoginRequest = onLoginRequest,
             onOpenTokenPage = onOpenTokenPage,
             scrollToTop = scrollToTop,
@@ -67,13 +71,25 @@ fun EntryProviderScope<NavKey>.settingsEntry(
 fun EntryProviderScope<NavKey>.playbackRulesEntry(
     onBackClick: () -> Unit = {},
     onAiSourceSearch: ((String) -> Unit)? = null,
-    onPlayHistory: (PlayerRoute) -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<PlaybackRulesRoute>(metadata = metadata) {
         PlaybackRulesScreen(
             onBackClick = onBackClick,
             onAiSourceSearch = onAiSourceSearch,
+        )
+    }
+}
+
+/** 观看记录二级页面条目 */
+fun EntryProviderScope<NavKey>.historyEntry(
+    onBackClick: () -> Unit = {},
+    onPlayHistory: (PlayerRoute) -> Unit = {},
+    metadata: Map<String, Any> = emptyMap(),
+) {
+    entry<HistoryRoute>(metadata = metadata) {
+        HistoryScreen(
+            onBackClick = onBackClick,
             onPlayHistory = onPlayHistory,
         )
     }

@@ -41,6 +41,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogActio
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.FeatureGate
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -78,6 +79,7 @@ fun UserScreen(
     onSubjectClick: (SubjectDetailRoute) -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onDownloadsClick: () -> Unit = {},
+    onHistoryClick: () -> Unit = {},
     onLoginRequest: () -> Unit = {},
     onOpenTokenPage: (String) -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
@@ -152,6 +154,7 @@ fun UserScreen(
         onRetryCollections = collectionsViewModel::retry,
         onSettingsClick = onSettingsClick,
         onDownloadsClick = onDownloadsClick,
+        onHistoryClick = onHistoryClick,
         downloadGroups = downloadGroups,
         onSwitchAccount = viewModel::switchAccount,
         onLogoutAccount = viewModel::logout,
@@ -182,6 +185,7 @@ fun UserScreenContent(
     onRetryCollections: () -> Unit = {},
     onSettingsClick: () -> Unit,
     onDownloadsClick: () -> Unit = {},
+    onHistoryClick: () -> Unit = {},
     downloadGroups: List<com.infinitezerone.minibgm.core.model.SubjectDownloadGroup> = emptyList(),
     onSwitchAccount: (Long) -> Unit,
     onLogoutAccount: (Long) -> Unit,
@@ -245,6 +249,15 @@ fun UserScreenContent(
                     Text(text = stringResource(R.string.feature_user_title_home))
                 },
                 actions = {
+                    FeatureGate(capability = { it.isInternalPlayerEnabled }) {
+                        IconButton(onClick = onHistoryClick) {
+                            Icon(
+                                imageVector = BgmIcons.History,
+                                contentDescription = stringResource(R.string.feature_user_history_title),
+                            )
+                        }
+                    }
+
                     IconButton(onClick = onDownloadsClick) {
                         val activeDownloadCount = downloadGroups.sumOf { it.downloadingCount }
                         if (activeDownloadCount > 0) {

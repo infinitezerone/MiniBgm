@@ -200,3 +200,10 @@ data class SubjectDownloadDetailRoute(
     val subjectId: Long,
     val subjectName: String = "",
 ) : DetailChainRoute
+
+/**
+ * 观看记录管理交互界面路由。
+ * 声明为 [DetailChainRoute]：可从用户中心顶栏、设置或播放器进入，返回时精确回到前驱页面。
+ */
+@Serializable
+data object HistoryRoute : DetailChainRoute

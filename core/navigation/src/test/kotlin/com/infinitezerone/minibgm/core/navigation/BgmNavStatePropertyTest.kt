@@ -130,6 +130,13 @@ class BgmNavStatePropertyTest {
         }
     }
 
+    private data object PushHistory : Action {
+        override fun applyTo(state: BgmNavState): Boolean {
+            state.navigateTo(HistoryRoute)
+            return true
+        }
+    }
+
     private data class SwitchTab(
         val index: Int,
     ) : Action {
@@ -149,7 +156,7 @@ class BgmNavStatePropertyTest {
 
     private fun randomActions(rng: Random): List<Action> =
         List(rng.nextInt(10, 40)) {
-            when (rng.nextInt(12)) {
+            when (rng.nextInt(13)) {
                 0 -> PushDetail(rng.nextLong())
                 1 -> PushLinked(rng.nextLong())
                 2 -> PushEpisode(rng.nextLong())
@@ -160,7 +167,8 @@ class BgmNavStatePropertyTest {
                 7 -> PushTopic(rng.nextLong())
                 8 -> PushPlayer(rng.nextLong())
                 9 -> PushPlaybackRules
-                10 -> SwitchTab(rng.nextInt())
+                10 -> PushHistory
+                11 -> SwitchTab(rng.nextInt())
                 else -> GoBack
             }
         }

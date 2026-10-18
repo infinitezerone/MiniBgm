@@ -137,8 +137,7 @@
 
     <!-- 8. 播放源管理页 -->
     <string name="feature_user_cd_ai_source_search">让 AI 助手找源</string>
-    <string name="feature_user_tab_rules">解析规则</string>
-    <string name="feature_user_tab_history">观看记录</string>
+    <string name="feature_user_history_title">观看记录</string>
     <string name="feature_user_rules_empty">暂无自定义播放规则，可点击「添加」或「导入」配置。</string>
     <string name="feature_user_rules_delete_title">确认删除规则</string>
     <string name="feature_user_rules_delete_message">确定要删除播放规则「%1$s」吗？</string>

@@ -2614,6 +2614,32 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 播放源管理与观看记录解耦红线：
+     * 1. 观看历史由独立 [HistoryViewModel] 和 [HistoryScreen] 承载，归口个人中心 [UserScreen] 顶栏直达；
+     * 2. [PlaybackRulesViewModel] 还原为纯粹的播放源规则与订阅管理，严禁持有 PlaybackHistoryRepository 或混入历史管理。
+     */
+    @Test
+    fun playback_history_must_be_decoupled_from_playback_rules_view_model() {
+        val rulesViewModelFile =
+            File(
+                projectRoot,
+                "feature/user/src/main/kotlin/com/infinitezerone/minibgm/feature/user/PlaybackRulesViewModel.kt",
+            )
+        if (!rulesViewModelFile.isFile) return
+        val text = KotlinSourceScanner.sanitize(rulesViewModelFile.readText())
+
+        val violations = mutableListOf<String>()
+        if (text.contains("PlaybackHistoryRepository") || text.contains("playbackHistory")) {
+            violations.add("PlaybackRulesViewModel 仍混入观看记录逻辑（持有 PlaybackHistoryRepository 或暴露 playbackHistory），必须彻底解耦")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反播放源规则与观看记录解耦架构红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
     @Test
     fun screenshot_test_modules_must_use_shared_unit_test_convention() {
         val includeRe = Regex("""^include\(":(.+)"\)$""")

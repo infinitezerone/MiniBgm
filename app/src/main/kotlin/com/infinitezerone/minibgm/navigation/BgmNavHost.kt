@@ -27,6 +27,7 @@ import com.infinitezerone.minibgm.core.navigation.BgmNavState
 import com.infinitezerone.minibgm.core.navigation.DownloadRoute
 import com.infinitezerone.minibgm.core.navigation.EpisodeDetailRoute
 import com.infinitezerone.minibgm.core.navigation.ExploreRoute
+import com.infinitezerone.minibgm.core.navigation.HistoryRoute
 import com.infinitezerone.minibgm.core.navigation.InAppLoginRoute
 import com.infinitezerone.minibgm.core.navigation.InAppWebRoute
 import com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute
@@ -54,6 +55,7 @@ import com.infinitezerone.minibgm.feature.subject.navigation.playerEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.subjectEntry
 import com.infinitezerone.minibgm.feature.subject.navigation.topicDetailEntry
 import com.infinitezerone.minibgm.feature.user.navigation.downloadEntry
+import com.infinitezerone.minibgm.feature.user.navigation.historyEntry
 import com.infinitezerone.minibgm.feature.user.navigation.inAppLoginEntry
 import com.infinitezerone.minibgm.feature.user.navigation.inAppWebEntry
 import com.infinitezerone.minibgm.feature.user.navigation.playbackRulesEntry
@@ -199,6 +201,7 @@ fun BgmNavHost(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onSettingsClick = { navState.navigateTo(SettingsRoute) },
                                 onDownloadsClick = { navState.navigateTo(DownloadRoute) },
+                                onHistoryClick = { navState.navigateTo(HistoryRoute) },
                                 onLoginRequest = openLogin,
                                 onOpenTokenPage = openTokenPage,
                                 scrollToTop = userScrollToTop,
@@ -212,6 +215,14 @@ fun BgmNavHost(
                                 },
                                 metadata = bgmDetailPane(),
                             )
+
+                            if (isInternalPlayerEnabled) {
+                                historyEntry(
+                                    onBackClick = { navState.goBack() },
+                                    onPlayHistory = { route -> navState.navigateTo(route) },
+                                    metadata = bgmDetailPane(),
+                                )
+                            }
 
                             subjectDownloadDetailEntry(
                                 onBackClick = { navState.goBack() },
@@ -263,7 +274,6 @@ fun BgmNavHost(
                                         } else {
                                             null
                                         },
-                                    onPlayHistory = { route -> navState.navigateTo(route) },
                                     metadata = bgmExtraPane(),
                                 )
                             }

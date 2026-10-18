@@ -20,16 +20,13 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,12 +53,9 @@ import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHos
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.designsystem.theme.FeatureGate
-import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
-import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.user.components.AddTorrentRuleDialog
-import com.infinitezerone.minibgm.feature.user.components.PlaybackHistoryCard
 import com.infinitezerone.minibgm.feature.user.components.PlaybackRuleCard
 import com.infinitezerone.minibgm.feature.user.components.RuleImportDialog
 import com.infinitezerone.minibgm.feature.user.components.SiteProbeDialog
@@ -86,14 +80,6 @@ private enum class RuleAddOption {
         }
 }
 
-/** 播放源管理页签：解析规则 / 观看记录 */
-private enum class PlaybackRulesTab(
-    val labelRes: Int,
-) {
-    RULES(R.string.feature_user_tab_rules),
-    HISTORY(R.string.feature_user_tab_history),
-}
-
 private enum class RuleFilter {
     ALL,
     ONLINE,
@@ -110,7 +96,6 @@ fun PlaybackRulesScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier,
     onAiSourceSearch: ((String) -> Unit)? = null,
-    onPlayHistory: (PlayerRoute) -> Unit = {},
     viewModel: PlaybackRulesViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -123,7 +108,6 @@ fun PlaybackRulesScreen(
 
     var isImportingRuleJson by remember { mutableStateOf(false) }
     var isAddingTorrentRule by remember { mutableStateOf(false) }
-    var selectedTab by rememberSaveable { mutableIntStateOf(PlaybackRulesTab.RULES.ordinal) }
     val overlayHostState = rememberOverlayHostState()
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -175,8 +159,6 @@ fun PlaybackRulesScreen(
         }
     }
 
-    val currentTab = PlaybackRulesTab.entries.getOrElse(selectedTab) { PlaybackRulesTab.RULES }
-
     Scaffold(
         topBar = {
             BgmTopAppBar(
@@ -190,78 +172,38 @@ fun PlaybackRulesScreen(
                     }
                 },
                 actions = {
-                    when (currentTab) {
-                        PlaybackRulesTab.RULES -> {
-                            if (uiState.subscriptionUrl.isNotBlank()) {
-                                IconButton(
-                                    onClick = { viewModel.refreshSubscription() },
-                                    enabled = !uiState.isRefreshingSubscription,
-                                ) {
-                                    if (uiState.isRefreshingSubscription) {
-                                        CircularProgressIndicator(
-                                            strokeWidth = 2.dp,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = BgmIcons.Refresh,
-                                            contentDescription = stringResource(R.string.feature_user_subscription_sync_action),
-                                        )
-                                    }
-                                }
-                            }
-                            FeatureGate(capability = { it.isAiAssistantEnabled && onAiSourceSearch != null }) {
-                                IconButton(onClick = { viewModel.requestAiSourceSearch() }) {
-                                    Icon(
-                                        imageVector = BgmIcons.Assistant,
-                                        contentDescription = stringResource(R.string.feature_user_cd_ai_source_search),
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
+                    if (uiState.subscriptionUrl.isNotBlank()) {
+                        IconButton(
+                            onClick = { viewModel.refreshSubscription() },
+                            enabled = !uiState.isRefreshingSubscription,
+                        ) {
+                            if (uiState.isRefreshingSubscription) {
+                                CircularProgressIndicator(
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = BgmIcons.Refresh,
+                                    contentDescription = stringResource(R.string.feature_user_subscription_sync_action),
+                                )
                             }
                         }
-                        PlaybackRulesTab.HISTORY ->
-                            if (uiState.playbackHistory.isNotEmpty()) {
-                                IconButton(
-                                    onClick = {
-                                        scope.launch {
-                                            val confirmed =
-                                                overlayHostState.await(
-                                                    ConfirmDialogAction(
-                                                        title =
-                                                            context.getString(
-                                                                R.string.feature_user_history_clear_all_title,
-                                                            ),
-                                                        message =
-                                                            context.getString(
-                                                                R.string.feature_user_history_clear_all_message,
-                                                            ),
-                                                        confirmText =
-                                                            context.getString(
-                                                                R.string.feature_user_history_clear_all_action,
-                                                            ),
-                                                        isDestructive = true,
-                                                    ),
-                                                )
-                                            if (confirmed) {
-                                                viewModel.clearPlaybackHistory()
-                                            }
-                                        }
-                                    },
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.CleaningServices,
-                                        contentDescription =
-                                            stringResource(R.string.feature_user_history_clear_all_action),
-                                    )
-                                }
-                            }
+                    }
+                    FeatureGate(capability = { it.isAiAssistantEnabled && onAiSourceSearch != null }) {
+                        IconButton(onClick = { viewModel.requestAiSourceSearch() }) {
+                            Icon(
+                                imageVector = BgmIcons.Assistant,
+                                contentDescription = stringResource(R.string.feature_user_cd_ai_source_search),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 },
             )
         },
         floatingActionButton = {
-            if (currentTab == PlaybackRulesTab.RULES && !uiState.isLoading) {
+            if (!uiState.isLoading) {
                 ExtendedFloatingActionButton(
                     onClick = {
                         scope.launch {
@@ -291,65 +233,31 @@ fun PlaybackRulesScreen(
         snackbarHost = { BgmSnackbarHost(hostState = snackbarHostState) },
         modifier = modifier,
     ) { innerPadding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-        ) {
-            PrimaryTabRow(selectedTabIndex = currentTab.ordinal) {
-                PlaybackRulesTab.entries.forEach { tab ->
-                    Tab(
-                        selected = tab == currentTab,
-                        onClick = { selectedTab = tab.ordinal },
-                        text = { Text(stringResource(tab.labelRes)) },
-                    )
-                }
+        if (uiState.isLoading) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
-
-            if (uiState.isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
-            } else {
-                when (currentTab) {
-                    PlaybackRulesTab.RULES ->
-                        RulesTabContent(
-                            rules = uiState.rules,
-                            onOpenSubscriptionImport = viewModel::openSubscriptionImport,
-                            onOpenSiteProbe = viewModel::openSiteProbe,
-                            onToggleRule = viewModel::toggleRule,
-                            onDeleteRule = viewModel::deleteRule,
-                            overlayHostState = overlayHostState,
-                            onShowSnackbar = { message ->
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(message)
-                                }
-                            },
-                        )
-                    PlaybackRulesTab.HISTORY ->
-                        HistoryTabContent(
-                            history = uiState.playbackHistory,
-                            onResume = { entry ->
-                                onPlayHistory(
-                                    PlayerRoute(
-                                        subjectId = entry.subjectId,
-                                        episodeId = entry.episodeId,
-                                        streamUrl = entry.streamUrl,
-                                        episodeName = entry.episodeName,
-                                        subjectName = entry.subjectName,
-                                        episodeSort = entry.episodeSort,
-                                    ),
-                                )
-                            },
-                            onDelete = viewModel::deleteHistory,
-                            overlayHostState = overlayHostState,
-                        )
-                }
-            }
+        } else {
+            RulesTabContent(
+                rules = uiState.rules,
+                onOpenSubscriptionImport = viewModel::openSubscriptionImport,
+                onOpenSiteProbe = viewModel::openSiteProbe,
+                onToggleRule = viewModel::toggleRule,
+                onDeleteRule = viewModel::deleteRule,
+                overlayHostState = overlayHostState,
+                modifier = Modifier.padding(innerPadding),
+                onShowSnackbar = { message ->
+                    scope.launch {
+                        snackbarHostState.showSnackbar(message)
+                    }
+                },
+            )
         }
     }
 
@@ -610,93 +518,6 @@ internal fun RulesTabContent(
                     )
                 }
             }
-        }
-    }
-}
-
-/**
- * 观看记录页签：按分集粒度的历史列表，点击整卡即续播、删除走显式按钮 + 二次确认。
- */
-@Composable
-private fun HistoryTabContent(
-    history: List<PlaybackHistory>,
-    onResume: (PlaybackHistory) -> Unit,
-    onDelete: (Long) -> Unit,
-    overlayHostState: OverlayHostState,
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    if (history.isEmpty()) {
-        LazyColumn(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
-        ) {
-            item(key = "history_empty_hero") {
-                Surface(
-                    shape = BgmShapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.History,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(40.dp),
-                        )
-                        Text(
-                            text = stringResource(R.string.feature_user_history_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-        return
-    }
-
-    LazyColumn(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        items(history, key = { it.episodeId }) { entry ->
-            PlaybackHistoryCard(
-                history = entry,
-                onResume = { onResume(entry) },
-                onDelete = {
-                    scope.launch {
-                        val confirmed =
-                            overlayHostState.await(
-                                ConfirmDialogAction(
-                                    title = context.getString(R.string.feature_user_history_delete_title),
-                                    message =
-                                        context.getString(
-                                            R.string.feature_user_history_delete_message,
-                                            entry.subjectName.ifBlank { entry.episodeName },
-                                        ),
-                                    confirmText = context.getString(R.string.feature_user_action_delete),
-                                    isDestructive = true,
-                                ),
-                            )
-                        if (confirmed) {
-                            onDelete(entry.episodeId)
-                        }
-                    }
-                },
-            )
         }
     }
 }

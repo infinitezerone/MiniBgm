@@ -30,6 +30,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeUpdateRepository
 import com.infinitezerone.minibgm.feature.search.SearchViewModel
 import com.infinitezerone.minibgm.feature.user.DownloadViewModel
+import com.infinitezerone.minibgm.feature.user.HistoryViewModel
 import com.infinitezerone.minibgm.feature.user.InAppWebViewModel
 import com.infinitezerone.minibgm.feature.user.PlaybackRulesViewModel
 import com.infinitezerone.minibgm.feature.user.UserCollectionsViewModel
@@ -186,6 +187,7 @@ class AppModuleTest : KoinTest {
             assertNotNull(get<PlaybackRulesViewModel>())
             assertNotNull(get<InAppWebViewModel>())
             assertNotNull(get<DownloadViewModel>())
+            assertNotNull(get<HistoryViewModel>())
 
             tempDir.deleteRecursively()
         }

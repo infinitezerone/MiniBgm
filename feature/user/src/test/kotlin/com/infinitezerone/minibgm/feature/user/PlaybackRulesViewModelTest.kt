@@ -5,20 +5,18 @@ import com.infinitezerone.minibgm.core.data.repository.PlaybackResolverRepositor
 import com.infinitezerone.minibgm.core.model.DiscoveredSource
 import com.infinitezerone.minibgm.core.model.MacCmsProbeResult
 import com.infinitezerone.minibgm.core.model.PlayableSource
-import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.core.model.SubscriptionValidationReport
-import com.infinitezerone.minibgm.core.testing.repository.FakePlaybackHistoryRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -51,6 +49,7 @@ private class FakeProbeResolver(
     }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackRulesViewModelTest {
     @Test
     fun siteProbe_success_previewsEndpointThenAddsSourceRule() =
@@ -545,101 +544,4 @@ class PlaybackRulesViewModelTest {
             assertTrue(rule.isResolvable)
             assertTrue(rule.isImportable)
         }
-
-    @Test
-    fun playbackHistory_isProjectedIntoUiStateByRecentWatchOrder() =
-        runTest {
-            val historyRepo = FakePlaybackHistoryRepository()
-            historyRepo.saveHistory(history(episodeId = 101L, positionMs = 120_000L, updatedAt = 1_000L))
-            historyRepo.saveHistory(history(episodeId = 102L, positionMs = 30_000L, updatedAt = 2_000L))
-
-            val viewModel = PlaybackRulesViewModel(FakeSettingsRepository(), null, historyRepo)
-            val state = viewModel.uiState.first { it.playbackHistory.isNotEmpty() }
-
-            // 最近观看的在最前：102 后写，应排在 101 之前
-            assertEquals(listOf(102L, 101L), state.playbackHistory.map { it.episodeId })
-            assertEquals(0.5f, state.playbackHistory.single { it.episodeId == 101L }.progress)
-        }
-
-    @Test
-    fun deleteHistory_removesOnlyTargetEpisodeAndEmitsResourceSnackbar() =
-        runTest {
-            val historyRepo = FakePlaybackHistoryRepository()
-            historyRepo.saveHistory(history(episodeId = 101L, updatedAt = 1_000L))
-            historyRepo.saveHistory(history(episodeId = 102L, updatedAt = 2_000L))
-
-            val viewModel = PlaybackRulesViewModel(FakeSettingsRepository(), null, historyRepo)
-            viewModel.deleteHistory(101L)
-            advanceUntilIdle()
-
-            assertNull(historyRepo.getHistoryByEpisode(101L))
-            assertEquals(102L, historyRepo.getHistoryByEpisode(102L)?.episodeId)
-
-            // 提示文案必须走资源体系：message 留空、messageRes 有效
-            val event = viewModel.events.first()
-            assertIs<PlaybackRulesUiEvent.ShowSnackbar>(event)
-            assertEquals(R.string.feature_user_history_deleted, event.messageRes)
-            assertNull(event.message)
-        }
-
-    @Test
-    fun deleteHistory_ignoresNonPositiveEpisodeId() =
-        runTest {
-            val historyRepo = FakePlaybackHistoryRepository()
-            historyRepo.saveHistory(history(episodeId = 101L, updatedAt = 1_000L))
-
-            val viewModel = PlaybackRulesViewModel(FakeSettingsRepository(), null, historyRepo)
-            viewModel.deleteHistory(0L)
-            advanceUntilIdle()
-
-            assertEquals(101L, historyRepo.getHistoryByEpisode(101L)?.episodeId)
-        }
-
-    @Test
-    fun clearPlaybackHistory_emptiesRepository() =
-        runTest {
-            val historyRepo = FakePlaybackHistoryRepository()
-            historyRepo.saveHistory(history(episodeId = 101L, updatedAt = 1_000L))
-            historyRepo.saveHistory(history(episodeId = 102L, updatedAt = 2_000L))
-
-            val viewModel = PlaybackRulesViewModel(FakeSettingsRepository(), null, historyRepo)
-            viewModel.clearPlaybackHistory()
-            advanceUntilIdle()
-
-            assertTrue(historyRepo.observeRecentHistory(10).first().isEmpty())
-            val event = viewModel.events.first()
-            assertIs<PlaybackRulesUiEvent.ShowSnackbar>(event)
-            assertEquals(R.string.feature_user_history_cleared, event.messageRes)
-        }
-
-    @Test
-    fun historyActions_withoutRepository_areNoOps() =
-        runTest {
-            // 未注入仓库（预览/降级）时两个入口都必须是安全空操作，不能让页面崩
-            val viewModel = PlaybackRulesViewModel(FakeSettingsRepository())
-
-            viewModel.deleteHistory(101L)
-            viewModel.clearPlaybackHistory()
-            advanceUntilIdle()
-
-            val state = viewModel.uiState.first { !it.isLoading }
-            assertTrue(state.playbackHistory.isEmpty())
-        }
-
-    private fun history(
-        episodeId: Long,
-        positionMs: Long = 0L,
-        updatedAt: Long = 0L,
-    ) = PlaybackHistory(
-        episodeId = episodeId,
-        subjectId = 1001L,
-        subjectName = "葬送的芙莉莲",
-        episodeName = "第 1 话",
-        episodeSort = 1f,
-        coverUrl = "https://example.com/cover.jpg",
-        streamUrl = "https://example.com/video.m3u8",
-        positionMs = positionMs,
-        durationMs = 240_000L,
-        updatedAt = updatedAt,
-    )
 }
