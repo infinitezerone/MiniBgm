@@ -273,7 +273,7 @@ fun PlayerScreen(
             .build()
 
     fun enterPictureInPicture() {
-        if (!uiState.pipEnabled) return
+        // 手动入口不受「自动画中画」开关影响：那个开关只决定返回桌面时是否自动小窗
         val act = activity ?: return
         if (act.requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
             act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -646,7 +646,8 @@ fun PlayerScreen(
             onOpenSourcesPanel = openSourcesPanel,
             onToggleLock = config.onToggleLock,
             onRequestOpenSources = onRequestOpenSources,
-            showPipButton = uiState.pipEnabled,
+            // 手动画中画入口常驻：关闭「自动画中画」不等于用户不想要小窗
+            showPipButton = true,
             currentQualityLabel = tracksSnapshot.currentQualityDisplayLabel,
             onOpenTrackSelection = openSettingsPanel,
             danmakus = uiState.danmakus,

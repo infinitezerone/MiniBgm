@@ -339,7 +339,7 @@ internal fun PlaybackAndContentSettingsCard(
                 icon = BgmIcons.PictureInPicture,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(R.string.feature_user_settings_pip_title),
-                subtitle = null,
+                subtitle = stringResource(R.string.feature_user_settings_pip_subtitle),
                 onClick = { onTogglePipEnabled(!pipEnabled) },
                 trailing = {
                     Switch(
