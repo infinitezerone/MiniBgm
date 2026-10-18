@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.data.repository
 
+import com.infinitezerone.minibgm.core.common.BgmDispatchers
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.repository.resolver.DanmakuParseResult
 import com.infinitezerone.minibgm.core.data.repository.resolver.DanmakuParser
@@ -17,6 +18,7 @@ import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import com.infinitezerone.minibgm.core.network.sha256
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
@@ -97,6 +99,7 @@ class DanmakuRepositoryImpl(
     private val danmakuOverrideDao: DanmakuOverrideDao? = null,
     private val settingsRepository: SettingsRepository? = null,
     private val networkMonitor: NetworkMonitor? = null,
+    private val dispatchers: BgmDispatchers = BgmDispatchers(),
     private val defaultEndpoint: String = DanmakuConfig.DEFAULT_ENDPOINT,
 ) : DanmakuRepository {
     private val logger = bgmLogger("Bgm/Danmaku")
@@ -225,7 +228,10 @@ class DanmakuRepositoryImpl(
             return DanmakuResult(emptyList(), match)
         }
 
-        return when (val parsed = DanmakuParser.parseDandanJsonResult(commentPage.html)) {
+        // JSON 解码 + 映射 + 排序是 CPU 密集操作：调用方（viewModelScope）在主线程，
+        // 这里显式切到默认调度器，绝不把解析留在 UI 线程上。
+        val parsed = withContext(dispatchers.default) { DanmakuParser.parseDandanJsonResult(commentPage.html) }
+        return when (parsed) {
             is DanmakuParseResult.Success -> {
                 logger.i {
                     "成功获取并解析弹幕: ${parsed.items.size} 条 (anime='$searchTitle', ep=${episodeSort.toInt()}, " +

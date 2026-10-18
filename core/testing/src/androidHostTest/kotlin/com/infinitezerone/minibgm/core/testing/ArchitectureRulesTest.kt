@@ -3289,6 +3289,82 @@ class ArchitectureRulesTest {
             .toSet()
     }
 
+    /**
+     * 仓库/抓取层必须把 CPU/IO 工作切出调用方线程。
+     *
+     * Kotlin 的 `suspend` 不切换线程：`viewModelScope.launch` 的续体仍在 Main，
+     * 所以 JSON 解码与正文解码必须在 `withContext(dispatchers.default)` 块内完成。
+     * 这条红线钉住"机制存在且包住了对应调用"，防止再出现"解析在主线程"。
+     */
+    @Test
+    fun repository_cpu_work_must_leave_the_caller_thread() {
+        val violations = mutableListOf<String>()
+
+        val danmakuRepo =
+            File(
+                projectRoot,
+                "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/DanmakuRepository.kt",
+            )
+        if (!danmakuRepo.isFile) {
+            violations += "DanmakuRepository.kt 不存在：${danmakuRepo.path}"
+        } else {
+            val code = KotlinSourceScanner.sanitize(danmakuRepo.readText())
+            if (!mentionsInsideBlock(code, "withContext(dispatchers.default)", "parseDandanJsonResult")) {
+                violations +=
+                    "DanmakuRepository.kt: 弹幕 JSON 解码/排序必须在 withContext(dispatchers.default) 内" +
+                    "（suspend 不等于离开主线程）"
+            }
+        }
+
+        val pageFetch =
+            File(
+                projectRoot,
+                "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/PageFetchService.kt",
+            )
+        if (!pageFetch.isFile) {
+            violations += "PageFetchService.kt 不存在：${pageFetch.path}"
+        } else {
+            val code = KotlinSourceScanner.sanitize(pageFetch.readText())
+            if (!mentionsInsideBlock(code, "withContext(dispatchers.default)", "decodeToString")) {
+                violations += "PageFetchService.kt: 正文读取/解码必须在 withContext(dispatchers.default) 内"
+            }
+        }
+
+        if (violations.isNotEmpty()) {
+            fail("调用方线程（可能是 Main）不得承担解析/解码：\n" + violations.joinToString("\n"))
+        }
+    }
+
+    /** [inner] 是否出现在以 [blockToken] 开头、花括号配对的代码块内 */
+    private fun mentionsInsideBlock(
+        code: String,
+        blockToken: String,
+        inner: String,
+    ): Boolean {
+        var searchFrom = 0
+        while (true) {
+            val start = code.indexOf(blockToken, searchFrom)
+            if (start < 0) return false
+            val open = code.indexOf('{', start + blockToken.length)
+            if (open < 0) return false
+            var depth = 0
+            var index = open
+            while (index < code.length) {
+                when (code[index]) {
+                    '{' -> depth++
+                    '}' -> {
+                        depth--
+                        if (depth == 0) break
+                    }
+                }
+                index++
+            }
+            val block = code.substring(open, minOf(index + 1, code.length))
+            if (block.contains(inner)) return true
+            searchFrom = index + 1
+        }
+    }
+
     private companion object {
         /** 红线只约束生产源码：build 产物与各测试源集目录一律不下钻 */
         val NON_SOURCE_DIR_NAMES =

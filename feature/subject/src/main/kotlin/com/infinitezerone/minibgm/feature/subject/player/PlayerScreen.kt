@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Badge
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
@@ -52,6 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -433,14 +435,6 @@ fun PlayerScreen(
         if (areControlsVisible && playback.isPlaying && !isScrubbing) {
             delay(CONTROLS_AUTO_HIDE_MS)
             areControlsVisible = false
-        }
-    }
-
-    // 暂停瞬间弹出控制栏（转变沿），此后尊重单击切换——用户可隐藏控制栏得到纯净暂停帧；
-    // 恢复播放时不强制，交给上方的自动隐藏计时器
-    LaunchedEffect(playback.isPlaying) {
-        if (!playback.isPlaying && !playback.isEnded) {
-            areControlsVisible = true
         }
     }
 
@@ -1100,10 +1094,34 @@ private fun PlayerVideoStage(
             )
         }
 
+        // 独立缓冲加载指示器（500ms 防抖）：微缓冲（<500ms）静止帧等待不打扰观影；
+        // 持续卡顿（>500ms）时仅在画面中央淡入极简转圈，绝不唤起控制层与暗色渐变遮罩。
+        val showBufferingSpinner by
+            produceState(initialValue = false, playback.isBuffering) {
+                if (playback.isBuffering) {
+                    delay(500L)
+                    value = true
+                } else {
+                    value = false
+                }
+            }
+
+        AnimatedVisibility(
+            visible = showBufferingSpinner && !playback.isEnded && errorMessage == null,
+            enter = fadeIn(tween(150)),
+            exit = fadeOut(tween(150)),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
+            CircularProgressIndicator(
+                color = MaterialTheme.colorScheme.primary,
+                strokeWidth = 3.dp,
+                modifier = Modifier.size(44.dp),
+            )
+        }
+
         AnimatedVisibility(
             visible =
                 controlsVisible ||
-                    playback.isBuffering ||
                     playback.isEnded ||
                     errorMessage != null,
             enter = fadeIn(tween(100)),

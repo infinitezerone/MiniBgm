@@ -331,14 +331,14 @@ fun DanmakuView(
     val density = LocalDensity.current
     val fontSizePx = with(density) { 15.sp.toPx() }
     val trackHeightPx = with(density) { 26.dp.toPx() }
-    val strokeWidthPx = with(density) { 3.dp.toPx() }
+    val strokeWidthPx = with(density) { 1.dp.toPx() }
 
     val fillPaint =
         remember(fontSizePx) {
             Paint().apply {
                 isAntiAlias = true
                 textSize = fontSizePx
-                typeface = Typeface.DEFAULT_BOLD
+                typeface = Typeface.DEFAULT
                 style = Paint.Style.FILL
             }
         }
@@ -348,7 +348,7 @@ fun DanmakuView(
             Paint().apply {
                 isAntiAlias = true
                 textSize = fontSizePx
-                typeface = Typeface.DEFAULT_BOLD
+                typeface = Typeface.DEFAULT
                 style = Paint.Style.STROKE
                 strokeWidth = strokeWidthPx
                 color = android.graphics.Color.BLACK

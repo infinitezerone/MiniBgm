@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.network
 
+import com.infinitezerone.minibgm.core.common.BgmDispatchers
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import io.ktor.client.HttpClient
 import io.ktor.client.request.HttpRequestBuilder
@@ -21,6 +22,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 
 /** 单次页面抓取的正文上限：够覆盖播放页源码，又不至于把抓取变成下载 */
 const val MAX_PAGE_BYTES: Int = 512 * 1024
@@ -116,6 +118,8 @@ internal class PageFetchServiceImpl(
     private val untrustedClient: HttpClient,
     /** 单条重定向链的总预算；测试注入小值验证超时降级 */
     private val redirectChainMillis: Long = MAX_REDIRECT_CHAIN_MILLIS,
+    /** 正文读取/解码的调度器：绝不留在调用方（可能是 Main）线程上 */
+    private val dispatchers: BgmDispatchers = BgmDispatchers(),
 ) : PageFetchService {
     private val logger = bgmLogger("Bgm/PageFetch")
 
@@ -332,46 +336,54 @@ internal class PageFetchServiceImpl(
             null
         }
 
+    /**
+     * 读取正文并解码。
+     *
+     * 必须显式切到 [BgmDispatchers.default]：Ktor 只负责把网络收包放到引擎线程，
+     * `readAvailable` 的续体和 `decodeToString` 仍会回到调用方调度器——调用方是
+     * `viewModelScope`（Main）时，几百 KB 的正文解码就落在主线程上。
+     */
     private suspend fun extractFetchedPage(
         response: HttpResponse,
         maxBytes: Int = MAX_PAGE_BYTES,
-    ): FetchedPage? {
-        // 初始 URL 过了闸不代表最终 URL 也安全：30x 可能跳到私网
-        if (!UrlSafety.isAllowedRemoteUrl(
-                response.call.request.url
-                    .toString(),
+    ): FetchedPage? =
+        withContext(dispatchers.default) {
+            // 初始 URL 过了闸不代表最终 URL 也安全：30x 可能跳到私网
+            if (!UrlSafety.isAllowedRemoteUrl(
+                    response.call.request.url
+                        .toString(),
+                )
+            ) {
+                return@withContext null
+            }
+            val channel = response.bodyAsChannel()
+            val buffer = ByteArray(maxBytes)
+            var offset = 0
+            while (offset < maxBytes) {
+                val read = channel.readAvailable(buffer, offset, maxBytes - offset)
+                if (read == -1) break
+                offset += read
+            }
+            if (offset == 0) return@withContext null
+
+            val respHeaders = mutableMapOf<String, String>()
+            response.headers.forEach { name, values ->
+                respHeaders[name] = values.joinToString(", ")
+            }
+            val setCookies = response.headers.getAll(HttpHeaders.SetCookie)
+            if (!setCookies.isNullOrEmpty()) {
+                val cookieString = setCookies.joinToString("; ") { it.substringBefore(';').trim() }
+                respHeaders["Cookie"] = cookieString
+            }
+
+            FetchedPage(
+                url =
+                    response.call.request.url
+                        .toString(),
+                html = buffer.decodeToString(0, offset),
+                responseHeaders = respHeaders,
             )
-        ) {
-            return null
         }
-        val channel = response.bodyAsChannel()
-        val buffer = ByteArray(maxBytes)
-        var offset = 0
-        while (offset < maxBytes) {
-            val read = channel.readAvailable(buffer, offset, maxBytes - offset)
-            if (read == -1) break
-            offset += read
-        }
-        if (offset == 0) return null
-
-        val respHeaders = mutableMapOf<String, String>()
-        response.headers.forEach { name, values ->
-            respHeaders[name] = values.joinToString(", ")
-        }
-        val setCookies = response.headers.getAll(HttpHeaders.SetCookie)
-        if (!setCookies.isNullOrEmpty()) {
-            val cookieString = setCookies.joinToString("; ") { it.substringBefore(';').trim() }
-            respHeaders["Cookie"] = cookieString
-        }
-
-        return FetchedPage(
-            url =
-                response.call.request.url
-                    .toString(),
-            html = buffer.decodeToString(0, offset),
-            responseHeaders = respHeaders,
-        )
-    }
 }
 
 /** 头名/头值里出现 CR、LF 或 NUL 就能注入额外响应头，直接丢弃该条 */

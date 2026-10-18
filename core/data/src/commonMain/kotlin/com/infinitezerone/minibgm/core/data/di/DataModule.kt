@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.data.di
 
+import com.infinitezerone.minibgm.core.common.BgmDispatchers
 import com.infinitezerone.minibgm.core.common.SecureSecretStore
 import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
@@ -110,6 +111,8 @@ fun dataModule(danmakuDefaultEndpoint: String = ""): Module =
                 settingsRepository = getOrNull<SettingsRepository>(),
                 // 离线时只读缓存：不新增本地缓存层，改用 RFC 5861 的 max-stale / only-if-cached
                 networkMonitor = getOrNull(),
+                // 解析必须离开调用方线程；注入统一调度器让测试可替换
+                dispatchers = getOrNull() ?: BgmDispatchers(),
                 defaultEndpoint = danmakuDefaultEndpoint,
             )
         }

@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -256,20 +255,6 @@ internal fun PlayerControlsOverlay(
                     imageVector = BgmIcons.MoreVert,
                     contentDescription = stringResource(R.string.feature_subject_player_settings),
                     tint = Color.White,
-                )
-            }
-        }
-
-        // 中央区域：仅保留缓冲状态加载指示器，完全移除遮挡画面的正中央大播放盘
-        if (isBuffering) {
-            Box(
-                modifier = Modifier.align(Alignment.Center),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 3.dp,
-                    modifier = Modifier.size(48.dp),
                 )
             }
         }

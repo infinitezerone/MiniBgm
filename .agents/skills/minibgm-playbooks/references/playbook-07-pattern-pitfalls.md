@@ -59,3 +59,7 @@
    * 弹幕若仅靠 `abs(text.hashCode()) % maxTracks` 分配轨道，同秒内相同内容（如「草」「2333」「前方高能」）的哈希值完全一致，会被强制挤在同一条轨道上完全重叠；且弹幕以恒定时长 $T$ 滚过屏幕，长文本速度显著快于短文本（$V = (W + L) / T$），后方长文本会快速追尾前方短文本。此外，在 60/120 FPS 绘制帧内反复调用 `measureText` 会引发高频 GC 与帧率波动。
    * 正确形态：在数据加载或尺寸变化时通过 `computeDanmakuLayout` 统一预计算 `PositionedDanmaku`；入场时校验前序弹幕尾部位置（$X_{tail} \le W - S$），追尾时校验前序弹幕离开屏幕瞬间后续弹幕头部位置（$X_{head} \ge S$）；同秒爆发自动瀑布流下落到空闲轨道；底部保留 25% 比例正文字幕避让区；Canvas 循环仅执行二分时间窗筛选与原生双层绘制，实现绘制帧零 GC 与极致流畅。
    * 红线：`ArchitectureRulesTest#danmaku_view_must_use_dynamic_track_allocation_and_not_hash_modulo`。
+18. **suspend 不等于离开主线程（Main-thread parsing pitfall）**：
+   * `viewModelScope.launch` 的续体固定在 `Dispatchers.Main`；仓库里的 `suspend` 函数不会自动切线程。`PageFetchService` 只把网络收包放到引擎线程，`readAvailable` 的续体与 `decodeToString` 仍回到调用方调度器，于是几百 KB 弹幕正文的 JSON 解码 + 排序落在 UI 线程上（真机是换集瞬间掉帧；单测完全看不见，因为 `runTest` 不接管硬编码的 `Dispatchers.Default`）。
+   * 正确形态：仓库/抓取层显式 `withContext(dispatchers.default)` 包住解码与 CPU 工作；`BgmDispatchers` 注入而非硬编码，测试可替换；debug 构建打开 StrictMode 兜底磁盘/网络。
+   * 红线：`ArchitectureRulesTest#repository_cpu_work_must_leave_the_caller_thread`。

@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm
 
 import android.app.Application
 import android.content.ComponentCallbacks2
+import android.os.StrictMode
 import co.touchlab.kermit.Logger
 import co.touchlab.kermit.Severity
 import co.touchlab.kermit.platformLogWriter
@@ -40,6 +41,20 @@ class MiniBgmApp :
 
     override fun onCreate() {
         super.onCreate()
+
+        // Debug 构建的主线程守卫：任何磁盘/网络落在主线程都会在 logcat 里现形。
+        // 解析类 CPU 工作 StrictMode 覆盖不到，由 ArchitectureRulesTest 的线程切换红线兜底。
+        if (BuildConfig.DEBUG) {
+            StrictMode.setThreadPolicy(
+                StrictMode.ThreadPolicy
+                    .Builder()
+                    .detectDiskReads()
+                    .detectDiskWrites()
+                    .detectNetwork()
+                    .penaltyLog()
+                    .build(),
+            )
+        }
 
         // 初始化统一日志门面（Kermit）：统一挂载 Android 平台日志输出器（Logcat）
         // Debug 开启 Debug 级别便于联调追踪；Release 提升至 Warn 级别杜绝信息泄漏与性能损耗
