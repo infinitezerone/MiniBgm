@@ -225,6 +225,9 @@ internal fun shouldRetryAfterException(
         cause is CancellationException -> false
         // 超时只重试一次：抖动值得再试一把，死站点不值得让用户等满 3 个请求预算（约 45s）
         cause is HttpRequestTimeoutException -> method.isIdempotent() && retryCount <= MAX_TIMEOUT_RETRIES
+        // 已分类的 HTTP 级错误（401/5xx 等）：重试由 retryIf 在响应阶段处理过，
+        // 再按异常重试一次等于把同一个失败重放两遍
+        cause is BgmNetworkException -> false
         // 传输层异常无法证明「请求尚未发出」：写请求一律不自动重放（宁可让用户重试）
         else -> method.isIdempotent()
     }

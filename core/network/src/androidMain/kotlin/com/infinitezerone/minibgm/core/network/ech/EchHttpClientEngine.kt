@@ -30,6 +30,13 @@ import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 
+/**
+ * 交给 Rust 的超时比 Kotlin 侧预算多留的余量：
+ * 让**超时边界由 Kotlin 侧掌握**——这样所有超时都从同一个入口（TimeoutCancellationException）
+ * 收敛成 HttpRequestTimeoutException；Rust 的超时只作为最后兜底。
+ */
+private const val NATIVE_TIMEOUT_SLACK_MS = 500L
+
 class EchEngineConfig : HttpClientEngineConfig() {
     var timeoutMillis: Long = 15000
 
@@ -139,25 +146,33 @@ class EchHttpClientEngine(
             val targetAddrs = AdaptiveDnsResolver.resolveTargetAddrs(host, port)
             val echConfig = if (enableEch) EchConfigStore.getActiveConfig() else null
 
+            // 超时边界必须由 Kotlin 侧掌握：Rust 自己超时只会回一个 errorMessage，
+            // 到 Kotlin 就退化成普通 IOException（分不清「超时」还是「连不上」），
+            // 于是「超时最多重试一次」的上限与归因全部失效。
+            val nativeBudget =
+                if (deadlineNanos != Long.MAX_VALUE) {
+                    remainingMillis(deadlineNanos).coerceAtLeast(connectTimeoutMillis)
+                } else {
+                    maxOf(connectTimeoutMillis, socketTimeoutMillis)
+                }
             val nativeCall =
                 try {
-                    EchNativeClient.nativeFetchCancellable(
-                        url = urlString,
-                        method = methodString,
-                        headerKeys = headerKeysList.toTypedArray(),
-                        headerValues = headerValuesList.toTypedArray(),
-                        body = bodyBytes,
-                        timeoutMs =
-                            if (deadlineNanos != Long.MAX_VALUE) {
-                                remainingMillis(deadlineNanos).coerceAtLeast(connectTimeoutMillis)
-                            } else {
-                                maxOf(connectTimeoutMillis, socketTimeoutMillis)
-                            },
-                        targetAddrs = targetAddrs,
-                        enableEch = enableEch,
-                        requireEch = config.requireEch && enableEch,
-                        echConfig = echConfig,
-                    )
+                    withTimeout(nativeBudget) {
+                        EchNativeClient.nativeFetchCancellable(
+                            url = urlString,
+                            method = methodString,
+                            headerKeys = headerKeysList.toTypedArray(),
+                            headerValues = headerValuesList.toTypedArray(),
+                            body = bodyBytes,
+                            // Rust 侧留余量：正常情况永远由上面的 withTimeout 先触发，
+                            // 它只在 Kotlin 计时器被系统挂起时兜底
+                            timeoutMs = nativeBudget + NATIVE_TIMEOUT_SLACK_MS,
+                            targetAddrs = targetAddrs,
+                            enableEch = enableEch,
+                            requireEch = config.requireEch && enableEch,
+                            echConfig = echConfig,
+                        )
+                    }
                 } catch (cancellation: CancellationException) {
                     val isRequestTimeout =
                         cancellation is TimeoutCancellationException ||

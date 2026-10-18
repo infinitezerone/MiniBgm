@@ -74,6 +74,14 @@ class HttpRetryPolicyTest {
     }
 
     @Test
+    fun classified_http_errors_are_not_retried_again() {
+        assertFalse(
+            shouldRetryAfterException(HttpMethod.Get, BgmNetworkException.ServerError(500), retryCount = 1),
+            "5xx 已在 retryIf 阶段处理过，按异常再重试一次等于重放同一个失败",
+        )
+    }
+
+    @Test
     fun too_many_requests_is_retried_for_any_method() {
         assertTrue(shouldRetryAfterResponse(HttpMethod.Post, HttpStatusCode.TooManyRequests))
         assertTrue(shouldRetryAfterResponse(HttpMethod.Get, HttpStatusCode.TooManyRequests))
