@@ -88,6 +88,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Stop
@@ -234,6 +235,7 @@ object BgmIcons {
     val PlayCircle: ImageVector = Icons.Filled.PlayCircleOutline
     val Pause: ImageVector = Icons.Filled.Pause
     val Stop: ImageVector = Icons.Filled.Stop
+    val SkipNext: ImageVector = Icons.Filled.SkipNext
     val Forward10: ImageVector = Icons.Filled.Forward10
     val Replay10: ImageVector = Icons.Filled.Replay10
     val FastForward: ImageVector = Icons.Filled.FastForward

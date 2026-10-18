@@ -1100,7 +1100,12 @@ class PlayerViewModel(
             viewModelScope.launch { playbackHistoryRepository?.deleteHistory(finishedEpId) }
         }
         if (!state.autoNextEnabled) return false
+        return playNextEpisode()
+    }
 
+    /** 用户手动点击「下一集」或播放结束时切换至下一集 */
+    fun playNextEpisode(): Boolean {
+        val state = _uiState.value
         // 优先根据全部分集列表查找下一集
         val epIndex =
             state.episodes.indexOfFirst {

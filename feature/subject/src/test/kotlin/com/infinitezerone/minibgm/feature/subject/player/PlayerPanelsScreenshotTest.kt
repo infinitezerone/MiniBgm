@@ -465,6 +465,69 @@ class PlayerPanelsScreenshotTest {
         composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/player_sources_sheet.png")
     }
 
+    @Test
+    @Config(sdk = [34], qualifiers = "w1280dp-h760dp-land")
+    fun settings_drawer_landscape() {
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    PlayerTrackSelectionDrawer(
+                        tracksSnapshot = sampleTracks,
+                        onSelectQuality = {},
+                        onAutoQuality = {},
+                        onSelectSubtitle = {},
+                        onDisableSubtitles = {},
+                        onAutoSubtitles = {},
+                        onSelectAudio = {},
+                        playbackSpeed = 1.25f,
+                        onSelectSpeed = {},
+                        resizeMode = PlayerResizeMode.FIT,
+                        onSelectResizeMode = {},
+                        isDanmakuEnabled = true,
+                        onToggleDanmaku = {},
+                        onOpenDanmakuPicker = {},
+                        isLooping = false,
+                        onToggleLoop = {},
+                        onClose = {},
+                    )
+                }
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/player_settings_drawer.png")
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w1280dp-h760dp-land")
+    fun sources_drawer_landscape() {
+        val sampleSources =
+            listOf(
+                PlayerSourceTab(id = "direct", name = "默认直链", isDirect = true),
+                PlayerSourceTab(id = "rule1", name = "源 A (樱花动漫)"),
+                PlayerSourceTab(id = "rule2", name = "源 B (AGE 动漫)"),
+            )
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    PlayerSourcesDrawer(
+                        sources = sampleSources,
+                        selectedIndex = 0,
+                        playingSourceId = "direct",
+                        sourceFailureCounts = mapOf("rule2" to 2),
+                        isResolvingSource = false,
+                        resolveAttempt = 0,
+                        resolveAttemptTotal = 0,
+                        matchedVodName = "葬送的芙莉莲 第 3 话",
+                        onSelectSource = {},
+                        onManageRules = {},
+                        onClose = {},
+                        onRequestOpenSources = {},
+                    )
+                }
+            }
+        }
+        composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/player_sources_drawer.png")
+    }
+
     private companion object {
         /** Robolectric 提供真实 android.* 实现，TrackGroup 可直接构造 */
         fun textTrackGroup(language: String): Tracks.Group =

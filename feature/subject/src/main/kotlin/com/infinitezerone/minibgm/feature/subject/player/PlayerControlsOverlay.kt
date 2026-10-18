@@ -32,12 +32,18 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -48,6 +54,7 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.DanmakuMatch
 import com.infinitezerone.minibgm.core.model.DanmakuMatchState
 import com.infinitezerone.minibgm.feature.subject.R
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -111,6 +118,8 @@ internal fun PlayerControlsOverlay(
     isLocked: Boolean = false,
     onToggleLock: () -> Unit = {},
     onSingleTap: () -> Unit = {},
+    hasNextEpisode: Boolean = false,
+    onPlayNextEpisode: (() -> Unit)? = null,
 ) {
     Box(
         modifier =
@@ -225,6 +234,11 @@ internal fun PlayerControlsOverlay(
                 }
             }
 
+            if (isLandscape) {
+                PlayerSystemStatusIndicator()
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+
             // 顶部操作栏右侧（横竖屏一致）：画中画在左、"更多"固定右上角最右——
             // 汇聚清晰度/音画字幕/倍速/比例/弹幕/循环（对齐 B 站/YouTube 的右上角"更多"位）
             if (showPipButton) {
@@ -303,162 +317,282 @@ internal fun PlayerControlsOverlay(
                     0f
                 }
 
-            // 纯粹的单行控制栏（Single-Row Inline Controls）
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // 1. 左下角播放/暂停键：缓冲中只要处于意图播放态即显示暂停，允许用户打断缓冲
-                IconButton(
-                    onClick = onPlayPauseToggle,
-                    modifier = Modifier.size(40.dp),
+            if (isLandscape) {
+                // 横屏成熟双行布局（Dual-Row Layout）：通栏全宽自适应进度条 + 下层控制行
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    val isPlaybackActive = isPlaying || isBuffering
-                    val icon =
-                        when {
-                            isEnded -> BgmIcons.Replay
-                            isPlaybackActive -> BgmIcons.Pause
-                            else -> BgmIcons.Play
+                    // 1. 上层通栏自适应进度条（最大化有效行程，微调更跟手）
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 2.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        PlayerProgressBar(
+                            progress = progress,
+                            bufferedProgress = bufferedProgress,
+                            isScrubbing = isScrubbing,
+                            onScrubStart = onScrubStart,
+                            onScrubbing = onScrubbing,
+                            onScrubEnd = onScrubEnd,
+                        )
+                    }
+
+                    // 2. 下层控制行（高度 44dp，左右双手集群分布）
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(44.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // 播放/暂停
+                        IconButton(
+                            onClick = onPlayPauseToggle,
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            val isPlaybackActive = isPlaying || isBuffering
+                            val icon =
+                                when {
+                                    isEnded -> BgmIcons.Replay
+                                    isPlaybackActive -> BgmIcons.Pause
+                                    else -> BgmIcons.Play
+                                }
+                            Icon(
+                                imageVector = icon,
+                                contentDescription =
+                                    if (isPlaybackActive) {
+                                        stringResource(R.string.feature_subject_player_pause)
+                                    } else {
+                                        stringResource(R.string.feature_subject_player_play)
+                                    },
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp),
+                            )
                         }
-                    Icon(
-                        imageVector = icon,
-                        contentDescription =
-                            if (isPlaybackActive) {
-                                stringResource(R.string.feature_subject_player_pause)
-                            } else {
-                                stringResource(R.string.feature_subject_player_play)
-                            },
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
 
-                Spacer(modifier = Modifier.width(4.dp))
+                        // 下一集按键（仅当有下一集且传入了回调时）
+                        if (hasNextEpisode && onPlayNextEpisode != null) {
+                            IconButton(
+                                onClick = onPlayNextEpisode,
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.SkipNext,
+                                    contentDescription = stringResource(R.string.feature_subject_ep_next),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
+                        }
 
-                // 2. 当前时间（启用 tnum 等宽数字并固定最小占位，杜绝数字跳动挤压进度条产生肉眼可见的伸缩抖动）
-                val displayPosition =
-                    if (isScrubbing) (scrubProgress * totalDuration).toLong() else currentPosition
-                val hasHours = totalDuration >= 3600_000L
-                val timeMinWidth = if (hasHours) 56.dp else 40.dp
-                val timeTextStyle =
-                    MaterialTheme.typography.labelSmall.copy(
-                        fontFeatureSettings = "tnum",
-                    )
-                Text(
-                    text = formatDuration(displayPosition, forceHours = hasHours),
-                    style = timeTextStyle,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.95f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.widthIn(min = timeMinWidth),
-                )
+                        Spacer(modifier = Modifier.width(4.dp))
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // 3. 自适应撑满的单行进度条
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    PlayerProgressBar(
-                        progress = progress,
-                        bufferedProgress = bufferedProgress,
-                        isScrubbing = isScrubbing,
-                        onScrubStart = onScrubStart,
-                        onScrubbing = onScrubbing,
-                        onScrubEnd = onScrubEnd,
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // 4. 总时间
-                Text(
-                    text = formatDuration(totalDuration, forceHours = hasHours),
-                    style = timeTextStyle,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.75f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.widthIn(min = timeMinWidth),
-                )
-
-                // 5. 右侧动作区：
-                //    - 横屏只留"状态型"文字（倍速 / 清晰度），比例与清晰度细节收进右上角 ⋮ 面板；
-                //    - 其余动作统一 40dp 图标靶区，不再用一排灰底药丸挤占进度条。
-                if (isLandscape) {
-                    Spacer(modifier = Modifier.width(10.dp))
-                    ControlsBarDivider()
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
-
-                // 弹幕开关
-                ControlsBarIconButton(
-                    icon = if (isDanmakuEnabled) BgmIcons.ChatBubble else BgmIcons.ChatBubbleOutline,
-                    contentDescription =
-                        stringResource(
-                            if (isDanmakuEnabled) {
-                                R.string.feature_subject_player_danmaku_on
-                            } else {
-                                R.string.feature_subject_player_danmaku_off
-                            },
-                        ),
-                    onClick = onToggleDanmaku,
-                    tint = if (isDanmakuEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
-                )
-
-                // 弹幕分集纠正入口（弹幕开启且有候选才出现；匹配处于回退兜底态时挂警示徽标）。
-                // 弹幕关闭时不提供该入口：它最终会拉取弹幕并写入持久化覆盖，与「关闭即零请求」冲突。
-                DanmakuMatchEntryButton(
-                    hasCandidates = isDanmakuEnabled && !danmakuMatch?.candidates.isNullOrEmpty(),
-                    isFallback = danmakuMatch?.state == DanmakuMatchState.FALLBACK,
-                    onClick = onOpenDanmakuPicker,
-                )
-
-                if (isLandscape) {
-                    if (showEpisodeQueue) {
-                        ControlsBarIconButton(
-                            icon = BgmIcons.ViewList,
-                            contentDescription = stringResource(R.string.feature_subject_player_episodes_pill),
-                            onClick = onOpenEpisodeQueue,
+                        // 合并时间文本（01:23 / 24:12）
+                        val displayPosition =
+                            if (isScrubbing) (scrubProgress * totalDuration).toLong() else currentPosition
+                        val hasHours = totalDuration >= 3600_000L
+                        val timeTextStyle =
+                            MaterialTheme.typography.labelSmall.copy(
+                                fontFeatureSettings = "tnum",
+                            )
+                        Text(
+                            text =
+                                "${formatDuration(
+                                    displayPosition,
+                                    forceHours = hasHours,
+                                )} / ${formatDuration(totalDuration, forceHours = hasHours)}",
+                            style = timeTextStyle,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White.copy(alpha = 0.95f),
                         )
-                    }
-                    if (onOpenSourcesPanel != null) {
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        // 弹幕开关
                         ControlsBarIconButton(
-                            icon = BgmIcons.Tv,
-                            contentDescription = stringResource(R.string.feature_subject_player_sources_pill),
-                            onClick = onOpenSourcesPanel,
+                            icon = if (isDanmakuEnabled) BgmIcons.ChatBubble else BgmIcons.ChatBubbleOutline,
+                            contentDescription =
+                                stringResource(
+                                    if (isDanmakuEnabled) {
+                                        R.string.feature_subject_player_danmaku_on
+                                    } else {
+                                        R.string.feature_subject_player_danmaku_off
+                                    },
+                                ),
+                            onClick = onToggleDanmaku,
+                            tint = if (isDanmakuEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
                         )
-                    }
-                    ControlsBarTextAction(
-                        text = "${playbackSpeed}x",
-                        onClickLabel = stringResource(R.string.feature_subject_player_speed_label),
-                        onClick = onCyclePlaybackSpeed,
-                    )
-                    if (currentQualityLabel != null) {
+
+                        // 弹幕分集纠正入口（弹幕开启且有候选才出现；匹配处于回退兜底态时挂警示徽标）
+                        DanmakuMatchEntryButton(
+                            hasCandidates = isDanmakuEnabled && !danmakuMatch?.candidates.isNullOrEmpty(),
+                            isFallback = danmakuMatch?.state == DanmakuMatchState.FALLBACK,
+                            onClick = onOpenDanmakuPicker,
+                        )
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        // 右侧动作区（文字胶囊与换源/选集/全屏）
+                        if (currentQualityLabel != null) {
+                            ControlsBarTextAction(
+                                text = currentQualityLabel,
+                                onClickLabel = stringResource(R.string.feature_subject_player_quality_group),
+                                onClick = onOpenTrackSelection,
+                            )
+                        }
                         ControlsBarTextAction(
-                            text = currentQualityLabel,
-                            onClickLabel = stringResource(R.string.feature_subject_player_quality_group),
-                            onClick = onOpenTrackSelection,
+                            text = "${playbackSpeed}x",
+                            onClickLabel = stringResource(R.string.feature_subject_player_speed_label),
+                            onClick = onCyclePlaybackSpeed,
+                        )
+                        if (showEpisodeQueue) {
+                            ControlsBarTextAction(
+                                text = stringResource(R.string.feature_subject_player_episodes_pill),
+                                onClickLabel = stringResource(R.string.feature_subject_player_episodes_pill),
+                                onClick = onOpenEpisodeQueue,
+                            )
+                        }
+                        if (onOpenSourcesPanel != null) {
+                            ControlsBarTextAction(
+                                text = stringResource(R.string.feature_subject_player_sources_pill),
+                                onClickLabel = stringResource(R.string.feature_subject_player_sources_pill),
+                                onClick = onOpenSourcesPanel,
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        // 退出全屏按键
+                        ControlsBarIconButton(
+                            icon = BgmIcons.FullscreenExit,
+                            contentDescription = stringResource(R.string.feature_subject_player_exit_fullscreen),
+                            onClick = onToggleFullscreen,
                         )
                     }
                 }
+            } else {
+                // 纯粹的单行控制栏（Single-Row Inline Controls）
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    // 1. 左下角播放/暂停键：缓冲中只要处于意图播放态即显示暂停，允许用户打断缓冲
+                    IconButton(
+                        onClick = onPlayPauseToggle,
+                        modifier = Modifier.size(40.dp),
+                    ) {
+                        val isPlaybackActive = isPlaying || isBuffering
+                        val icon =
+                            when {
+                                isEnded -> BgmIcons.Replay
+                                isPlaybackActive -> BgmIcons.Pause
+                                else -> BgmIcons.Play
+                            }
+                        Icon(
+                            imageVector = icon,
+                            contentDescription =
+                                if (isPlaybackActive) {
+                                    stringResource(R.string.feature_subject_player_pause)
+                                } else {
+                                    stringResource(R.string.feature_subject_player_play)
+                                },
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
 
-                Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
 
-                // 6. 全屏切换键
-                ControlsBarIconButton(
-                    icon = if (isLandscape) BgmIcons.FullscreenExit else BgmIcons.Fullscreen,
-                    contentDescription =
-                        if (isLandscape) {
-                            stringResource(R.string.feature_subject_player_exit_fullscreen)
-                        } else {
-                            stringResource(R.string.feature_subject_player_enter_fullscreen)
-                        },
-                    onClick = onToggleFullscreen,
-                )
+                    // 2. 当前时间（启用 tnum 等宽数字并固定最小占位，杜绝数字跳动挤压进度条产生肉眼可见的伸缩抖动）
+                    val displayPosition =
+                        if (isScrubbing) (scrubProgress * totalDuration).toLong() else currentPosition
+                    val hasHours = totalDuration >= 3600_000L
+                    val timeMinWidth = if (hasHours) 56.dp else 40.dp
+                    val timeTextStyle =
+                        MaterialTheme.typography.labelSmall.copy(
+                            fontFeatureSettings = "tnum",
+                        )
+                    Text(
+                        text = formatDuration(displayPosition, forceHours = hasHours),
+                        style = timeTextStyle,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.95f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.widthIn(min = timeMinWidth),
+                    )
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // 3. 自适应撑满的单行进度条
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        PlayerProgressBar(
+                            progress = progress,
+                            bufferedProgress = bufferedProgress,
+                            isScrubbing = isScrubbing,
+                            onScrubStart = onScrubStart,
+                            onScrubbing = onScrubbing,
+                            onScrubEnd = onScrubEnd,
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // 4. 总时间
+                    Text(
+                        text = formatDuration(totalDuration, forceHours = hasHours),
+                        style = timeTextStyle,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.75f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.widthIn(min = timeMinWidth),
+                    )
+
+                    // 弹幕开关
+                    ControlsBarIconButton(
+                        icon = if (isDanmakuEnabled) BgmIcons.ChatBubble else BgmIcons.ChatBubbleOutline,
+                        contentDescription =
+                            stringResource(
+                                if (isDanmakuEnabled) {
+                                    R.string.feature_subject_player_danmaku_on
+                                } else {
+                                    R.string.feature_subject_player_danmaku_off
+                                },
+                            ),
+                        onClick = onToggleDanmaku,
+                        tint = if (isDanmakuEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                    )
+
+                    // 弹幕分集纠正入口（弹幕开启且有候选才出现；匹配处于回退兜底态时挂警示徽标）。
+                    // 弹幕关闭时不提供该入口：它最终会拉取弹幕并写入持久化覆盖，与「关闭即零请求」冲突。
+                    DanmakuMatchEntryButton(
+                        hasCandidates = isDanmakuEnabled && !danmakuMatch?.candidates.isNullOrEmpty(),
+                        isFallback = danmakuMatch?.state == DanmakuMatchState.FALLBACK,
+                        onClick = onOpenDanmakuPicker,
+                    )
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // 6. 全屏切换键
+                    ControlsBarIconButton(
+                        icon = if (isLandscape) BgmIcons.FullscreenExit else BgmIcons.Fullscreen,
+                        contentDescription =
+                            if (isLandscape) {
+                                stringResource(R.string.feature_subject_player_exit_fullscreen)
+                            } else {
+                                stringResource(R.string.feature_subject_player_enter_fullscreen)
+                            },
+                        onClick = onToggleFullscreen,
+                    )
+                }
             }
         }
     }
@@ -600,3 +734,74 @@ private fun BoxScope.PlayerErrorState(
         }
     }
 }
+
+/**
+ * 横屏全屏系统状态指示（时间与电量）。
+ * 消除系统状态栏隐藏后的全屏时间盲区。
+ */
+@Composable
+private fun PlayerSystemStatusIndicator(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var currentTime by remember {
+        mutableStateOf(formatSystemTime())
+    }
+    var batteryPercent by remember {
+        mutableIntStateOf(getBatteryLevel(context))
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = formatSystemTime()
+            batteryPercent = getBatteryLevel(context)
+            delay(15_000L)
+        }
+    }
+
+    Row(
+        modifier =
+            modifier
+                .background(Color.White.copy(alpha = 0.14f), CircleShape)
+                .padding(horizontal = 9.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = currentTime,
+            style =
+                MaterialTheme.typography.labelSmall.copy(
+                    fontFeatureSettings = "tnum",
+                ),
+            color = Color.White.copy(alpha = 0.95f),
+            fontWeight = FontWeight.Medium,
+        )
+        if (batteryPercent in 0..100) {
+            Text(
+                text = "$batteryPercent%",
+                style =
+                    MaterialTheme.typography.labelSmall.copy(
+                        fontFeatureSettings = "tnum",
+                    ),
+                color = Color.White.copy(alpha = 0.75f),
+                fontWeight = FontWeight.Normal,
+            )
+        }
+    }
+}
+
+private fun formatSystemTime(): String {
+    val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+    return sdf.format(java.util.Date())
+}
+
+private fun getBatteryLevel(context: android.content.Context): Int =
+    runCatching {
+        val filter = android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)
+        val batteryStatus = context.registerReceiver(null, filter)
+        val level = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
+        if (level >= 0 && scale > 0) {
+            (level * 100 / scale)
+        } else {
+            -1
+        }
+    }.getOrDefault(-1)

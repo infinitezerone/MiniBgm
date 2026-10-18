@@ -425,6 +425,24 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun queuePlayback_playNextEpisode_switchesToNextQueueItem() {
+        val viewModel =
+            viewModel(
+                route =
+                    route(
+                        queue = queueOf("https://example.com/ep1.m3u8", "https://example.com/ep2.m3u8"),
+                    ),
+            )
+        assertTrue(viewModel.uiState.value.hasNext)
+        val switched = viewModel.playNextEpisode()
+        assertTrue(switched)
+        assertEquals(1, viewModel.uiState.value.currentIndex)
+        assertEquals("https://example.com/ep2.m3u8", viewModel.uiState.value.streamUrl)
+        assertFalse(viewModel.uiState.value.hasNext)
+        assertFalse(viewModel.playNextEpisode())
+    }
+
+    @Test
     fun queuePlayback_switchToOutOfRange_isIgnored() {
         val viewModel = viewModel(route = route(queue = queueOf("https://example.com/ep1.m3u8")))
 

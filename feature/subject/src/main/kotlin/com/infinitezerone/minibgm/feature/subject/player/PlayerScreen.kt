@@ -655,6 +655,8 @@ fun PlayerScreen(
             onToggleDanmaku = viewModel::toggleDanmaku,
             danmakuMatch = uiState.danmakuMatch,
             onOpenDanmakuPicker = openDanmakuPicker,
+            hasNextEpisode = uiState.hasNext,
+            onPlayNextEpisode = viewModel::playNextEpisode,
             resumeOverlayPosition = resumeOverlayPosition,
             onResumeSeekToBeginning = {
                 controller.seekTo(0L)
@@ -988,6 +990,8 @@ private fun PlayerVideoStage(
     onToggleDanmaku: () -> Unit = {},
     danmakuMatch: DanmakuMatch? = null,
     onOpenDanmakuPicker: () -> Unit = {},
+    hasNextEpisode: Boolean = false,
+    onPlayNextEpisode: (() -> Unit)? = null,
     resumeOverlayPosition: Long? = null,
     onResumeSeekToBeginning: () -> Unit = {},
     onResumeDismiss: () -> Unit = {},
@@ -1144,13 +1148,15 @@ private fun PlayerVideoStage(
                 isLocked = isLocked,
                 onToggleLock = onToggleLock,
                 onSingleTap = onSingleTap,
+                hasNextEpisode = hasNextEpisode,
+                onPlayNextEpisode = onPlayNextEpisode,
             )
         }
 
         val resumeOverlayBottomPadding by animateDpAsState(
             targetValue =
                 if (controlsVisible) {
-                    if (isLandscape) 64.dp else 56.dp
+                    if (isLandscape) 80.dp else 56.dp
                 } else {
                     if (isLandscape) 28.dp else 16.dp
                 },
