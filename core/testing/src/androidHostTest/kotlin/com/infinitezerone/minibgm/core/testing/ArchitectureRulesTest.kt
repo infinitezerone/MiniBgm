@@ -2578,6 +2578,42 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 播放器观看记录与断点续播红线：
+     * 1. 观看历史与断点续播唯一真源是 [PlaybackHistoryRepository]，按分集 [episodeId] 绑定；
+     * 2. [PlayerViewModel] 严禁再引用 SettingsRepository.playbackPositions / savePlaybackPosition / clearPlaybackPosition，
+     *    彻底剥离直链 streamUrl 依赖，杜绝双轨数据与跨集串流。
+     */
+    @Test
+    fun player_view_model_playback_resume_must_bind_strictly_to_playback_history_repo() {
+        val playerViewModelFile =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerViewModel.kt",
+            )
+        if (!playerViewModelFile.isFile) return
+        val text = KotlinSourceScanner.sanitize(playerViewModelFile.readText())
+
+        val violations = mutableListOf<String>()
+        if (text.contains("settingsRepository.playbackPositions") ||
+            text.contains("settingsRepository.savePlaybackPosition") ||
+            text.contains("settingsRepository.clearPlaybackPosition")
+        ) {
+            violations.add("PlayerViewModel 仍存在对 SettingsRepository.playbackPositions 的读写调用，必须统一收拢至 PlaybackHistoryRepository")
+        }
+        if (!text.contains("playbackHistoryRepository?.saveHistory") ||
+            !text.contains("playbackHistoryRepository?.deleteHistory") ||
+            !text.contains("playbackHistoryRepository?.getHistoryByEpisode")
+        ) {
+            violations.add("PlayerViewModel 缺少对 PlaybackHistoryRepository 的 save/delete/getHistoryByEpisode 完整调用闭环")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反播放器观看记录与断点续播架构红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
     @Test
     fun screenshot_test_modules_must_use_shared_unit_test_convention() {
         val includeRe = Regex("""^include\(":(.+)"\)$""")

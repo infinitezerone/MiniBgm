@@ -267,13 +267,12 @@ sealed interface PlayerUiEvent {
 
 /**
  * 数据侧仓库流投影快照（私有于 [PlayerViewModel]）：
- * 续播位置表 / 播放规则 / 源健康度 / 条目元数据 / 全部分集 / PiP 偏好六个仓库流
+ * 播放规则 / 源健康度 / 条目元数据 / 全部分集 / 偏好设置等仓库流
  * 经单点 combine 合流为一份不可变快照，再统一并入 [_uiState]（写法对齐
  * [EpisodeDetailViewModel] 的仓库快照合流形态）。UI 可见的字段一律是投影，
  * 不存在逐路 `collect { _uiState.update {} }` 的第二事实源。
  */
 private data class PlayerRepoSnapshot(
-    val positions: Map<String, Long> = emptyMap(),
     val rules: List<PlaybackSourceRule> = emptyList(),
     val failureCounts: Map<String, Int> = emptyMap(),
     val subject: Subject? = null,
@@ -351,8 +350,8 @@ private class PlaybackSession(
     /** 自动打卡一次性守卫：一次播放会话仅触发一次，换集后复位 */
     var hasTriggeredAutoMark: Boolean = false
 
-    /** 断点续播位置表镜像（由 [PlayerRepoSnapshot.positions] 持续同步） */
-    var positionsMap: Map<String, Long> = emptyMap()
+    /** 会话内各分集播放进度缓存（key = episodeId, value = 播放毫秒） */
+    val episodePositions = mutableMapOf<Long, Long>()
 
     /** 界面回报的当前播放位置（内存暂存，按 [POSITION_SAVE_TICKS] 节流落盘） */
     var latestPositionMs: Long = 0L
@@ -403,15 +402,6 @@ private class PlaybackSession(
 
     /** 到达列表末尾且后端仍有更多分集时，等待续拉完成后自动连播下一集的意图标记 */
     var pendingAutoNextOnMoreLoaded: Boolean = false
-
-    /**
-     * 换集后「按新地址查续播点」的待办标记。
-     *
-     * 直链换集时新地址当下可知，当场查表下发；规则源换集时旧画面被故意保留、新地址要等嗅探结果，
-     * 只能把查表推迟到解析成功那一刻一次性消费——否则会把上一集的进度当成新分集的续播点下发，
-     * 让新分集直接跳到旧分集的时间轴（短集会因此瞬间播完并触发连播空跳）。
-     */
-    var pendingResumeLookupForNewEpisode: Boolean = false
 }
 
 /**
@@ -646,12 +636,7 @@ class PlayerViewModel(
      */
     private val repoSnapshots: Flow<PlayerRepoSnapshot> =
         combine(
-            combine(
-                settingsRepository.playbackPositions,
-                settingsRepository.playbackRules,
-            ) { positions, rules ->
-                positions to rules
-            },
+            settingsRepository.playbackRules,
             combine(
                 failureStore?.sourceHealth ?: flowOf(emptyMap()),
                 playViewPreferencesFlow,
@@ -667,9 +652,8 @@ class PlayerViewModel(
             ) { subject, episodes, collection, totalEpisodes, hasMoreEpisodes ->
                 RepoSubjectData(subject, episodes, collection, totalEpisodes, hasMoreEpisodes)
             },
-        ) { (positions, rules), (failureCounts, playView), subjectData ->
+        ) { rules, (failureCounts, playView), subjectData ->
             PlayerRepoSnapshot(
-                positions = positions,
                 rules = rules,
                 failureCounts = failureCounts,
                 subject = subjectData.subject,
@@ -737,6 +721,7 @@ class PlayerViewModel(
                 val history = playbackHistoryRepository?.getHistoryByEpisode(route.episodeId)
                 session.initialResumeResolvedEpisodeId = route.episodeId
                 if (history != null && history.positionMs >= MIN_RESUME_POSITION_MS && !history.isCompleted) {
+                    session.episodePositions[route.episodeId] = history.positionMs
                     _uiState.update { current ->
                         if (current.resumePositionMs == 0L) {
                             current.copy(resumePositionMs = history.positionMs)
@@ -767,7 +752,6 @@ class PlayerViewModel(
         preferredSourceId: String,
     ): Boolean {
         // 会话镜像同步（命令侧只读，见 [PlaybackSession]）
-        session.positionsMap = snapshot.positions
         snapshot.subject?.let { subject ->
             session.subjectOriginalName = subject.name
             session.subjectAliases = subject.titleAliases
@@ -924,17 +908,6 @@ class PlayerViewModel(
             if (snapshot.subtitlesDisabled != next.subtitlesDisabled) {
                 next = next.copy(subtitlesDisabled = snapshot.subtitlesDisabled)
             }
-            // 首次进页且尚未开始播放、尚未锁定初次续播点时，跟随位置表同步历史记录；
-            // 播放一旦发生（latestPositionMs > 0 或已锁定），中途周期性落盘产生的新位置严禁反向冲刷回 resumePositionMs
-            if (session.initialResumeResolvedEpisodeId != next.episodeId && session.latestPositionMs <= 0L) {
-                if (next.resumePositionMs == 0L && next.streamUrl.isNotBlank()) {
-                    val saved = snapshot.positions[next.streamUrl] ?: 0L
-                    if (saved >= MIN_RESUME_POSITION_MS) {
-                        next = next.copy(resumePositionMs = saved)
-                        session.initialResumeResolvedEpisodeId = next.episodeId
-                    }
-                }
-            }
             next
         }
         if (session.pendingAutoNextOnMoreLoaded) {
@@ -981,79 +954,46 @@ class PlayerViewModel(
     }
 
     /**
-     * 把内存中的当前分集位置落盘（立即捕获 url/位置再异步写，换集时先于状态切换调用）。
+     * 把内存中的当前分集位置落盘至 [PlaybackHistoryRepository] 并更新会话缓存。
      * 由节流循环与界面 ON_PAUSE 触发。
      */
     fun flushPlaybackPosition() {
         val state = _uiState.value
-        val url = state.streamUrl
         val position = session.latestPositionMs
-        if (url.isBlank() || position <= 0L) return
+        val epId = if (state.episodeId > 0L) state.episodeId else route.episodeId
+        if (epId <= 0L || position <= 0L) return
+        session.episodePositions[epId] = position
         viewModelScope.launch {
-            settingsRepository.savePlaybackPosition(url, position)
-            val epId = if (state.episodeId > 0L) state.episodeId else route.episodeId
-            if (epId > 0L) {
-                playbackHistoryRepository?.saveHistory(
-                    PlaybackHistory(
-                        episodeId = epId,
-                        subjectId = if (state.subjectId > 0L) state.subjectId else route.subjectId,
-                        subjectName = state.subjectName.ifBlank { route.subjectName },
-                        episodeName = state.episodeName.ifBlank { route.episodeName },
-                        episodeSort = state.episodeSort,
-                        coverUrl = state.subjectCoverUrl,
-                        streamUrl = url,
-                        positionMs = position,
-                        durationMs = session.latestDurationMs,
-                        updatedAt = System.currentTimeMillis(),
-                    ),
-                )
-            }
+            playbackHistoryRepository?.saveHistory(
+                PlaybackHistory(
+                    episodeId = epId,
+                    subjectId = if (state.subjectId > 0L) state.subjectId else route.subjectId,
+                    subjectName = state.subjectName.ifBlank { route.subjectName },
+                    episodeName = state.episodeName.ifBlank { route.episodeName },
+                    episodeSort = state.episodeSort,
+                    coverUrl = state.subjectCoverUrl,
+                    streamUrl = state.streamUrl,
+                    positionMs = position,
+                    durationMs = session.latestDurationMs,
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
         }
     }
 
     /**
-     * 换集后一次性消费「按新地址查续播点」的待办：换集时新地址尚不可知（规则源要等嗅探结果），
-     * 在真实地址落定的那一刻查表下发。未换集的路径（重试 / 换源）返回 null，
-     * 保持「同一分集内换线路沿用当前进度」的原语义不变。
-     *
-     * @return 新分集自己的续播点（0 表示无记录）；null 表示本次不是换集，调用方不应改动续播点
+     * 换集或入场时，联动 [PlaybackHistoryRepository] 恢复分集历史进度。
      */
-    private fun consumePendingResumePositionForNewEpisode(url: String): Long? {
-        if (!session.pendingResumeLookupForNewEpisode) return null
-        session.pendingResumeLookupForNewEpisode = false
-        val memoryPosition = session.positionsMap[url]?.takeIf { it >= MIN_RESUME_POSITION_MS }
-        syncResumePositionForEpisode(_uiState.value.episodeId, url)
-        return memoryPosition
-    }
-
-    /**
-     * 换集或规则源地址就绪时，联动 [PlaybackHistoryRepository] 兜底恢复历史进度：
-     * 解决动态 URL、签名过期或内存表未命中导致换集续播点丢失的问题。
-     */
-    private fun syncResumePositionForEpisode(
-        episodeId: Long,
-        fallbackUrl: String? = null,
-    ) {
-        if (episodeId <= 0L && fallbackUrl.isNullOrBlank()) return
+    private fun syncResumePositionForEpisode(episodeId: Long) {
+        if (episodeId <= 0L) return
         viewModelScope.launch {
-            val historyPosition =
-                if (episodeId > 0L) {
-                    val history = playbackHistoryRepository?.getHistoryByEpisode(episodeId)
-                    if (history != null && history.positionMs > 0L && !history.isCompleted) {
-                        history.positionMs
-                    } else {
-                        0L
-                    }
-                } else {
-                    0L
-                }
-            val memoryPosition = fallbackUrl?.let { session.positionsMap[it] } ?: 0L
-            val bestPosition = maxOf(historyPosition, memoryPosition)
+            val history = playbackHistoryRepository?.getHistoryByEpisode(episodeId)
             session.initialResumeResolvedEpisodeId = episodeId
-            if (bestPosition >= MIN_RESUME_POSITION_MS) {
+            if (history != null && history.positionMs >= MIN_RESUME_POSITION_MS && !history.isCompleted) {
+                session.episodePositions[episodeId] = history.positionMs
                 _uiState.update { current ->
                     if (current.episodeId == episodeId && current.resumePositionMs == 0L) {
-                        current.copy(resumePositionMs = bestPosition)
+                        current.copy(resumePositionMs = history.positionMs)
                     } else {
                         current
                     }
@@ -1134,9 +1074,12 @@ class PlayerViewModel(
         val state = _uiState.value
         if (state.streamUrl.isBlank()) return false
         markWatched(state.episodeSort.toInt())
-        val finishedUrl = state.streamUrl
+        val finishedEpId = state.episodeId
         session.resetProgressTracking()
-        viewModelScope.launch { settingsRepository.clearPlaybackPosition(finishedUrl) }
+        if (finishedEpId > 0L) {
+            session.episodePositions.remove(finishedEpId)
+            viewModelScope.launch { playbackHistoryRepository?.deleteHistory(finishedEpId) }
+        }
         if (!state.autoNextEnabled) return false
 
         // 优先根据全部分集列表查找下一集
@@ -1189,8 +1132,9 @@ class PlayerViewModel(
         session.hasTriggeredAutoMark = false
         session.pendingAutoNextOnMoreLoaded = false
         session.pendingDanmakuEmptyHint = false
-        session.pendingResumeLookupForNewEpisode = _uiState.value.currentSource?.isDirect == false
         session.currentIndex = index
+
+        val initialResume = if (entry.episodeId > 0L) session.episodePositions[entry.episodeId] ?: 0L else 0L
 
         _uiState.update {
             it.copy(
@@ -1217,11 +1161,13 @@ class PlayerViewModel(
                 danmakus = emptyList(),
                 danmakuMatch = null,
                 autoMarked = false,
-                resumePositionMs = session.positionsMap[entry.streamUrl] ?: 0L,
+                resumePositionMs = initialResume,
                 error = null,
             )
         }
-        syncResumePositionForEpisode(entry.episodeId, entry.streamUrl)
+        if (entry.episodeId > 0L) {
+            syncResumePositionForEpisode(entry.episodeId)
+        }
         if (_uiState.value.currentSource?.isDirect == false || entry.streamUrl.isBlank()) {
             resolveCurrentEpisodeStream()
         }
@@ -1245,7 +1191,14 @@ class PlayerViewModel(
         }
         flushPlaybackPosition()
         session.selectedSourceId = targetId
-        _uiState.update { it.copy(selectedSourceIndex = index, matchedVodName = null) }
+        val currentPosition = session.latestPositionMs
+        _uiState.update {
+            it.copy(
+                selectedSourceIndex = index,
+                matchedVodName = null,
+                resumePositionMs = currentPosition.takeIf { pos -> pos > 0L } ?: it.resumePositionMs,
+            )
+        }
         resolveCurrentEpisodeStream()
     }
 
@@ -1285,13 +1238,13 @@ class PlayerViewModel(
         val isDirect = state.currentSource?.isDirect == true
         val directEntry = if (isDirect && queueIndex >= 0) queue[queueIndex] else null
         val directMissing = isDirect && directEntry == null
-        // 规则源此刻还拿不到新分集地址（旧画面被故意保留），续播点查表推迟到嗅探出地址那一刻
-        session.pendingResumeLookupForNewEpisode = state.currentSource?.isDirect == false
         val currentEp =
             state.episodes.firstOrNull {
                 (episode.id > 0 && it.id == episode.id) ||
                     (it.sort == episode.sort && it.type == episode.type)
             }
+
+        val initialResume = if (episode.id > 0L) session.episodePositions[episode.id] ?: 0L else 0L
 
         _uiState.update {
             it.copy(
@@ -1330,9 +1283,8 @@ class PlayerViewModel(
                         directMissing -> emptyMap()
                         else -> it.requestHeaders
                     },
-                // 续播点属于"分集"而不是"上一个地址"：换集必须按新分集自己的记录下发，
-                // 绝不能沿用上一集的进度（规则源的地址稍后由 consumePendingResumePositionForNewEpisode 补上）
-                resumePositionMs = directEntry?.let { session.positionsMap[it.streamUrl] ?: 0L } ?: 0L,
+                // 续播点属于"分集"：优先读会话内当前分集最新位置，初始或未缓存时下发 0L（稍后由 syncResumePositionForEpisode 查表补上）
+                resumePositionMs = initialResume,
                 error =
                     when {
                         !directMissing -> null
@@ -1345,7 +1297,9 @@ class PlayerViewModel(
                     },
             )
         }
-        syncResumePositionForEpisode(episode.id, directEntry?.streamUrl)
+        if (episode.id > 0L) {
+            syncResumePositionForEpisode(episode.id)
+        }
         resolveCurrentEpisodeStream()
         commentsDelegate.loadComments(episode.id, force = true)
         loadDanmakuIfEnabled()
@@ -1634,8 +1588,6 @@ class PlayerViewModel(
                         (it.episodeSort >= 0f && it.episodeSort == state.episodeSort)
                 }
             if (matchingEntry != null && matchingEntry.streamUrl.isNotBlank()) {
-                val isNewEpisode = session.pendingResumeLookupForNewEpisode
-                val resumeForNewEpisode = consumePendingResumePositionForNewEpisode(matchingEntry.streamUrl)
                 _uiState.update {
                     it.copy(
                         streamUrl = matchingEntry.streamUrl,
@@ -1643,14 +1595,6 @@ class PlayerViewModel(
                         playingSourceId = currentTab.id,
                         isResolvingSource = false,
                         error = null,
-                        resumePositionMs =
-                            if (isNewEpisode) {
-                                resumeForNewEpisode ?: 0L
-                            } else {
-                                session.latestPositionMs.takeIf { pos ->
-                                    pos > 0L
-                                } ?: it.resumePositionMs
-                            },
                     )
                 }
             } else {
@@ -1729,9 +1673,6 @@ class PlayerViewModel(
                     val playable = outcome?.directSource
 
                     if (playable != null) {
-                        // 换集到此才拿到新分集的真实地址，续播点在此刻按新地址查表下发；同分集内换线路沿用当前进度
-                        val isNewEpisode = session.pendingResumeLookupForNewEpisode
-                        val resumeForNewEpisode = consumePendingResumePositionForNewEpisode(playable.url)
                         _uiState.update {
                             it.copy(
                                 streamUrl = playable.url,
@@ -1742,12 +1683,6 @@ class PlayerViewModel(
                                 resolveAttempt = 0,
                                 resolveAttemptTotal = 0,
                                 error = null,
-                                resumePositionMs =
-                                    if (isNewEpisode) {
-                                        resumeForNewEpisode ?: 0L
-                                    } else {
-                                        session.latestPositionMs.takeIf { pos -> pos > 0L } ?: it.resumePositionMs
-                                    },
                             )
                         }
                     } else {

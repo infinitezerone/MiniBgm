@@ -66,6 +66,7 @@ class PlayerViewModelTest {
         queue: List<PlayerQueueEntry> = emptyList(),
         startIndex: Int = 0,
         initialRuleId: String = "",
+        episodeId: Long = this.episodeId,
     ) = PlayerRoute(
         subjectId = subjectId,
         episodeId = episodeId,
@@ -427,12 +428,12 @@ class PlayerViewModelTest {
     }
 
     @Test
-    fun resumePosition_exposedFromSettingsForCurrentEpisode() =
+    fun resumePosition_exposedFromHistoryForCurrentEpisode() =
         runTest {
-            val settings = FakeSettingsRepository()
-            settings.setPlaybackPositions(mapOf(initialStreamUrl to 62_000L))
+            val historyRepo = FakePlaybackHistoryRepository()
+            historyRepo.saveHistory(historyEntry(positionMs = 62_000L, durationMs = 240_000L))
 
-            val viewModel = viewModel(settingsRepository = settings)
+            val viewModel = viewModel(playbackHistoryRepository = historyRepo)
             advanceUntilIdle()
 
             assertEquals(62_000L, viewModel.uiState.value.resumePositionMs)
@@ -441,18 +442,26 @@ class PlayerViewModelTest {
     @Test
     fun switchTo_flushesPreviousEpisodePositionBeforeLeaving() =
         runTest {
-            val settings = FakeSettingsRepository()
+            val historyRepo = FakePlaybackHistoryRepository()
             val viewModel =
                 viewModel(
-                    route = route(queue = queueOf("https://example.com/ep1.m3u8", "https://example.com/ep2.m3u8")),
-                    settingsRepository = settings,
+                    route =
+                        route(
+                            episodeId = 101L,
+                            queue =
+                                listOf(
+                                    PlayerQueueEntry(streamUrl = "https://example.com/ep1.m3u8", episodeId = 101L, episodeSort = 1f),
+                                    PlayerQueueEntry(streamUrl = "https://example.com/ep2.m3u8", episodeId = 102L, episodeSort = 2f),
+                                ),
+                        ),
+                    playbackHistoryRepository = historyRepo,
                 )
 
             viewModel.onProgressChanged(30_000L)
             viewModel.switchTo(1)
             advanceUntilIdle()
 
-            assertEquals(30_000L, settings.playbackPositions.first()["https://example.com/ep1.m3u8"])
+            assertEquals(30_000L, historyRepo.getHistoryByEpisode(101L)?.positionMs)
             // 新分集没有已存位置，不恢复
             assertEquals(0L, viewModel.uiState.value.resumePositionMs)
         }
@@ -523,25 +532,46 @@ class PlayerViewModelTest {
     @Test
     fun selectEpisode_doesNotCarryPreviousEpisodeResumePosition() =
         runTest {
-            val settings = FakeSettingsRepository()
-            settings.setPlaybackPositions(
-                mapOf(
-                    "https://example.com/ep1.m3u8" to 300_000L,
-                    "https://example.com/ep2.m3u8" to 90_000L,
+            val historyRepo = FakePlaybackHistoryRepository()
+            historyRepo.saveHistory(
+                PlaybackHistory(
+                    episodeId = 101L,
+                    subjectId = subjectId,
+                    subjectName = "葬送的芙莉莲",
+                    episodeName = "第一话",
+                    positionMs = 300_000L,
+                    durationMs =
+                        24 * 60_000L,
+                ),
+            )
+            historyRepo.saveHistory(
+                PlaybackHistory(
+                    episodeId = 102L,
+                    subjectId = subjectId,
+                    subjectName = "葬送的芙莉莲",
+                    episodeName = "第二话",
+                    positionMs = 90_000L,
+                    durationMs =
+                        24 * 60_000L,
                 ),
             )
             val viewModel =
                 viewModel(
                     route =
                         route(
-                            queue = queueOf("https://example.com/ep1.m3u8", "https://example.com/ep2.m3u8"),
+                            episodeId = 101L,
+                            queue =
+                                listOf(
+                                    PlayerQueueEntry(streamUrl = "https://example.com/ep1.m3u8", episodeId = 101L, episodeSort = 1f),
+                                    PlayerQueueEntry(streamUrl = "https://example.com/ep2.m3u8", episodeId = 102L, episodeSort = 2f),
+                                ),
                         ),
-                    settingsRepository = settings,
+                    playbackHistoryRepository = historyRepo,
                 )
             advanceUntilIdle()
             assertEquals(300_000L, viewModel.uiState.value.resumePositionMs)
 
-            viewModel.selectEpisode(PlayerEpisodeItem(id = 0L, sort = 2f, name = "第二话"))
+            viewModel.selectEpisode(PlayerEpisodeItem(id = 102L, sort = 2f, name = "第二话"))
             advanceUntilIdle()
 
             val state = viewModel.uiState.value
@@ -550,11 +580,22 @@ class PlayerViewModelTest {
         }
 
     @Test
-    fun selectEpisode_onRuleSource_appliesNewEpisodeResumePositionAfterSniffing() =
+    fun selectEpisode_onRuleSource_appliesNewEpisodeResumePosition() =
         runTest {
-            val settings = FakeSettingsRepository()
+            val historyRepo = FakePlaybackHistoryRepository()
             // 新分集此前看过一部分：换集后必须恢复到它自己的位置
-            settings.setPlaybackPositions(mapOf("https://cdn.example.com/ep2.m3u8" to 60_000L))
+            historyRepo.saveHistory(
+                PlaybackHistory(
+                    episodeId = 2002L,
+                    subjectId = subjectId,
+                    subjectName = "Test",
+                    episodeName = "第二话",
+                    episodeSort = 2f,
+                    positionMs = 60_000L,
+                    durationMs = 24 * 60_000L,
+                ),
+            )
+            val settings = FakeSettingsRepository()
             val rule =
                 PlaybackSourceRule(
                     id = "rule1",
@@ -595,16 +636,17 @@ class PlayerViewModelTest {
                     authRepository = FakeAuthRepository(initialLoggedIn = true),
                     settingsRepository = settings,
                     playbackResolverRepository = fakeResolver,
+                    playbackHistoryRepository = historyRepo,
                 )
             advanceUntilIdle()
             assertEquals("https://cdn.example.com/ep1.m3u8", viewModel.uiState.value.streamUrl)
 
-            viewModel.selectEpisode(PlayerEpisodeItem(id = 0L, sort = 2f, name = "第二话"))
+            viewModel.selectEpisode(PlayerEpisodeItem(id = 2002L, sort = 2f, name = "第二话"))
             advanceUntilIdle()
 
             val state = viewModel.uiState.value
             assertEquals("https://cdn.example.com/ep2.m3u8", state.streamUrl)
-            assertEquals("规则源换集要在嗅探出地址后用新分集自己的续播点", 60_000L, state.resumePositionMs)
+            assertEquals("规则源换集按分集自己的续播点恢复", 60_000L, state.resumePositionMs)
         }
 
     @Test
@@ -690,28 +732,41 @@ class PlayerViewModelTest {
     @Test
     fun onPlaybackEnded_clearsSavedResumePosition() =
         runTest {
-            val settings = FakeSettingsRepository()
-            settings.setPlaybackPositions(mapOf(initialStreamUrl to 62_000L))
-            val viewModel = viewModel(settingsRepository = settings)
+            val historyRepo = FakePlaybackHistoryRepository()
+            historyRepo.saveHistory(
+                PlaybackHistory(
+                    episodeId = episodeId,
+                    subjectId = subjectId,
+                    subjectName = "测试动画",
+                    episodeName = "第 1 话",
+                    episodeSort = 1f,
+                    coverUrl = "",
+                    streamUrl = initialStreamUrl,
+                    positionMs = 62_000L,
+                    durationMs = 120_000L,
+                    updatedAt = 0L,
+                ),
+            )
+            val viewModel = viewModel(playbackHistoryRepository = historyRepo)
             advanceUntilIdle()
 
             viewModel.onPlaybackEnded()
             advanceUntilIdle()
 
-            assertFalse(settings.playbackPositions.first().containsKey(initialStreamUrl))
+            assertNull(historyRepo.getHistoryByEpisode(episodeId))
         }
 
     @Test
     fun periodicFlush_persistsLatestProgress() =
         runTest {
-            val settings = FakeSettingsRepository()
-            val viewModel = viewModel(settingsRepository = settings)
+            val historyRepo = FakePlaybackHistoryRepository()
+            val viewModel = viewModel(playbackHistoryRepository = historyRepo)
 
             // 进度回调约 500ms 一跳，POSITION_SAVE_TICKS 跳后节流落盘
             repeat(POSITION_SAVE_TICKS) { viewModel.onProgressChanged(45_000L) }
             advanceUntilIdle()
 
-            assertEquals(45_000L, settings.playbackPositions.first()[initialStreamUrl])
+            assertEquals(45_000L, historyRepo.getHistoryByEpisode(episodeId)?.positionMs)
         }
 
     @Test

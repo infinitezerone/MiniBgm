@@ -38,13 +38,13 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 - 排期真值只来自 AniList 已验证播出事件；禁止算术预测与合成剧集；bangumi-data 只做元数据与平台映射（`schedule_repository_uses_anilist_as_the_only_roster_source`）。
 - 复用 `BgmHttpClient.jsonConfig`，不手写 `Json {}`（`json_instances_have_a_single_home_per_scope`）。
 - Ktor 401 自动刷新、刷新彻底失败自动登出——调用方永远不会看到 401。
-- 播放器会话：续播点按**分集**重算（`selectEpisode` / `switchTo` 必须按新分集下发 `resumePositionMs`；规则源换集要把查表推迟到嗅探出地址那一刻），同分集换线路才沿用当前进度；
-  - 「选中」≠「正在播」：徽标、健康度归因与「上次可用源」读 `playingSourceId`（`onPlaybackReady` / `onPlaybackError` 归属在播源）；切源失败只能回退选中项 + 轻提示，严禁全屏错误盖住仍在播的画面；选中项按**源标识**找回（下标只有位置语义）。
+- 播放器会话：续播点按**分集**绑定（`selectEpisode` / `switchTo` 按 `episodeId` 存取，与直链/源解耦；`player_view_model_playback_resume_must_bind_strictly_to_playback_history_repo`），同分集换线路沿用当前进度；
+  - 「选中」≠「正在播」：徽标、健康度归因与上次可用源读 `playingSourceId`（`onPlaybackReady` / `onPlaybackError` 归属在播源）；切源失败回退选中项 + 轻提示，禁全屏错误盖住仍在播画面；选中项按**源标识**找回（下标仅位置语义）。
   - 引擎重置只重置媒体字段（`isLooping` 由 `repeatMode` 持有），轨道 override 只清「跟着上一份媒体选的」（`player_media_state_reset_must_preserve_engine_side_preferences`）。
-  - 长期偏好（弹幕/连播/画中画/关闭字幕）经 `SettingsRepository` 落库并由 `PlayViewPreferences` 投影回读，禁 VM 内存翻转、禁 UI `remember`；「关闭字幕」只记立场并只走单向 `applySubtitlesDisabledPreference`；倍速/画幅/单集循环刻意不落库（`player_view_preferences_must_be_persisted_not_held_in_session_state`）。
-  - 弹幕关闭即零请求（自动拉取按 `episodeId:episodeSort` 去重），「分集纠正」入口随开关两处收起，重开后的空提示只能来自真实空结果（`danmaku_match_entry_must_be_gated_by_the_danmaku_toggle`）。
-  - 三处评论区共用一份排序偏好（`SettingsRepository.setCommentSortOrder` + `CommentSortOrder.fromKey`）（`comment_sort_order_must_be_a_shared_persisted_preference`）。
-  - `DefaultMediaSourceFactory` 必须包 `DefaultDataSource.Factory` 以支持 `file://`（`exoplayer_engine_media_source_factory_must_wrap_default_data_source`）；线路生成剔除 `TORRENT`（`player_view_model_must_filter_out_torrent_rules_from_online_sources`）；结构化 API 规则严禁当直链（`isLikelyMediaStream` 断言接口型 URL）；播放错误浮层必须同时给 `onNextSource` 与 `onOpenSourcesPanel`。
+  - 长期偏好（弹幕/连播/画中画/关闭字幕）经 `SettingsRepository` 落库由 `PlayViewPreferences` 投影回读，禁 VM 内存翻转、禁 UI `remember`；「关闭字幕」只记立场且走单向 `applySubtitlesDisabledPreference`；倍速/画幅/单集循环刻意不落库（`player_view_preferences_must_be_persisted_not_held_in_session_state`）。
+  - 弹幕关闭即零请求（自动拉取按 `episodeId:episodeSort` 去重），分集纠正随开关两处收起，重开后空提示只能来自真实空结果（`danmaku_match_entry_must_be_gated_by_the_danmaku_toggle`）。
+  - 三处评论区共用排序偏好（`SettingsRepository.setCommentSortOrder` + `CommentSortOrder.fromKey`；`comment_sort_order_must_be_a_shared_persisted_preference`）。
+  - `DefaultMediaSourceFactory` 包 `DefaultDataSource.Factory` 支持 `file://`（`exoplayer_engine_media_source_factory_must_wrap_default_data_source`）；线路生成剔除 `TORRENT`（`player_view_model_must_filter_out_torrent_rules_from_online_sources`）；结构化 API 禁当直链（`isLikelyMediaStream` 断言接口型 URL）；播放错误浮层同时给 `onNextSource` 与 `onOpenSourcesPanel`。
 - 手势与进度条：屏幕横向手势必须把实时进度透传 `onScrubbing` 并联动底边进度线；进度条统一 `awaitEachGesture` 单手势循环，Thumb 行程按两端半径对齐，触摸靶区 ≥44dp；双击累加 + 650ms 防抖收敛为单次 Seek，侧边药丸承接、严禁中央 Seek HUD；动态数值用 `tnum` 且容器定宽（`player_gesture_hud_must_not_jitter_and_use_tnum_and_avoid_dual_hud_conflict`）。
 - 图床与富文本：未知图床 Fail-Open 直连（后台异步探 ECH），BBCode 图片块必须有加载占位；带链接图片与畸形嵌套必须归一化并提取纯净直链（`image_loader_routing_must_fail_open_for_unknown_third_party_hosts`）。
 - 原生插件：严禁派发未就绪 Socket；扩展下载与后台大任务必须经 `BgmOverlayHost` 确认；动态 `.so` 按版本隔离 + `Mutex` + `setReadOnly`（`dynamic_so_loading_enforces_wx_version_isolation_and_no_silent_install`、`stream_engines_never_use_fake_placeholders_or_unbound_sockets`）。

@@ -16,9 +16,10 @@
    * 用"整体覆盖"重置媒体态（`_state.value = PlaybackState(...)`）时，任何没被显式带过去的字段都等于被悄悄改回默认值。单集循环 `isLooping` 由引擎 `repeatMode` 持有、UI 只持状态副本，于是出现"面板显示已关闭、视频仍在循环"的幽灵态（开关要点两次才关得掉）。正确形态：重置只覆盖媒体相关字段，偏好类字段显式保留并与引擎保持一致——`PlayerController.setMedia` 里 `val looping = _state.value.isLooping`，且 URL 变化、URL 清空两条路径都要覆盖；新增"重置媒体态"的写法时先问一句"哪些字段是引擎/用户偏好、删了会变行为"。同源陷阱：`PlayerController.resetTrackOverridesOnMediaChange()` 曾顺手 `setTrackTypeDisabled(TEXT, false)`，于是用户显式关掉字幕后每换一条线路/换一集都要重关一次——`disabledTrackTypes` 是**用户级偏好**，换媒体只允许清「跟着上一份媒体选的」轨道 override（`clearOverridesOfType`），红线由 `PlayerControllerTest#disableSubtitles_survivesMediaChange` 钉死。
 9. **AGP 的 `splits` 是全局 DSL，没有"按变体开关"的公开 API（9.3.2 的 `Splits` 只在 `com.android.build.api.dsl`）**：
    * 所以"debug 单包 / release 分包"只能靠**项目属性 + 工作流保证**：`app/build.gradle.kts` 里 `val enableAbiSplits = (project.findProperty("minibgm.abiSplits") as? String)?.toBoolean() ?: false`，发版时由 `release.yml` 传 `-Pminibgm.abiSplits=true`。改这类"默认关、发版开"的开关时，**必须在发版链路补产物断言**（缺包直接 exit 1），否则一改就静默退化成 fat APK，下游的分 ABI 资产与 universal 别名全部变形。
-10. **续播点属于"分集"而不是"上一个地址"**：
-   * 任何换集入口都必须显式按新分集查表下发 `resumePositionMs`。直链换集时新地址当下可知，当场查表；规则源换集时旧画面被故意保留、新地址要等嗅探结果，只能把查表推迟到解析成功那一刻一次性消费（`consumePendingResumePositionForNewEpisode`），而同分集内换线路必须沿用当前进度（不可消费）。
-   * 严禁将未看过的分集回退至旧分集的 `latestPositionMs`（新分集无历史即下发 0L）；播放从头开始后，中途周期性自动落盘产生的位置表快照（`applyRepoSnapshot`）严禁反向冲刷回 `resumePositionMs`，避免未看过的视频播到 10 秒时突发「从上次开始播放」浮层与跳帧。
+10. **续播点严格与"分集（episodeId）"绑定，与媒体直链/源类型彻底解耦**：
+   * 观看记录与断点续播的唯一真源是 `PlaybackHistoryRepository`，键为合法分集 ID（`episodeId > 0L`），不依赖 `streamUrl` 或设置仓库 DataStore；临时测试流不入库、不恢复历史。
+   * 任何换集入口（`selectEpisode` / `switchTo`）在点击分集的瞬间即可同步读取会话内分集位置并异步查 Room 补全下发 `resumePositionMs`；流嗅探（`resolveCurrentEpisodeStream`）仅负责获取视频直链，绝不修改 `resumePositionMs`；同分集内换线路沿用当前会话进度。
+   * 严禁将未看过的分集回退至旧分集的进度（新分集无历史即下发 0L）；播放中途周期性自动落盘严禁反向冲刷回 `resumePositionMs`，避免未看过的视频播到中途突发「从上次开始播放」浮层与跳帧。
    * 新增换集入口时，同步补一条"换集后 `resumePositionMs` 等于新分集自己的记录"与"未看过视频续播点保持 0L"的回归单测。
 11. **离线视频播放器工厂与种子规则隔离**：
    * ExoPlayer 引擎的 `DefaultMediaSourceFactory` 必须经 `DefaultDataSource.Factory(context, httpDataSourceFactory)` 包装。若裸传 `httpDataSourceFactory`，Media3 播放离线下载的 `file://` 视频时会强转为 `HttpURLConnection` 造成 `ClassCastException` 崩溃；
