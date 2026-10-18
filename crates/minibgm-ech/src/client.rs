@@ -865,7 +865,11 @@ async fn async_try_fetch_with_config(
         let (tls, socket_addr) =
             match connect_wave(&mut candidates, &tls_config, &server_name, deadline).await {
                 Ok(pair) => pair,
-                Err(error) => {
+                // ECH 配置被服务端拒绝：带上可达地址立即返回，交由上层刷新配置后自愈重试
+                Err(ConnectWaveError::RetryConfigs { source, addr }) => {
+                    return Err(AttemptError::before_request_at(source, addr.to_string()))
+                }
+                Err(ConnectWaveError::Exhausted(error)) => {
                     return Err(AttemptError::before_request(last_error.unwrap_or(error)))
                 }
             };
@@ -873,6 +877,14 @@ async fn async_try_fetch_with_config(
         // 一旦请求已交给 hyper，换候选地址重发就可能重复非幂等 POST/PUT：
         // 只有连接与 TLS 握手阶段的失败才允许换下一个候选。
         let mut request_started = false;
+        // 连接已经花掉一部分预算：请求阶段必须按**剩余**预算计时，
+        // 否则「连接 2s + 请求 15s」会让整次请求超出 deadline
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(AttemptError::before_request(
+                "request timed out after connecting to candidate address".to_owned(),
+            ));
+        }
         let result = timeout(remaining, async {
             let tls = tls_slot
                 .take()
@@ -1009,6 +1021,18 @@ async fn async_try_fetch_with_config(
 /// 只竞速「TCP + TLS 握手」这一段——请求本身绝不重放（非幂等语义由调用方守护）。
 /// 一波最多 [HEDGE_MAX_INFLIGHT] 个在飞；全灭后由调用方用下一波候选重试，
 /// 因此既拿到并行收益，又保留「换候选」的语义。
+/// 交错连接失败的两类语义。
+enum ConnectWaveError {
+    /// 服务端明确拒绝当前 ECH 配置并下发 retry_configs：必须立刻中断并带上可达地址触发自愈。
+    /// Cloudflare 所有边缘共享同一套 ECHConfig，继续换 IP 只会被同样拒绝（徒增 RTT）。
+    RetryConfigs {
+        source: Box<dyn std::error::Error + Send + Sync>,
+        addr: SocketAddr,
+    },
+    /// 本波候选全部失败（超时 / 连接被拒 / 握手失败）。
+    Exhausted(Box<dyn std::error::Error + Send + Sync>),
+}
+
 async fn connect_wave(
     candidates: &mut std::vec::IntoIter<SocketAddr>,
     tls_config: &Arc<ClientConfig>,
@@ -1019,18 +1043,23 @@ async fn connect_wave(
         tokio_rustls::client::TlsStream<tokio::net::TcpStream>,
         SocketAddr,
     ),
-    Box<dyn std::error::Error + Send + Sync>,
+    ConnectWaveError,
 > {
     let mut in_flight = tokio::task::JoinSet::new();
     let mut last_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
     let mut next_launch = tokio::time::Instant::now();
+    let mut exhausted = false;
 
     loop {
         // 到点补位：首个立即起跑，其后每个 STAGGER 起一个（RFC 8305 §5）
         while in_flight.len() < HEDGE_MAX_INFLIGHT && tokio::time::Instant::now() >= next_launch {
-            let Some(addr) = candidates.next() else { break };
+            let Some(addr) = candidates.next() else {
+                exhausted = true;
+                break;
+            };
             let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
             if remaining.is_zero() {
+                exhausted = true;
                 break;
             }
             next_launch = tokio::time::Instant::now() + HEDGE_STAGGER;
@@ -1049,24 +1078,41 @@ async fn connect_wave(
         }
 
         if in_flight.is_empty() {
-            return Err(last_error.unwrap_or_else(|| "no reachable candidate address".into()));
+            return Err(ConnectWaveError::Exhausted(
+                last_error.unwrap_or_else(|| "no reachable candidate address".into()),
+            ));
         }
 
-        tokio::select! {
-            joined = in_flight.join_next() => {
-                match joined {
-                    Some(Ok((addr, Ok(Ok(stream))))) => {
-                        // 赢家已定：其余尝试随 JoinSet drop 一起中止，避免泄漏 fd 与后台握手
-                        in_flight.abort_all();
-                        return Ok((stream, addr));
-                    }
-                    Some(Ok((_, Ok(Err(error))))) => last_error = Some(Box::new(error)),
-                    Some(Ok((_, Err(elapsed)))) => last_error = Some(Box::new(elapsed)),
-                    Some(Err(join_error)) => last_error = Some(Box::new(join_error)),
-                    None => {}
-                }
+        // 没有可再起跑的候选（或已达并发上限）时只能等任务结束；
+        // 若仍挂着已经到期的 sleep_until，select! 会立刻返回并空转，白白烧 CPU。
+        let joined = if exhausted || in_flight.len() >= HEDGE_MAX_INFLIGHT {
+            in_flight.join_next().await
+        } else {
+            tokio::select! {
+                joined = in_flight.join_next() => joined,
+                _ = tokio::time::sleep_until(next_launch) => continue,
             }
-            _ = tokio::time::sleep_until(next_launch), if in_flight.len() < HEDGE_MAX_INFLIGHT => {}
+        };
+
+        match joined {
+            Some(Ok((addr, Ok(Ok(stream))))) => {
+                // 赢家已定：其余尝试随 JoinSet drop 一起中止，避免泄漏 fd 与后台握手
+                in_flight.abort_all();
+                return Ok((stream, addr));
+            }
+            Some(Ok((addr, Ok(Err(error))))) => {
+                if extract_retry_configs(&error).is_some() {
+                    in_flight.abort_all();
+                    return Err(ConnectWaveError::RetryConfigs {
+                        source: Box::new(error),
+                        addr,
+                    });
+                }
+                last_error = Some(Box::new(error));
+            }
+            Some(Ok((_, Err(elapsed)))) => last_error = Some(Box::new(elapsed)),
+            Some(Err(join_error)) => last_error = Some(Box::new(join_error)),
+            None => {}
         }
     }
 }
