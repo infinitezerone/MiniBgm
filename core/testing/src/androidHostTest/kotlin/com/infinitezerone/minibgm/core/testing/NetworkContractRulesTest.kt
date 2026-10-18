@@ -11,7 +11,9 @@ import kotlin.test.assertTrue
  * 1. 未列入白名单的 4xx/5xx 被当成成功，写操作"确认了但没落库"；
  * 2. 下载用 requestTimeoutMillis = null 想关超时，结果被回填成默认值；
  * 3. 自建 HttpClient(CIO) 给回环流打补丁，而不是收敛到 RoutingEngine；
- * 4. 抓取/订阅接受任意 URL，且响应体无上限。
+ * 4. 抓取/订阅接受任意 URL，且响应体无上限；
+ * 5. 30x 跨 host 时把规则自带的 Cookie/Authorization 一并交给第三方；
+ * 6. 重定向链每跳各自计超时，最坏把调用方拖成 6 倍等待。
  */
 class NetworkContractRulesTest {
     private val projectRoot: File by lazy {
@@ -60,6 +62,20 @@ class NetworkContractRulesTest {
         }
         if (!pageFetch.contains("resolveRedirect") || !pageFetch.contains("untrustedClient")) {
             violations.add("PageFetchService.kt 未逐跳校验 30x：私网跳转会在复核前被发出")
+        }
+        if (!pageFetch.contains("applyRuleHeaders") || !pageFetch.contains("CREDENTIAL_HEADERS")) {
+            violations.add("PageFetchService.kt 跨域跳转未剥离凭据头：规则自带的 Cookie/Authorization 会跟着 30x 走")
+        }
+        if (!pageFetch.contains("MAX_REDIRECT_CHAIN_MILLIS") || !pageFetch.contains("withTimeout")) {
+            violations.add("PageFetchService.kt 重定向链没有整体预算：多跳各卡单跳超时会让调用方干等")
+        }
+
+        val tokenService =
+            read("core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/BgmTokenService.kt")
+        if (!tokenService.contains("BgmNetworkException.Timeout(cause = e)") ||
+            !tokenService.contains("e.statusCode == 425")
+        ) {
+            violations.add("BgmTokenService.kt 把 408/425 当成凭据失效：弱网/代理抖动会触发强制登出")
         }
 
         val subscription =

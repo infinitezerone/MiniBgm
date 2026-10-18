@@ -14,15 +14,31 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.Parameters
+import io.ktor.http.Url
 import io.ktor.utils.io.cancel
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 /** 单次页面抓取的正文上限：够覆盖播放页源码，又不至于把抓取变成下载 */
 const val MAX_PAGE_BYTES: Int = 512 * 1024
 
 /** 手动跟随 30x 的最大跳数；超过按不可信处理 */
 private const val MAX_REDIRECTS = 5
+
+/**
+ * 一条重定向链的总预算。
+ *
+ * 单跳超时只能约束一次请求；6 跳各卡在超时边界时，调用方要干等 6 倍。
+ * 超预算按"抓取失败"降级，与逐跳失败同一出口。
+ */
+private const val MAX_REDIRECT_CHAIN_MILLIS = 30_000L
 
 /** 抓取结果：[url] 为重定向后的最终地址，由调用方回填 Referer；[responseHeaders] 包含响应头（含合并的 Cookie） */
 data class FetchedPage(
@@ -87,9 +103,10 @@ interface PageFetchService {
 }
 
 internal class PageFetchServiceImpl(
-    private val client: HttpClient,
     /** 禁止自动跟随 30x 的 client：每一跳都要先过 [UrlSafety]，防止规则页跳进内网 */
-    private val untrustedClient: HttpClient = client,
+    private val untrustedClient: HttpClient,
+    /** 单条重定向链的总预算；测试注入小值验证超时降级 */
+    private val redirectChainMillis: Long = MAX_REDIRECT_CHAIN_MILLIS,
 ) : PageFetchService {
     private val logger = bgmLogger("Bgm/PageFetch")
 
@@ -109,11 +126,11 @@ internal class PageFetchServiceImpl(
             }
         return try {
             val response =
-                getFollowingSafeRedirects(target) {
-                    header(HttpHeaders.Accept, "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
-                    header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
-                    safeHeaders.forEach { (name, value) -> header(name.trim(), value.trim()) }
-                } ?: return null
+                getFollowingSafeRedirects(
+                    startUrl = target,
+                    headers = safeHeaders,
+                    accept = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+                ) ?: return null
             extractFetchedPage(response)
         } catch (e: CancellationException) {
             throw e
@@ -139,46 +156,53 @@ internal class PageFetchServiceImpl(
                 name.isNotBlank() && name.isSafeHeaderValue() && value.isSafeHeaderValue()
             }
         return try {
-            var current = target
-            var currentMethod = HttpMethod.Post
-            var redirects = 0
-            while (true) {
-                if (!UrlSafety.isAllowedRemoteUrl(current)) return null
-                val response =
-                    if (currentMethod == HttpMethod.Post) {
-                        untrustedClient.post(current) {
-                            header(HttpHeaders.Accept, "*/*")
-                            header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
-                            safeHeaders.forEach { (name, value) -> header(name.trim(), value.trim()) }
-                            setBody(
-                                FormDataContent(
-                                    Parameters.build {
-                                        formData.forEach { (k, v) -> append(k, v) }
-                                    },
-                                ),
-                            )
+            withRedirectChainBudget {
+                var current = target
+                var currentMethod = HttpMethod.Post
+                var redirects = 0
+                while (true) {
+                    if (!UrlSafety.isAllowedRemoteUrl(current)) return@withRedirectChainBudget null
+                    val response =
+                        if (currentMethod == HttpMethod.Post) {
+                            untrustedClient.post(current) {
+                                header(HttpHeaders.Accept, "*/*")
+                                header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
+                                applyRuleHeaders(safeHeaders, target, current)
+                                setBody(
+                                    FormDataContent(
+                                        Parameters.build {
+                                            formData.forEach { (k, v) -> append(k, v) }
+                                        },
+                                    ),
+                                )
+                            }
+                        } else {
+                            untrustedClient.get(current) {
+                                header(HttpHeaders.Accept, "*/*")
+                                header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
+                                applyRuleHeaders(safeHeaders, target, current)
+                            }
                         }
-                    } else {
-                        untrustedClient.get(current) {
-                            header(HttpHeaders.Accept, "*/*")
-                            header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
-                            safeHeaders.forEach { (name, value) -> header(name.trim(), value.trim()) }
+                    val location = response.headers[HttpHeaders.Location]
+                    if (response.status.value in 300..399 && location != null) {
+                        response.bodyAsChannel().cancel()
+                        if (++redirects > MAX_REDIRECTS) return@withRedirectChainBudget null
+                        current = UrlSafety.resolveRedirect(current, location) ?: return@withRedirectChainBudget null
+                        // 307/308 保持原方法与 body；301/302/303 按浏览器惯例降级为 GET
+                        if (response.status.value != 307 && response.status.value != 308) {
+                            currentMethod = HttpMethod.Get
                         }
+                        continue
                     }
-                val location = response.headers[HttpHeaders.Location]
-                if (response.status.value in 300..399 && location != null) {
-                    response.bodyAsChannel().cancel()
-                    if (++redirects > MAX_REDIRECTS) return null
-                    current = UrlSafety.resolveRedirect(current, location) ?: return null
-                    // 307/308 保持原方法与 body；301/302/303 按浏览器惯例降级为 GET
-                    if (response.status.value != 307 && response.status.value != 308) {
-                        currentMethod = HttpMethod.Get
-                    }
-                    continue
+                    return@withRedirectChainBudget extractFetchedPage(response)
                 }
-                return extractFetchedPage(response)
+                @Suppress("UNREACHABLE_CODE")
+                null
             }
-            @Suppress("UNREACHABLE_CODE")
+        } catch (e: TimeoutCancellationException) {
+            // 外层若已取消（调用方自己的 withTimeout），超时只是取消的副产物，必须继续上抛
+            currentCoroutineContext().ensureActive()
+            logger.w { "表单提交重定向链超时 $target" }
             null
         } catch (e: CancellationException) {
             throw e
@@ -203,18 +227,49 @@ internal class PageFetchServiceImpl(
                 name.isNotBlank() && name.isSafeHeaderValue() && value.isSafeHeaderValue()
             }
         return try {
-            client
-                .prepareGet(target) {
-                    // 探测的是媒体直链，Accept 不能沿用 text/html，否则 CDN 可能回一个错误页
-                    header(HttpHeaders.Accept, "*/*")
-                    header(HttpHeaders.Range, "bytes=0-2047")
-                    safeHeaders.forEach { (name, value) -> header(name.trim(), value.trim()) }
-                }.execute { response ->
-                    StreamProbe.Responded(
-                        status = response.status.value,
-                        contentType = response.headers[HttpHeaders.ContentType]?.substringBefore(';')?.trim(),
-                    )
+            // 探测不套 UrlSafety：局域网/NAS 直链是合法目标（见 UrlSafety KDoc）。
+            // 但 30x 必须自己跟：共享 client 的自动重定向会跨 host 带走规则头，
+            // 且无法给整条链设预算。
+            withRedirectChainBudget {
+                var current = target
+                var redirects = 0
+                while (true) {
+                    val response =
+                        untrustedClient
+                            .prepareGet(current) {
+                                // 探测的是媒体直链，Accept 不能沿用 text/html，否则 CDN 可能回一个错误页
+                                header(HttpHeaders.Accept, "*/*")
+                                header(HttpHeaders.Range, "bytes=0-2047")
+                                applyRuleHeaders(safeHeaders, target, current)
+                            }.execute { it }
+                    val location = response.headers[HttpHeaders.Location]
+                    if (response.status.value !in 300..399 || location == null) {
+                        response.bodyAsChannel().cancel()
+                        return@withRedirectChainBudget StreamProbe.Responded(
+                            status = response.status.value,
+                            contentType = response.headers[HttpHeaders.ContentType]?.substringBefore(';')?.trim(),
+                        )
+                    }
+                    response.bodyAsChannel().cancel()
+                    if (++redirects > MAX_REDIRECTS) return@withRedirectChainBudget StreamProbe.Failed("重定向次数过多")
+                    val next =
+                        UrlSafety.resolveRedirect(current, location)
+                            ?: return@withRedirectChainBudget StreamProbe.Failed("重定向目标不可信")
+                    if (!next.startsWith("http://", ignoreCase = true) &&
+                        !next.startsWith("https://", ignoreCase = true)
+                    ) {
+                        return@withRedirectChainBudget StreamProbe.Failed("重定向目标不可信")
+                    }
+                    current = next
                 }
+                @Suppress("UNREACHABLE_CODE")
+                StreamProbe.Failed("探测请求异常")
+            }
+        } catch (e: TimeoutCancellationException) {
+            // 外层若已取消（调用方自己的 withTimeout），超时只是取消的副产物，必须继续上抛
+            currentCoroutineContext().ensureActive()
+            logger.w { "首包探测重定向链超时 $target" }
+            StreamProbe.Failed("重定向链超时")
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -224,25 +279,55 @@ internal class PageFetchServiceImpl(
     }
 
     /**
+     * 给整条重定向链一个**墙钟**预算。
+     *
+     * 刻意切到 [Dispatchers.Default]：`withTimeout` 跟随调用方调度器的时钟，
+     * 而"这条链最多花多久"是墙钟语义——测试的虚拟时间会瞬间烧完预算，
+     * 自定义调度器也可能把它拖偏。墙钟预算不该由调用方调度器决定。
+     */
+    private suspend fun <T> withRedirectChainBudget(block: suspend CoroutineScope.() -> T): T =
+        withContext(Dispatchers.Default) {
+            withTimeout(redirectChainMillis, block)
+        }
+
+    /**
      * GET 30x 逐跳跟随：每一跳都重新过 [UrlSafety]，最多 [MAX_REDIRECTS] 跳。
      * 返回 null 表示目标不可信/跳转过多，调用方按"没有结果"降级。
      */
     private suspend fun getFollowingSafeRedirects(
         startUrl: String,
-        configure: HttpRequestBuilder.() -> Unit,
-    ): HttpResponse? {
-        var current = startUrl
-        var redirects = 0
-        while (true) {
-            if (!UrlSafety.isAllowedRemoteUrl(current)) return null
-            val response = untrustedClient.get(current) { configure() }
-            val location = response.headers[HttpHeaders.Location]
-            if (response.status.value !in 300..399 || location == null) return response
-            response.bodyAsChannel().cancel()
-            if (++redirects > MAX_REDIRECTS) return null
-            current = UrlSafety.resolveRedirect(current, location) ?: return null
+        headers: Map<String, String>,
+        accept: String,
+    ): HttpResponse? =
+        try {
+            withRedirectChainBudget {
+                var current = startUrl
+                var redirects = 0
+                while (true) {
+                    if (!UrlSafety.isAllowedRemoteUrl(current)) return@withRedirectChainBudget null
+                    val response =
+                        untrustedClient.get(current) {
+                            header(HttpHeaders.Accept, accept)
+                            header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
+                            applyRuleHeaders(headers, startUrl, current)
+                        }
+                    val location = response.headers[HttpHeaders.Location]
+                    if (response.status.value !in 300..399 || location == null) {
+                        return@withRedirectChainBudget response
+                    }
+                    response.bodyAsChannel().cancel()
+                    if (++redirects > MAX_REDIRECTS) return@withRedirectChainBudget null
+                    current = UrlSafety.resolveRedirect(current, location) ?: return@withRedirectChainBudget null
+                }
+                @Suppress("UNREACHABLE_CODE")
+                null
+            }
+        } catch (e: TimeoutCancellationException) {
+            // 外层若已取消（调用方自己的 withTimeout），超时只是取消的副产物，必须继续上抛
+            currentCoroutineContext().ensureActive()
+            logger.w { "页面抓取重定向链超时 $startUrl" }
+            null
         }
-    }
 
     private suspend fun extractFetchedPage(response: HttpResponse): FetchedPage? {
         // 初始 URL 过了闸不代表最终 URL 也安全：30x 可能跳到私网
@@ -285,3 +370,32 @@ internal class PageFetchServiceImpl(
 
 /** 头名/头值里出现 CR、LF 或 NUL 就能注入额外响应头，直接丢弃该条 */
 private fun String.isSafeHeaderValue(): Boolean = all { it.code != 10 && it.code != 13 && it.code != 0 }
+
+/** 跨 host 跳转时必须丢下的凭据类头：规则作者自备的凭据只该发给目标站，不能跟着 30x 走 */
+private val CREDENTIAL_HEADERS =
+    setOf(
+        HttpHeaders.Authorization.lowercase(),
+        HttpHeaders.Cookie.lowercase(),
+        "proxy-authorization",
+        "cookie2",
+    )
+
+/**
+ * 把规则自带的请求头写到当前跳。
+ *
+ * 同 host 全量保留；跨 host 只保留非凭据头（Referer/UA 等），
+ * 避免一次 30x 就把 Authorization/Cookie 交给第三方。
+ */
+private fun HttpRequestBuilder.applyRuleHeaders(
+    headers: Map<String, String>,
+    originUrl: String,
+    targetUrl: String,
+) {
+    val sameHost = hostOf(originUrl)?.equals(hostOf(targetUrl), ignoreCase = true) == true
+    headers.forEach { (name, value) ->
+        if (!sameHost && name.trim().lowercase() in CREDENTIAL_HEADERS) return@forEach
+        header(name.trim(), value.trim())
+    }
+}
+
+private fun hostOf(url: String): String? = runCatching { Url(url).host }.getOrNull()

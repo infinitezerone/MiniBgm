@@ -86,10 +86,9 @@ fun networkModule(
         single<BangumiCommunityService> { BangumiCommunityServiceImpl(get(named("unauthenticated"))) }
         single<ScheduleSnapshotService> { ScheduleSnapshotServiceImpl(get(named("unauthenticated"))) }
         single<PageFetchService> {
-            PageFetchServiceImpl(
-                client = get(named("unauthenticated")),
-                untrustedClient = get(named("untrusted")),
-            )
+            // 只注入禁止自动跟随的 client：抓取/探测的每一跳都由 PageFetchService
+            // 自己复核 URL 并剥跨域凭据头，不接受 Ktor 的隐式重定向
+            PageFetchServiceImpl(untrustedClient = get(named("untrusted")))
         }
         single<com.infinitezerone.minibgm.core.network.CommunitySubscriptionService> {
             com.infinitezerone.minibgm.core.network

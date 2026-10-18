@@ -11,6 +11,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
@@ -135,10 +136,7 @@ class PageFetchServiceTest {
                     followRedirects = false
                 }
             val impl =
-                PageFetchServiceImpl(
-                    client = HttpClient(MockEngine { respond("") }),
-                    untrustedClient = untrusted,
-                )
+                PageFetchServiceImpl(untrustedClient = untrusted)
 
             assertNull(impl.fetchHtml("https://origin.example.com/e/1"))
             assertEquals(1, calls, "私网跳转必须在发出第二跳前被拦下")
@@ -166,10 +164,7 @@ class PageFetchServiceTest {
                     followRedirects = false
                 }
             val impl =
-                PageFetchServiceImpl(
-                    client = HttpClient(MockEngine { respond("") }),
-                    untrustedClient = untrusted,
-                )
+                PageFetchServiceImpl(untrustedClient = untrusted)
 
             val page = impl.fetchHtml("https://origin.example.com/e/1")
 
@@ -204,10 +199,7 @@ class PageFetchServiceTest {
                     followRedirects = false
                 }
             val impl =
-                PageFetchServiceImpl(
-                    client = HttpClient(MockEngine { respond("") }),
-                    untrustedClient = untrusted,
-                )
+                PageFetchServiceImpl(untrustedClient = untrusted)
 
             val page = impl.postForm("https://api.example.com/form", mapOf("d" to "payload"))
 
@@ -330,6 +322,133 @@ class PageFetchServiceTest {
             assertNull(impl.postForm("http://192.168.1.1/", emptyMap(), emptyMap()))
 
             assertEquals(0, requests)
+        }
+
+    @Test
+    fun `跨 host 跳转剥掉凭据头但保留普通头`() =
+        runTest {
+            val seen = mutableListOf<Headers>()
+            val untrusted =
+                HttpClient(
+                    MockEngine { request ->
+                        seen += request.headers
+                        if (seen.size == 1) {
+                            respondRedirect("https://cdn.example.net/e/1")
+                        } else {
+                            respond(
+                                content = "<html>ok</html>",
+                                status = HttpStatusCode.OK,
+                                headers = headersOf(HttpHeaders.ContentType to listOf("text/html")),
+                            )
+                        }
+                    },
+                ) {
+                    followRedirects = false
+                }
+
+            val page =
+                PageFetchServiceImpl(untrustedClient = untrusted).fetchHtml(
+                    "https://origin.example.com/e/1",
+                    mapOf(
+                        "Authorization" to "Bearer secret",
+                        "Cookie" to "sid=1",
+                        "Referer" to "https://origin.example.com/",
+                    ),
+                )
+
+            assertEquals("https://cdn.example.net/e/1", page?.url)
+            assertEquals("Bearer secret", seen[0][HttpHeaders.Authorization])
+            assertNull(seen[1][HttpHeaders.Authorization], "跨 host 不能再带 Authorization")
+            assertNull(seen[1][HttpHeaders.Cookie], "跨 host 不能再带 Cookie")
+            assertEquals("https://origin.example.com/", seen[1][HttpHeaders.Referrer])
+        }
+
+    @Test
+    fun `同 host 跳转保留凭据头`() =
+        runTest {
+            val seen = mutableListOf<Headers>()
+            val untrusted =
+                HttpClient(
+                    MockEngine { request ->
+                        seen += request.headers
+                        if (seen.size == 1) {
+                            respondRedirect("https://origin.example.com/e/2")
+                        } else {
+                            respond(
+                                content = "<html>ok</html>",
+                                status = HttpStatusCode.OK,
+                                headers = headersOf(HttpHeaders.ContentType to listOf("text/html")),
+                            )
+                        }
+                    },
+                ) {
+                    followRedirects = false
+                }
+
+            PageFetchServiceImpl(untrustedClient = untrusted).fetchHtml(
+                "https://origin.example.com/e/1",
+                mapOf("Authorization" to "Bearer secret"),
+            )
+
+            assertEquals("Bearer secret", seen[1][HttpHeaders.Authorization])
+        }
+
+    @Test
+    fun `重定向链超过总预算时按抓取失败降级`() =
+        runTest {
+            val untrusted =
+                HttpClient(
+                    MockEngine {
+                        delay(2_000)
+                        respondRedirect("https://next.example.com/x")
+                    },
+                ) {
+                    followRedirects = false
+                }
+
+            val impl =
+                PageFetchServiceImpl(
+                    untrustedClient = untrusted,
+                    redirectChainMillis = 50,
+                )
+
+            assertNull(impl.fetchHtml("https://origin.example.com/e/1"))
+        }
+
+    @Test
+    fun `probeStream 逐跳跟随并跨 host 剥凭据头`() =
+        runTest {
+            val seen = mutableListOf<Headers>()
+            val untrusted =
+                HttpClient(
+                    MockEngine { request ->
+                        seen += request.headers
+                        if (seen.size == 1) {
+                            respond(
+                                content = "",
+                                status = HttpStatusCode.Found,
+                                headers = headersOf(HttpHeaders.Location to listOf("https://cdn.example.net/v.mp4")),
+                            )
+                        } else {
+                            respond(
+                                content = "",
+                                status = HttpStatusCode.OK,
+                                headers = headersOf(HttpHeaders.ContentType to listOf("video/mp4")),
+                            )
+                        }
+                    },
+                ) {
+                    followRedirects = false
+                }
+
+            val probe =
+                PageFetchServiceImpl(untrustedClient = untrusted).probeStream(
+                    "https://origin.example.com/v.mp4",
+                    mapOf("Authorization" to "Bearer secret"),
+                )
+
+            assertEquals(StreamProbe.Responded(status = 200, contentType = "video/mp4"), probe)
+            assertNull(seen[1][HttpHeaders.Authorization])
         }
 
     @Test

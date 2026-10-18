@@ -146,4 +146,16 @@ class BgmTokenServiceRefreshTest {
                 service.refreshOrNull("rt")
             }
         }
+
+    /** 408/425 是服务端没给出结论，不是凭据失效；判成 invalid_grant 会误登出。 */
+    @Test
+    fun `408 与 425 属瞬时故障 上抛而不是清凭据`() =
+        runTest {
+            assertFailsWith<BgmNetworkException.Timeout> {
+                serviceWithBaseClient(HttpStatusCode.RequestTimeout).refreshOrNull("rt")
+            }
+            assertFailsWith<BgmNetworkException.ServerError> {
+                serviceWithBaseClient(HttpStatusCode.TooEarly).refreshOrNull("rt")
+            }
+        }
 }

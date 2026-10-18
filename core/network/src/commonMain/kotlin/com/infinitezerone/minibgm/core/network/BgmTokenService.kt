@@ -118,6 +118,10 @@ class BgmTokenService(
                 // ServerError(429) 到达；必须在这里显式还原成 RateLimited，
                 // 否则限流会被当成 invalid_grant 而误登出
                 e.statusCode == 429 -> throw BgmNetworkException.RateLimited()
+                // 408 请求超时 / 425 Too Early：服务端根本没给出结论，不是凭据失效。
+                // 判成 invalid_grant 会把能自愈的弱网、代理故障升级成强制登出。
+                e.statusCode == 408 -> throw BgmNetworkException.Timeout(cause = e)
+                e.statusCode == 425 -> throw e
                 e.statusCode in 400..499 -> null
                 else -> throw e
             }
