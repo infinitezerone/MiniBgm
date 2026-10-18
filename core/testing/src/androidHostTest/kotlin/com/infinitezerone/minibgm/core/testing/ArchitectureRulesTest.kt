@@ -2511,6 +2511,50 @@ class ArchitectureRulesTest {
         )
     }
 
+    @Test
+    fun danmaku_view_must_use_dynamic_track_allocation_and_not_hash_modulo() {
+        val violations = mutableListOf<String>()
+        val danmakuViewPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/DanmakuView.kt"
+        val code = KotlinSourceScanner.sanitize(File(projectRoot, danmakuViewPath).readText())
+
+        // 1. 禁止使用粗暴的 text.hashCode() % maxTracks
+        if (code.contains(".hashCode()") || code.contains("hashCode() %")) {
+            violations.add(
+                "$danmakuViewPath 包含 hashCode() 弹道取模：粗暴的哈希取模会导致相同文字（如「草」「2333」）" +
+                    "或哈希冲突的弹幕物理重叠在同一轨道，且无视文字长度与移动速度差异引发追尾",
+            )
+        }
+
+        // 2. 必须具备动态排版预计算 computeDanmakuLayout
+        if (!code.contains("fun computeDanmakuLayout(") || !code.contains("computeDanmakuLayout(")) {
+            violations.add("$danmakuViewPath 缺少 computeDanmakuLayout：弹道分配必须前置预计算，严禁每帧盲算")
+        }
+
+        // 3. 绘制循环必须消费 PositionedDanmaku，且严禁在绘制循环里反复 measureText
+        if (!code.contains("PositionedDanmaku")) {
+            violations.add("$danmakuViewPath 缺少 PositionedDanmaku 预计算实例模型")
+        }
+
+        val canvasIdx = code.indexOf("Canvas(modifier =")
+        if (canvasIdx > 0) {
+            val canvasBody = code.substring(canvasIdx)
+            if (canvasBody.contains("measureText(")) {
+                violations.add("$danmakuViewPath 在 Canvas 绘制块中调用了 measureText：测量必须在预计算中完成，严禁在 60/120 FPS 绘制帧触发文字测量")
+            }
+        }
+
+        // 4. 必须具备字幕安全避让逻辑
+        if (!code.contains("SUBTITLE_AREA_RATIO") && !code.contains("subtitleAreaRatio")) {
+            violations.add("$danmakuViewPath 缺少字幕避让保护区域计算：必须为屏幕底部预留正文字幕安全区")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反「弹幕动态排版与防重叠」架构红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
     /** 播放页必须落库的偏好字段 → 对应的 SettingsRepository 写入方法 */
     private val playerPersistedPreferences: Map<String, String> =
         mapOf(

@@ -1,6 +1,10 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
+import com.infinitezerone.minibgm.core.model.DanmakuItem
+import com.infinitezerone.minibgm.core.model.DanmakuMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlayerViewComponentsTest {
@@ -320,5 +324,174 @@ class PlayerViewComponentsTest {
 
         // Quarter of travel: 20 + 0.25 * 460 = 135f -> exactly 0.25f
         assertEquals(0.25f, calculateProgressBarFraction(135f, totalWidth, thumbRadiusPx), 0.0001f)
+    }
+
+    @Test
+    fun isScrollTrackSafe_preventsEntryCollision() {
+        val lastItem = DanmakuItem(timeMs = 1_000L, text = "Leading")
+        val lastWidth = 100f
+        val canvasWidth = 1000f
+        val durationMs = 8_000L
+        val minSpacingPx = 30f
+
+        // 1. 同一时间戳入场：尾部尚未入屏，必须判定不安全
+        val simultaneous = DanmakuItem(timeMs = 1_000L, text = "Follower")
+        assertFalse(isScrollTrackSafe(lastItem, lastWidth, simultaneous, 100f, canvasWidth, durationMs, minSpacingPx))
+
+        // 2. 尾部刚进入右边界但未留出 minSpacingPx：判定不安全
+        // tailX = (1000 + 100) * (1 - deltaT / 8000)
+        // 当 deltaT = 500ms 时，tailX = 1100 * (7500 / 8000) = 1031.25 > 1000 - 30 (970)
+        val tooEarly = DanmakuItem(timeMs = 1_500L, text = "TooEarly")
+        assertFalse(isScrollTrackSafe(lastItem, lastWidth, tooEarly, 100f, canvasWidth, durationMs, minSpacingPx))
+
+        // 3. 尾部已行进出安全距离（deltaT = 1500ms，tailX = 1100 * 6500 / 8000 = 893.75 <= 970）：判定安全
+        val safeEntry = DanmakuItem(timeMs = 2_500L, text = "SafeEntry")
+        assertTrue(isScrollTrackSafe(lastItem, lastWidth, safeEntry, 100f, canvasWidth, durationMs, minSpacingPx))
+
+        // 4. 前序弹幕已完全离开屏幕（deltaT >= durationMs）：判定安全
+        val expired = DanmakuItem(timeMs = 10_000L, text = "ExpiredLeader")
+        assertTrue(isScrollTrackSafe(lastItem, lastWidth, expired, 100f, canvasWidth, durationMs, minSpacingPx))
+    }
+
+    @Test
+    fun isScrollTrackSafe_preventsOvertakeCollision() {
+        val lastItem = DanmakuItem(timeMs = 1_000L, text = "Short")
+        val lastWidth = 100f
+        val canvasWidth = 1000f
+        val durationMs = 8_000L
+        val minSpacingPx = 30f
+
+        // 后续弹幕文字很长（700px），速度显著快于前序弹幕（100px）
+        // 即使入场安全，但在屏幕中途或离开屏幕前会追尾
+        val fastFollower = DanmakuItem(timeMs = 2_000L, text = "VeryLongDanmakuTextWithHighSpeed")
+        val fastWidth = 700f
+        // deltaT = 1000ms:
+        // tailX_last = (1000 + 100) * (7000 / 8000) = 962.5 <= 970 (入场安全通过)
+        // 但追尾检查：elapsedNew = 8000 - 1000 = 7000ms
+        // headX = 1000 - (7000 / 8000) * 1700 = 1000 - 1487.5 = -487.5 < 30 (追尾不安全拦截！)
+        assertFalse(isScrollTrackSafe(lastItem, lastWidth, fastFollower, fastWidth, canvasWidth, durationMs, minSpacingPx))
+
+        // 若前序与后续弹幕速度相同（宽度相同），入场安全即可保证永不追尾
+        val sameSpeedFollower = DanmakuItem(timeMs = 2_000L, text = "SameSpeed")
+        assertTrue(isScrollTrackSafe(lastItem, lastWidth, sameSpeedFollower, lastWidth, canvasWidth, durationMs, minSpacingPx))
+
+        // 若后续弹幕进入时间足够晚（例如 deltaT = 4500ms），即使速度快也不会在屏幕内追尾
+        // deltaT = 4500ms: elapsedNew = 3500ms
+        // headX = 1000 - (3500 / 8000) * 1700 = 1000 - 743.75 = 256.25 >= 30 (追尾安全通过)
+        val wellSpacedFastFollower = DanmakuItem(timeMs = 5_500L, text = "WellSpacedFast")
+        assertTrue(isScrollTrackSafe(lastItem, lastWidth, wellSpacedFastFollower, fastWidth, canvasWidth, durationMs, minSpacingPx))
+    }
+
+    @Test
+    fun computeDanmakuLayout_allocatesSeparateTracksForSimultaneousDanmakus() {
+        // 5 条同时发出的相同弹幕（模拟“草”或者“2333”弹幕刷屏）
+        val danmakus =
+            (0 until 5).map {
+                DanmakuItem(timeMs = 2_000L, text = "草", mode = DanmakuMode.SCROLL)
+            }
+
+        val layout =
+            computeDanmakuLayout(
+                danmakus = danmakus,
+                canvasWidth = 1000f,
+                canvasHeight = 600f,
+                trackHeightPx = 40f,
+                durationMs = 8_000L,
+                measureTextWidth = { 50f },
+            )
+
+        assertEquals(5, layout.size)
+        val trackIndices = layout.map { it.trackIndex }
+        // 5 条同时发出的弹幕必须被分配到不同的弹道（0, 1, 2, 3, 4），彻底消除同屏重叠！
+        assertEquals(listOf(0, 1, 2, 3, 4), trackIndices)
+    }
+
+    @Test
+    fun computeDanmakuLayout_respectsSubtitleProtectionArea() {
+        val canvasHeight = 1000f
+        val trackHeightPx = 50f
+        val subtitleRatio = 0.25f // 底部预留 25% (250px)
+        val availableHeight = canvasHeight * (1f - subtitleRatio) // 750px
+
+        // 大量滚动弹幕
+        val danmakus =
+            (0 until 30).map {
+                DanmakuItem(timeMs = 2_000L, text = "Danmaku $it", mode = DanmakuMode.SCROLL)
+            }
+
+        val layout =
+            computeDanmakuLayout(
+                danmakus = danmakus,
+                canvasWidth = 1000f,
+                canvasHeight = canvasHeight,
+                trackHeightPx = trackHeightPx,
+                durationMs = 8_000L,
+                measureTextWidth = { 100f },
+                subtitleAreaRatio = subtitleRatio,
+            )
+
+        // 验证所有分配的滚动弹道 Y 轴均不超过 availableHeight (750px)
+        for (item in layout) {
+            val posY = (item.trackIndex + 1) * trackHeightPx
+            assertTrue("Track Y ($posY) must not exceed available height ($availableHeight)", posY <= availableHeight)
+        }
+    }
+
+    @Test
+    fun computeDanmakuLayout_stacksTopAndBottomFixedDanmakusWithoutCollision() {
+        val topDanmakus =
+            listOf(
+                DanmakuItem(timeMs = 1_000L, text = "Top 1", mode = DanmakuMode.TOP),
+                DanmakuItem(timeMs = 1_500L, text = "Top 2", mode = DanmakuMode.TOP),
+                DanmakuItem(timeMs = 6_000L, text = "Top 3 (After 1 expires)", mode = DanmakuMode.TOP),
+            )
+        val layoutTop =
+            computeDanmakuLayout(
+                danmakus = topDanmakus,
+                canvasWidth = 1000f,
+                canvasHeight = 600f,
+                trackHeightPx = 40f,
+                measureTextWidth = { 80f },
+                fixedDurationMs = 4_000L,
+            )
+        assertEquals(3, layoutTop.size)
+        assertEquals(0, layoutTop[0].trackIndex) // Top 1 在 track 0
+        assertEquals(1, layoutTop[1].trackIndex) // Top 2 与 Top 1 时间重叠，落入 track 1
+        assertEquals(0, layoutTop[2].trackIndex) // Top 3 在 6000ms，Top 1 (1000 + 4000 = 5000ms) 已过期，复用 track 0！
+
+        val bottomDanmakus =
+            listOf(
+                DanmakuItem(timeMs = 1_000L, text = "Bottom 1", mode = DanmakuMode.BOTTOM),
+                DanmakuItem(timeMs = 1_500L, text = "Bottom 2", mode = DanmakuMode.BOTTOM),
+            )
+        val layoutBottom =
+            computeDanmakuLayout(
+                danmakus = bottomDanmakus,
+                canvasWidth = 1000f,
+                canvasHeight = 600f,
+                trackHeightPx = 40f,
+                measureTextWidth = { 80f },
+                fixedDurationMs = 4_000L,
+            )
+        assertEquals(2, layoutBottom.size)
+        assertEquals(0, layoutBottom[0].trackIndex)
+        assertEquals(1, layoutBottom[1].trackIndex)
+    }
+
+    @Test
+    fun findActivePositionedDanmakus_filtersCorrectActiveWindow() {
+        val items =
+            listOf(
+                PositionedDanmaku(DanmakuItem(timeMs = 1_000L, text = "Old expired", mode = DanmakuMode.SCROLL), 0, 100f),
+                PositionedDanmaku(DanmakuItem(timeMs = 5_000L, text = "Active 1", mode = DanmakuMode.SCROLL), 1, 100f),
+                PositionedDanmaku(DanmakuItem(timeMs = 8_000L, text = "Active 2", mode = DanmakuMode.SCROLL), 2, 100f),
+                PositionedDanmaku(DanmakuItem(timeMs = 12_000L, text = "Future", mode = DanmakuMode.SCROLL), 0, 100f),
+            )
+
+        // currentMs = 10_000ms, duration = 8_500ms -> 范围 [1_500ms, 10_000ms]
+        val active = findActivePositionedDanmakus(items, 10_000L, 8_500L)
+        assertEquals(2, active.size)
+        assertEquals("Active 1", active[0].item.text)
+        assertEquals("Active 2", active[1].item.text)
     }
 }

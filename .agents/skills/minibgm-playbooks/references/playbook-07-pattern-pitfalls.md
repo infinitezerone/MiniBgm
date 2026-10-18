@@ -54,3 +54,8 @@
 16. **CRAP 复杂度死锁（CC > 30 无论覆盖率多高必死）**：
    * CRAP 公式为 $CRAP(m) = CC^2 \times (1 - Cov)^3 + CC$。当圈复杂度 $CC > 30$ 时，即便测试覆盖率达到 99%，计算结果也必然大于 30.0 阈值而触发 CI 硬失败。
    * 正确形态：当复杂业务（如多源检索、多策略解析器）逻辑庞大时，切忌在一个方法体内堆叠 `when`/`for`/`if` 分支；必须拆解为职责单一的高内聚纯函数（使各个纯函数 $CC < 10$）。平台边界方法（如磁盘 IO、网络回退）必须编写单元测试，杜绝 $Cov = 0\%$ 导致的 CRAP 爆表（$Cov=0\%$ 时 $CC \ge 6$ 即超标）。验证命令：`./gradlew :core:testing:crapCheck`。
+
+17. **弹幕哈希盲取模与同屏追尾重叠（Danmaku Collision Pitfall）**：
+   * 弹幕若仅靠 `abs(text.hashCode()) % maxTracks` 分配轨道，同秒内相同内容（如「草」「2333」「前方高能」）的哈希值完全一致，会被强制挤在同一条轨道上完全重叠；且弹幕以恒定时长 $T$ 滚过屏幕，长文本速度显著快于短文本（$V = (W + L) / T$），后方长文本会快速追尾前方短文本。此外，在 60/120 FPS 绘制帧内反复调用 `measureText` 会引发高频 GC 与帧率波动。
+   * 正确形态：在数据加载或尺寸变化时通过 `computeDanmakuLayout` 统一预计算 `PositionedDanmaku`；入场时校验前序弹幕尾部位置（$X_{tail} \le W - S$），追尾时校验前序弹幕离开屏幕瞬间后续弹幕头部位置（$X_{head} \ge S$）；同秒爆发自动瀑布流下落到空闲轨道；底部保留 25% 比例正文字幕避让区；Canvas 循环仅执行二分时间窗筛选与原生双层绘制，实现绘制帧零 GC 与极致流畅。
+   * 红线：`ArchitectureRulesTest#danmaku_view_must_use_dynamic_track_allocation_and_not_hash_modulo`。
