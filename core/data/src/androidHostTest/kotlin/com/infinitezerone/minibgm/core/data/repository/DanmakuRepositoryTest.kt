@@ -1,9 +1,11 @@
 package com.infinitezerone.minibgm.core.data.repository
 
+import com.infinitezerone.minibgm.core.data.cache.DanmakuDiskCache
 import com.infinitezerone.minibgm.core.data.repository.resolver.DanmakuParser
 import com.infinitezerone.minibgm.core.database.dao.DanmakuOverrideDao
 import com.infinitezerone.minibgm.core.database.entity.DanmakuEpisodeOverrideEntity
 import com.infinitezerone.minibgm.core.model.DanmakuEpisodeCandidate
+import com.infinitezerone.minibgm.core.model.DanmakuItem
 import com.infinitezerone.minibgm.core.model.DanmakuMatchState
 import com.infinitezerone.minibgm.core.model.DanmakuMode
 import com.infinitezerone.minibgm.core.model.DanmakuResult
@@ -51,6 +53,29 @@ private class FakeDanmakuOverrideDao : DanmakuOverrideDao {
 
     override suspend fun deleteOverride(episodeId: Long) {
         store.remove(episodeId)
+    }
+}
+
+private class FakeDanmakuDiskCache : DanmakuDiskCache {
+    val store = mutableMapOf<String, List<DanmakuItem>>()
+    var getCallCount = 0
+    var putCallCount = 0
+
+    override suspend fun get(cacheKey: String): List<DanmakuItem>? {
+        getCallCount++
+        return store[cacheKey]
+    }
+
+    override suspend fun put(
+        cacheKey: String,
+        items: List<DanmakuItem>,
+    ) {
+        putCallCount++
+        store[cacheKey] = items
+    }
+
+    override suspend fun clear() {
+        store.clear()
     }
 }
 
@@ -118,10 +143,12 @@ class DanmakuRepositoryTest {
     private fun repoWith(
         fetcher: FakeDanmakuPageFetchService,
         overrideDao: FakeDanmakuOverrideDao? = null,
+        danmakuDiskCache: DanmakuDiskCache? = null,
     ): DanmakuRepositoryImpl =
         DanmakuRepositoryImpl(
             pageFetchService = fetcher,
             danmakuOverrideDao = overrideDao,
+            danmakuDiskCache = danmakuDiskCache,
         )
 
     private suspend fun DanmakuRepository.get(
@@ -430,6 +457,94 @@ class DanmakuRepositoryTest {
 
             val result = repo.get(title = "进击的巨人", episodeSort = 1f)
             assertTrue(result.items.isEmpty())
+        }
+
+    @Test
+    fun `DanmakuRepository 磁盘缓存命中时跳过分集弹幕拉取直接返回`() =
+        runTest {
+            val searchEpisodesJson =
+                """
+                {
+                  "hasMore": false,
+                  "animes": [
+                    {
+                      "animeId": 1234,
+                      "animeTitle": "葬送的芙莉莲",
+                      "episodes": [
+                        { "episodeId": 9876, "episodeTitle": "第01话" }
+                      ]
+                    }
+                  ]
+                }
+                """.trimIndent()
+            val fakeFetcher =
+                FakeDanmakuPageFetchService(
+                    mapOf("/api/v2/search/episodes" to searchEpisodesJson),
+                )
+            val fakeDiskCache = FakeDanmakuDiskCache()
+            val cachedDanmaku =
+                listOf(
+                    DanmakuItem(timeMs = 12000L, text = "磁盘缓存弹幕", mode = DanmakuMode.SCROLL, color = 0xFFFFFF),
+                )
+            fakeDiskCache.put("https://api.dandanplay.net_ep9876", cachedDanmaku)
+
+            val repo = repoWith(fetcher = fakeFetcher, danmakuDiskCache = fakeDiskCache)
+            val result = repo.get(title = "葬送的芙莉莲", episodeSort = 1f)
+
+            assertEquals(1, result.items.size)
+            assertEquals("磁盘缓存弹幕", result.items[0].text)
+            // 验证未向网络请求 /api/v2/comment/9876
+            assertTrue(fakeFetcher.requestedUrls.none { it.contains("/api/v2/comment") })
+        }
+
+    @Test
+    fun `DanmakuRepository 主标题无结果时自动回退至次要标题搜索`() =
+        runTest {
+            val secondarySearchJson =
+                """
+                {
+                  "hasMore": false,
+                  "animes": [
+                    {
+                      "animeId": 5001,
+                      "animeTitle": "葬送のフリーレン",
+                      "episodes": [
+                        { "episodeId": 6789, "episodeTitle": "第01话" }
+                      ]
+                    }
+                  ]
+                }
+                """.trimIndent()
+            val primaryEncoded =
+                com.infinitezerone.minibgm.core.model.PlaybackSourceRule
+                    .encodeParam("芙莉莲")
+            val secondaryEncoded =
+                com.infinitezerone.minibgm.core.model.PlaybackSourceRule
+                    .encodeParam("葬送のフリーレン")
+            val fakeFetcher =
+                FakeDanmakuPageFetchService(
+                    mapOf(
+                        // 主标题搜索返回空
+                        "anime=$primaryEncoded" to """{"animes":[]}""",
+                        // 次要标题搜索命中
+                        "anime=$secondaryEncoded" to secondarySearchJson,
+                        "/api/v2/comment/6789" to sampleDandanJson,
+                    ),
+                )
+            val repo = repoWith(fetcher = fakeFetcher)
+            val result =
+                repo.getDanmaku(
+                    bangumiEpisodeId = 100L,
+                    subjectId = 1L,
+                    title = "芙莉莲",
+                    episodeSort = 1f,
+                    episodeName = null,
+                    secondaryTitle = "葬送のフリーレン",
+                )
+
+            assertEquals(3, result.items.size)
+            assertEquals(DanmakuMatchState.AUTO_MATCHED, result.match?.state)
+            assertEquals(6789L, result.match?.chosen?.episodeId)
         }
 
     // ---- 匹配算法：标题相似度与分集名加成 ----

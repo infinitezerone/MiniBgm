@@ -14,6 +14,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -39,9 +40,65 @@ data object PlayerEpisodesRequest : OverlayRequest<Unit>
 data object PlayerSourcesRequest : OverlayRequest<Unit>
 
 /**
- * 播放设置面板（清晰度/倍速/画面比例/字幕/音轨/弹幕/单集循环）。
- * 竖屏与横屏统一走底部弹层：OverlayHost 渲染的内容独立于舞台层级，
- * 右侧抽屉形态需要依赖舞台 BoxScope 且退出动画要与 respond 时序耦合，收益不抵复杂度。
+ * 播放器横屏右侧抽屉通用容器：
+ * 半透明黑色渐变蒙层背景（点击收起） + 右侧平滑滑入滑出抽屉 + 返回键优雅收起 + 动效结束自动响应。
+ */
+@Composable
+private fun PlayerRightDrawerContainer(
+    visibleState: MutableTransitionState<Boolean>,
+    onDismissRequest: () -> Unit,
+    onRespond: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    BackHandler { onDismissRequest() }
+    SideEffect {
+        if (visibleState.isIdle && !visibleState.currentState) {
+            onRespond()
+        }
+    }
+    Box(modifier = modifier.fillMaxSize()) {
+        AnimatedVisibility(
+            visibleState = visibleState,
+            enter = fadeIn(tween(durationMillis = 150)),
+            exit = fadeOut(tween(durationMillis = 120)),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onDismissRequest,
+                        ),
+            )
+        }
+        AnimatedVisibility(
+            visibleState = visibleState,
+            enter =
+                slideInHorizontally(
+                    initialOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(durationMillis = 160),
+                ),
+            exit =
+                slideOutHorizontally(
+                    targetOffsetX = { fullWidth -> fullWidth },
+                    animationSpec = tween(durationMillis = 140),
+                ),
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+        ) {
+            content()
+        }
+    }
+}
+
+/**
+ * 播放设置面板（清晰度/倍速/画面比例/字幕/音轨/弹幕/单集循环）：
+ * 竖屏模式走优雅底部弹层 [PlayerTrackSelectionSheet]，横屏模式走右侧抽屉 [PlayerTrackSelectionDrawer]，
+ * 彻底消除横屏全屏下底部弹窗扁平挤压、大面积遮挡画面的体验缺陷。
  */
 fun OverlayProviderScope.playerSettingsPanel(
     tracksSnapshot: () -> PlayerTracksSnapshot,
@@ -52,6 +109,8 @@ fun OverlayProviderScope.playerSettingsPanel(
     isDanmakuEnabled: () -> Boolean,
     onToggleDanmaku: () -> Unit,
     onOpenDanmakuPicker: (() -> Unit)?,
+    danmakuTimeOffsetMs: () -> Long = { 0L },
+    onSelectDanmakuTimeOffset: (Long) -> Unit = {},
     isLooping: () -> Boolean,
     onToggleLoop: () -> Unit,
     onSelectQuality: (PlayerQualityOption) -> Unit,
@@ -60,34 +119,78 @@ fun OverlayProviderScope.playerSettingsPanel(
     onDisableSubtitles: () -> Unit,
     onAutoSubtitles: () -> Unit,
     onSelectAudio: (PlayerTrackOption) -> Unit,
+    isLandscape: () -> Boolean = { false },
 ) {
     overlay<PlayerSettingsRequest, Unit> { _, onRespond ->
-        PlayerTrackSelectionSheet(
-            isOpen = true,
-            tracksSnapshot = tracksSnapshot(),
-            onSelectQuality = onSelectQuality,
-            onAutoQuality = onAutoQuality,
-            onSelectSubtitle = onSelectSubtitle,
-            onDisableSubtitles = onDisableSubtitles,
-            onAutoSubtitles = onAutoSubtitles,
-            onSelectAudio = onSelectAudio,
-            playbackSpeed = playbackSpeed(),
-            onSelectSpeed = onSelectSpeed,
-            resizeMode = resizeMode(),
-            onSelectResizeMode = onSelectResizeMode,
-            isDanmakuEnabled = isDanmakuEnabled(),
-            onToggleDanmaku = onToggleDanmaku,
-            onOpenDanmakuPicker =
-                onOpenDanmakuPicker?.let { open ->
-                    {
-                        onRespond(Unit)
-                        open()
-                    }
-                },
-            isLooping = isLooping(),
-            onToggleLoop = onToggleLoop,
-            onDismiss = { onRespond(Unit) },
-        )
+        val landscape = isLandscape()
+        if (landscape) {
+            val visibleState =
+                remember {
+                    MutableTransitionState(initialState = false).apply { targetState = true }
+                }
+            PlayerRightDrawerContainer(
+                visibleState = visibleState,
+                onDismissRequest = { visibleState.targetState = false },
+                onRespond = { onRespond(Unit) },
+            ) {
+                PlayerTrackSelectionDrawer(
+                    tracksSnapshot = tracksSnapshot(),
+                    onSelectQuality = onSelectQuality,
+                    onAutoQuality = onAutoQuality,
+                    onSelectSubtitle = onSelectSubtitle,
+                    onDisableSubtitles = onDisableSubtitles,
+                    onAutoSubtitles = onAutoSubtitles,
+                    onSelectAudio = onSelectAudio,
+                    playbackSpeed = playbackSpeed(),
+                    onSelectSpeed = onSelectSpeed,
+                    resizeMode = resizeMode(),
+                    onSelectResizeMode = onSelectResizeMode,
+                    isDanmakuEnabled = isDanmakuEnabled(),
+                    onToggleDanmaku = onToggleDanmaku,
+                    onOpenDanmakuPicker =
+                        onOpenDanmakuPicker?.let { open ->
+                            {
+                                visibleState.targetState = false
+                                open()
+                            }
+                        },
+                    danmakuTimeOffsetMs = danmakuTimeOffsetMs(),
+                    onSelectDanmakuTimeOffset = onSelectDanmakuTimeOffset,
+                    isLooping = isLooping(),
+                    onToggleLoop = onToggleLoop,
+                    onClose = { visibleState.targetState = false },
+                )
+            }
+        } else {
+            PlayerTrackSelectionSheet(
+                isOpen = true,
+                tracksSnapshot = tracksSnapshot(),
+                onSelectQuality = onSelectQuality,
+                onAutoQuality = onAutoQuality,
+                onSelectSubtitle = onSelectSubtitle,
+                onDisableSubtitles = onDisableSubtitles,
+                onAutoSubtitles = onAutoSubtitles,
+                onSelectAudio = onSelectAudio,
+                playbackSpeed = playbackSpeed(),
+                onSelectSpeed = onSelectSpeed,
+                resizeMode = resizeMode(),
+                onSelectResizeMode = onSelectResizeMode,
+                isDanmakuEnabled = isDanmakuEnabled(),
+                onToggleDanmaku = onToggleDanmaku,
+                onOpenDanmakuPicker =
+                    onOpenDanmakuPicker?.let { open ->
+                        {
+                            onRespond(Unit)
+                            open()
+                        }
+                    },
+                danmakuTimeOffsetMs = danmakuTimeOffsetMs(),
+                onSelectDanmakuTimeOffset = onSelectDanmakuTimeOffset,
+                isLooping = isLooping(),
+                onToggleLoop = onToggleLoop,
+                onDismiss = { onRespond(Unit) },
+            )
+        }
     }
 }
 
@@ -108,70 +211,34 @@ fun OverlayProviderScope.playerEpisodeQueuePanel(
             remember {
                 MutableTransitionState(initialState = false).apply { targetState = true }
             }
-        BackHandler { visibleState.targetState = false }
-        // 退出动画播完后再响应（关闭挂起协程并卸载浮层内容）——SideEffect 保证不在组合期产生副作用
-        SideEffect {
-            if (visibleState.isIdle && !visibleState.currentState) {
-                onRespond(Unit)
-            }
-        }
-        Box(modifier = Modifier.fillMaxSize()) {
-            AnimatedVisibility(
-                visibleState = visibleState,
-                enter = fadeIn(tween(durationMillis = 150)),
-                exit = fadeOut(tween(durationMillis = 120)),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.5f))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { visibleState.targetState = false },
-                            ),
-                )
-            }
-            AnimatedVisibility(
-                visibleState = visibleState,
-                enter =
-                    slideInHorizontally(
-                        initialOffsetX = { fullWidth -> fullWidth },
-                        animationSpec = tween(durationMillis = 160),
-                    ),
-                exit =
-                    slideOutHorizontally(
-                        targetOffsetX = { fullWidth -> fullWidth },
-                        animationSpec = tween(durationMillis = 140),
-                    ),
-                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-            ) {
-                PlayerEpisodeQueueDrawer(
-                    queue = state.queue,
-                    currentIndex = state.currentIndex,
-                    episodes = state.episodes,
-                    selectedEpisodeSort = state.episodeSort,
-                    selectedEpisodeId = state.episodeId,
-                    selectedEpisodeType = state.episodeType,
-                    autoNextEnabled = state.autoNextEnabled,
-                    totalEpisodes = state.totalEpisodes,
-                    hasMoreEpisodes = state.hasMoreEpisodes,
-                    isLoadingMoreEpisodes = state.isLoadingMoreEpisodes,
-                    onLoadMoreEpisodes = onLoadMoreEpisodes,
-                    onToggleAutoNext = onToggleAutoNext,
-                    onSelectEpisode = {
-                        onSelectEpisode(it)
-                        visibleState.targetState = false
-                    },
-                    onSelectQueueIndex = {
-                        onSelectQueueIndex(it)
-                        visibleState.targetState = false
-                    },
-                    onClose = { visibleState.targetState = false },
-                )
-            }
+        PlayerRightDrawerContainer(
+            visibleState = visibleState,
+            onDismissRequest = { visibleState.targetState = false },
+            onRespond = { onRespond(Unit) },
+        ) {
+            PlayerEpisodeQueueDrawer(
+                queue = state.queue,
+                currentIndex = state.currentIndex,
+                episodes = state.episodes,
+                selectedEpisodeSort = state.episodeSort,
+                selectedEpisodeId = state.episodeId,
+                selectedEpisodeType = state.episodeType,
+                autoNextEnabled = state.autoNextEnabled,
+                totalEpisodes = state.totalEpisodes,
+                hasMoreEpisodes = state.hasMoreEpisodes,
+                isLoadingMoreEpisodes = state.isLoadingMoreEpisodes,
+                onLoadMoreEpisodes = onLoadMoreEpisodes,
+                onToggleAutoNext = onToggleAutoNext,
+                onSelectEpisode = {
+                    onSelectEpisode(it)
+                    visibleState.targetState = false
+                },
+                onSelectQueueIndex = {
+                    onSelectQueueIndex(it)
+                    visibleState.targetState = false
+                },
+                onClose = { visibleState.targetState = false },
+            )
         }
     }
 }
@@ -217,77 +284,44 @@ fun OverlayProviderScope.playerSourcesPanel(
         val state = uiState()
         val landscape = isLandscape()
         if (landscape) {
-            val visibleState = remember { MutableTransitionState(false) }
-            androidx.compose.runtime.LaunchedEffect(Unit) { visibleState.targetState = true }
-            BackHandler { visibleState.targetState = false }
-            SideEffect {
-                if (visibleState.isIdle && !visibleState.currentState) {
-                    onRespond(Unit)
+            val visibleState =
+                remember {
+                    MutableTransitionState(initialState = false).apply { targetState = true }
                 }
-            }
-            Box(modifier = Modifier.fillMaxSize()) {
-                AnimatedVisibility(
-                    visibleState = visibleState,
-                    enter = fadeIn(tween(durationMillis = 150)),
-                    exit = fadeOut(tween(durationMillis = 120)),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.5f))
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = { visibleState.targetState = false },
-                                ),
-                    )
-                }
-                AnimatedVisibility(
-                    visibleState = visibleState,
-                    enter =
-                        slideInHorizontally(
-                            initialOffsetX = { fullWidth -> fullWidth },
-                            animationSpec = tween(durationMillis = 160),
-                        ),
-                    exit =
-                        slideOutHorizontally(
-                            targetOffsetX = { fullWidth -> fullWidth },
-                            animationSpec = tween(durationMillis = 140),
-                        ),
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                ) {
-                    PlayerSourcesDrawer(
-                        sources = state.sources,
-                        selectedIndex = state.selectedSourceIndex,
-                        playingSourceId = state.playingSourceId,
-                        sourceFailureCounts = state.sourceFailureCounts,
-                        isResolvingSource = state.isResolvingSource,
-                        resolveAttempt = state.resolveAttempt,
-                        resolveAttemptTotal = state.resolveAttemptTotal,
-                        matchedVodName = state.matchedVodName,
-                        onSelectSource = { index ->
-                            onSelectSource(index)
-                            visibleState.targetState = false
+            PlayerRightDrawerContainer(
+                visibleState = visibleState,
+                onDismissRequest = { visibleState.targetState = false },
+                onRespond = { onRespond(Unit) },
+            ) {
+                PlayerSourcesDrawer(
+                    sources = state.sources,
+                    selectedIndex = state.selectedSourceIndex,
+                    playingSourceId = state.playingSourceId,
+                    sourceFailureCounts = state.sourceFailureCounts,
+                    isResolvingSource = state.isResolvingSource,
+                    resolveAttempt = state.resolveAttempt,
+                    resolveAttemptTotal = state.resolveAttemptTotal,
+                    matchedVodName = state.matchedVodName,
+                    onSelectSource = { index ->
+                        onSelectSource(index)
+                        visibleState.targetState = false
+                    },
+                    onManageRules =
+                        onManageRules?.let { manage ->
+                            {
+                                visibleState.targetState = false
+                                manage()
+                            }
                         },
-                        onManageRules =
-                            onManageRules?.let { manage ->
-                                {
-                                    visibleState.targetState = false
-                                    manage()
-                                }
-                            },
-                        onRequestOpenSources =
-                            onRequestOpenSources?.let { openAi ->
-                                {
-                                    visibleState.targetState = false
-                                    openAi()
-                                }
-                            },
-                        onClose = { visibleState.targetState = false },
-                    )
-                }
+                    onRequestOpenSources =
+                        onRequestOpenSources?.let { openAi ->
+                            {
+                                visibleState.targetState = false
+                                openAi()
+                            }
+                        },
+                    onClose = { visibleState.targetState = false },
+                )
             }
         } else {
             PlayerSourcesBottomSheet(

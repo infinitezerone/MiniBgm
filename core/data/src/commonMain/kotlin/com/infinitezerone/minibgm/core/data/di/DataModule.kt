@@ -105,6 +105,7 @@ val dataModule =
                 pageFetchService = get<PageFetchService>(),
                 danmakuOverrideDao = getOrNull<com.infinitezerone.minibgm.core.database.dao.DanmakuOverrideDao>(),
                 settingsRepository = getOrNull<SettingsRepository>(),
+                danmakuDiskCache = getOrNull<com.infinitezerone.minibgm.core.data.cache.DanmakuDiskCache>(),
             )
         }
         single<PlaybackSourceVerifier> {

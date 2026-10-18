@@ -2,11 +2,14 @@ package com.infinitezerone.minibgm.feature.subject.player
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -396,6 +400,8 @@ internal fun PlayerTrackSelectionSheet(
     isDanmakuEnabled: Boolean = false,
     onToggleDanmaku: () -> Unit = {},
     onOpenDanmakuPicker: (() -> Unit)? = null,
+    danmakuTimeOffsetMs: Long = 0L,
+    onSelectDanmakuTimeOffset: (Long) -> Unit = {},
     isLooping: Boolean = false,
     onToggleLoop: () -> Unit = {},
     onDismiss: () -> Unit,
@@ -421,11 +427,81 @@ internal fun PlayerTrackSelectionSheet(
             isDanmakuEnabled = isDanmakuEnabled,
             onToggleDanmaku = onToggleDanmaku,
             onOpenDanmakuPicker = onOpenDanmakuPicker,
+            danmakuTimeOffsetMs = danmakuTimeOffsetMs,
+            onSelectDanmakuTimeOffset = onSelectDanmakuTimeOffset,
             isLooping = isLooping,
             onToggleLoop = onToggleLoop,
             onClose = onDismiss,
             modifier = Modifier.padding(bottom = 24.dp),
         )
+    }
+}
+
+/**
+ * 播放器「播放设置」横屏右侧抽屉：对照选集抽屉与播放源抽屉同源视觉结构，
+ * 容器使用高对比度主题容器 [MaterialTheme.colorScheme.surfaceContainerHigh]，左上/左下 16dp 圆角，
+ * 在宽屏环境下提供单手操控的优雅滑出体验，避免底部弹层横向拉伸变形与遮挡画面。
+ */
+@Composable
+internal fun PlayerTrackSelectionDrawer(
+    tracksSnapshot: PlayerTracksSnapshot,
+    onSelectQuality: (PlayerQualityOption) -> Unit,
+    onAutoQuality: () -> Unit,
+    onSelectSubtitle: (PlayerTrackOption) -> Unit,
+    onDisableSubtitles: () -> Unit,
+    onAutoSubtitles: () -> Unit,
+    onSelectAudio: (PlayerTrackOption) -> Unit,
+    playbackSpeed: Float = 1f,
+    onSelectSpeed: (Float) -> Unit = {},
+    resizeMode: PlayerResizeMode = PlayerResizeMode.FIT,
+    onSelectResizeMode: (PlayerResizeMode) -> Unit = {},
+    isDanmakuEnabled: Boolean = false,
+    onToggleDanmaku: () -> Unit = {},
+    onOpenDanmakuPicker: (() -> Unit)? = null,
+    danmakuTimeOffsetMs: Long = 0L,
+    onSelectDanmakuTimeOffset: (Long) -> Unit = {},
+    isLooping: Boolean = false,
+    onToggleLoop: () -> Unit = {},
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.95f),
+        shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp),
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+        modifier = modifier.width(360.dp).fillMaxHeight(),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .displayCutoutPadding()
+                    .padding(vertical = 8.dp),
+        ) {
+            PlayerTrackSelectionContent(
+                tracksSnapshot = tracksSnapshot,
+                onSelectQuality = onSelectQuality,
+                onAutoQuality = onAutoQuality,
+                onSelectSubtitle = onSelectSubtitle,
+                onDisableSubtitles = onDisableSubtitles,
+                onAutoSubtitles = onAutoSubtitles,
+                onSelectAudio = onSelectAudio,
+                playbackSpeed = playbackSpeed,
+                onSelectSpeed = onSelectSpeed,
+                resizeMode = resizeMode,
+                onSelectResizeMode = onSelectResizeMode,
+                isDanmakuEnabled = isDanmakuEnabled,
+                onToggleDanmaku = onToggleDanmaku,
+                onOpenDanmakuPicker = onOpenDanmakuPicker,
+                danmakuTimeOffsetMs = danmakuTimeOffsetMs,
+                onSelectDanmakuTimeOffset = onSelectDanmakuTimeOffset,
+                isLooping = isLooping,
+                onToggleLoop = onToggleLoop,
+                onClose = onClose,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
 
@@ -448,6 +524,8 @@ internal fun PlayerTrackSelectionContent(
     isDanmakuEnabled: Boolean = false,
     onToggleDanmaku: () -> Unit = {},
     onOpenDanmakuPicker: (() -> Unit)? = null,
+    danmakuTimeOffsetMs: Long = 0L,
+    onSelectDanmakuTimeOffset: (Long) -> Unit = {},
     isLooping: Boolean = false,
     onToggleLoop: () -> Unit = {},
     onClose: () -> Unit,
@@ -716,6 +794,15 @@ internal fun PlayerTrackSelectionContent(
                     onToggle = onToggleDanmaku,
                 )
             }
+            if (isDanmakuEnabled) {
+                item {
+                    DanmakuOffsetRow(
+                        offsetMs = danmakuTimeOffsetMs,
+                        isDarkThemed = isDarkThemed,
+                        onSelectOffset = onSelectDanmakuTimeOffset,
+                    )
+                }
+            }
             if (onOpenDanmakuPicker != null) {
                 item {
                     TrackItemRow(
@@ -756,6 +843,23 @@ internal fun formatSpeedLabel(speed: Float): String =
         String.format(Locale.US, "%.2f", speed).trimEnd('0').trimEnd('.') + "x"
     }
 
+/** 弹幕时间轴微调候选档位（-2s ~ +2s） */
+internal val DANMAKU_OFFSET_OPTIONS = listOf(-2000L, -1000L, -500L, 0L, 500L, 1000L, 2000L)
+
+/** 弹幕时间轴微调标签格式化（0s, +0.5s, -1s 等） */
+internal fun formatDanmakuOffsetPillLabel(offsetMs: Long): String =
+    when {
+        offsetMs == 0L -> "0s"
+        offsetMs % 1000L == 0L -> {
+            val s = offsetMs / 1000L
+            if (s > 0) "+${s}s" else "${s}s"
+        }
+        else -> {
+            val s = offsetMs.toFloat() / 1000f
+            if (s > 0) String.format(Locale.US, "+%.1fs", s) else String.format(Locale.US, "%.1fs", s)
+        }
+    }
+
 /**
  * 药丸单选（倍速/画面比例共用）：选中态用主题色描边加粗，未选中弱化
  */
@@ -791,6 +895,81 @@ private fun SpeedPill(
                     },
                 maxLines = 1,
             )
+        }
+    }
+}
+
+/** 弹幕时间轴微调行 */
+@Composable
+private fun DanmakuOffsetRow(
+    offsetMs: Long,
+    isDarkThemed: Boolean,
+    onSelectOffset: (Long) -> Unit,
+) {
+    val haptic = LocalHapticFeedback.current
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(R.string.feature_subject_player_danmaku_offset_title),
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (isDarkThemed) Color.White else MaterialTheme.colorScheme.onSurface,
+            )
+            val offsetText =
+                if (offsetMs == 0L) {
+                    stringResource(R.string.feature_subject_player_danmaku_offset_reset)
+                } else {
+                    stringResource(
+                        R.string.feature_subject_player_danmaku_offset_seconds,
+                        offsetMs.toFloat() / 1000f,
+                    )
+                }
+            Text(
+                text = offsetText,
+                style =
+                    MaterialTheme.typography.labelMedium.copy(
+                        fontFeatureSettings = "tnum",
+                    ),
+                color =
+                    if (offsetMs != 0L) {
+                        MaterialTheme.colorScheme.primary
+                    } else if (isDarkThemed) {
+                        Color.White.copy(alpha = 0.6f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+            )
+        }
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            DANMAKU_OFFSET_OPTIONS.forEach { optionMs ->
+                SpeedPill(
+                    label = formatDanmakuOffsetPillLabel(optionMs),
+                    isSelected = offsetMs == optionMs,
+                    isDarkThemed = isDarkThemed,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onSelectOffset(optionMs)
+                    },
+                )
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.di
 
 import android.content.Context
+import com.infinitezerone.minibgm.core.data.cache.DanmakuDiskCache
 import com.infinitezerone.minibgm.core.data.crash.CrashLogRepository
 import com.infinitezerone.minibgm.core.data.di.platformDataModule
 import com.infinitezerone.minibgm.core.data.download.ApkInstaller
@@ -118,6 +119,7 @@ class AppModuleTest : KoinTest {
             assertNotNull(get<NetworkMonitor>())
             assertNotNull(get<CrashLogRepository>())
             assertNotNull(get<SeasonalDiskCache>())
+            assertNotNull(get<DanmakuDiskCache>())
             assertNotNull(get<AssetDownloader>())
             assertNotNull(get<TorrentIntentDispatcher>())
             assertNotNull(get<TorrentRepository>())

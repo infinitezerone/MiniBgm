@@ -474,6 +474,9 @@
     <string name="feature_subject_player_danmaku_group">弹幕</string>
     <string name="feature_subject_player_danmaku_show">显示弹幕</string>
     <string name="feature_subject_player_danmaku_pick_episode">选择弹幕分集</string>
+    <string name="feature_subject_player_danmaku_offset_title">时间轴微调</string>
+    <string name="feature_subject_player_danmaku_offset_reset">同步 (0s)</string>
+    <string name="feature_subject_player_danmaku_offset_seconds">%1$+.1f秒</string>
     <string name="feature_subject_player_loop">单集循环</string>
     <string name="feature_subject_player_settings_entry">播放设置</string>
 </resources>

@@ -655,6 +655,7 @@ fun PlayerScreen(
             onToggleDanmaku = viewModel::toggleDanmaku,
             danmakuMatch = uiState.danmakuMatch,
             onOpenDanmakuPicker = openDanmakuPicker,
+            danmakuTimeOffsetMs = uiState.danmakuTimeOffsetMs,
             hasNextEpisode = uiState.hasNext,
             onPlayNextEpisode = viewModel::playNextEpisode,
             resumeOverlayPosition = resumeOverlayPosition,
@@ -882,6 +883,8 @@ fun PlayerScreen(
                     openDanmakuPicker.takeIf {
                         uiState.isDanmakuEnabled && !uiState.danmakuMatch?.candidates.isNullOrEmpty()
                     },
+                danmakuTimeOffsetMs = { uiState.danmakuTimeOffsetMs },
+                onSelectDanmakuTimeOffset = viewModel::setDanmakuTimeOffsetMs,
                 isLooping = { playback.isLooping },
                 onToggleLoop = { controller.setLooping(!playback.isLooping) },
                 onSelectQuality = {
@@ -906,6 +909,7 @@ fun PlayerScreen(
                     viewModel.setSubtitlesDisabled(false)
                 },
                 onSelectAudio = controller::selectAudioTrack,
+                isLandscape = { isLandscape },
             )
             playerEpisodeQueuePanel(
                 uiState = { uiState },
@@ -990,6 +994,7 @@ private fun PlayerVideoStage(
     onToggleDanmaku: () -> Unit = {},
     danmakuMatch: DanmakuMatch? = null,
     onOpenDanmakuPicker: () -> Unit = {},
+    danmakuTimeOffsetMs: Long = 0L,
     hasNextEpisode: Boolean = false,
     onPlayNextEpisode: (() -> Unit)? = null,
     resumeOverlayPosition: Long? = null,
@@ -1022,6 +1027,7 @@ private fun PlayerVideoStage(
                             isEnabled = isDanmakuEnabled,
                             isPlaying = playback.isPlaying,
                             playbackSpeed = playbackSpeed,
+                            timeOffsetMs = danmakuTimeOffsetMs,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }

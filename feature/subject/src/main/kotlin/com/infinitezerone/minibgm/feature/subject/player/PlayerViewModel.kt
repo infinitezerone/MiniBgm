@@ -195,6 +195,8 @@ data class PlayerUiState(
     val isDanmakuLoading: Boolean = false,
     /** 弹幕分集匹配元信息（用户覆盖 / 自动命中 / 回退兜底 + 全部候选） */
     val danmakuMatch: DanmakuMatch? = null,
+    /** 弹幕时间轴微调偏移量（毫秒，正数代表弹幕延后出现，负数代表弹幕提前出现） */
+    val danmakuTimeOffsetMs: Long = 0L,
     /**
      * 「关闭字幕」的长期偏好（真值来自设置仓库投影）。
      *
@@ -1459,6 +1461,7 @@ class PlayerViewModel(
                         title = title,
                         episodeSort = epSort,
                         episodeName = current.episodeName,
+                        secondaryTitle = session.subjectOriginalName.takeIf { it.isNotBlank() && it != title },
                     )
                 val shouldHintEmpty = session.pendingDanmakuEmptyHint
                 session.pendingDanmakuEmptyHint = false
@@ -1510,6 +1513,11 @@ class PlayerViewModel(
             )
             loadDanmaku()
         }
+    }
+
+    /** 弹幕时间轴微调（毫秒）：支持 ±0.5s ~ ±5s 偏移校准，对齐不同压制组的片头时间差异 */
+    fun setDanmakuTimeOffsetMs(offsetMs: Long) {
+        _uiState.update { it.copy(danmakuTimeOffsetMs = offsetMs.coerceIn(-10_000L, 10_000L)) }
     }
 
     /**

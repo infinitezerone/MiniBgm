@@ -77,8 +77,11 @@ fun DanmakuView(
     modifier: Modifier = Modifier,
     isPlaying: Boolean = false,
     playbackSpeed: Float = 1f,
+    timeOffsetMs: Long = 0L,
 ) {
     if (!isEnabled || danmakus.isEmpty() || currentPositionMs < 0) return
+
+    val effectivePositionMs = (currentPositionMs + timeOffsetMs).coerceAtLeast(0L)
 
     val density = LocalDensity.current
     val fontSizePx = with(density) { 15.sp.toPx() }
@@ -123,19 +126,19 @@ fun DanmakuView(
             }
         }
 
-    val animPosition = remember { Animatable(currentPositionMs.toFloat()) }
+    val animPosition = remember { Animatable(effectivePositionMs.toFloat()) }
 
-    LaunchedEffect(currentPositionMs, isPlaying, playbackSpeed) {
+    LaunchedEffect(effectivePositionMs, isPlaying, playbackSpeed) {
         if (!isPlaying) {
-            animPosition.snapTo(currentPositionMs.toFloat())
+            animPosition.snapTo(effectivePositionMs.toFloat())
             return@LaunchedEffect
         }
         val currentAnimVal = animPosition.value
-        val jump = abs(currentPositionMs - currentAnimVal)
+        val jump = abs(effectivePositionMs - currentAnimVal)
         if (jump > 1_500f) {
-            animPosition.snapTo(currentPositionMs.toFloat())
+            animPosition.snapTo(effectivePositionMs.toFloat())
         }
-        val targetMs = currentPositionMs + (500L * playbackSpeed)
+        val targetMs = effectivePositionMs + (500L * playbackSpeed)
         animPosition.animateTo(
             targetValue = targetMs,
             animationSpec = tween(durationMillis = 500, easing = LinearEasing),
