@@ -79,6 +79,19 @@ interface PageFetchService {
         requestHeaders: Map<String, String> = emptyMap(),
     ): FetchedPage?
 
+    /**
+     * 带**载荷预算**的抓取。[maxBytes] 由调用方声明，不是全局常量：
+     * HTML 页面用 [MAX_PAGE_BYTES] 防止把抓取变成下载；协议型 JSON（弹幕正文等）必须给出足够大的预算，
+     * 否则会被静默截断成"解析失败 = 这一集没有数据"。
+     *
+     * 默认实现忽略预算（测试替身不必关心容量），生产实现按预算截断正文并保留原语义。
+     */
+    suspend fun fetchHtml(
+        url: String,
+        requestHeaders: Map<String, String>,
+        maxBytes: Int,
+    ): FetchedPage? = fetchHtml(url, requestHeaders)
+
     /** 发送表单 POST 请求并取回正文与响应头（部分播放接口用） */
     suspend fun postForm(
         url: String,
@@ -109,6 +122,12 @@ internal class PageFetchServiceImpl(
     override suspend fun fetchHtml(
         url: String,
         requestHeaders: Map<String, String>,
+    ): FetchedPage? = fetchHtml(url, requestHeaders, MAX_PAGE_BYTES)
+
+    override suspend fun fetchHtml(
+        url: String,
+        requestHeaders: Map<String, String>,
+        maxBytes: Int,
     ): FetchedPage? {
         val target = url.trim()
         if (!target.startsWith("http://", ignoreCase = true) && !target.startsWith("https://", ignoreCase = true)) {
@@ -127,7 +146,7 @@ internal class PageFetchServiceImpl(
                     headers = safeHeaders,
                     accept = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
                 ) ?: return null
-            extractFetchedPage(response)
+            extractFetchedPage(response, maxBytes.coerceAtLeast(1))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -313,7 +332,10 @@ internal class PageFetchServiceImpl(
             null
         }
 
-    private suspend fun extractFetchedPage(response: HttpResponse): FetchedPage? {
+    private suspend fun extractFetchedPage(
+        response: HttpResponse,
+        maxBytes: Int = MAX_PAGE_BYTES,
+    ): FetchedPage? {
         // 初始 URL 过了闸不代表最终 URL 也安全：30x 可能跳到私网
         if (!UrlSafety.isAllowedRemoteUrl(
                 response.call.request.url
@@ -323,10 +345,10 @@ internal class PageFetchServiceImpl(
             return null
         }
         val channel = response.bodyAsChannel()
-        val buffer = ByteArray(MAX_PAGE_BYTES)
+        val buffer = ByteArray(maxBytes)
         var offset = 0
-        while (offset < MAX_PAGE_BYTES) {
-            val read = channel.readAvailable(buffer, offset, MAX_PAGE_BYTES - offset)
+        while (offset < maxBytes) {
+            val read = channel.readAvailable(buffer, offset, maxBytes - offset)
             if (read == -1) break
             offset += read
         }

@@ -27,12 +27,14 @@ fun appModule(
     enableNetworkLogging: Boolean = BuildConfig.DEBUG,
     oauthTokenProxyUrl: String = BuildConfig.OAUTH_TOKEN_PROXY_URL,
     danmakuDefaultEndpoint: String = BuildConfig.DANMAKU_DEFAULT_ENDPOINT,
+    httpCacheDirectory: String? = null,
 ) = module {
     includes(
         networkModule(
             enableNetworkLogging,
             userAgent = appUserAgent,
             authConfig = BgmAuthConfig(tokenProxyUrl = oauthTokenProxyUrl),
+            httpCacheDirectory = httpCacheDirectory,
         ),
         databaseModule,
         datastoreModule,

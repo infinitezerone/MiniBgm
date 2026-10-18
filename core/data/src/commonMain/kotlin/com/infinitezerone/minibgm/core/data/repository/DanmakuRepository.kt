@@ -1,14 +1,14 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.bgmLogger
-import com.infinitezerone.minibgm.core.data.cache.DanmakuDiskCache
+import com.infinitezerone.minibgm.core.data.repository.resolver.DanmakuParseResult
 import com.infinitezerone.minibgm.core.data.repository.resolver.DanmakuParser
 import com.infinitezerone.minibgm.core.data.repository.resolver.episodeNumberFromLabel
+import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
 import com.infinitezerone.minibgm.core.database.dao.DanmakuOverrideDao
 import com.infinitezerone.minibgm.core.database.entity.DanmakuEpisodeOverrideEntity
 import com.infinitezerone.minibgm.core.model.DanmakuConfig
 import com.infinitezerone.minibgm.core.model.DanmakuEpisodeCandidate
-import com.infinitezerone.minibgm.core.model.DanmakuItem
 import com.infinitezerone.minibgm.core.model.DanmakuMatch
 import com.infinitezerone.minibgm.core.model.DanmakuMatchState
 import com.infinitezerone.minibgm.core.model.DanmakuResult
@@ -77,17 +77,29 @@ internal data class DandanSearchEpisodesResponse(
     val animes: List<DandanAnimeItem> = emptyList(),
 )
 
+/**
+ * RFC 5861 / RFC 9111 §5.2.1：离线时"只用缓存、允许最多 7 天陈旧"（与实际 max-age 对齐），绝不发网络。
+ *
+ * 新鲜度永远由服务端 `Cache-Control` / `ETag` 决定；这里只是**请求指令**，
+ * 不是又造一套 TTL——陈旧数据只在网络不可用时兜底，并且不伪装成新鲜数据。
+ */
+private const val OFFLINE_CACHE_CONTROL_VALUE = "max-stale=604800, only-if-cached"
+
+private fun Map<String, String>.withOfflinePolicy(offline: Boolean): Map<String, String> =
+    if (!offline) {
+        this
+    } else {
+        this + ("Cache-Control" to OFFLINE_CACHE_CONTROL_VALUE)
+    }
+
 class DanmakuRepositoryImpl(
     private val pageFetchService: PageFetchService,
     private val danmakuOverrideDao: DanmakuOverrideDao? = null,
     private val settingsRepository: SettingsRepository? = null,
-    private val danmakuDiskCache: DanmakuDiskCache? = null,
+    private val networkMonitor: NetworkMonitor? = null,
     private val defaultEndpoint: String = DanmakuConfig.DEFAULT_ENDPOINT,
 ) : DanmakuRepository {
     private val logger = bgmLogger("Bgm/Danmaku")
-
-    /** 注释弹幕正文按"已解析出的 dandanplay 分集 id"缓存——覆盖切换换 id 即换键，天然隔离 */
-    private val memoryCache = mutableMapOf<String, List<DanmakuItem>>()
 
     @OptIn(ExperimentalEncodingApi::class)
     override suspend fun getDanmaku(
@@ -117,15 +129,19 @@ class DanmakuRepositoryImpl(
                 ?: config?.endpoint?.trim()?.ifBlank { null }
                 ?: defaultEndpoint.trim().ifBlank { DanmakuConfig.DEFAULT_ENDPOINT }
         val endpoint = rawEndpoint.removeSuffix("/")
+        // 离线时改用 RFC 5861 的请求指令：命中新鲜条目直接复用，命中陈旧条目允许最多 7 天陈旧数据；
+        // 没有缓存则 504 降级为空——不再需要自建一份"盲过期"的本地缓存。
+        val offline = runCatching { networkMonitor?.isOnline?.first() == false }.getOrDefault(false)
 
         val hasAuth = !effectiveAppId.isNullOrBlank() && !effectiveAppSecret.isNullOrBlank()
         logger.i {
             "开始拉取弹幕: anime='$searchTitle', ep=${episodeSort.toInt()}, endpoint=$endpoint, " +
-                "鉴权状态=${if (hasAuth) "已配置签名(AppId=$effectiveAppId)" else "免签模式/未配置"}"
+                "鉴权状态=${if (hasAuth) "已配置签名(AppId=$effectiveAppId)" else "免签模式/未配置"}, " +
+                "网络=${if (offline) "离线(仅读缓存)" else "在线"}"
         }
 
         val searchPath = "/api/v2/search/episodes"
-        val searchHeaders = buildAuthHeaders(effectiveAppId, effectiveAppSecret, searchPath)
+        val searchHeaders = buildAuthHeaders(effectiveAppId, effectiveAppSecret, searchPath).withOfflinePolicy(offline)
 
         suspend fun searchCandidates(query: String): List<DanmakuEpisodeCandidate> {
             val encoded = PlaybackSourceRule.encodeParam(query)
@@ -198,36 +214,35 @@ class DanmakuRepositoryImpl(
                 "episodeTitle='${match.chosen?.episodeTitle}', episodeId=$episodeId, 候选数=${candidates.size}"
         }
 
-        val cacheKey = "${endpoint}_ep$episodeId"
-        // 1. 内存 L1 缓存
-        memoryCache[cacheKey]?.let {
-            logger.d { "命中内存缓存弹幕: key=$cacheKey, count=${it.size}" }
-            return DanmakuResult(it, match)
-        }
-
-        // 2. 本地磁盘 L2 缓存
-        danmakuDiskCache?.get(cacheKey)?.let { diskItems ->
-            logger.d { "命中磁盘缓存弹幕: key=$cacheKey, count=${diskItems.size}" }
-            memoryCache[cacheKey] = diskItems
-            return DanmakuResult(diskItems, match)
-        }
-
         val commentPath = "/api/v2/comment/$episodeId"
         val commentUrl = "$endpoint$commentPath?withRelated=true"
-        val commentHeaders = buildAuthHeaders(effectiveAppId, effectiveAppSecret, commentPath)
-        val commentPage = pageFetchService.fetchHtml(commentUrl, commentHeaders)
+        val commentHeaders = buildAuthHeaders(effectiveAppId, effectiveAppSecret, commentPath).withOfflinePolicy(offline)
+        // 载荷预算由调用方声明：协议型 JSON 必须完整，否则截断会被解析器当成"这一集没弹幕"。
+        // 新鲜度由 HTTP 缓存（服务端 Cache-Control / ETag）负责，仓库不再自研 TTL 与本地缓存。
+        val commentPage = pageFetchService.fetchHtml(commentUrl, commentHeaders, DANMAKU_COMMENT_MAX_BYTES)
         if (commentPage == null) {
             logger.w { "拉取弹幕详情网络失败: url=$commentUrl" }
             return DanmakuResult(emptyList(), match)
         }
 
-        val items = DanmakuParser.parseDandanJson(commentPage.html)
-        logger.i { "成功获取并解析弹幕: ${items.size} 条 (anime='$searchTitle', ep=${episodeSort.toInt()}, episodeId=$episodeId)" }
-        if (items.isNotEmpty()) {
-            memoryCache[cacheKey] = items
-            danmakuDiskCache?.put(cacheKey, items)
+        return when (val parsed = DanmakuParser.parseDandanJsonResult(commentPage.html)) {
+            is DanmakuParseResult.Success -> {
+                logger.i {
+                    "成功获取并解析弹幕: ${parsed.items.size} 条 (anime='$searchTitle', ep=${episodeSort.toInt()}, " +
+                        "episodeId=$episodeId, chars=${commentPage.html.length})"
+                }
+                DanmakuResult(parsed.items, match)
+            }
+
+            is DanmakuParseResult.Failure -> {
+                // 解析失败是可观测的故障，绝不能静默退化成"这一集没有弹幕"
+                logger.w {
+                    "弹幕正文解析失败: ${parsed.reason} (anime='$searchTitle', ep=${episodeSort.toInt()}, " +
+                        "episodeId=$episodeId, url=$commentUrl, chars=${commentPage.html.length})"
+                }
+                DanmakuResult(emptyList(), match)
+            }
         }
-        return DanmakuResult(items, match)
     }
 
     override suspend fun saveDanmakuOverride(
@@ -358,6 +373,14 @@ class DanmakuRepositoryImpl(
             .replace(WHITESPACE_OR_PUNCTUATION, "")
 
     private companion object {
+        /**
+         * 弹幕正文的单次载荷预算。
+         *
+         * 弹弹play 的 comment 接口整包返回（无分片），热门集实测 600 KB 级；
+         * 512 KB 的"页面"预算会把正文截断成不可解析的 JSON，必须由调用方给出足够大的预算。
+         */
+        const val DANMAKU_COMMENT_MAX_BYTES = 8 * 1024 * 1024
+
         const val EPISODE_MATCH_EPSILON = 0.01f
         const val MIN_NAME_BONUS_LENGTH = 2
         const val EPISODE_NAME_BONUS = 0.5

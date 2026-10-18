@@ -29,6 +29,7 @@ import org.koin.android.ext.koin.androidLogger
 import org.koin.androidx.workmanager.koin.workManagerFactory
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
+import java.io.File
 
 class MiniBgmApp :
     Application(),
@@ -65,7 +66,12 @@ class MiniBgmApp :
             androidLogger(if (BuildConfig.DEBUG) Level.DEBUG else Level.ERROR)
             androidContext(this@MiniBgmApp)
             workManagerFactory()
-            modules(appModule())
+            modules(
+                appModule(
+                    // HTTP 缓存目录与 ECH 运行时同样落在私有目录：系统可回收，不进用户资产区
+                    httpCacheDirectory = File(cacheDir, "http_cache").absolutePath,
+                ),
+            )
         }
 
         // 开发者面板的「详细网络与引擎日志」必须真实抬高日志门限：此前门限只在启动期由

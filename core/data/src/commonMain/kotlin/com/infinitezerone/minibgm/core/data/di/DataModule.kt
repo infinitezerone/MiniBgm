@@ -43,6 +43,7 @@ import com.infinitezerone.minibgm.core.network.BgmTokenService
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 fun dataModule(danmakuDefaultEndpoint: String = ""): Module =
@@ -103,10 +104,12 @@ fun dataModule(danmakuDefaultEndpoint: String = ""): Module =
         }
         single<DanmakuRepository> {
             DanmakuRepositoryImpl(
-                pageFetchService = get<PageFetchService>(),
+                // 弹幕走 HTTP 缓存实例：新鲜度由服务端 Cache-Control / ETag 决定，不再自研 TTL
+                pageFetchService = get<PageFetchService>(named("danmaku")),
                 danmakuOverrideDao = getOrNull<com.infinitezerone.minibgm.core.database.dao.DanmakuOverrideDao>(),
                 settingsRepository = getOrNull<SettingsRepository>(),
-                danmakuDiskCache = getOrNull<com.infinitezerone.minibgm.core.data.cache.DanmakuDiskCache>(),
+                // 离线时只读缓存：不新增本地缓存层，改用 RFC 5861 的 max-stale / only-if-cached
+                networkMonitor = getOrNull(),
                 defaultEndpoint = danmakuDefaultEndpoint,
             )
         }

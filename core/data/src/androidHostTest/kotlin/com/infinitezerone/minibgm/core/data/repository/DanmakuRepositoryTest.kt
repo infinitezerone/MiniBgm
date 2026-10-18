@@ -1,16 +1,17 @@
 package com.infinitezerone.minibgm.core.data.repository
 
-import com.infinitezerone.minibgm.core.data.cache.DanmakuDiskCache
+import com.infinitezerone.minibgm.core.data.repository.resolver.DanmakuParseResult
 import com.infinitezerone.minibgm.core.data.repository.resolver.DanmakuParser
 import com.infinitezerone.minibgm.core.database.dao.DanmakuOverrideDao
 import com.infinitezerone.minibgm.core.database.entity.DanmakuEpisodeOverrideEntity
 import com.infinitezerone.minibgm.core.model.DanmakuEpisodeCandidate
-import com.infinitezerone.minibgm.core.model.DanmakuItem
 import com.infinitezerone.minibgm.core.model.DanmakuMatchState
 import com.infinitezerone.minibgm.core.model.DanmakuMode
 import com.infinitezerone.minibgm.core.model.DanmakuResult
 import com.infinitezerone.minibgm.core.network.FetchedPage
+import com.infinitezerone.minibgm.core.network.MAX_PAGE_BYTES
 import com.infinitezerone.minibgm.core.network.PageFetchService
+import com.infinitezerone.minibgm.core.testing.util.TestNetworkMonitor
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -23,6 +24,21 @@ private class FakeDanmakuPageFetchService(
     val requestedUrls = mutableListOf<String>()
     val lastHeaders = mutableMapOf<String, String>()
 
+    /** 每次请求实际带的请求头（离线策略、签名头都从这里断言） */
+    val allHeaders = mutableListOf<Map<String, String>>()
+
+    /** 弹幕正文请求实际使用的载荷预算（搜索接口不计） */
+    var lastCommentMaxBytes: Int? = null
+
+    override suspend fun fetchHtml(
+        url: String,
+        requestHeaders: Map<String, String>,
+        maxBytes: Int,
+    ): FetchedPage? {
+        if (url.contains("/api/v2/comment/")) lastCommentMaxBytes = maxBytes
+        return fetchHtml(url, requestHeaders)
+    }
+
     override suspend fun fetchHtml(
         url: String,
         requestHeaders: Map<String, String>,
@@ -31,6 +47,7 @@ private class FakeDanmakuPageFetchService(
         requestedUrls += url
         lastHeaders.clear()
         lastHeaders.putAll(requestHeaders)
+        allHeaders += requestHeaders.toMap()
         val html = responses.entries.firstOrNull { url.contains(it.key) }?.value ?: return null
         return FetchedPage(url = url, html = html)
     }
@@ -53,29 +70,6 @@ private class FakeDanmakuOverrideDao : DanmakuOverrideDao {
 
     override suspend fun deleteOverride(episodeId: Long) {
         store.remove(episodeId)
-    }
-}
-
-private class FakeDanmakuDiskCache : DanmakuDiskCache {
-    val store = mutableMapOf<String, List<DanmakuItem>>()
-    var getCallCount = 0
-    var putCallCount = 0
-
-    override suspend fun get(cacheKey: String): List<DanmakuItem>? {
-        getCallCount++
-        return store[cacheKey]
-    }
-
-    override suspend fun put(
-        cacheKey: String,
-        items: List<DanmakuItem>,
-    ) {
-        putCallCount++
-        store[cacheKey] = items
-    }
-
-    override suspend fun clear() {
-        store.clear()
     }
 }
 
@@ -143,12 +137,10 @@ class DanmakuRepositoryTest {
     private fun repoWith(
         fetcher: FakeDanmakuPageFetchService,
         overrideDao: FakeDanmakuOverrideDao? = null,
-        danmakuDiskCache: DanmakuDiskCache? = null,
     ): DanmakuRepositoryImpl =
         DanmakuRepositoryImpl(
             pageFetchService = fetcher,
             danmakuOverrideDao = overrideDao,
-            danmakuDiskCache = danmakuDiskCache,
         )
 
     private suspend fun DanmakuRepository.get(
@@ -189,6 +181,45 @@ class DanmakuRepositoryTest {
         assertEquals("底部弹幕提示", items[2].text)
         assertEquals(DanmakuMode.BOTTOM, items[2].mode)
     }
+
+    @Test
+    fun `DanmakuParser 截断正文必须判为解析失败而不是空列表`() {
+        // 模拟 512 KB 截断：闭合括号被切掉，正文仍然"看起来像 JSON"
+        val truncated = sampleDandanJson.trim().dropLast(1)
+
+        val result = DanmakuParser.parseDandanJsonResult(truncated)
+
+        assertTrue(result is DanmakuParseResult.Failure, "截断正文不得静默退化成空列表")
+        assertTrue(
+            result.reason.contains("不完整"),
+            "失败原因必须能指向截断，实际=${result.reason}",
+        )
+    }
+
+    @Test
+    fun `DanmakuRepository 离线时请求只读缓存并允许陈旧兜底`() =
+        runTest {
+            val searchEpisodesJson =
+                """{"animes":[{"animeId":1234,"animeTitle":"葬送的芙莉莲","episodes":[{"episodeId":9876,"episodeTitle":"第01话"}]}]}"""
+            val fake =
+                FakeDanmakuPageFetchService(
+                    mapOf(
+                        "/api/v2/search/episodes" to searchEpisodesJson,
+                        "/api/v2/comment/9876" to sampleDandanJson,
+                    ),
+                )
+            val monitor = TestNetworkMonitor().apply { setOnline(false) }
+            val repo = DanmakuRepositoryImpl(pageFetchService = fake, networkMonitor = monitor)
+
+            repo.get(title = "葬送的芙莉莲", episodeSort = 1f)
+
+            assertTrue(fake.allHeaders.isNotEmpty())
+            fake.allHeaders.forEach { headers ->
+                val cacheControl = headers["Cache-Control"].orEmpty()
+                assertTrue(cacheControl.contains("only-if-cached"), "离线请求必须只读缓存，实际=$cacheControl")
+                assertTrue(cacheControl.contains("max-stale="), "离线请求必须允许陈旧兜底，实际=$cacheControl")
+            }
+        }
 
     @Test
     fun `DanmakuParser 正确解析标准 XML 弹幕`() {
@@ -256,6 +287,27 @@ class DanmakuRepositoryTest {
             assertEquals("test_app", fake.lastHeaders["X-AppId"])
             assertTrue(fake.lastHeaders.containsKey("X-Timestamp"))
             assertTrue(fake.lastHeaders.containsKey("X-Signature"))
+        }
+
+    @Test
+    fun `DanmakuRepository 弹幕正文必须按调用方预算请求而不是沿用页面预算`() =
+        runTest {
+            val searchEpisodesJson =
+                """{"animes":[{"animeId":1234,"animeTitle":"葬送的芙莉莲","episodes":[{"episodeId":9876,"episodeTitle":"第01话"}]}]}"""
+            val fake =
+                FakeDanmakuPageFetchService(
+                    mapOf(
+                        "/api/v2/search/episodes" to searchEpisodesJson,
+                        "/api/v2/comment/9876" to sampleDandanJson,
+                    ),
+                )
+
+            repoWith(fake).get(title = "葬送的芙莉莲", episodeSort = 1f)
+
+            // 弹弹play 的 comment 接口整包返回，热门集远超 512 KB 页面预算；
+            // 若沿用 MAX_PAGE_BYTES，正文会被截断成不可解析的 JSON 并被当成"这一集没有弹幕"
+            val budget = fake.lastCommentMaxBytes
+            assertTrue(budget != null && budget > MAX_PAGE_BYTES, "弹幕正文预算必须大于页面预算，实际=$budget")
         }
 
     @Test
@@ -359,44 +411,6 @@ class DanmakuRepositoryTest {
         }
 
     @Test
-    fun `DanmakuRepository 内存缓存生效且覆盖切换不串缓存`() =
-        runTest {
-            val fake =
-                FakeDanmakuPageFetchService(
-                    mapOf(
-                        "/api/v2/search/episodes" to multiAnimeSearchJson,
-                        "/api/v2/comment/9876" to sampleDandanJson,
-                        "/api/v2/comment/9871" to sampleDandanJson,
-                    ),
-                )
-            val overrideDao = FakeDanmakuOverrideDao()
-            val repo = repoWith(fake, overrideDao)
-
-            val first = repo.get(title = "葬送的芙莉莲", episodeSort = 1f)
-            val second = repo.get(title = "葬送的芙莉莲", episodeSort = 1f)
-            assertEquals(3, first.items.size)
-            assertEquals(3, second.items.size)
-            // 弹幕正文按已解析分集 id 缓存：第二次只重复搜索，正文直接命中内存
-            assertEquals(3, fake.callCount)
-
-            // 切换覆盖 → 新分集新缓存键，不会串到旧分集的弹幕
-            repo.saveDanmakuOverride(
-                bangumiEpisodeId = 100L,
-                subjectId = 1L,
-                candidate =
-                    DanmakuEpisodeCandidate(
-                        animeId = 2002,
-                        animeTitle = "葬送的芙莉莲",
-                        episodeId = 9876,
-                        episodeTitle = "第03话 杀人魔",
-                    ),
-            )
-            val switched = repo.get(title = "葬送的芙莉莲", episodeSort = 1f)
-            assertEquals(9876L, switched.match?.chosen?.episodeId)
-            assertTrue(fake.requestedUrls.last().contains("/api/v2/comment/9876"))
-        }
-
-    @Test
     fun `DanmakuRepository 异常时 Fail-Open 返回空列表`() =
         runTest {
             val fake = FakeDanmakuPageFetchService(emptyMap())
@@ -457,44 +471,6 @@ class DanmakuRepositoryTest {
 
             val result = repo.get(title = "进击的巨人", episodeSort = 1f)
             assertTrue(result.items.isEmpty())
-        }
-
-    @Test
-    fun `DanmakuRepository 磁盘缓存命中时跳过分集弹幕拉取直接返回`() =
-        runTest {
-            val searchEpisodesJson =
-                """
-                {
-                  "hasMore": false,
-                  "animes": [
-                    {
-                      "animeId": 1234,
-                      "animeTitle": "葬送的芙莉莲",
-                      "episodes": [
-                        { "episodeId": 9876, "episodeTitle": "第01话" }
-                      ]
-                    }
-                  ]
-                }
-                """.trimIndent()
-            val fakeFetcher =
-                FakeDanmakuPageFetchService(
-                    mapOf("/api/v2/search/episodes" to searchEpisodesJson),
-                )
-            val fakeDiskCache = FakeDanmakuDiskCache()
-            val cachedDanmaku =
-                listOf(
-                    DanmakuItem(timeMs = 12000L, text = "磁盘缓存弹幕", mode = DanmakuMode.SCROLL, color = 0xFFFFFF),
-                )
-            fakeDiskCache.put("https://api.dandanplay.net_ep9876", cachedDanmaku)
-
-            val repo = repoWith(fetcher = fakeFetcher, danmakuDiskCache = fakeDiskCache)
-            val result = repo.get(title = "葬送的芙莉莲", episodeSort = 1f)
-
-            assertEquals(1, result.items.size)
-            assertEquals("磁盘缓存弹幕", result.items[0].text)
-            // 验证未向网络请求 /api/v2/comment/9876
-            assertTrue(fakeFetcher.requestedUrls.none { it.contains("/api/v2/comment") })
         }
 
     @Test

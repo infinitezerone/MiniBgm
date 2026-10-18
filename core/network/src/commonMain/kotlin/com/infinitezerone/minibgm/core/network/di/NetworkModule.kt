@@ -12,8 +12,10 @@ import com.infinitezerone.minibgm.core.network.PageFetchService
 import com.infinitezerone.minibgm.core.network.PageFetchServiceImpl
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotServiceImpl
+import com.infinitezerone.minibgm.core.network.createHttpCacheStorage
 import com.infinitezerone.minibgm.core.network.createPlatformHttpClientEngine
 import io.ktor.client.engine.HttpClientEngine
+import io.ktor.client.plugins.cache.HttpCache
 import org.koin.core.module.Module
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -23,12 +25,14 @@ import org.koin.dsl.module
  * @param userAgent 由 app 层以 BuildConfig.VERSION_NAME 拼装，随版本自动更新
  * @param engine 底层 HTTP 引擎，单测时注入 MockEngine
  * @param authConfig OAuth 认证配置，app 层注入由 CI / 本地配置提供的网关端点
+ * @param httpCacheDirectory HTTP 磁盘缓存目录（null 表示不持久化；仅弹幕取数使用）
  */
 fun networkModule(
     enableNetworkLogging: Boolean = false,
     userAgent: String,
     engine: HttpClientEngine? = null,
     authConfig: BgmAuthConfig = BgmAuthConfig(),
+    httpCacheDirectory: String? = null,
 ): Module =
     module {
         single { authConfig }
@@ -92,6 +96,31 @@ fun networkModule(
             // 只注入禁止自动跟随的 client：抓取/探测的每一跳都由 PageFetchService
             // 自己复核 URL 并剥跨域凭据头，不接受 Ktor 的隐式重定向
             PageFetchServiceImpl(untrustedClient = get(named("untrusted")))
+        }
+
+        // 弹幕取数专用：HTTP 缓存的新鲜度完全交给服务端响应头（Cache-Control / ETag / 304），
+        // 仓库不再自研 TTL。刻意与通用抓取 client 分开——播放页/订阅页的抓取不能被顺带缓存，
+        // 否则源列表会按服务端给的 max-age 静默变旧。
+        single<PageFetchService>(named("danmaku")) {
+            val cacheDirectory = httpCacheDirectory?.trim()?.takeIf { it.isNotBlank() }
+            if (cacheDirectory == null) {
+                PageFetchServiceImpl(untrustedClient = get(named("untrusted")))
+            } else {
+                val cacheStorage = createHttpCacheStorage(cacheDirectory)
+                val cachedClient =
+                    BgmHttpClient.createBaseClient(
+                        engine = get(),
+                        enableLogging = enableNetworkLogging,
+                        userAgent = userAgent,
+                    ) {
+                        // 与通用抓取同一条安全边界：30x 由 PageFetchService 逐跳复核后自己跟
+                        followRedirects = false
+                        install(HttpCache) {
+                            publicStorage(cacheStorage)
+                        }
+                    }
+                PageFetchServiceImpl(untrustedClient = cachedClient)
+            }
         }
         single<com.infinitezerone.minibgm.core.network.CommunitySubscriptionService> {
             com.infinitezerone.minibgm.core.network

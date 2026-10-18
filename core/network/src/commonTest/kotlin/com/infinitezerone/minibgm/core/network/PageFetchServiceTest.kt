@@ -87,11 +87,27 @@ class PageFetchServiceTest {
         }
 
     @Test
-    fun `正文超过上限时截断`() =
+    fun `正文超过默认上限时按页面预算截断`() =
         runTest {
             val page = service(body = "a".repeat(MAX_PAGE_BYTES + 4096)).fetchHtml("https://big.example.com/page")
 
             assertEquals(MAX_PAGE_BYTES, page?.html?.length)
+        }
+
+    @Test
+    fun `协议正文按调用方预算取全而不是沿用页面预算`() =
+        runTest {
+            // 弹幕正文动辄数百 KB：调用方声明自己的预算后，必须拿到完整正文，
+            // 而不是被页面默认的 MAX_PAGE_BYTES 截断成不可解析的 JSON
+            val payload = "{\"count\":1,\"comments\":[" + " ".repeat(MAX_PAGE_BYTES + 4096) + "]}"
+            val page =
+                service(body = payload).fetchHtml(
+                    "https://api.example.com/comment/1",
+                    emptyMap(),
+                    maxBytes = 8 * 1024 * 1024,
+                )
+
+            assertEquals(payload.length, page?.html?.length)
         }
 
     @Test
