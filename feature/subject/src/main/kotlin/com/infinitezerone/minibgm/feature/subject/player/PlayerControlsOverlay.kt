@@ -571,15 +571,7 @@ internal fun PlayerControlsOverlay(
                         tint = if (isDanmakuEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
                     )
 
-                    // 弹幕分集纠正入口（弹幕开启且有候选才出现；匹配处于回退兜底态时挂警示徽标）。
-                    // 弹幕关闭时不提供该入口：它最终会拉取弹幕并写入持久化覆盖，与「关闭即零请求」冲突。
-                    DanmakuMatchEntryButton(
-                        hasCandidates = isDanmakuEnabled && !danmakuMatch?.candidates.isNullOrEmpty(),
-                        isFallback = danmakuMatch?.state == DanmakuMatchState.FALLBACK,
-                        onClick = onOpenDanmakuPicker,
-                    )
-
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
 
                     // 6. 全屏切换键
                     ControlsBarIconButton(
