@@ -74,7 +74,6 @@
     <string name="feature_user_settings_amoled_title">AMOLED 纯黑</string>
     <string name="feature_user_section_playback_content">播放与内容</string>
     <string name="feature_user_settings_pip_title">自动画中画</string>
-    <string name="feature_user_settings_pip_subtitle">返回桌面时自动进入小窗；播放器里的画中画按钮不受影响</string>
     <string name="feature_user_settings_restricted_content_title">受限内容</string>
 
     <!-- 6. 设置页：数据同步与提醒 -->
