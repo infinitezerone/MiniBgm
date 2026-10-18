@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.network.ech
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -31,9 +32,16 @@ data class EchNativeStartedResponse(
 object EchNativeClient {
     private val logger = bgmLogger("Bgm/EchNative")
     private var isLoaded = false
+
+    /**
+     * JNI 调用是阻塞的（nativeAwait/nativeReadBodyChunk），必须借线程池承载。
+     * 但线程数必须有界：Rust 侧同时最多 64 个 in-flight 请求，超过只会排队；
+     * 无界 cached pool 在图片墙/批量探活时会把线程数打穿。
+     */
+    private val nativeThreadIndex = AtomicInteger(0)
     private val requestExecutor =
-        Executors.newCachedThreadPool { runnable ->
-            Thread(runnable, "MiniBgm-EchNative").apply { isDaemon = true }
+        Executors.newFixedThreadPool(MAX_NATIVE_IN_FLIGHT) { runnable ->
+            Thread(runnable, "MiniBgm-EchNative-" + nativeThreadIndex.incrementAndGet()).apply { isDaemon = true }
         }
 
     init {
@@ -47,6 +55,8 @@ object EchNativeClient {
     }
 
     fun isAvailable(): Boolean = isLoaded
+
+    private const val MAX_NATIVE_IN_FLIGHT = 64
 
     suspend fun nativeFetchCancellable(
         url: String,

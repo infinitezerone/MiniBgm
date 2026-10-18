@@ -7,6 +7,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 
 /**
@@ -125,6 +126,9 @@ internal class ScheduleSnapshotServiceImpl(
                     val etag = response.headers[HttpHeaders.ETag]
                     return ScheduleSnapshotResult.Modified(response.body<ScheduleSnapshotDto>(), etag)
                 }
+            } catch (e: CancellationException) {
+                // 取消不是"这个 CDN 失败"，继续试下一个会让取消失效
+                throw e
             } catch (e: Throwable) {
                 lastException = e
             }
@@ -151,6 +155,8 @@ internal class ScheduleSnapshotServiceImpl(
                 if (response.status == HttpStatusCode.OK) {
                     return response.body<SeasonSnapshotDto>()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Throwable) {
                 // 逐个 CDN 尝试
             }

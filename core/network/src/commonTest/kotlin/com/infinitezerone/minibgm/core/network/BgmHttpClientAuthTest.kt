@@ -4,9 +4,13 @@ import com.infinitezerone.minibgm.core.common.TokenProvider
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.http.headersOf
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -266,5 +270,63 @@ class BgmHttpClientAuthTest {
             val response = client.get("https://example.com/api")
             assertEquals(HttpStatusCode.OK, response.status)
             assertEquals(2, attempts)
+        }
+
+    /**
+     * 白名单漏掉 4xx 时，写操作不读 status 会把"参数非法"当成"收藏成功"。
+     * 这条钉住 400 必须上抛且不被重试。
+     */
+    @Test
+    fun `400 被映射为 RequestRejected 且不会静默成功`() =
+        runTest {
+            var attempts = 0
+            val engine =
+                MockEngine {
+                    attempts++
+                    respond("", HttpStatusCode.BadRequest, headersOf(HttpHeaders.ContentType to listOf("application/json")))
+                }
+            val client =
+                BgmHttpClient.create(
+                    userAgent = "MiniBgm/test",
+                    tokenProvider = FakeTokenProvider(null, null),
+                    engine = engine,
+                )
+
+            val error =
+                assertFailsWith<BgmNetworkException.RequestRejected> {
+                    client.post("https://api.bgm.tv/v0/users/-/collections/1") {
+                        contentType(ContentType.Application.Json)
+                        setBody("{}")
+                    }
+                }
+
+            assertEquals(400, error.statusCode)
+            assertEquals(1, attempts, "4xx 不是瞬时故障，不应重试")
+        }
+
+    /** 5xx 里原先只映射了 500/502/503，504 会被当成成功；这里钉住兜底映射。 */
+    @Test
+    fun `504 被映射为 ServerError 且保留状态码`() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond("", HttpStatusCode.GatewayTimeout, headersOf(HttpHeaders.ContentType to listOf("application/json")))
+                }
+            val client =
+                BgmHttpClient.create(
+                    userAgent = "MiniBgm/test",
+                    tokenProvider = FakeTokenProvider(null, null),
+                    engine = engine,
+                )
+
+            val error =
+                assertFailsWith<BgmNetworkException.ServerError> {
+                    client.post("https://api.bgm.tv/v0/users/-/collections/1") {
+                        contentType(ContentType.Application.Json)
+                        setBody("{}")
+                    }
+                }
+
+            assertEquals(504, error.statusCode)
         }
 }

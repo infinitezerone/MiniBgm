@@ -6,15 +6,18 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondError
+import io.ktor.client.engine.mock.respondRedirect
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -368,5 +371,64 @@ class CommunitySubscriptionServiceTest {
             assertEquals("示例站 动画线上看", source.name)
             assertEquals("https://example.tv/?s={title}", source.urlTemplate)
             assertTrue(source.isAlive)
+        }
+
+    /** 取消必须上抛：否则 awaitAll 无法终止同批探活，退出页面后仍会打满所有站点。 */
+    @Test
+    fun `取消订阅拉取时立即上抛而不是降级为空报告`() =
+        runTest {
+            val engine = MockEngine { throw CancellationException("cancelled") }
+            val client =
+                HttpClient(engine) {
+                    install(ContentNegotiation) {
+                        json(Json { ignoreUnknownKeys = true })
+                    }
+                }
+            val service = CommunitySubscriptionServiceImpl(client = client)
+
+            assertFailsWith<CancellationException> {
+                service.validateAndTestSubscription("https://cdn.example.com/rules.json")
+            }
+        }
+
+    @Test
+    fun `订阅重定向到私网时立即停止且不发出第二跳`() =
+        runTest {
+            var requests = 0
+            val client =
+                HttpClient(
+                    MockEngine { _ ->
+                        requests += 1
+                        respondRedirect("http://127.0.0.1:8080/rules.json")
+                    },
+                ) {
+                    followRedirects = false
+                }
+
+            val report =
+                CommunitySubscriptionServiceImpl(client = client)
+                    .validateAndTestSubscription("https://origin.example.com/rules.json")
+
+            assertFalse(report.isHealthy)
+            assertEquals(1, requests, "私网跳转必须在发出第二跳前被拦下")
+        }
+
+    @Test
+    fun `私网订阅地址不会发出请求`() =
+        runTest {
+            var requests = 0
+            val client =
+                HttpClient(
+                    MockEngine {
+                        requests++
+                        respond("")
+                    },
+                )
+            val report =
+                CommunitySubscriptionServiceImpl(client = client)
+                    .validateAndTestSubscription("http://127.0.0.1:8080/rules.json")
+
+            assertEquals(0, requests)
+            assertFalse(report.isHealthy)
         }
 }

@@ -103,10 +103,27 @@ class BgmTokenService(
             throw e
         } catch (e: BgmNetworkException.RateLimited) {
             throw e
-        } catch (e: BgmNetworkException.ServerError) {
-            if (e.statusCode in 400..499) null else throw e
-        } catch (_: BgmNetworkException) {
+        } catch (e: BgmNetworkException.RequestRejected) {
+            // 4xx 拒绝（invalid_grant 等）：凭据已不可恢复，返回 null 触发登出闭环
             null
+        } catch (e: BgmNetworkException.Unauthorized) {
+            null
+        } catch (e: BgmNetworkException.Forbidden) {
+            null
+        } catch (e: BgmNetworkException.NotFound) {
+            null
+        } catch (e: BgmNetworkException.ServerError) {
+            when {
+                // 生产 token client 走 createBaseClient（无 validator），429 会以
+                // ServerError(429) 到达；必须在这里显式还原成 RateLimited，
+                // 否则限流会被当成 invalid_grant 而误登出
+                e.statusCode == 429 -> throw BgmNetworkException.RateLimited()
+                e.statusCode in 400..499 -> null
+                else -> throw e
+            }
+        } catch (e: BgmNetworkException) {
+            // 超时 / 断网 / DNS / TLS 等瞬时故障原样上抛，绝不能清凭据造成误登出
+            throw e
         }
 
     private suspend fun request(

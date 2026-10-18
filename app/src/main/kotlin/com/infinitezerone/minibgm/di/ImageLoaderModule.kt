@@ -53,6 +53,8 @@ import org.koin.dsl.module
 private class ImageRoutingEngine(
     private val primaryEngine: HttpClientEngine,
     private val fallbackEngine: HttpClientEngine,
+    /** 共享引擎归 networkModule 所有：图片加载器关闭时不能把它一起关掉 */
+    private val ownsPrimary: Boolean = false,
 ) : HttpClientEngineBase("ImageRoutingEngine") {
     override val config: HttpClientEngineConfig = HttpClientEngineConfig()
 
@@ -97,7 +99,7 @@ private class ImageRoutingEngine(
 
     override fun close() {
         super.close()
-        primaryEngine.close()
+        if (ownsPrimary) primaryEngine.close()
         fallbackEngine.close()
     }
 }
@@ -135,9 +137,15 @@ private class BgmImageCdnInterceptor : Interceptor {
 val imageLoaderModule =
     module {
         single<HttpClient>(named("imageHttpClient")) {
-            val primaryEngine = getOrNull<HttpClientEngine>() ?: createPlatformHttpClientEngine()
+            val sharedEngine = getOrNull<HttpClientEngine>()
+            val primaryEngine = sharedEngine ?: createPlatformHttpClientEngine()
             val fallbackEngine = CIO.create()
-            val compositeEngine = ImageRoutingEngine(primaryEngine, fallbackEngine)
+            val compositeEngine =
+                ImageRoutingEngine(
+                    primaryEngine = primaryEngine,
+                    fallbackEngine = fallbackEngine,
+                    ownsPrimary = sharedEngine == null,
+                )
 
             BgmHttpClient
                 .createBaseClient(

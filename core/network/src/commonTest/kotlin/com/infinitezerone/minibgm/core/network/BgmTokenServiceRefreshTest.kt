@@ -19,50 +19,66 @@ import kotlin.test.assertNull
  * - 429 / 5xx / 网络异常（瞬时故障）→ 原样上抛，避免误登出
  */
 class BgmTokenServiceRefreshTest {
+    private val noopTokenProvider =
+        object : TokenProvider {
+            override suspend fun getAccessToken(): String? = null
+
+            override suspend fun getRefreshToken(): String? = null
+
+            override suspend fun saveTokens(
+                userId: Long,
+                accessToken: String,
+                refreshToken: String,
+            ) {}
+
+            override suspend fun saveTokens(
+                accessToken: String,
+                refreshToken: String,
+            ) {}
+
+            override suspend fun setActiveUser(userId: Long) {}
+
+            override suspend fun removeTokens(userId: Long) {}
+
+            override suspend fun clearTokens() {}
+
+            override val hasTokens: kotlinx.coroutines.flow.Flow<Boolean>
+                get() = kotlinx.coroutines.flow.flowOf(false)
+
+            override val activeUserId: kotlinx.coroutines.flow.Flow<Long?>
+                get() = kotlinx.coroutines.flow.flowOf(null)
+        }
+
+    // 必须经 BgmHttpClient.create 构建：生产链路的 HttpResponseValidator
+    // 决定了 429→RateLimited、401→Unauthorized、5xx→ServerError 的映射，
+    // 裸 HttpClient 不含该插件，测出的降级行为会与生产不一致
+    private fun serviceWith(engine: MockEngine): BgmTokenService =
+        BgmTokenService(
+            client =
+                BgmHttpClient.create(
+                    userAgent = "MiniBgm/test",
+                    tokenProvider = noopTokenProvider,
+                    engine = engine,
+                ),
+            config = BgmAuthConfig(),
+        )
+
     private fun serviceWith(
         status: HttpStatusCode,
         body: String = """{"error":"invalid_grant"}""",
     ): BgmTokenService =
+        serviceWith(
+            MockEngine {
+                respond(body, status, headersOf(HttpHeaders.ContentType to listOf("application/json")))
+            },
+        )
+
+    /** 生产 token client 是 createBaseClient（无 validator），429 会以 ServerError 形态到达。 */
+    private fun serviceWithBaseClient(status: HttpStatusCode): BgmTokenService =
         BgmTokenService(
-            // 必须经 BgmHttpClient.create 构建：生产链路的 HttpResponseValidator
-            // 决定了 429→RateLimited、401→Unauthorized、5xx→ServerError 的映射，
-            // 裸 HttpClient 不含该插件，测出的降级行为会与生产不一致
             client =
-                BgmHttpClient.create(
-                    userAgent = "MiniBgm/test",
-                    tokenProvider =
-                        object : TokenProvider {
-                            override suspend fun getAccessToken(): String? = null
-
-                            override suspend fun getRefreshToken(): String? = null
-
-                            override suspend fun saveTokens(
-                                userId: Long,
-                                accessToken: String,
-                                refreshToken: String,
-                            ) {}
-
-                            override suspend fun saveTokens(
-                                accessToken: String,
-                                refreshToken: String,
-                            ) {}
-
-                            override suspend fun setActiveUser(userId: Long) {}
-
-                            override suspend fun removeTokens(userId: Long) {}
-
-                            override suspend fun clearTokens() {}
-
-                            override val hasTokens: kotlinx.coroutines.flow.Flow<Boolean>
-                                get() = kotlinx.coroutines.flow.flowOf(false)
-
-                            override val activeUserId: kotlinx.coroutines.flow.Flow<Long?>
-                                get() = kotlinx.coroutines.flow.flowOf(null)
-                        },
-                    engine =
-                        MockEngine {
-                            respond(body, status, headersOf(HttpHeaders.ContentType to listOf("application/json")))
-                        },
+                BgmHttpClient.createBaseClient(
+                    engine = MockEngine { respond("", status) },
                 ),
             config = BgmAuthConfig(),
         )
@@ -105,10 +121,29 @@ class BgmTokenServiceRefreshTest {
         }
 
     @Test
+    fun `生产 token client 的 429 仍按限流上抛`() =
+        runTest {
+            assertFailsWith<BgmNetworkException.RateLimited> {
+                serviceWithBaseClient(HttpStatusCode.TooManyRequests).refreshOrNull("rt")
+            }
+        }
+
+    @Test
     fun `刷新成功时正常返回凭据`() =
         runTest {
             val refreshed = assertNotNull(serviceWith(HttpStatusCode.OK, successBody).refreshOrNull("rt"))
             assertEquals("na", refreshed.accessToken)
             assertEquals("nr", refreshed.refreshToken)
+        }
+
+    /** 超时/断网是瞬时故障：必须原样上抛，绝不能返回 null 触发清凭据（误登出）。 */
+    @Test
+    fun `超时等瞬时网络异常原样上抛而不是清凭据`() =
+        runTest {
+            val service = serviceWith(MockEngine { throw BgmNetworkException.Timeout() })
+
+            assertFailsWith<BgmNetworkException.Timeout> {
+                service.refreshOrNull("rt")
+            }
         }
 }

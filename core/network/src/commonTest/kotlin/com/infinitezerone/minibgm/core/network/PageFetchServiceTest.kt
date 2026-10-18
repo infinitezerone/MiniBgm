@@ -7,6 +7,7 @@ import io.ktor.client.engine.mock.respondRedirect
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
@@ -121,6 +122,100 @@ class PageFetchServiceTest {
         }
 
     @Test
+    fun `重定向到私网时立即停止且不发出第二跳`() =
+        runTest {
+            var calls = 0
+            val untrusted =
+                HttpClient(
+                    MockEngine { _ ->
+                        calls += 1
+                        respondRedirect("http://127.0.0.1:8080/admin")
+                    },
+                ) {
+                    followRedirects = false
+                }
+            val impl =
+                PageFetchServiceImpl(
+                    client = HttpClient(MockEngine { respond("") }),
+                    untrustedClient = untrusted,
+                )
+
+            assertNull(impl.fetchHtml("https://origin.example.com/e/1"))
+            assertEquals(1, calls, "私网跳转必须在发出第二跳前被拦下")
+        }
+
+    @Test
+    fun `no-redirect client 下公网跳转仍逐跳跟随到最终页`() =
+        runTest {
+            var calls = 0
+            val untrusted =
+                HttpClient(
+                    MockEngine { _ ->
+                        calls += 1
+                        if (calls == 1) {
+                            respondRedirect("https://final.example.com/e/1")
+                        } else {
+                            respond(
+                                content = "<html>moved</html>",
+                                status = HttpStatusCode.OK,
+                                headers = headersOf(HttpHeaders.ContentType to listOf("text/html")),
+                            )
+                        }
+                    },
+                ) {
+                    followRedirects = false
+                }
+            val impl =
+                PageFetchServiceImpl(
+                    client = HttpClient(MockEngine { respond("") }),
+                    untrustedClient = untrusted,
+                )
+
+            val page = impl.fetchHtml("https://origin.example.com/e/1")
+
+            assertEquals("https://final.example.com/e/1", page?.url)
+            assertEquals("<html>moved</html>", page?.html)
+            assertEquals(2, calls)
+        }
+
+    @Test
+    fun `postForm 303 重定向按浏览器惯例降级为 GET`() =
+        runTest {
+            val methods = mutableListOf<HttpMethod>()
+            val untrusted =
+                HttpClient(
+                    MockEngine { request ->
+                        methods += request.method
+                        if (methods.size == 1) {
+                            respond(
+                                content = "",
+                                status = HttpStatusCode.SeeOther,
+                                headers = headersOf(HttpHeaders.Location to listOf("https://api.example.com/result")),
+                            )
+                        } else {
+                            respond(
+                                content = """{"ok":true}""",
+                                status = HttpStatusCode.OK,
+                                headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                            )
+                        }
+                    },
+                ) {
+                    followRedirects = false
+                }
+            val impl =
+                PageFetchServiceImpl(
+                    client = HttpClient(MockEngine { respond("") }),
+                    untrustedClient = untrusted,
+                )
+
+            val page = impl.postForm("https://api.example.com/form", mapOf("d" to "payload"))
+
+            assertEquals(listOf(HttpMethod.Post, HttpMethod.Get), methods)
+            assertEquals("https://api.example.com/result", page?.url)
+        }
+
+    @Test
     fun `postForm 正常发送表单并聚合 SetCookie 为 Cookie 响应头`() =
         runTest {
             var capturedParamD: String? = null
@@ -215,5 +310,46 @@ class PageFetchServiceTest {
             assertNull(headers["X-A"])
             assertEquals("2", headers["X-B"])
             assertTrue(headers.names().none { it.equals("X-Injected", ignoreCase = true) })
+        }
+
+    @Test
+    fun `fetchHtml 与 postForm 拒绝本机与私网目标且不发出请求`() =
+        runTest {
+            var requests = 0
+            val impl =
+                PageFetchServiceImpl(
+                    HttpClient(
+                        MockEngine {
+                            requests++
+                            respond("x")
+                        },
+                    ),
+                )
+
+            assertNull(impl.fetchHtml("http://127.0.0.1:8080/admin"))
+            assertNull(impl.postForm("http://192.168.1.1/", emptyMap(), emptyMap()))
+
+            assertEquals(0, requests)
+        }
+
+    @Test
+    fun `probeStream 仍允许局域网媒体直链`() =
+        runTest {
+            val impl =
+                PageFetchServiceImpl(
+                    HttpClient(
+                        MockEngine {
+                            respond(
+                                content = "",
+                                status = HttpStatusCode.OK,
+                                headers = headersOf(HttpHeaders.ContentType to listOf("video/mp4")),
+                            )
+                        },
+                    ),
+                )
+
+            val probe = impl.probeStream("http://192.168.1.5:8080/video.mp4")
+
+            assertEquals(StreamProbe.Responded(status = 200, contentType = "video/mp4"), probe)
         }
 }

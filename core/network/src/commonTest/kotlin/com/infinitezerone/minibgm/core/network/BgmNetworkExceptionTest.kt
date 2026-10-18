@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.network
 
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -32,6 +33,12 @@ class BgmNetworkExceptionTest {
         val netEx = ex.toBgmNetworkException()
         assertIs<BgmNetworkException.Timeout>(netEx)
         assertEquals("网络超时，请重试", netEx.message)
+    }
+
+    @Test
+    fun toBgmNetworkException_recognizesKtorTimeoutTypeEvenWhenClassNamesAreObfuscated() {
+        val ex = HttpRequestTimeoutException("https://api.bgm.tv/v0/subjects/1", 15_000)
+        assertIs<BgmNetworkException.Timeout>(ex.toBgmNetworkException())
     }
 
     @Test
@@ -125,6 +132,7 @@ class BgmNetworkExceptionTest {
                 BgmNetworkException.Unauthorized().message,
                 BgmNetworkException.Forbidden().message,
                 BgmNetworkException.NotFound().message,
+                BgmNetworkException.RequestRejected(400).message,
                 BgmNetworkException.RateLimited().message,
                 BgmNetworkException.ServerError(500).message,
                 BgmNetworkException.Timeout().message,

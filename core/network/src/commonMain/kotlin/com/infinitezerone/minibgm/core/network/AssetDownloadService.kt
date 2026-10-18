@@ -2,8 +2,7 @@ package com.infinitezerone.minibgm.core.network
 
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
-import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.HttpTimeoutConfig
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
@@ -47,15 +46,8 @@ internal fun isLoopbackHttpUrl(url: String): Boolean {
 
 internal class AssetDownloadServiceImpl(
     private val client: HttpClient,
-    private val loopbackClient: HttpClient? = null,
 ) : AssetDownloadService {
     private val logger = bgmLogger("Bgm/AssetDownloadService")
-
-    private val defaultLoopbackClient: HttpClient by lazy {
-        HttpClient(CIO) {
-            install(HttpTimeout)
-        }
-    }
 
     override suspend fun streamAsset(
         url: String,
@@ -63,29 +55,19 @@ internal class AssetDownloadServiceImpl(
         onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
     ): Long {
         val isLoopback = isLoopbackHttpUrl(url)
-        // 本地回环 HTTP 流（如 librqbit 本地流媒体服务 http://127.0.0.1:<port>/...）必须走纯流式 CIO 引擎：
-        // 1. EchHttpClientEngine 仅允许 https:// 外部请求，拒绝明文 http://；
-        // 2. EchHttpClientEngine 会在 JNI 层一次性聚合完整响应体，不适合 GB 级本地视频流；
-        // 3. 单测若显式注入 MockEngine 则保留给 MockEngine 拦截断言。
-        val activeClient =
-            if (isLoopback &&
-                !client.engine::class
-                    .simpleName
-                    .orEmpty()
-                    .contains("Mock")
-            ) {
-                loopbackClient ?: defaultLoopbackClient
-            } else {
-                client
-            }
-
-        return activeClient
+        // 回环流（如 librqbit 的 http://127.0.0.1:<port>/...）由平台 RoutingEngine 分流到
+        // 纯流式 CIO，本服务不再自建 client、也不再看 engine 类名做特判；这里只负责
+        // 下载语义（Range / 无限请求预算 / 回环读取超时放宽）。
+        return client
             .prepareGet(url) {
                 if (rangeStart > 0L) {
                     header(HttpHeaders.Range, "bytes=$rangeStart-")
                 }
                 timeout {
-                    requestTimeoutMillis = null
+                    // 必须用 INFINITE_TIMEOUT_MS 而不是 null：Ktor 的 HttpTimeout 插件会把
+                    // per-request 的 null 回填成 client 级默认值（这里 30s），否则大文件下载
+                    // 会在第 30 秒被请求预算掐断。真正的停滞由下面的 socketTimeout 兜底。
+                    requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS
                     // P2P 本地流在寻道/连接 Peer 阶段可能超过 30s 才产出首个顺序分片，放宽回环流读取超时至 120s
                     socketTimeoutMillis = if (isLoopback) 120_000L else 30_000L
                     connectTimeoutMillis = 15_000L

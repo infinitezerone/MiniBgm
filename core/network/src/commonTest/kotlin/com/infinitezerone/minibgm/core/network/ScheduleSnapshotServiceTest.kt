@@ -8,6 +8,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -186,5 +187,25 @@ class ScheduleSnapshotServiceTest {
             assertFailsWith<IllegalStateException> {
                 service.getSnapshot()
             }
+        }
+
+    /** 取消不是"这个 CDN 失败"：继续试下一个会让退出页面后的刷新仍跑满全部 CDN。 */
+    @Test
+    fun getSnapshot_cancelled_stopsImmediatelyInsteadOfTryingNextCdn() =
+        runTest {
+            val calls = mutableListOf<String>()
+            val engine =
+                MockEngine { request ->
+                    calls += request.url.toString()
+                    throw CancellationException("cancelled")
+                }
+            val service =
+                ScheduleSnapshotServiceImpl(
+                    createClient(engine),
+                    listOf("https://cdn1.example.com/snapshot.json", "https://cdn2.example.com/snapshot.json"),
+                )
+
+            assertFailsWith<CancellationException> { service.getSnapshot() }
+            assertEquals(1, calls.size, "取消后不应再尝试后续 CDN")
         }
 }

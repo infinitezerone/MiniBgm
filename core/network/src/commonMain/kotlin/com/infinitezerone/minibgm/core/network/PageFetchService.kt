@@ -2,19 +2,27 @@ package com.infinitezerone.minibgm.core.network
 
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import io.ktor.client.HttpClient
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.forms.FormDataContent
+import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
 import io.ktor.client.request.prepareGet
-import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.Parameters
+import io.ktor.utils.io.cancel
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
 
 /** 单次页面抓取的正文上限：够覆盖播放页源码，又不至于把抓取变成下载 */
 const val MAX_PAGE_BYTES: Int = 512 * 1024
+
+/** 手动跟随 30x 的最大跳数；超过按不可信处理 */
+private const val MAX_REDIRECTS = 5
 
 /** 抓取结果：[url] 为重定向后的最终地址，由调用方回填 Referer；[responseHeaders] 包含响应头（含合并的 Cookie） */
 data class FetchedPage(
@@ -80,6 +88,8 @@ interface PageFetchService {
 
 internal class PageFetchServiceImpl(
     private val client: HttpClient,
+    /** 禁止自动跟随 30x 的 client：每一跳都要先过 [UrlSafety]，防止规则页跳进内网 */
+    private val untrustedClient: HttpClient = client,
 ) : PageFetchService {
     private val logger = bgmLogger("Bgm/PageFetch")
 
@@ -91,19 +101,20 @@ internal class PageFetchServiceImpl(
         if (!target.startsWith("http://", ignoreCase = true) && !target.startsWith("https://", ignoreCase = true)) {
             return null
         }
+        // 规则页抓取是"第三方内容驱动"的请求：本机/私网目标一律拒绝，避免恶意订阅扫内网
+        if (!UrlSafety.isAllowedRemoteUrl(target)) return null
         val safeHeaders =
             requestHeaders.filter { (name, value) ->
                 name.isNotBlank() && name.isSafeHeaderValue() && value.isSafeHeaderValue()
             }
         return try {
-            client
-                .prepareGet(target) {
+            val response =
+                getFollowingSafeRedirects(target) {
                     header(HttpHeaders.Accept, "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
                     header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
                     safeHeaders.forEach { (name, value) -> header(name.trim(), value.trim()) }
-                }.execute { response ->
-                    extractFetchedPage(response)
-                }
+                } ?: return null
+            extractFetchedPage(response)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -121,26 +132,54 @@ internal class PageFetchServiceImpl(
         if (!target.startsWith("http://", ignoreCase = true) && !target.startsWith("https://", ignoreCase = true)) {
             return null
         }
+        // 规则页抓取是"第三方内容驱动"的请求：本机/私网目标一律拒绝，避免恶意订阅扫内网
+        if (!UrlSafety.isAllowedRemoteUrl(target)) return null
         val safeHeaders =
             requestHeaders.filter { (name, value) ->
                 name.isNotBlank() && name.isSafeHeaderValue() && value.isSafeHeaderValue()
             }
         return try {
-            client
-                .preparePost(target) {
-                    header(HttpHeaders.Accept, "*/*")
-                    header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
-                    safeHeaders.forEach { (name, value) -> header(name.trim(), value.trim()) }
-                    setBody(
-                        io.ktor.client.request.forms.FormDataContent(
-                            io.ktor.http.Parameters.build {
-                                formData.forEach { (k, v) -> append(k, v) }
-                            },
-                        ),
-                    )
-                }.execute { response ->
-                    extractFetchedPage(response)
+            var current = target
+            var currentMethod = HttpMethod.Post
+            var redirects = 0
+            while (true) {
+                if (!UrlSafety.isAllowedRemoteUrl(current)) return null
+                val response =
+                    if (currentMethod == HttpMethod.Post) {
+                        untrustedClient.post(current) {
+                            header(HttpHeaders.Accept, "*/*")
+                            header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
+                            safeHeaders.forEach { (name, value) -> header(name.trim(), value.trim()) }
+                            setBody(
+                                FormDataContent(
+                                    Parameters.build {
+                                        formData.forEach { (k, v) -> append(k, v) }
+                                    },
+                                ),
+                            )
+                        }
+                    } else {
+                        untrustedClient.get(current) {
+                            header(HttpHeaders.Accept, "*/*")
+                            header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
+                            safeHeaders.forEach { (name, value) -> header(name.trim(), value.trim()) }
+                        }
+                    }
+                val location = response.headers[HttpHeaders.Location]
+                if (response.status.value in 300..399 && location != null) {
+                    response.bodyAsChannel().cancel()
+                    if (++redirects > MAX_REDIRECTS) return null
+                    current = UrlSafety.resolveRedirect(current, location) ?: return null
+                    // 307/308 保持原方法与 body；301/302/303 按浏览器惯例降级为 GET
+                    if (response.status.value != 307 && response.status.value != 308) {
+                        currentMethod = HttpMethod.Get
+                    }
+                    continue
                 }
+                return extractFetchedPage(response)
+            }
+            @Suppress("UNREACHABLE_CODE")
+            null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -184,7 +223,36 @@ internal class PageFetchServiceImpl(
         }
     }
 
-    private suspend fun extractFetchedPage(response: io.ktor.client.statement.HttpResponse): FetchedPage? {
+    /**
+     * GET 30x 逐跳跟随：每一跳都重新过 [UrlSafety]，最多 [MAX_REDIRECTS] 跳。
+     * 返回 null 表示目标不可信/跳转过多，调用方按"没有结果"降级。
+     */
+    private suspend fun getFollowingSafeRedirects(
+        startUrl: String,
+        configure: HttpRequestBuilder.() -> Unit,
+    ): HttpResponse? {
+        var current = startUrl
+        var redirects = 0
+        while (true) {
+            if (!UrlSafety.isAllowedRemoteUrl(current)) return null
+            val response = untrustedClient.get(current) { configure() }
+            val location = response.headers[HttpHeaders.Location]
+            if (response.status.value !in 300..399 || location == null) return response
+            response.bodyAsChannel().cancel()
+            if (++redirects > MAX_REDIRECTS) return null
+            current = UrlSafety.resolveRedirect(current, location) ?: return null
+        }
+    }
+
+    private suspend fun extractFetchedPage(response: HttpResponse): FetchedPage? {
+        // 初始 URL 过了闸不代表最终 URL 也安全：30x 可能跳到私网
+        if (!UrlSafety.isAllowedRemoteUrl(
+                response.call.request.url
+                    .toString(),
+            )
+        ) {
+            return null
+        }
         val channel = response.bodyAsChannel()
         val buffer = ByteArray(MAX_PAGE_BYTES)
         var offset = 0

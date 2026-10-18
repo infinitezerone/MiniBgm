@@ -40,6 +40,17 @@ fun networkModule(
             )
         }
 
+        // 第三方内容驱动的抓取/订阅专用：禁止自动跟随 30x，调用方必须逐跳过 UrlSafety
+        single(named("untrusted")) {
+            BgmHttpClient.createBaseClient(
+                engine = get(),
+                enableLogging = enableNetworkLogging,
+                userAgent = userAgent,
+            ) {
+                followRedirects = false
+            }
+        }
+
         single<com.infinitezerone.minibgm.core.network.oauth.OAuthProxyService> {
             com.infinitezerone.minibgm.core.network.oauth
                 .createOAuthProxyService(client = get(named("unauthenticated")))
@@ -74,10 +85,15 @@ fun networkModule(
         single<BangumiApiService> { BangumiApiServiceImpl(client = get(), authConfig = get()) }
         single<BangumiCommunityService> { BangumiCommunityServiceImpl(get(named("unauthenticated"))) }
         single<ScheduleSnapshotService> { ScheduleSnapshotServiceImpl(get(named("unauthenticated"))) }
-        single<PageFetchService> { PageFetchServiceImpl(get(named("unauthenticated"))) }
+        single<PageFetchService> {
+            PageFetchServiceImpl(
+                client = get(named("unauthenticated")),
+                untrustedClient = get(named("untrusted")),
+            )
+        }
         single<com.infinitezerone.minibgm.core.network.CommunitySubscriptionService> {
             com.infinitezerone.minibgm.core.network
-                .CommunitySubscriptionServiceImpl(get(named("unauthenticated")))
+                .CommunitySubscriptionServiceImpl(get(named("untrusted")))
         }
         single<com.infinitezerone.minibgm.core.network.UpdateService> {
             com.infinitezerone.minibgm.core.network

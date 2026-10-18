@@ -1341,8 +1341,9 @@ class ArchitectureRulesTest {
      * ECH 边缘优选池防污染与本地回环流分流红线（见 AGENTS.md 领域规则 & 剧本 8）：
      * 1. `EchHttpClientEngine` 捕获 `CancellationException` 时必须区分真实请求超时（`TimeoutCancellationException`）
      *    与正常协程取消（如 Coil 列表滚动取消图片请求），严禁无条件调用 `recordFailure` 导致 `EchEdgePool` 黄金节点被误杀；
-     * 2. `AssetDownloadService` 必须将本地回环 HTTP 流（`isLoopbackHttpUrl`）分流至纯流式 `CIO` 引擎，
-     *    严禁将 `http://127.0.0.1` 的 P2P 视频流送入仅支持 `https://` 且全量内存缓冲的 `EchHttpClientEngine`；
+     * 2. 本地回环 HTTP 流必须保留 `isLoopbackHttpUrl` 判定（用于放宽 socket 超时），
+     *    但分流动作统一收敛到平台 `RoutingEngine`；`AssetDownloadService` 严禁自建 CIO client、
+     *    也严禁把 `http://127.0.0.1` 的 P2P 视频流送进仅支持 `https://` 的 `EchHttpClientEngine`；
      * 3. `crates/minibgm-torrent/src/server.rs` 必须开启 `overwrite: true` 并在初始化异常时 `cancel_token.cancel()`。
      */
     @Test
@@ -1369,9 +1370,26 @@ class ArchitectureRulesTest {
             )
         assertTrue(assetServiceFile.isFile, "AssetDownloadService.kt 未找到")
         val assetContent = KotlinSourceScanner.sanitize(assetServiceFile.readText())
-        if (!assetContent.contains("isLoopbackHttpUrl") || !assetContent.contains("HttpClient(CIO)")) {
+        if (!assetContent.contains("isLoopbackHttpUrl")) {
             violations.add(
-                "AssetDownloadService.kt 未对本地回环流 (http://127.0.0.1) 分流至流式 CIO 引擎，将导致本地 P2P 流被 EchHttpClientEngine 拦截失败",
+                "AssetDownloadService.kt 丢失 isLoopbackHttpUrl 判定，回环流将无法放宽 socket 读取超时",
+            )
+        }
+        if (assetContent.contains("HttpClient(CIO)")) {
+            violations.add(
+                "AssetDownloadService.kt 不得自建 CIO client：回环分流必须统一由 RoutingEngine 负责",
+            )
+        }
+        val routingEngineFile =
+            File(
+                projectRoot,
+                "core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/transport/RoutingEngine.kt",
+            )
+        assertTrue(routingEngineFile.isFile, "RoutingEngine.kt 未找到")
+        val routingContent = KotlinSourceScanner.sanitize(routingEngineFile.readText())
+        if (!routingContent.contains("URLProtocol.HTTP") || !routingContent.contains("plainEngine")) {
+            violations.add(
+                "RoutingEngine.kt 未把 http 协议路由到 plain 引擎：回环/明文流会被 EchHttpClientEngine 拒绝",
             )
         }
 

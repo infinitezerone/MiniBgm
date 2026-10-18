@@ -1,5 +1,10 @@
 package com.infinitezerone.minibgm.core.network
 
+import io.ktor.client.network.sockets.ConnectTimeoutException
+import io.ktor.client.network.sockets.SocketTimeoutException
+import io.ktor.client.plugins.HttpRequestTimeoutException
+import kotlinx.serialization.SerializationException
+
 /**
  * 网络层异常 → 用户可见文案的**唯一出口**。
  *
@@ -32,6 +37,17 @@ sealed class BgmNetworkException(
     /** 404 */
     class NotFound(
         message: String = "内容不存在",
+    ) : BgmNetworkException(message)
+
+    /**
+     * 其余 4xx（400 / 409 / 422 等）：请求本身被服务端拒绝，重试无意义。
+     *
+     * 历史上这里没有兜底，未列入白名单的 4xx 会原样返回给调用方；写操作不读 status，
+     * 于是"参数非法"会被当成"收藏成功"。带状态码便于用户反馈与日志定位。
+     */
+    class RequestRejected(
+        val statusCode: Int,
+        message: String = "请求被拒绝 ($statusCode)",
     ) : BgmNetworkException(message)
 
     /** 429。保留"请稍后重试"——用户第一反应就是立刻重试，这句不是废话 */
@@ -118,6 +134,10 @@ fun Throwable.toBgmNetworkException(): BgmNetworkException {
 }
 
 private fun isTimeout(t: Throwable): Boolean {
+    // 先做类型判断：R8 会重命名 Ktor 的异常类，simpleName 启发式在 release 下会失效
+    if (t is HttpRequestTimeoutException || t is ConnectTimeoutException || t is SocketTimeoutException) {
+        return true
+    }
     val name = t::class.simpleName.orEmpty()
     return name.contains("Timeout", ignoreCase = true) ||
         t.message?.contains("timed out", ignoreCase = true) == true
@@ -145,6 +165,7 @@ private fun isSsl(t: Throwable): Boolean {
 }
 
 private fun isSerialization(t: Throwable): Boolean {
+    if (t is SerializationException) return true
     val name = t::class.simpleName.orEmpty()
     return name.contains("Serialization", ignoreCase = true) ||
         name.contains("JsonConvert", ignoreCase = true)

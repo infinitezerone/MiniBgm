@@ -5,17 +5,26 @@ import com.infinitezerone.minibgm.core.model.SubscriptionValidationReport
 import com.infinitezerone.minibgm.core.model.TvBoxConfig
 import com.infinitezerone.minibgm.core.model.TvBoxSiteConversion
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.cancel
+import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.time.measureTimedValue
+
+private const val MAX_SUBSCRIPTION_BYTES = 2 * 1024 * 1024
+private const val MAX_REDIRECTS = 5
 
 /**
  * 一次解析的产出：可用规则 + 被跳过的条目分类。
@@ -55,6 +64,9 @@ internal class CommunitySubscriptionServiceImpl(
     private val client: HttpClient,
     private val json: Json = BgmHttpClient.jsonConfig,
 ) : CommunitySubscriptionService {
+    /** 探活并发上限：一条订阅可能含数百站点，不能一个站点一条无界协程 */
+    private val probeSemaphore = Semaphore(permits = 8)
+
     override suspend fun validateAndTestSubscription(target: String): SubscriptionValidationReport {
         val trimmed = target.trim()
         if (trimmed.isBlank()) {
@@ -91,7 +103,9 @@ internal class CommunitySubscriptionServiceImpl(
                 rawSources
                     .map { source ->
                         async {
-                            testSourceConnectivity(source)
+                            probeSemaphore.withPermit {
+                                testSourceConnectivity(source)
+                            }
                         }
                     }.awaitAll()
             }
@@ -167,21 +181,62 @@ internal class CommunitySubscriptionServiceImpl(
     }
 
     private suspend fun fetchSourcesFromUrl(url: String): ParsedSourceBatch {
+        if (!UrlSafety.isAllowedRemoteUrl(url)) return ParsedSourceBatch()
         return try {
-            val response: HttpResponse =
-                client.get(url) {
-                    timeout {
-                        requestTimeoutMillis = 6000
-                        connectTimeoutMillis = 3000
+            var current = url
+            var redirects = 0
+            while (true) {
+                if (!UrlSafety.isAllowedRemoteUrl(current)) return ParsedSourceBatch()
+                val response: HttpResponse =
+                    client.get(current) {
+                        timeout {
+                            requestTimeoutMillis = 6000
+                            connectTimeoutMillis = 3000
+                        }
                     }
+                val location = response.headers[HttpHeaders.Location]
+                if (response.status.value in 300..399 && location != null) {
+                    response.bodyAsChannel().cancel()
+                    if (++redirects > MAX_REDIRECTS) return ParsedSourceBatch()
+                    current = UrlSafety.resolveRedirect(current, location) ?: return ParsedSourceBatch()
+                    continue
                 }
-            if (!response.status.isSuccess()) return ParsedSourceBatch()
-
-            val rawText: String = response.body()
-            parseSourcesFromText(rawText, url)
+                if (!response.status.isSuccess()) return ParsedSourceBatch()
+                // 若注入的 client 仍自动跟随了跳转，用最终 URL 做最后一道复核
+                if (!UrlSafety.isAllowedRemoteUrl(
+                        response.call.request.url
+                            .toString(),
+                    )
+                ) {
+                    return ParsedSourceBatch()
+                }
+                val rawText = readLimitedText(response)
+                return parseSourcesFromText(rawText, url)
+            }
+            @Suppress("UNREACHABLE_CODE")
+            ParsedSourceBatch()
+        } catch (e: CancellationException) {
+            // 取消必须向上传播：否则 awaitAll 无法终止同批探活
+            throw e
         } catch (_: Throwable) {
             ParsedSourceBatch()
         }
+    }
+
+    /**
+     * 订阅响应体上限：正常订阅包远小于 2 MB；无上限时一个慢速大包就能把内存打满。
+     * 超限时截断，后续 JSON 解析失败会安全降级为空批次。
+     */
+    private suspend fun readLimitedText(response: HttpResponse): String {
+        val channel = response.bodyAsChannel()
+        val buffer = ByteArray(MAX_SUBSCRIPTION_BYTES)
+        var offset = 0
+        while (offset < buffer.size) {
+            val read = channel.readAvailable(buffer, offset, buffer.size - offset)
+            if (read <= 0) break
+            offset += read
+        }
+        return buffer.decodeToString(0, offset)
     }
 
     internal fun extractSourceFromHtml(
@@ -267,6 +322,10 @@ internal class CommunitySubscriptionServiceImpl(
         if (pingUrl.isBlank()) {
             return source.copy(isAlive = true, latencyMs = 150L)
         }
+        // 探活同样由第三方规则驱动：本机/私网源直接判死，不能拿来扫内网
+        if (!UrlSafety.isAllowedRemoteUrl(pingUrl)) {
+            return source.copy(isAlive = false, latencyMs = 9999L)
+        }
 
         return try {
             val (response, duration) =
@@ -283,6 +342,8 @@ internal class CommunitySubscriptionServiceImpl(
                 isAlive = isSuccess,
                 latencyMs = duration.inWholeMilliseconds,
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Throwable) {
             source.copy(
                 isAlive = false,

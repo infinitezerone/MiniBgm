@@ -14,7 +14,6 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
-import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
@@ -143,7 +142,6 @@ object BgmHttpClient {
         engine: HttpClientEngine? = null,
     ): HttpClient {
         fun HttpClientConfig<*>.bgmConfiguration() {
-            install(HttpCache)
             applyBaseNetworkConfig(enableLogging = enableLogging, loggerTag = "Bgm/Network")
             install(HttpTimeout) {
                 requestTimeoutMillis = 15000
@@ -185,15 +183,19 @@ object BgmHttpClient {
             }
             HttpResponseValidator {
                 validateResponse { response ->
-                    when (response.status) {
-                        HttpStatusCode.Unauthorized -> throw BgmNetworkException.Unauthorized()
-                        HttpStatusCode.Forbidden -> throw BgmNetworkException.Forbidden()
-                        HttpStatusCode.NotFound -> throw BgmNetworkException.NotFound()
-                        HttpStatusCode.TooManyRequests -> throw BgmNetworkException.RateLimited()
-                        HttpStatusCode.InternalServerError,
-                        HttpStatusCode.BadGateway,
-                        HttpStatusCode.ServiceUnavailable,
-                        -> throw BgmNetworkException.ServerError(response.status.value)
+                    val status = response.status
+                    when {
+                        status == HttpStatusCode.Unauthorized -> throw BgmNetworkException.Unauthorized()
+                        status == HttpStatusCode.Forbidden -> throw BgmNetworkException.Forbidden()
+                        status == HttpStatusCode.NotFound -> throw BgmNetworkException.NotFound()
+                        status == HttpStatusCode.TooManyRequests -> throw BgmNetworkException.RateLimited()
+                        // 304 是条件请求的合法结果，不是失败；是否使用缓存由调用方决定
+                        status == HttpStatusCode.NotModified -> Unit
+                        // 其余 4xx/5xx 必须统一上抛：写操作不读 status，白名单漏掉的
+                        // 400/409/504 会被静默当成成功，造成"确认了但没落库"
+                        status.value in 400..499 -> throw BgmNetworkException.RequestRejected(status.value)
+                        status.value in 500..599 -> throw BgmNetworkException.ServerError(status.value)
+                        else -> Unit
                     }
                 }
                 handleResponseExceptionWithRequest { cause, _ ->

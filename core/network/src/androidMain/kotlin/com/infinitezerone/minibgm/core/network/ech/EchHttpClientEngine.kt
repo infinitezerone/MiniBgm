@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.network.ech
 
 import com.infinitezerone.minibgm.core.common.bgmLogger
+import com.infinitezerone.minibgm.core.network.resolveRequestBudgetMillis
 import io.ktor.client.engine.HttpClientEngineBase
 import io.ktor.client.engine.HttpClientEngineCapability
 import io.ktor.client.engine.HttpClientEngineConfig
@@ -59,7 +60,7 @@ class EchHttpClientEngine(
         val callContext = callContext()
         val requestTime = GMTDate()
         val timeoutConfig = data.getCapabilityOrNull(HttpTimeoutCapability)
-        val requestBudgetMillis = timeoutConfig?.requestTimeoutMillis ?: config.timeoutMillis
+        val requestBudgetMillis = resolveRequestBudgetMillis(timeoutConfig, config.timeoutMillis)
         val socketTimeoutMillis = timeoutConfig?.socketTimeoutMillis ?: config.timeoutMillis
         val connectTimeoutMillis = timeoutConfig?.connectTimeoutMillis ?: 10_000L
 
