@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -307,13 +308,13 @@ internal fun PlayerControlsOverlay(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .height(42.dp),
+                        .height(48.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // 1. 左下角播放/暂停键：缓冲中只要处于意图播放态即显示暂停，允许用户打断缓冲
                 IconButton(
                     onClick = onPlayPauseToggle,
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(40.dp),
                 ) {
                     val isPlaybackActive = isPlaying || isBuffering
                     val icon =
@@ -384,113 +385,29 @@ internal fun PlayerControlsOverlay(
                     modifier = Modifier.widthIn(min = timeMinWidth),
                 )
 
-                // 5. 横屏全屏扩展控件（竖屏收拢至右上角设置）
+                // 5. 右侧动作区：
+                //    - 横屏只留"状态型"文字（倍速 / 清晰度），比例与清晰度细节收进右上角 ⋮ 面板；
+                //    - 其余动作统一 40dp 图标靶区，不再用一排灰底药丸挤占进度条。
                 if (isLandscape) {
                     Spacer(modifier = Modifier.width(10.dp))
-
-                    // 画面比例微标签
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color.White.copy(alpha = 0.16f),
-                        modifier = Modifier.clickable(onClick = onCycleResizeMode),
-                    ) {
-                        Text(
-                            text = stringResource(resizeMode.labelRes),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.9f),
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // 倍速微标签
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color.White.copy(alpha = 0.16f),
-                        modifier = Modifier.clickable(onClick = onCyclePlaybackSpeed),
-                    ) {
-                        Text(
-                            text = "${playbackSpeed}x",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White.copy(alpha = 0.9f),
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                        )
-                    }
-
-                    if (currentQualityLabel != null) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.White.copy(alpha = 0.16f),
-                            modifier = Modifier.clickable(onClick = onOpenTrackSelection),
-                        ) {
-                            Text(
-                                text = currentQualityLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White.copy(alpha = 0.9f),
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                            )
-                        }
-                    }
-
-                    if (showEpisodeQueue) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.White.copy(alpha = 0.16f),
-                            modifier = Modifier.clickable(onClick = onOpenEpisodeQueue),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.feature_subject_player_episodes_pill),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White.copy(alpha = 0.9f),
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                            )
-                        }
-                    }
-
-                    if (onOpenSourcesPanel != null) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.White.copy(alpha = 0.16f),
-                            modifier = Modifier.clickable(onClick = onOpenSourcesPanel),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.feature_subject_player_sources_pill),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White.copy(alpha = 0.9f),
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                            )
-                        }
-                    }
+                    ControlsBarDivider()
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
 
                 // 弹幕开关
-                Spacer(modifier = Modifier.width(4.dp))
-                IconButton(
+                ControlsBarIconButton(
+                    icon = if (isDanmakuEnabled) BgmIcons.ChatBubble else BgmIcons.ChatBubbleOutline,
+                    contentDescription =
+                        stringResource(
+                            if (isDanmakuEnabled) {
+                                R.string.feature_subject_player_danmaku_on
+                            } else {
+                                R.string.feature_subject_player_danmaku_off
+                            },
+                        ),
                     onClick = onToggleDanmaku,
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector = if (isDanmakuEnabled) BgmIcons.ChatBubble else BgmIcons.ChatBubbleOutline,
-                        contentDescription =
-                            stringResource(
-                                if (isDanmakuEnabled) {
-                                    R.string.feature_subject_player_danmaku_on
-                                } else {
-                                    R.string.feature_subject_player_danmaku_off
-                                },
-                            ),
-                        tint = if (isDanmakuEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
+                    tint = if (isDanmakuEnabled) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f),
+                )
 
                 // 弹幕分集纠正入口（弹幕开启且有候选才出现；匹配处于回退兜底态时挂警示徽标）。
                 // 弹幕关闭时不提供该入口：它最终会拉取弹幕并写入持久化覆盖，与「关闭即零请求」冲突。
@@ -500,32 +417,109 @@ internal fun PlayerControlsOverlay(
                     onClick = onOpenDanmakuPicker,
                 )
 
+                if (isLandscape) {
+                    if (showEpisodeQueue) {
+                        ControlsBarIconButton(
+                            icon = BgmIcons.ViewList,
+                            contentDescription = stringResource(R.string.feature_subject_player_episodes_pill),
+                            onClick = onOpenEpisodeQueue,
+                        )
+                    }
+                    if (onOpenSourcesPanel != null) {
+                        ControlsBarIconButton(
+                            icon = BgmIcons.Tv,
+                            contentDescription = stringResource(R.string.feature_subject_player_sources_pill),
+                            onClick = onOpenSourcesPanel,
+                        )
+                    }
+                    ControlsBarTextAction(
+                        text = "${playbackSpeed}x",
+                        onClickLabel = stringResource(R.string.feature_subject_player_speed_label),
+                        onClick = onCyclePlaybackSpeed,
+                    )
+                    if (currentQualityLabel != null) {
+                        ControlsBarTextAction(
+                            text = currentQualityLabel,
+                            onClickLabel = stringResource(R.string.feature_subject_player_quality_group),
+                            onClick = onOpenTrackSelection,
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.width(6.dp))
 
                 // 6. 全屏切换键
-                IconButton(
+                ControlsBarIconButton(
+                    icon = if (isLandscape) BgmIcons.FullscreenExit else BgmIcons.Fullscreen,
+                    contentDescription =
+                        if (isLandscape) {
+                            stringResource(R.string.feature_subject_player_exit_fullscreen)
+                        } else {
+                            stringResource(R.string.feature_subject_player_enter_fullscreen)
+                        },
                     onClick = onToggleFullscreen,
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector =
-                            if (isLandscape) {
-                                BgmIcons.FullscreenExit
-                            } else {
-                                BgmIcons.Fullscreen
-                            },
-                        contentDescription =
-                            if (isLandscape) {
-                                stringResource(R.string.feature_subject_player_exit_fullscreen)
-                            } else {
-                                stringResource(R.string.feature_subject_player_enter_fullscreen)
-                            },
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
+                )
             }
         }
+    }
+}
+
+/** 控制栏分组竖线：把"播放控制"与"画面/线路动作"分开，比一排灰底药丸更安静 */
+@Composable
+private fun ControlsBarDivider() {
+    Box(
+        modifier =
+            Modifier
+                .width(1.dp)
+                .height(20.dp)
+                .background(Color.White.copy(alpha = 0.3f)),
+    )
+}
+
+/** 控制栏图标动作：统一 40dp 触控靶区，图标 22dp，与文字动作同一基线 */
+@Composable
+private fun ControlsBarIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    tint: Color = Color.White,
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+/**
+ * 控制栏文字动作：只承载"当前值本身就是信息"的开关（倍速 / 清晰度）。
+ * 无底色、40dp 高度，靠字重和间距区分层级，不再画成一排药丸。
+ */
+@Composable
+private fun ControlsBarTextAction(
+    text: String,
+    onClickLabel: String,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier =
+            Modifier
+                .height(40.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClickLabel = onClickLabel, onClick = onClick)
+                .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Medium,
+            color = Color.White.copy(alpha = 0.95f),
+            maxLines = 1,
+        )
     }
 }
 

@@ -134,7 +134,7 @@ internal fun DanmakuMatchEntryButton(
     onClick: () -> Unit,
 ) {
     if (!hasCandidates) return
-    IconButton(onClick = onClick, modifier = Modifier.size(32.dp)) {
+    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
         BadgedBox(
             badge = {
                 if (isFallback) {
@@ -146,7 +146,7 @@ internal fun DanmakuMatchEntryButton(
                 imageVector = BgmIcons.FilterList,
                 contentDescription = stringResource(R.string.feature_subject_player_danmaku_pick_entry),
                 tint = Color.White.copy(alpha = 0.9f),
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
     }
