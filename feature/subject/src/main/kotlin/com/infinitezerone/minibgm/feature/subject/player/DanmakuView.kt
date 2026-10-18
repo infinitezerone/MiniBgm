@@ -19,7 +19,7 @@ import com.infinitezerone.minibgm.core.model.DanmakuItem
 import com.infinitezerone.minibgm.core.model.DanmakuMode
 import kotlin.math.abs
 
-private const val DANMAKU_DURATION_MS = 6_000L
+private const val DANMAKU_DURATION_MS = 8_500L
 private const val FIXED_DURATION_MS = 4_000L
 
 /**

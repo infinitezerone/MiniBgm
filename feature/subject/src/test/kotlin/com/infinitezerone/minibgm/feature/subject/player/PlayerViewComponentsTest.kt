@@ -261,6 +261,18 @@ class PlayerViewComponentsTest {
         assertEquals("Active scroll 1", active[0].text)
         assertEquals("Active top", active[1].text)
         assertEquals("Active scroll 2", active[2].text)
+
+        // 验证 8500ms 滚动时长边界：1499ms 已过期，1500ms 仍处于最后活跃刻度
+        val boundaryDanmakus =
+            listOf(
+                com.infinitezerone.minibgm.core.model
+                    .DanmakuItem(timeMs = 1_499L, text = "Expired"),
+                com.infinitezerone.minibgm.core.model
+                    .DanmakuItem(timeMs = 1_500L, text = "Alive boundary"),
+            )
+        val boundaryActive = findActiveDanmakus(boundaryDanmakus, 10_000L)
+        assertEquals(1, boundaryActive.size)
+        assertEquals("Alive boundary", boundaryActive[0].text)
     }
 
     @Test
