@@ -160,4 +160,66 @@ class AdaptiveDnsResolverTest {
             val addrs = AdaptiveDnsResolver.resolveTargetAddrs("example.com", 443)
             assertEquals(listOf("93.184.216.34:443"), addrs?.toList(), "RFC 8767: 处于陈旧可用期时立即返回旧地址")
         }
+
+    @Test
+    fun recordSuccess_does_not_clear_dnsCache() {
+        val now = TimeUtils.nowEpochMillis()
+        AdaptiveDnsResolver.injectCacheEntryForTest(
+            host = "example.com",
+            ips = listOf("93.184.216.34"),
+            freshUntil = now + 600_000L,
+            staleUntil = now + 86_400_000L,
+        )
+
+        AdaptiveDnsResolver.recordSuccess("example.com", "93.184.216.34:443")
+
+        val entry = AdaptiveDnsResolver.getCacheEntryForTest("example.com")
+        assertTrue(entry != null, "recordSuccess 绝不能抹除 dnsCache，否则下次请求会退化为阻塞冷启动解析")
+        assertEquals(listOf("93.184.216.34"), entry.first)
+    }
+
+    @Test
+    fun recordFailure_does_not_clear_dnsCache() {
+        val now = TimeUtils.nowEpochMillis()
+        AdaptiveDnsResolver.injectCacheEntryForTest(
+            host = "example.com",
+            ips = listOf("93.184.216.34"),
+            freshUntil = now + 600_000L,
+            staleUntil = now + 86_400_000L,
+        )
+
+        AdaptiveDnsResolver.recordFailure("example.com")
+
+        val entry = AdaptiveDnsResolver.getCacheEntryForTest("example.com")
+        assertTrue(entry != null, "recordFailure 绝不能抹除 dnsCache，RFC 8767 容灾依赖此缓存")
+        assertEquals(listOf("93.184.216.34"), entry.first)
+    }
+
+    @Test
+    fun resolveTargetAddrs_applies_backoff_to_freshUntil_when_background_refresh_fails() =
+        runTest {
+            val now = TimeUtils.nowEpochMillis()
+            val host = "non-existent-domain-for-test.invalid"
+            AdaptiveDnsResolver.injectCacheEntryForTest(
+                host = host,
+                ips = listOf("1.2.3.4"),
+                freshUntil = now - 1000L,
+                staleUntil = now + 86_400_000L,
+            )
+
+            val addrs = AdaptiveDnsResolver.resolveTargetAddrs(host, 443)
+            assertEquals(listOf("1.2.3.4:443"), addrs?.toList())
+
+            // 等待后台刷新完成并应用退避
+            var backedOff = false
+            for (i in 1..50) {
+                Thread.sleep(50)
+                val entry = AdaptiveDnsResolver.getCacheEntryForTest(host)
+                if (entry != null && entry.second > now) {
+                    backedOff = true
+                    break
+                }
+            }
+            assertTrue(backedOff, "后台解析失败后应将 freshUntil 推后以退避冷却")
+        }
 }

@@ -19,14 +19,21 @@ internal object EchNetworkMonitor {
     private val logger = bgmLogger("Bgm/EchNetwork")
     private var registered = false
 
+    @Volatile
+    private var currentNetwork: Any? = null
+
     fun start(context: Context) {
         if (registered) return
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
         val callback =
             object : ConnectivityManager.NetworkCallback() {
-                override fun onAvailable(network: Network) = onNetworkSwitched("onAvailable")
+                override fun onAvailable(network: Network) {
+                    handleNetworkAvailable(network)
+                }
 
-                override fun onLost(network: Network) = onNetworkSwitched("onLost")
+                override fun onLost(network: Network) {
+                    handleNetworkLost(network)
+                }
             }
         runCatching { manager.registerDefaultNetworkCallback(callback) }
             .onSuccess {
@@ -41,5 +48,35 @@ internal object EchNetworkMonitor {
         CloudflareEdgeProbe.resetCooldown()
         AdaptiveDnsResolver.invalidateCaches()
         EchRuntime.clearConnectionPool()
+    }
+
+    internal fun onNetworkLost(reason: String) {
+        logger.i { "[NET] $reason -> active network lost, reset probe cooldown and clear connection pool" }
+        CloudflareEdgeProbe.resetCooldown()
+        EchRuntime.clearConnectionPool()
+    }
+
+    internal fun handleNetworkAvailable(network: Any): Boolean {
+        val previous = currentNetwork
+        if (previous == network) return false
+        currentNetwork = network
+        onNetworkSwitched("onAvailable($network)")
+        return true
+    }
+
+    internal fun handleNetworkLost(network: Any): Boolean {
+        val current = currentNetwork
+        return if (current == network) {
+            currentNetwork = null
+            onNetworkLost("onLost($network)")
+            true
+        } else {
+            logger.d { "[NET] onLost ignored for inactive/already-replaced network: $network (active: $current)" }
+            false
+        }
+    }
+
+    internal fun resetForTest() {
+        currentNetwork = null
     }
 }

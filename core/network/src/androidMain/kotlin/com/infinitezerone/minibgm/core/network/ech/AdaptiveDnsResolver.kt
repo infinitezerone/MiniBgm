@@ -48,6 +48,9 @@ internal object AdaptiveDnsResolver {
     /** 内存 DNS 缓存陈旧可用期（24 小时）：RFC 8767 Stale-While-Revalidate 容灾与平滑更新。 */
     private const val DNS_CACHE_STALE_MILLIS = 24L * 60 * 60 * 1000
 
+    /** SWR 后台刷新失败时的退避冷却期（60 秒）：避免每次请求重复派发解析。 */
+    private const val DNS_REFRESH_BACKOFF_MILLIS = 60L * 1000
+
     private data class DnsCacheEntry(
         val ips: List<String>,
         val freshUntil: Long,
@@ -233,9 +236,6 @@ internal object AdaptiveDnsResolver {
         }
 
         val candidates = resolvedCandidates.remove(host).orEmpty()
-        // 一并清掉该 host 的 DNS 缓存：下一次请求重新解析 / 重新探测，
-        // 而不是把刚失败的同一批候选原样再送一遍（那会让页面永久卡在超时）
-        dnsCache.remove(host)
         val index = candidates.indexOfFirst { EchEdgePool.normalizeIp(it) == succeededIp }
         if (index <= 0) return
         candidates.take(index).forEach { candidate ->
@@ -250,9 +250,12 @@ internal object AdaptiveDnsResolver {
     /**
      * 完整请求失败（超时或连接彻底失败）。把为该域名准备的全部候选标记为失败一次，
      * 避免坏节点因从未成功而永久留在池顶。
+     *
+     * 注意：不能在此处抹除 [dnsCache]——RFC 8767 SWR 的 24 小时容灾正是为了在断网/抖动时
+     * 让后续请求仍能拿到陈旧候选降级重试。抹掉会导致下次请求直接退化为阻塞式冷启动解析。
      */
     fun recordFailure(host: String) {
-        val candidates = resolvedCandidates[host].orEmpty()
+        val candidates = resolvedCandidates.remove(host).orEmpty()
         candidates.forEach { candidate ->
             val ip = EchEdgePool.normalizeIp(candidate) ?: candidate
             if (isCloudflareIp(ip)) {
@@ -260,7 +263,7 @@ internal object AdaptiveDnsResolver {
             }
         }
         if (candidates.isNotEmpty()) {
-            logger.w { "[DNS] $host request failed completely; demoted ${candidates.size} candidate(s) and dropped the cached list" }
+            logger.w { "[DNS] $host request failed completely; demoted ${candidates.size} candidate(s)" }
         }
     }
 
@@ -346,6 +349,16 @@ internal object AdaptiveDnsResolver {
                         EchEdgePool.absorb(ips, now)
                     }
                     logger.d { "[DNS] background refresh updated $host -> $ips" }
+                } else {
+                    // 刷新失败或解析结果全被判毒：对现有 stale 缓存应用退避冷却，
+                    // 将 freshUntil 推后 DNS_REFRESH_BACKOFF_MILLIS，避免后续请求无界派发后台解析
+                    val existing = dnsCache[host]
+                    if (existing != null) {
+                        dnsCache[host] = existing.copy(freshUntil = now + DNS_REFRESH_BACKOFF_MILLIS)
+                    }
+                    logger.w {
+                        "[DNS] background refresh failed or all IPs poisoned for $host; backed off for ${DNS_REFRESH_BACKOFF_MILLIS / 1000}s"
+                    }
                 }
             } finally {
                 refreshingHosts.remove(host)

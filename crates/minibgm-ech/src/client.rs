@@ -1495,4 +1495,101 @@ mod tests {
         let guard = client.h2_pool.read().unwrap();
         assert!(guard.is_empty());
     }
+
+    #[test]
+    fn test_connect_wave_empty_candidates_returns_exhausted() {
+        let client = EchHttpClient::new().unwrap();
+        let tls_config = client.tls_config_standard.clone();
+        let server_name = ServerName::try_from("example.com").unwrap().to_owned();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let mut candidates = Vec::<SocketAddr>::new().into_iter();
+
+        let err = runtime()
+            .unwrap()
+            .block_on(connect_wave(
+                &mut candidates,
+                &tls_config,
+                &server_name,
+                deadline,
+            ))
+            .err()
+            .unwrap();
+
+        match err {
+            ConnectWaveError::Exhausted(_) => {}
+            _ => panic!("expected Exhausted error"),
+        }
+    }
+
+    #[test]
+    fn test_connect_wave_past_deadline_returns_exhausted() {
+        let client = EchHttpClient::new().unwrap();
+        let tls_config = client.tls_config_standard.clone();
+        let server_name = ServerName::try_from("example.com").unwrap().to_owned();
+        let deadline = tokio::time::Instant::now() - Duration::from_secs(1);
+        let addr: SocketAddr = "127.0.0.1:443".parse().unwrap();
+        let mut candidates = vec![addr].into_iter();
+
+        let err = runtime()
+            .unwrap()
+            .block_on(connect_wave(
+                &mut candidates,
+                &tls_config,
+                &server_name,
+                deadline,
+            ))
+            .err()
+            .unwrap();
+
+        match err {
+            ConnectWaveError::Exhausted(_) => {}
+            _ => panic!("expected Exhausted error"),
+        }
+    }
+
+    #[test]
+    fn test_hedge_constants() {
+        assert_eq!(HEDGE_STAGGER, Duration::from_millis(250));
+        assert_eq!(HEDGE_MAX_INFLIGHT, 3);
+    }
+
+    #[test]
+    fn test_connect_wave_unreachable_candidates_exhausts_and_staggers() {
+        let client = EchHttpClient::new().unwrap();
+        let tls_config = client.tls_config_standard.clone();
+        let server_name = ServerName::try_from("example.com").unwrap().to_owned();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        // Bind an ephemeral TCP listener and drop it so that connection is refused
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port1 = listener.local_addr().unwrap().port();
+        drop(listener);
+        let listener2 = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port2 = listener2.local_addr().unwrap().port();
+        drop(listener2);
+
+        let addrs = vec![
+            SocketAddr::from(([127, 0, 0, 1], port1)),
+            SocketAddr::from(([127, 0, 0, 1], port2)),
+        ];
+        let mut candidates = addrs.into_iter();
+
+        let start = tokio::time::Instant::now();
+        let err = runtime()
+            .unwrap()
+            .block_on(connect_wave(
+                &mut candidates,
+                &tls_config,
+                &server_name,
+                deadline,
+            ))
+            .err()
+            .unwrap();
+
+        match err {
+            ConnectWaveError::Exhausted(_) => {}
+            _ => panic!("expected Exhausted error"),
+        }
+        assert!(candidates.next().is_none());
+        assert!(start.elapsed() <= Duration::from_secs(5));
+    }
 }

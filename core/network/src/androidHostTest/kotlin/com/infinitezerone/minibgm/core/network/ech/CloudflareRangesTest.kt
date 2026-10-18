@@ -60,6 +60,32 @@ class CloudflareRangesTest {
     }
 
     @Test
+    fun accepts_cloudflare_ipv4_mapped_ipv6_addresses() {
+        listOf(
+            "::ffff:104.18.10.118",
+            "::ffff:172.67.73.67",
+            "[::ffff:104.26.9.23]",
+            "0:0:0:0:0:ffff:104.26.8.23",
+            "::ffff:0:104.26.14.71",
+        ).forEach { ip ->
+            assertTrue(CloudflareRanges.contains(ip), "$ip should fall inside a Cloudflare range")
+        }
+    }
+
+    @Test
+    fun rejects_non_cloudflare_ipv4_mapped_ipv6_addresses() {
+        listOf(
+            "::ffff:1.1.1.1",
+            "::ffff:192.168.1.1",
+            "::ffff:8.8.8.8",
+            "0:0:0:0:0:ffff:127.0.0.1",
+            "::ffff:0:10.0.0.1",
+        ).forEach { ip ->
+            assertFalse(CloudflareRanges.contains(ip), "$ip must not be treated as Cloudflare")
+        }
+    }
+
+    @Test
     fun sampling_stays_inside_the_ranges_and_honours_exclusions() {
         val excluded = setOf("104.16.0.0")
         val sampled = CloudflareRanges.sampleCandidates(count = 64, random = Random(42), exclude = excluded)

@@ -20,12 +20,14 @@ class EchNetworkMonitorTest {
     fun setUp() {
         AdaptiveDnsResolver.resetForTest()
         CloudflareEdgeProbe.resetCooldown()
+        EchNetworkMonitor.resetForTest()
     }
 
     @AfterTest
     fun tearDown() {
         AdaptiveDnsResolver.resetForTest()
         CloudflareEdgeProbe.resetCooldown()
+        EchNetworkMonitor.resetForTest()
     }
 
     @Test
@@ -62,6 +64,14 @@ class EchNetworkMonitorTest {
 
     @Test
     fun network_switch_drops_cached_resolution() {
+        val now = TimeUtils.nowEpochMillis()
+        AdaptiveDnsResolver.injectCacheEntryForTest(
+            host = "example.com",
+            ips = listOf("93.184.216.34"),
+            freshUntil = now + 600_000L,
+            staleUntil = now + 86_400_000L,
+        )
+
         EchNetworkMonitor.onNetworkSwitched("test")
 
         assertEquals(
@@ -69,5 +79,41 @@ class EchNetworkMonitorTest {
             AdaptiveDnsResolver.cachedHostCountForTest(),
             "换网后必须丢弃旧网络的 DNS 与候选缓存",
         )
+    }
+
+    @Test
+    fun onLost_for_stale_network_is_ignored_when_new_network_is_active() {
+        val wifiNetwork = "wifi-network-handle"
+        val cellNetwork = "cellular-network-handle"
+
+        // 1. Wi-Fi 连接
+        assertTrue(EchNetworkMonitor.handleNetworkAvailable(wifiNetwork))
+
+        // 2. 蜂窝网络接管（Wi-Fi 切换蜂窝）
+        assertTrue(EchNetworkMonitor.handleNetworkAvailable(cellNetwork))
+
+        // 3. 延迟到达的 Wi-Fi 断开事件（onLost）必须被忽略，严禁误清蜂窝的连接池
+        val lostResult = EchNetworkMonitor.handleNetworkLost(wifiNetwork)
+        assertFalse(lostResult, "旧网络断开事件必须被忽略")
+
+        // 4. 当前蜂窝网络断开事件正常处理
+        val cellLostResult = EchNetworkMonitor.handleNetworkLost(cellNetwork)
+        assertTrue(cellLostResult, "当前活跃网络断开必须正常响应")
+    }
+
+    @Test
+    fun onNetworkLost_does_not_wipe_dns_cache_preserving_swr_fallback() {
+        val now = TimeUtils.nowEpochMillis()
+        AdaptiveDnsResolver.injectCacheEntryForTest(
+            host = "example.com",
+            ips = listOf("93.184.216.34"),
+            freshUntil = now + 600_000L,
+            staleUntil = now + 86_400_000L,
+        )
+
+        EchNetworkMonitor.onNetworkLost("test")
+
+        val entry = AdaptiveDnsResolver.getCacheEntryForTest("example.com")
+        assertTrue(entry != null, "网络彻底断开时必须保留 SWR 缓存以供离线/恢复容灾")
     }
 }

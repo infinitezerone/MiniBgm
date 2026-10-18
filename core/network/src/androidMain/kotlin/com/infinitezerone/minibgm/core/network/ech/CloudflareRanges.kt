@@ -76,17 +76,37 @@ internal object CloudflareRanges {
             range("172.64.0.0", 13),
         )
 
-    /** 该 IP 是否落在 Cloudflare 网段内（支持 IPv4 与 IPv6）。非 IP 字面量一律返回 false。 */
+    /** 该 IP 是否落在 Cloudflare 网段内（支持 IPv4、IPv6 与 IPv4-mapped IPv6）。非 IP 字面量一律返回 false。 */
     fun contains(ip: String): Boolean {
-        val ipv4 = ipv4ToLong(ip)
+        val cleanIp = ip.trim().removePrefix("[").removeSuffix("]")
+        val ipv4 = ipv4ToLong(cleanIp)
         if (ipv4 != null) {
             return WHITELIST.any { it.contains(ipv4) }
         }
-        val ipv6 = ipv6ToBytes(ip)
+        val mappedIpv4 = extractIpv4FromMapped(cleanIp)
+        if (mappedIpv4 != null) {
+            val mappedLong = ipv4ToLong(mappedIpv4)
+            if (mappedLong != null) {
+                return WHITELIST.any { it.contains(mappedLong) }
+            }
+        }
+        val ipv6 = ipv6ToBytes(cleanIp)
         if (ipv6 != null) {
             return IPV6_WHITELIST.any { it.contains(ipv6) }
         }
         return false
+    }
+
+    private fun extractIpv4FromMapped(ip: String): String? {
+        val lower = ip.lowercase()
+        val suffix =
+            when {
+                lower.startsWith("0:0:0:0:0:ffff:") -> lower.removePrefix("0:0:0:0:0:ffff:")
+                lower.startsWith("::ffff:0:") -> lower.removePrefix("::ffff:0:")
+                lower.startsWith("::ffff:") -> lower.removePrefix("::ffff:")
+                else -> null
+            }
+        return suffix?.takeIf { it.contains('.') }
     }
 
     /**
@@ -159,6 +179,20 @@ internal object CloudflareRanges {
     private fun ipv6ToBytes(ip: String): ByteArray? {
         val trimmed = ip.trim().removePrefix("[").removeSuffix("]")
         if (!trimmed.contains(':')) return null
+
+        val mappedIpv4 = extractIpv4FromMapped(trimmed)
+        if (mappedIpv4 != null) {
+            val v4Long = ipv4ToLong(mappedIpv4) ?: return null
+            val result = ByteArray(16)
+            result[10] = 0xFF.toByte()
+            result[11] = 0xFF.toByte()
+            result[12] = ((v4Long shr 24) and 0xFF).toByte()
+            result[13] = ((v4Long shr 16) and 0xFF).toByte()
+            result[14] = ((v4Long shr 8) and 0xFF).toByte()
+            result[15] = (v4Long and 0xFF).toByte()
+            return result
+        }
+
         if (!trimmed.all { it.isDigit() || (it in 'a'..'f') || (it in 'A'..'F') || it == ':' }) {
             return null
         }
