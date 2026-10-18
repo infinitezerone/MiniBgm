@@ -349,6 +349,11 @@ class SubjectDetailViewModel(
                     ?.displayName
                     .orEmpty(),
             episode = episode,
+            coverUrl =
+                _uiState.value.subject
+                    ?.images
+                    ?.bestImage
+                    .orEmpty(),
         )
 
     private val isLoggedIn =

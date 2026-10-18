@@ -1,7 +1,10 @@
 package com.infinitezerone.minibgm.feature.user
 
 import com.infinitezerone.minibgm.core.model.PlaybackHistory
+import com.infinitezerone.minibgm.core.model.Subject
+import com.infinitezerone.minibgm.core.model.SubjectImages
 import com.infinitezerone.minibgm.core.testing.repository.FakePlaybackHistoryRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -132,6 +135,29 @@ class HistoryViewModelTest {
             val event = viewModel.events.first()
             assertIs<HistoryUiEvent.ShowSnackbar>(event)
             assertEquals(R.string.feature_user_history_subject_deleted, event.messageRes)
+        }
+
+    @Test
+    fun healMissingCovers_recoversBlankCoverFromSubjectRepository() =
+        runTest {
+            val historyRepo = FakePlaybackHistoryRepository()
+            historyRepo.saveHistory(
+                history(episodeId = 101L, subjectId = 7L, updatedAt = 1_000L).copy(coverUrl = ""),
+            )
+            val subjectRepo = FakeSubjectRepository()
+            subjectRepo.sendSubject(
+                Subject(
+                    id = 7L,
+                    name = "葬送的芙莉莲",
+                    images = SubjectImages(large = "https://example.com/frieren.jpg"),
+                ),
+            )
+
+            val viewModel = HistoryViewModel(historyRepo, subjectRepo)
+            advanceUntilIdle()
+
+            val healed = requireNotNull(historyRepo.getHistoryByEpisode(101L))
+            assertEquals("https://example.com/frieren.jpg", healed.coverUrl)
         }
 
     private fun history(

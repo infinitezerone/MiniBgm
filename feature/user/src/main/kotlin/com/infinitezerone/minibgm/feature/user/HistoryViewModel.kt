@@ -3,7 +3,9 @@ package com.infinitezerone.minibgm.feature.user
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.repository.PlaybackHistoryRepository
+import com.infinitezerone.minibgm.core.data.repository.SubjectRepository
 import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -11,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -38,6 +41,7 @@ sealed interface HistoryUiEvent {
 
 class HistoryViewModel(
     private val playbackHistoryRepository: PlaybackHistoryRepository,
+    private val subjectRepository: SubjectRepository? = null,
 ) : ViewModel() {
     private val _events = Channel<HistoryUiEvent>(Channel.BUFFERED)
     val events: Flow<HistoryUiEvent> = _events.receiveAsFlow()
@@ -60,6 +64,42 @@ class HistoryViewModel(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = HistoryUiState(isLoading = true),
         )
+
+    init {
+        healMissingCovers()
+    }
+
+    /**
+     * 存量自愈：若历史库中存在此前遗留的无封面记录，异步从条目仓中补齐并回写
+     */
+    private fun healMissingCovers() {
+        val repo = subjectRepository ?: return
+        viewModelScope.launch {
+            val history =
+                playbackHistoryRepository
+                    .observeRecentHistory(limit = PLAYBACK_HISTORY_LIMIT)
+                    .firstOrNull { list -> list.any { it.coverUrl.isBlank() && it.subjectId > 0L } }
+                    ?: return@launch
+            val missing = history.filter { it.coverUrl.isBlank() && it.subjectId > 0L }
+            val distinctSubjectIds = missing.map { it.subjectId }.distinct()
+            for (sid in distinctSubjectIds) {
+                val cached =
+                    repo.getCachedSubject(sid)
+                        ?: (repo.fetchSubjectDetail(sid) as? AppResult.Success)?.data
+                val bestCover =
+                    cached?.images?.bestImage
+                        ?: cached?.images?.large
+                        ?: cached?.images?.common
+                if (!bestCover.isNullOrBlank()) {
+                    missing
+                        .filter { it.subjectId == sid }
+                        .forEach { entry ->
+                            playbackHistoryRepository.saveHistory(entry.copy(coverUrl = bestCover))
+                        }
+                }
+            }
+        }
+    }
 
     /** 展开/收起某部番的分集列表；未知番剧（<=0）没有可展开的分组 */
     fun toggleSubjectExpanded(subjectId: Long) {

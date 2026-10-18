@@ -552,6 +552,7 @@ class PlayerViewModel(
             episodeSort = entry.episodeSort,
             episodeType = entry.episodeType,
             subjectName = route.subjectName,
+            subjectCoverUrl = route.coverUrl,
             requestHeaders = entry.requestHeaders,
             queue = queue,
             currentIndex = session.currentIndex,
@@ -732,7 +733,7 @@ class PlayerViewModel(
         if (route.subjectId > 0) {
             viewModelScope.launch {
                 subjectRepository?.fetchEpisodes(route.subjectId)
-                if (route.subjectName.isBlank()) {
+                if (route.subjectName.isBlank() || _uiState.value.subjectCoverUrl.isBlank()) {
                     subjectRepository?.fetchSubjectDetail(route.subjectId)
                 }
             }
@@ -902,7 +903,9 @@ class PlayerViewModel(
                     currentEpisodeDesc = currentEp?.desc ?: next.currentEpisodeDesc,
                     currentEpisodeAirdate = currentEp?.airdate ?: next.currentEpisodeAirdate,
                     currentEpisodeCommentCount = currentEp?.commentCount ?: next.currentEpisodeCommentCount,
-                    subjectCoverUrl = snapshot.subject?.images?.large ?: snapshot.subject?.images?.common ?: next.subjectCoverUrl,
+                    subjectCoverUrl =
+                        snapshot.subject?.images?.bestImage ?: snapshot.subject?.images?.large ?: snapshot.subject?.images?.common
+                            ?: next.subjectCoverUrl,
                     subjectScore = snapshot.subject?.rating?.score ?: next.subjectScore,
                     subjectDate = snapshot.subject?.date?.ifBlank { snapshot.subject.airDate } ?: next.subjectDate,
                     subjectSummary = snapshot.subject?.summary ?: next.subjectSummary,
@@ -1279,9 +1282,30 @@ class PlayerViewModel(
             session.currentIndex = queueIndex
         }
 
-        val isDirect = state.currentSource?.isDirect == true
+        var isDirect = state.currentSource?.isDirect == true
         val directEntry = if (isDirect && queueIndex >= 0) queue[queueIndex] else null
-        val directMissing = isDirect && directEntry == null
+        var directMissing = isDirect && directEntry == null
+        var targetSourceIndex = state.selectedSourceIndex
+
+        // 当直链队列中缺失目标分集时（例如从观看记录回放单集直链后切下一集）：
+        // 若存在可用规则源，无缝平滑切换至规则源进行嗅探解析，而不是直接死锁报错
+        if (directMissing && state.currentSource?.kind == PlayerSourceKind.DIRECT) {
+            val fallbackRuleIndex =
+                if (route.initialSourceId.isNotBlank() && route.initialSourceId != DIRECT_SOURCE_ID) {
+                    state.sources.indexOfFirst { it.rule?.id == route.initialSourceId }.takeIf { it >= 0 }
+                } else {
+                    null
+                } ?: state.sources.indexOfFirst { !it.isDirect && (state.sourceFailureCounts[it.id] ?: 0) == 0 }.takeIf { it >= 0 }
+                    ?: state.sources.indexOfFirst { !it.isDirect }.takeIf { it >= 0 }
+
+            if (fallbackRuleIndex != null) {
+                targetSourceIndex = fallbackRuleIndex
+                isDirect = false
+                directMissing = false
+                session.selectedSourceId = state.sources.getOrNull(fallbackRuleIndex)?.id
+            }
+        }
+
         val currentEp =
             state.episodes.firstOrNull {
                 (episode.id > 0 && it.id == episode.id) ||
@@ -1297,6 +1321,7 @@ class PlayerViewModel(
                 episodeSort = episode.sort,
                 episodeType = episode.type,
                 currentIndex = if (queueIndex >= 0) queueIndex else it.currentIndex,
+                selectedSourceIndex = targetSourceIndex,
                 isWatched = currentEp?.isWatched ?: false,
                 currentEpisodeDesc = currentEp?.desc ?: episode.desc,
                 currentEpisodeAirdate = currentEp?.airdate ?: episode.airdate,
@@ -1316,7 +1341,7 @@ class PlayerViewModel(
                     },
                 playingSourceId =
                     when {
-                        directEntry != null -> it.sources.getOrNull(it.selectedSourceIndex)?.id
+                        directEntry != null -> it.sources.getOrNull(targetSourceIndex)?.id
                         directMissing -> null
                         // 非直链源保留旧画面，归属要等嗅探出地址那一刻才替换
                         else -> it.playingSourceId
@@ -1662,6 +1687,22 @@ class PlayerViewModel(
                     )
                 }
             } else {
+                if (currentTab.kind == PlayerSourceKind.DIRECT) {
+                    val fallbackRuleIndex =
+                        if (route.initialSourceId.isNotBlank() && route.initialSourceId != DIRECT_SOURCE_ID) {
+                            state.sources.indexOfFirst { it.rule?.id == route.initialSourceId }.takeIf { it >= 0 }
+                        } else {
+                            null
+                        } ?: state.sources.indexOfFirst { !it.isDirect && (state.sourceFailureCounts[it.id] ?: 0) == 0 }.takeIf { it >= 0 }
+                            ?: state.sources.indexOfFirst { !it.isDirect }.takeIf { it >= 0 }
+
+                    if (fallbackRuleIndex != null) {
+                        _uiState.update { it.copy(selectedSourceIndex = fallbackRuleIndex) }
+                        session.selectedSourceId = state.sources.getOrNull(fallbackRuleIndex)?.id
+                        resolveCurrentEpisodeStream()
+                        return
+                    }
+                }
                 val errorMessage =
                     when (currentTab.kind) {
                         PlayerSourceKind.TORRENT_STREAM -> "当前 BT 资源仅包含单集，请切换线路或重新选源"

@@ -11,6 +11,7 @@ fun buildEpisodePlayerRoute(
     subjectId: Long,
     subjectName: String,
     episode: Episode,
+    coverUrl: String = "",
 ): PlayerRoute =
     PlayerRoute(
         subjectId = subjectId,
@@ -21,4 +22,5 @@ fun buildEpisodePlayerRoute(
         subjectName = subjectName,
         episodeSort = episode.episodeNumber,
         episodeType = episode.type,
+        coverUrl = coverUrl,
     )

@@ -245,14 +245,20 @@ fun HistoryScreen(
 }
 
 /** 历史记录 → 播放器路由：点击即按该分集的断点续播 */
-private fun PlaybackHistory.toPlayerRoute(): PlayerRoute =
-    PlayerRoute(
+private fun PlaybackHistory.toPlayerRoute(): PlayerRoute {
+    val isRuleSource = sourceId.isNotBlank() && sourceId != "direct"
+    return PlayerRoute(
         subjectId = subjectId,
         episodeId = episodeId,
-        streamUrl = streamUrl,
+        // 若来自规则源，不传过期的静态单集直链（避免锁死单集直链队列），带上 initialRuleId 由规则引擎解析并支持下一集连播；
+        // 若纯直链/本地/离线则保留 streamUrl
+        streamUrl = if (isRuleSource) "" else streamUrl,
         episodeName = episodeName,
         subjectName = subjectName,
         episodeSort = episodeSort,
         initialSourceName = sourceName,
         initialSourceId = sourceId,
+        initialRuleId = if (isRuleSource) sourceId else "",
+        coverUrl = coverUrl,
     )
+}

@@ -484,6 +484,11 @@ class EpisodeDetailViewModel(
                     ?.displayName
                     .orEmpty(),
             episode = episode,
+            coverUrl =
+                uiState.value.subject
+                    ?.images
+                    ?.bestImage
+                    .orEmpty(),
         )
 
     /**

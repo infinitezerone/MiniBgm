@@ -172,6 +172,8 @@ data class PlayerRoute(
      * 用于在回放历史直链期间**保留来源归属**，避免下次从历史进入时退化成「默认直链」。
      */
     val initialSourceId: String = "",
+    /** 入口携带的条目封面 URL，用于播放器立即展示与落盘观看记录，避免详情未拉取前封面丢失 */
+    val coverUrl: String = "",
 ) : DetailChainRoute
 
 /** 播放队列里的一条分集（与 [PlayerRoute] 同生命周期，仅用于播放器内换集与连播） */

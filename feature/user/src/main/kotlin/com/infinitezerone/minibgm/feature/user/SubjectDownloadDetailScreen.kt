@@ -350,6 +350,7 @@ internal fun SubjectDownloadDetailContent(
                                                 episodeName = task.episodeName.ifBlank { task.title },
                                                 subjectName = task.subjectName.ifBlank { subjectName },
                                                 episodeSort = task.episodeSort,
+                                                coverUrl = task.subjectCoverUrl,
                                             )
                                         play(route)
                                     }

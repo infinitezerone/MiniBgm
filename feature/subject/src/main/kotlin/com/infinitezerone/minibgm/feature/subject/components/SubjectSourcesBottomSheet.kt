@@ -600,12 +600,14 @@ fun SubjectSourcesBottomSheet(
                                     subjectName = displayName,
                                     episodeSort = episode.episodeNumber,
                                     episodeType = episode.type,
+                                    coverUrl = subject.images?.bestImage.orEmpty(),
                                 )
                             } else {
                                 PlayerRoute(
                                     subjectId = subject.id,
                                     episodeId = 0L,
                                     subjectName = displayName,
+                                    coverUrl = subject.images?.bestImage.orEmpty(),
                                 )
                             }
                         onInternalPlayClick(route)
@@ -712,6 +714,7 @@ fun SubjectSourcesBottomSheet(
                                                     // 面板与观看记录才能显示真实源名，而不是「默认直链」
                                                     initialSourceId = rule.id,
                                                     initialSourceName = rule.name,
+                                                    coverUrl = subject.images?.bestImage.orEmpty(),
                                                 )
                                             onInternalPlayClick(route)
                                         } else {
@@ -1171,6 +1174,7 @@ fun TorrentMediaResourcesSection(
                                         episodeId = episode?.id ?: 0L,
                                     ),
                                 ),
+                            coverUrl = subject.images?.bestImage.orEmpty(),
                         ),
                     )
                 }
@@ -1225,6 +1229,7 @@ fun TorrentMediaResourcesSection(
                                             episodeId = episode?.id ?: 0L,
                                         ),
                                     ),
+                                coverUrl = subject.images?.bestImage.orEmpty(),
                             ),
                         )
                     }

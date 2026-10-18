@@ -68,6 +68,7 @@ class PlayerViewModelTest {
         initialRuleId: String = "",
         initialSourceName: String = "",
         initialSourceId: String = "",
+        coverUrl: String = "",
         episodeId: Long = this.episodeId,
     ) = PlayerRoute(
         subjectId = subjectId,
@@ -78,6 +79,7 @@ class PlayerViewModelTest {
         initialRuleId = initialRuleId,
         initialSourceName = initialSourceName,
         initialSourceId = initialSourceId,
+        coverUrl = coverUrl,
     )
 
     private fun viewModel(
@@ -562,6 +564,53 @@ class PlayerViewModelTest {
             val entry = requireNotNull(historyRepo.getHistoryByEpisode(episodeId))
             assertEquals("r1", entry.sourceId)
             assertEquals("R1", entry.sourceName)
+        }
+
+    @Test
+    fun initialCoverUrl_setsSubjectCoverUrl() {
+        val testCover = "https://lain.bgm.tv/pic/cover/l/test.jpg"
+        val state = viewModel(route = route(coverUrl = testCover)).uiState.value
+        assertEquals(testCover, state.subjectCoverUrl)
+    }
+
+    /**
+     * 从历史记录回放单集直链后切下一集：
+     * 直链队列只有该集时（directMissing），必须无缝平滑切至规则源并嗅探下一集，不得报死锁错误。
+     */
+    @Test
+    fun selectEpisode_onDirectMissing_fallsBackToRuleSourceAndResolves() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            settings.setPlaybackRules(rulesOf("r1"))
+            val viewModel =
+                viewModel(
+                    route =
+                        route(
+                            episodeId = 2001L,
+                            streamUrl = "https://example.com/ep1_direct.m3u8",
+                            initialSourceId = "r1",
+                            initialSourceName = "R1",
+                        ),
+                    settingsRepository = settings,
+                    playbackResolverRepository = resolverReturning("https://example.com/ep2_resolved.m3u8"),
+                )
+            advanceUntilIdle()
+
+            // 初始在直链源上
+            assertTrue(
+                viewModel.uiState.value.currentSource
+                    ?.isDirect == true,
+            )
+            assertEquals("https://example.com/ep1_direct.m3u8", viewModel.uiState.value.streamUrl)
+
+            // 切换到第 2 话（直链队列没有第 2 话）
+            viewModel.selectEpisode(PlayerEpisodeItem(id = 2002L, sort = 2f, name = "第 2 话"))
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertNull("平滑降级到规则源后不得报错", state.error)
+            assertEquals("应成功通过规则源解析出第 2 话流地址", "https://example.com/ep2_resolved.m3u8", state.streamUrl)
+            assertEquals("当前播放源应已切换为规则源 r1", "r1", state.playingSourceId)
         }
 
     @Test

@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.user.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -81,9 +82,16 @@ internal fun PlaybackHistoryCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(start = 10.dp, top = 10.dp, bottom = 10.dp, end = 2.dp),
             ) {
-                HistoryCover(url = group.coverUrl)
+                HistoryCover(
+                    url = group.coverUrl,
+                    progress = group.latest.progress,
+                    showProgress = group.latest.durationMs > 0L && group.latest.progress > 0f,
+                )
                 Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     Text(
                         text = group.subjectName,
                         style = MaterialTheme.typography.bodyMedium,
@@ -98,19 +106,10 @@ internal fun PlaybackHistoryCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { group.latest.progress },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .height(4.dp)
-                                .clip(RoundedCornerShape(4.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 2.dp),
+                    ) {
                         Text(
                             text = historyProgressText(group.latest),
                             style = MaterialTheme.typography.labelSmall,
@@ -342,9 +341,13 @@ private const val ONE_MINUTE_MILLIS = 60_000L
 private const val ONE_HOUR_MILLIS = 60 * ONE_MINUTE_MILLIS
 private const val ONE_DAY_MILLIS = 24 * ONE_HOUR_MILLIS
 
-/** 封面缩略图：无封面时退化为播放图标占位，不阻塞整行布局 */
+/** 封面缩略图：无封面时退化为播放图标占位，底边贴合微型断点进度条 */
 @Composable
-private fun HistoryCover(url: String) {
+private fun HistoryCover(
+    url: String,
+    progress: Float = 0f,
+    showProgress: Boolean = false,
+) {
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -352,20 +355,38 @@ private fun HistoryCover(url: String) {
             Modifier
                 .size(width = HISTORY_COVER_WIDTH, height = HISTORY_COVER_HEIGHT),
     ) {
-        if (url.isNotBlank()) {
-            AsyncImage(
-                model = url,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = BgmIcons.PlayCircle,
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (url.isNotBlank()) {
+                AsyncImage(
+                    model = url,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = BgmIcons.PlayCircle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
+            }
+            if (showProgress) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .align(Alignment.BottomCenter)
+                            .clip(RoundedCornerShape(bottomStart = 8.dp, bottomEnd = 8.dp)),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f),
                 )
             }
         }
