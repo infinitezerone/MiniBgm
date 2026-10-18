@@ -17,7 +17,9 @@
 9. **AGP 的 `splits` 是全局 DSL，没有"按变体开关"的公开 API（9.3.2 的 `Splits` 只在 `com.android.build.api.dsl`）**：
    * 所以"debug 单包 / release 分包"只能靠**项目属性 + 工作流保证**：`app/build.gradle.kts` 里 `val enableAbiSplits = (project.findProperty("minibgm.abiSplits") as? String)?.toBoolean() ?: false`，发版时由 `release.yml` 传 `-Pminibgm.abiSplits=true`。改这类"默认关、发版开"的开关时，**必须在发版链路补产物断言**（缺包直接 exit 1），否则一改就静默退化成 fat APK，下游的分 ABI 资产与 universal 别名全部变形。
 10. **续播点属于"分集"而不是"上一个地址"**：
-   * 任何换集入口都必须显式按新分集查表下发 `resumePositionMs`。直链换集时新地址当下可知，当场查表；规则源换集时旧画面被故意保留、新地址要等嗅探结果，只能把查表推迟到解析成功那一刻一次性消费（`consumePendingResumePositionForNewEpisode`），而同分集内换线路必须沿用当前进度（不可消费）。只靠"`resumePositionMs == 0` 才回填"的仓库快照回填会漏掉换集路径，把上一集进度当成新分集续播点下发，导致新分集跳到旧分集时间轴、短集瞬间播完并连播空跳。新增换集入口时，同步补一条"换集后 `resumePositionMs` 等于新分集自己的记录"的回归单测。
+   * 任何换集入口都必须显式按新分集查表下发 `resumePositionMs`。直链换集时新地址当下可知，当场查表；规则源换集时旧画面被故意保留、新地址要等嗅探结果，只能把查表推迟到解析成功那一刻一次性消费（`consumePendingResumePositionForNewEpisode`），而同分集内换线路必须沿用当前进度（不可消费）。
+   * 严禁将未看过的分集回退至旧分集的 `latestPositionMs`（新分集无历史即下发 0L）；播放从头开始后，中途周期性自动落盘产生的位置表快照（`applyRepoSnapshot`）严禁反向冲刷回 `resumePositionMs`，避免未看过的视频播到 10 秒时突发「从上次开始播放」浮层与跳帧。
+   * 新增换集入口时，同步补一条"换集后 `resumePositionMs` 等于新分集自己的记录"与"未看过视频续播点保持 0L"的回归单测。
 11. **离线视频播放器工厂与种子规则隔离**：
    * ExoPlayer 引擎的 `DefaultMediaSourceFactory` 必须经 `DefaultDataSource.Factory(context, httpDataSourceFactory)` 包装。若裸传 `httpDataSourceFactory`，Media3 播放离线下载的 `file://` 视频时会强转为 `HttpURLConnection` 造成 `ClassCastException` 崩溃；
    * 播放器线路构建（`PlayerViewModel.buildSources`）必须过滤 `kind != PlaybackRuleKind.TORRENT`，避免将 BT 种子嗅探规则误暴露给播放器作为普通在线流；

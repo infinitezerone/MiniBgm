@@ -411,16 +411,21 @@ fun PlayerScreen(
     }
 
     // 续播断点恢复与内置浮层触发：仅对新分集且有此前记录时触发一次（同分集换线无缝继承进度，不重复提示）
-    LaunchedEffect(uiState.resumePositionMs, uiState.streamUrl, playerReady) {
-        if (playerReady && uiState.resumePositionMs >= MIN_RESUME_POSITION_MS && lastResumedEpisodeId != uiState.episodeId) {
-            lastResumedEpisodeId = uiState.episodeId
+    LaunchedEffect(uiState.episodeId, uiState.streamUrl, playerReady, uiState.resumePositionMs) {
+        if (playerReady && lastResumedEpisodeId != uiState.episodeId) {
             val resume = uiState.resumePositionMs
-            val duration = playback.durationMs
-            if (duration <= 0L || resume < duration * 0.95) {
-                if (position.value < MIN_RESUME_POSITION_MS) {
-                    controller.seekTo(resume)
+            if (resume >= MIN_RESUME_POSITION_MS) {
+                lastResumedEpisodeId = uiState.episodeId
+                val duration = playback.durationMs
+                if (duration <= 0L || resume < duration * 0.95) {
+                    if (position.value < MIN_RESUME_POSITION_MS) {
+                        controller.seekTo(resume)
+                    }
+                    resumeOverlayPosition = resume
                 }
-                resumeOverlayPosition = resume
+            } else if (position.value >= MIN_RESUME_POSITION_MS) {
+                // 当前分集已经从头播放超过了阈值，确认本集是从头播放的，直接锁定，后续决不弹窗
+                lastResumedEpisodeId = uiState.episodeId
             }
         }
     }

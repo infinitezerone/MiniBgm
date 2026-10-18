@@ -608,6 +608,86 @@ class PlayerViewModelTest {
         }
 
     @Test
+    fun selectEpisode_onRuleSource_unwatchedEpisode_resumePositionMsMustStayZero() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            // ep2 没有历史记录（从未看过）
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule1",
+                    name = "TestRule",
+                    urlTemplate = "https://example.com/watch?t={title}&ep={ep}",
+                    isEnabled = true,
+                )
+            settings.importPlaybackRules(listOf(rule))
+
+            val fakeResolver =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> =
+                        listOf(
+                            PlayableSource(
+                                url = "https://cdn.example.com/ep${epNumber.toInt()}.m3u8",
+                                kind = PlaylistEntryKind.DIRECT,
+                            ),
+                        )
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+                }
+
+            val viewModel =
+                PlayerViewModel(
+                    route = route(streamUrl = ""),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                    playbackResolverRepository = fakeResolver,
+                )
+            advanceUntilIdle()
+
+            // 正在播放第 1 集至 120 秒
+            viewModel.onProgressChanged(120_000L)
+
+            // 切换到第 2 集（从未看过）
+            viewModel.selectEpisode(PlayerEpisodeItem(id = 0L, sort = 2f, name = "第二话"))
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals("https://cdn.example.com/ep2.m3u8", state.streamUrl)
+            assertEquals("未看过的分集续播点必须为 0，严禁继承上一集的播放进度", 0L, state.resumePositionMs)
+        }
+
+    @Test
+    fun playingFromBeginning_flushPlaybackPosition_doesNotMutateResumePositionMsMidPlayback() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val viewModel = viewModel(settingsRepository = settings)
+            advanceUntilIdle()
+            assertEquals("初始未看过的视频续播点应为 0", 0L, viewModel.uiState.value.resumePositionMs)
+
+            // 播放中途回报进度并落盘
+            viewModel.onProgressChanged(10_000L)
+            viewModel.flushPlaybackPosition()
+            advanceUntilIdle()
+
+            assertEquals(
+                "播放中途周期性自动落盘严禁反向冲刷回入场续播点 resumePositionMs",
+                0L,
+                viewModel.uiState.value.resumePositionMs,
+            )
+        }
+
+    @Test
     fun onPlaybackEnded_clearsSavedResumePosition() =
         runTest {
             val settings = FakeSettingsRepository()

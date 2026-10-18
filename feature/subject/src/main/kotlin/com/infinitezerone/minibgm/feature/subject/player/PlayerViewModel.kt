@@ -365,6 +365,9 @@ private class PlaybackSession(
      */
     var latestDurationMs: Long = 0L
 
+    /** 当前分集是否已完成入场续播点解析（锁定后，播放中途的自动落盘严禁反向冲刷成续播点） */
+    var initialResumeResolvedEpisodeId: Long? = null
+
     /**
      * 换集/结束时统一清空进度跟踪。
      *
@@ -375,6 +378,7 @@ private class PlaybackSession(
         latestPositionMs = 0L
         latestDurationMs = 0L
         progressTicksSinceSave = 0
+        initialResumeResolvedEpisodeId = null
     }
 
     /** 距上次落盘累计的进度跳数 */
@@ -731,7 +735,8 @@ class PlayerViewModel(
             loadComments()
             viewModelScope.launch {
                 val history = playbackHistoryRepository?.getHistoryByEpisode(route.episodeId)
-                if (history != null && history.positionMs > 0L && !history.isCompleted) {
+                session.initialResumeResolvedEpisodeId = route.episodeId
+                if (history != null && history.positionMs >= MIN_RESUME_POSITION_MS && !history.isCompleted) {
                     _uiState.update { current ->
                         if (current.resumePositionMs == 0L) {
                             current.copy(resumePositionMs = history.positionMs)
@@ -919,9 +924,16 @@ class PlayerViewModel(
             if (snapshot.subtitlesDisabled != next.subtitlesDisabled) {
                 next = next.copy(subtitlesDisabled = snapshot.subtitlesDisabled)
             }
-            // 尚无可恢复点时跟随位置表刷新当前分集（已下发/消费过的不回退）
-            if (next.resumePositionMs == 0L && next.streamUrl.isNotBlank()) {
-                next = next.copy(resumePositionMs = snapshot.positions[next.streamUrl] ?: 0L)
+            // 首次进页且尚未开始播放、尚未锁定初次续播点时，跟随位置表同步历史记录；
+            // 播放一旦发生（latestPositionMs > 0 或已锁定），中途周期性落盘产生的新位置严禁反向冲刷回 resumePositionMs
+            if (session.initialResumeResolvedEpisodeId != next.episodeId && session.latestPositionMs <= 0L) {
+                if (next.resumePositionMs == 0L && next.streamUrl.isNotBlank()) {
+                    val saved = snapshot.positions[next.streamUrl] ?: 0L
+                    if (saved >= MIN_RESUME_POSITION_MS) {
+                        next = next.copy(resumePositionMs = saved)
+                        session.initialResumeResolvedEpisodeId = next.episodeId
+                    }
+                }
             }
             next
         }
@@ -955,6 +967,7 @@ class PlayerViewModel(
     fun onProgressChanged(positionMs: Long) {
         if (positionMs <= 0L) return
         session.latestPositionMs = positionMs
+        session.initialResumeResolvedEpisodeId = _uiState.value.episodeId
         if (++session.progressTicksSinceSave >= POSITION_SAVE_TICKS) {
             session.progressTicksSinceSave = 0
             flushPlaybackPosition()
@@ -1036,6 +1049,7 @@ class PlayerViewModel(
                 }
             val memoryPosition = fallbackUrl?.let { session.positionsMap[it] } ?: 0L
             val bestPosition = maxOf(historyPosition, memoryPosition)
+            session.initialResumeResolvedEpisodeId = episodeId
             if (bestPosition >= MIN_RESUME_POSITION_MS) {
                 _uiState.update { current ->
                     if (current.episodeId == episodeId && current.resumePositionMs == 0L) {
@@ -1620,6 +1634,7 @@ class PlayerViewModel(
                         (it.episodeSort >= 0f && it.episodeSort == state.episodeSort)
                 }
             if (matchingEntry != null && matchingEntry.streamUrl.isNotBlank()) {
+                val isNewEpisode = session.pendingResumeLookupForNewEpisode
                 val resumeForNewEpisode = consumePendingResumePositionForNewEpisode(matchingEntry.streamUrl)
                 _uiState.update {
                     it.copy(
@@ -1629,9 +1644,13 @@ class PlayerViewModel(
                         isResolvingSource = false,
                         error = null,
                         resumePositionMs =
-                            resumeForNewEpisode ?: session.latestPositionMs.takeIf { pos ->
-                                pos > 0L
-                            } ?: it.resumePositionMs,
+                            if (isNewEpisode) {
+                                resumeForNewEpisode ?: 0L
+                            } else {
+                                session.latestPositionMs.takeIf { pos ->
+                                    pos > 0L
+                                } ?: it.resumePositionMs
+                            },
                     )
                 }
             } else {
@@ -1711,6 +1730,7 @@ class PlayerViewModel(
 
                     if (playable != null) {
                         // 换集到此才拿到新分集的真实地址，续播点在此刻按新地址查表下发；同分集内换线路沿用当前进度
+                        val isNewEpisode = session.pendingResumeLookupForNewEpisode
                         val resumeForNewEpisode = consumePendingResumePositionForNewEpisode(playable.url)
                         _uiState.update {
                             it.copy(
@@ -1723,7 +1743,11 @@ class PlayerViewModel(
                                 resolveAttemptTotal = 0,
                                 error = null,
                                 resumePositionMs =
-                                    resumeForNewEpisode ?: session.latestPositionMs.takeIf { pos -> pos > 0L } ?: it.resumePositionMs,
+                                    if (isNewEpisode) {
+                                        resumeForNewEpisode ?: 0L
+                                    } else {
+                                        session.latestPositionMs.takeIf { pos -> pos > 0L } ?: it.resumePositionMs
+                                    },
                             )
                         }
                     } else {
