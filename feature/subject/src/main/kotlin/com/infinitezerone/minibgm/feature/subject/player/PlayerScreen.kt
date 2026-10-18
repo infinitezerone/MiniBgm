@@ -1058,8 +1058,8 @@ private fun PlayerVideoStage(
                     !playback.isEnded &&
                     errorMessage == null &&
                     playback.durationMs > 0L,
-            enter = fadeIn(tween(150)),
-            exit = fadeOut(tween(150)),
+            enter = fadeIn(tween(100)),
+            exit = fadeOut(tween(100)),
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
         ) {
             // 位置单独订阅：只有底边进度线随 500ms 位置跳重组
@@ -1091,8 +1091,8 @@ private fun PlayerVideoStage(
                     playback.isBuffering ||
                     playback.isEnded ||
                     errorMessage != null,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn(tween(100)),
+            exit = fadeOut(tween(100)),
             modifier = Modifier.fillMaxSize(),
         ) {
             PlayerControlsOverlay(
@@ -1148,13 +1148,14 @@ private fun PlayerVideoStage(
                 } else {
                     if (isLandscape) 28.dp else 16.dp
                 },
+            animationSpec = tween(100),
             label = "resumeOverlayBottomPadding",
         )
 
         AnimatedVisibility(
             visible = resumeOverlayPosition != null && !isLocked,
-            enter = fadeIn() + slideInVertically { it / 2 },
-            exit = fadeOut() + slideOutVertically { it / 2 },
+            enter = fadeIn(tween(100)) + slideInVertically(tween(100)) { it / 2 },
+            exit = fadeOut(tween(100)) + slideOutVertically(tween(100)) { it / 2 },
             modifier =
                 Modifier
                     .align(Alignment.BottomStart)

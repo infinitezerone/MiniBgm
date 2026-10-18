@@ -118,8 +118,8 @@ fun OverlayProviderScope.playerEpisodeQueuePanel(
         Box(modifier = Modifier.fillMaxSize()) {
             AnimatedVisibility(
                 visibleState = visibleState,
-                enter = fadeIn(tween(durationMillis = 200)),
-                exit = fadeOut(tween(durationMillis = 200)),
+                enter = fadeIn(tween(durationMillis = 150)),
+                exit = fadeOut(tween(durationMillis = 120)),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Box(
@@ -139,12 +139,12 @@ fun OverlayProviderScope.playerEpisodeQueuePanel(
                 enter =
                     slideInHorizontally(
                         initialOffsetX = { fullWidth -> fullWidth },
-                        animationSpec = tween(durationMillis = 250),
+                        animationSpec = tween(durationMillis = 160),
                     ),
                 exit =
                     slideOutHorizontally(
                         targetOffsetX = { fullWidth -> fullWidth },
-                        animationSpec = tween(durationMillis = 200),
+                        animationSpec = tween(durationMillis = 140),
                     ),
                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
             ) {
@@ -228,8 +228,8 @@ fun OverlayProviderScope.playerSourcesPanel(
             Box(modifier = Modifier.fillMaxSize()) {
                 AnimatedVisibility(
                     visibleState = visibleState,
-                    enter = fadeIn(tween(durationMillis = 200)),
-                    exit = fadeOut(tween(durationMillis = 200)),
+                    enter = fadeIn(tween(durationMillis = 150)),
+                    exit = fadeOut(tween(durationMillis = 120)),
                     modifier = Modifier.fillMaxSize(),
                 ) {
                     Box(
@@ -249,12 +249,12 @@ fun OverlayProviderScope.playerSourcesPanel(
                     enter =
                         slideInHorizontally(
                             initialOffsetX = { fullWidth -> fullWidth },
-                            animationSpec = tween(durationMillis = 250),
+                            animationSpec = tween(durationMillis = 160),
                         ),
                     exit =
                         slideOutHorizontally(
                             targetOffsetX = { fullWidth -> fullWidth },
-                            animationSpec = tween(durationMillis = 200),
+                            animationSpec = tween(durationMillis = 140),
                         ),
                     modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
                 ) {
