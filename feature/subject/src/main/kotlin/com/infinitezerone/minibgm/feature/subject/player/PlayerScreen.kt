@@ -151,24 +151,6 @@ fun PlayerScreen(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // 弹幕分集纠正：挂起承接候选挑选浮层，选中即落库覆盖并重载弹幕
-    val openDanmakuPicker: () -> Unit = {
-        coroutineScope.launch {
-            val match = uiState.danmakuMatch ?: return@launch
-            val chosen =
-                overlayHostState.awaitOrNull(
-                    DanmakuCandidateRequest(
-                        candidates = match.candidates,
-                        current = match.chosen,
-                        currentState = match.state,
-                    ),
-                )
-            if (chosen != null) {
-                viewModel.selectDanmakuCandidate(chosen)
-            }
-        }
-    }
-
     // 单个播放引擎 + 控制器：换源只更新请求头，绝不重建播放器
     val engine = remember(context) { ExoPlayerEngine(context) }
     val controller = remember(engine, coroutineScope) { PlayerController(engine, coroutineScope) }
@@ -177,9 +159,14 @@ fun PlayerScreen(
     val bufferedPosition = controller.bufferedPositionMs
     val player = controller.player
 
-    val openSettingsPanel: () -> Unit = {
+    val openSettingsPanel: (PlayerSettingsTab) -> Unit = { tab ->
         controller.refreshTracksSnapshot()
-        coroutineScope.launch { overlayHostState.await(PlayerSettingsRequest) }
+        coroutineScope.launch { overlayHostState.await(PlayerSettingsRequest(tab)) }
+    }
+
+    // 弹幕分集纠正：统一直接拉起设置抽屉的弹幕 Tab（内聚分集匹配卡片与候选切换器）
+    val openDanmakuPicker: () -> Unit = {
+        openSettingsPanel(PlayerSettingsTab.DANMAKU)
     }
     val openEpisodeQueuePanel: () -> Unit = {
         coroutineScope.launch { overlayHostState.await(PlayerEpisodeQueueRequest) }
@@ -649,12 +636,14 @@ fun PlayerScreen(
             // 手动画中画入口常驻：关闭「自动画中画」不等于用户不想要小窗
             showPipButton = true,
             currentQualityLabel = tracksSnapshot.currentQualityDisplayLabel,
-            onOpenTrackSelection = openSettingsPanel,
+            onOpenTrackSelection = { openSettingsPanel(PlayerSettingsTab.PLAYBACK) },
             danmakus = uiState.danmakus,
             isDanmakuEnabled = uiState.isDanmakuEnabled,
             onToggleDanmaku = viewModel::toggleDanmaku,
             danmakuMatch = uiState.danmakuMatch,
             onOpenDanmakuPicker = openDanmakuPicker,
+            danmakuAlpha = uiState.danmakuAlpha,
+            danmakuDurationMs = uiState.danmakuDurationMs,
             danmakuTimeOffsetMs = uiState.danmakuTimeOffsetMs,
             hasNextEpisode = uiState.hasNext,
             onPlayNextEpisode = viewModel::playNextEpisode,
@@ -883,6 +872,12 @@ fun PlayerScreen(
                     openDanmakuPicker.takeIf {
                         uiState.isDanmakuEnabled && !uiState.danmakuMatch?.candidates.isNullOrEmpty()
                     },
+                danmakuMatch = { uiState.danmakuMatch },
+                onSelectDanmakuCandidate = viewModel::selectDanmakuCandidate,
+                danmakuAlpha = { uiState.danmakuAlpha },
+                onSelectDanmakuAlpha = viewModel::setDanmakuAlpha,
+                danmakuDurationMs = { uiState.danmakuDurationMs },
+                onSelectDanmakuDurationMs = viewModel::setDanmakuDurationMs,
                 danmakuTimeOffsetMs = { uiState.danmakuTimeOffsetMs },
                 onSelectDanmakuTimeOffset = viewModel::setDanmakuTimeOffsetMs,
                 isLooping = { playback.isLooping },
@@ -994,6 +989,8 @@ private fun PlayerVideoStage(
     onToggleDanmaku: () -> Unit = {},
     danmakuMatch: DanmakuMatch? = null,
     onOpenDanmakuPicker: () -> Unit = {},
+    danmakuAlpha: Float = 1.0f,
+    danmakuDurationMs: Long = 8500L,
     danmakuTimeOffsetMs: Long = 0L,
     hasNextEpisode: Boolean = false,
     onPlayNextEpisode: (() -> Unit)? = null,
@@ -1028,6 +1025,8 @@ private fun PlayerVideoStage(
                             isPlaying = playback.isPlaying,
                             playbackSpeed = playbackSpeed,
                             timeOffsetMs = danmakuTimeOffsetMs,
+                            durationMs = danmakuDurationMs,
+                            alpha = danmakuAlpha,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }

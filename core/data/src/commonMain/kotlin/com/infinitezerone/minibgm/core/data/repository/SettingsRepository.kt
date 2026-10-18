@@ -55,6 +55,10 @@ data class UserSettings(
     val pipEnabled: Boolean = true,
     /** 弹幕显示开关（播放页长期偏好：关闭期间不发起任何弹幕请求） */
     val danmakuEnabled: Boolean = true,
+    /** 弹幕不透明度（0.1f ~ 1.0f） */
+    val danmakuAlpha: Float = 1.0f,
+    /** 弹幕全屏滚动耗时毫秒数 */
+    val danmakuDurationMs: Long = 8500L,
     /** 播放结束自动连播下一集（播放页长期偏好） */
     val autoNextEnabled: Boolean = true,
     /** 吐槽/评论排序偏好（hot / asc / desc；三处评论区共用同一条偏好；空串按各页默认） */
@@ -119,6 +123,12 @@ interface SettingsRepository {
 
     /** 弹幕显示开关（播放页长期偏好） */
     suspend fun setDanmakuEnabled(enabled: Boolean)
+
+    /** 弹幕不透明度（0.1f ~ 1.0f） */
+    suspend fun setDanmakuAlpha(alpha: Float)
+
+    /** 弹幕滚动时长毫秒数 */
+    suspend fun setDanmakuDurationMs(durationMs: Long)
 
     /** 播放结束自动连播下一集 */
     suspend fun setAutoNextEnabled(enabled: Boolean)
@@ -298,6 +308,8 @@ internal class SettingsRepositoryImpl(
                 dynamicColor = prefs.dynamicColor,
                 pipEnabled = prefs.pipEnabled,
                 danmakuEnabled = prefs.danmakuEnabled,
+                danmakuAlpha = prefs.danmakuAlpha,
+                danmakuDurationMs = prefs.danmakuDurationMs,
                 autoNextEnabled = prefs.autoNextEnabled,
                 commentSortOrder = prefs.commentSortOrder,
                 subtitlesDisabled = prefs.subtitlesDisabled,
@@ -428,6 +440,14 @@ internal class SettingsRepositoryImpl(
 
     override suspend fun setDanmakuEnabled(enabled: Boolean) {
         userPreferences.setDanmakuEnabled(enabled)
+    }
+
+    override suspend fun setDanmakuAlpha(alpha: Float) {
+        userPreferences.setDanmakuAlpha(alpha)
+    }
+
+    override suspend fun setDanmakuDurationMs(durationMs: Long) {
+        userPreferences.setDanmakuDurationMs(durationMs)
     }
 
     override suspend fun setAutoNextEnabled(enabled: Boolean) {

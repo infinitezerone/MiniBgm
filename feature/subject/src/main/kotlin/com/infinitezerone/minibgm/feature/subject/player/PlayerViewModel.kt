@@ -189,6 +189,10 @@ data class PlayerUiState(
     val matchedVodName: String? = null,
     /** 弹幕显示开关（长期偏好，真值来自设置仓库投影；关闭期间不发起任何弹幕请求） */
     val isDanmakuEnabled: Boolean = true,
+    /** 弹幕不透明度（0.1f ~ 1.0f） */
+    val danmakuAlpha: Float = 1.0f,
+    /** 弹幕全屏滚动耗时毫秒数 */
+    val danmakuDurationMs: Long = 8500L,
     /** 当前分集已加载的弹幕列表 */
     val danmakus: List<DanmakuItem> = emptyList(),
     /** 弹幕加载中状态 */
@@ -284,6 +288,8 @@ private data class PlayerRepoSnapshot(
     val rawEpisodes: List<Episode> = emptyList(),
     val pipEnabled: Boolean = true,
     val danmakuEnabled: Boolean = true,
+    val danmakuAlpha: Float = 1.0f,
+    val danmakuDurationMs: Long = 8500L,
     val autoNextEnabled: Boolean = true,
     val commentSortOrder: String = "",
     val subtitlesDisabled: Boolean = false,
@@ -302,6 +308,8 @@ private data class PlayerRepoSnapshot(
 private data class PlayViewPreferences(
     val pipEnabled: Boolean = true,
     val danmakuEnabled: Boolean = true,
+    val danmakuAlpha: Float = 1.0f,
+    val danmakuDurationMs: Long = 8500L,
     val autoNextEnabled: Boolean = true,
     val commentSortOrder: String = "",
     val subtitlesDisabled: Boolean = false,
@@ -617,6 +625,8 @@ class PlayerViewModel(
             PlayViewPreferences(
                 pipEnabled = it.pipEnabled,
                 danmakuEnabled = it.danmakuEnabled,
+                danmakuAlpha = it.danmakuAlpha,
+                danmakuDurationMs = it.danmakuDurationMs,
                 autoNextEnabled = it.autoNextEnabled,
                 commentSortOrder = it.commentSortOrder,
                 subtitlesDisabled = it.subtitlesDisabled,
@@ -671,6 +681,8 @@ class PlayerViewModel(
                 rawEpisodes = subjectData.episodes,
                 pipEnabled = playView.pipEnabled,
                 danmakuEnabled = playView.danmakuEnabled,
+                danmakuAlpha = playView.danmakuAlpha,
+                danmakuDurationMs = playView.danmakuDurationMs,
                 autoNextEnabled = playView.autoNextEnabled,
                 commentSortOrder = playView.commentSortOrder,
                 subtitlesDisabled = playView.subtitlesDisabled,
@@ -910,6 +922,12 @@ class PlayerViewModel(
             // 弹幕显示开关（长期偏好，由设置仓库投影；命令侧据此决定是否补拉）
             if (snapshot.danmakuEnabled != next.isDanmakuEnabled) {
                 next = next.copy(isDanmakuEnabled = snapshot.danmakuEnabled)
+            }
+            if (snapshot.danmakuAlpha != next.danmakuAlpha) {
+                next = next.copy(danmakuAlpha = snapshot.danmakuAlpha)
+            }
+            if (snapshot.danmakuDurationMs != next.danmakuDurationMs) {
+                next = next.copy(danmakuDurationMs = snapshot.danmakuDurationMs)
             }
             // 播放结束自动连播（长期偏好）
             if (snapshot.autoNextEnabled != next.autoNextEnabled) {
@@ -1413,6 +1431,20 @@ class PlayerViewModel(
         }
         viewModelScope.launch {
             settingsRepository.setDanmakuEnabled(targetEnabled)
+        }
+    }
+
+    /** 设置弹幕不透明度（长期偏好，落库设置仓库） */
+    fun setDanmakuAlpha(alpha: Float) {
+        viewModelScope.launch {
+            settingsRepository.setDanmakuAlpha(alpha)
+        }
+    }
+
+    /** 设置弹幕全屏滚动时长毫秒数（长期偏好，落库设置仓库） */
+    fun setDanmakuDurationMs(durationMs: Long) {
+        viewModelScope.launch {
+            settingsRepository.setDanmakuDurationMs(durationMs)
         }
     }
 

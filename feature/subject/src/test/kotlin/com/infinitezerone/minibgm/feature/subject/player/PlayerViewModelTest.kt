@@ -2623,4 +2623,37 @@ class PlayerViewModelTest {
 
             assertEquals("r1", settings.lastPlaybackSourceId.first())
         }
+
+    @Test
+    fun danmakuSettings_persistedAndReflectedInUiState() =
+        runTest {
+            val settings = FakeSettingsRepository()
+            val vm =
+                PlayerViewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = episodeId,
+                            streamUrl = "https://example.com/ep1.m3u8",
+                            subjectName = "葬送的芙莉莲",
+                            episodeSort = 1f,
+                        ),
+                    collectionRepository = FakeCollectionRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settings,
+                )
+            advanceUntilIdle()
+
+            assertEquals(1.0f, vm.uiState.value.danmakuAlpha)
+            assertEquals(8500L, vm.uiState.value.danmakuDurationMs)
+
+            vm.setDanmakuAlpha(0.6f)
+            vm.setDanmakuDurationMs(5000L)
+            advanceUntilIdle()
+
+            assertEquals(0.6f, settings.settings.first().danmakuAlpha)
+            assertEquals(5000L, settings.settings.first().danmakuDurationMs)
+            assertEquals(0.6f, vm.uiState.value.danmakuAlpha)
+            assertEquals(5000L, vm.uiState.value.danmakuDurationMs)
+        }
 }

@@ -40,6 +40,10 @@ class FakeSettingsRepository(
         private set
     var setDanmakuEnabledCallCount: Int = 0
         private set
+    var setDanmakuAlphaCallCount: Int = 0
+        private set
+    var setDanmakuDurationMsCallCount: Int = 0
+        private set
     var setAutoNextEnabledCallCount: Int = 0
         private set
     var setCommentSortOrderCallCount: Int = 0
@@ -128,6 +132,16 @@ class FakeSettingsRepository(
     override suspend fun setDanmakuEnabled(enabled: Boolean) {
         setDanmakuEnabledCallCount++
         settingsState.value = settingsState.value.copy(danmakuEnabled = enabled)
+    }
+
+    override suspend fun setDanmakuAlpha(alpha: Float) {
+        setDanmakuAlphaCallCount++
+        settingsState.value = settingsState.value.copy(danmakuAlpha = alpha)
+    }
+
+    override suspend fun setDanmakuDurationMs(durationMs: Long) {
+        setDanmakuDurationMsCallCount++
+        settingsState.value = settingsState.value.copy(danmakuDurationMs = durationMs)
     }
 
     override suspend fun setAutoNextEnabled(enabled: Boolean) {

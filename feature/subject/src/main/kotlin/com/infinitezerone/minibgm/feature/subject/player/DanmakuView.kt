@@ -28,9 +28,10 @@ private const val FIXED_DURATION_MS = 4_000L
 internal fun findActiveDanmakus(
     danmakus: List<DanmakuItem>,
     currentMs: Long,
+    scrollDurationMs: Long = DANMAKU_DURATION_MS,
 ): List<DanmakuItem> {
     if (danmakus.isEmpty() || currentMs < 0) return emptyList()
-    val minTime = currentMs - DANMAKU_DURATION_MS
+    val minTime = currentMs - scrollDurationMs
     var low = 0
     var high = danmakus.size
     while (low < high) {
@@ -51,7 +52,7 @@ internal fun findActiveDanmakus(
         val elapsed = currentMs - item.timeMs
         val isActive =
             when (item.mode) {
-                DanmakuMode.SCROLL -> elapsed in 0..DANMAKU_DURATION_MS
+                DanmakuMode.SCROLL -> elapsed in 0..scrollDurationMs
                 DanmakuMode.TOP, DanmakuMode.BOTTOM -> elapsed in 0..FIXED_DURATION_MS
             }
         if (isActive) {
@@ -78,10 +79,13 @@ fun DanmakuView(
     isPlaying: Boolean = false,
     playbackSpeed: Float = 1f,
     timeOffsetMs: Long = 0L,
+    durationMs: Long = DANMAKU_DURATION_MS,
+    alpha: Float = 1.0f,
 ) {
     if (!isEnabled || danmakus.isEmpty() || currentPositionMs < 0) return
 
     val effectivePositionMs = (currentPositionMs + timeOffsetMs).coerceAtLeast(0L)
+    val effectiveAlpha = alpha.coerceIn(0.1f, 1f)
 
     val density = LocalDensity.current
     val fontSizePx = with(density) { 15.sp.toPx() }
@@ -99,7 +103,7 @@ fun DanmakuView(
         }
 
     val strokePaint =
-        remember(fontSizePx, strokeWidthPx) {
+        remember(fontSizePx, strokeWidthPx, effectiveAlpha) {
             Paint().apply {
                 isAntiAlias = true
                 textSize = fontSizePx
@@ -107,6 +111,7 @@ fun DanmakuView(
                 style = Paint.Style.STROKE
                 strokeWidth = strokeWidthPx
                 color = android.graphics.Color.BLACK
+                this.alpha = (effectiveAlpha * 255).toInt()
             }
         }
 
@@ -156,7 +161,7 @@ fun DanmakuView(
             val maxTracks = ((canvasHeight * 0.6f) / trackHeightPx).toInt().coerceAtLeast(1)
             val nativeCanvas = drawContext.canvas.nativeCanvas
 
-            val visibleItems = findActiveDanmakus(sortedDanmakus, renderedPositionMs)
+            val visibleItems = findActiveDanmakus(sortedDanmakus, renderedPositionMs, durationMs)
 
             for (item in visibleItems) {
                 val text = item.text
@@ -167,7 +172,7 @@ fun DanmakuView(
                 val (x, y) =
                     when (item.mode) {
                         DanmakuMode.SCROLL -> {
-                            val progress = elapsed.toFloat() / DANMAKU_DURATION_MS
+                            val progress = elapsed.toFloat() / durationMs
                             val posX = canvasWidth - progress * (canvasWidth + textWidth)
                             val posY = (trackIndex + 1) * trackHeightPx
                             posX to posY
@@ -189,12 +194,15 @@ fun DanmakuView(
                 // 先绘制黑色描边外廓
                 nativeCanvas.drawText(text, x, y, strokePaint)
 
-                // 再绘制高对比度字色
+                // 再绘制高对比度字色（按 effectiveAlpha 等比透明）
+                val baseAlpha = (effectiveAlpha * 255).toInt()
                 val colorInt =
                     if (item.color != 0) {
-                        item.color or (0xFF shl 24)
+                        val itemAlpha = ((item.color ushr 24) and 0xFF).let { if (it == 0) 255 else it }
+                        val finalAlpha = ((itemAlpha / 255f) * (baseAlpha / 255f) * 255).toInt()
+                        (item.color and 0x00FFFFFF) or (finalAlpha shl 24)
                     } else {
-                        android.graphics.Color.WHITE
+                        (android.graphics.Color.WHITE and 0x00FFFFFF) or (baseAlpha shl 24)
                     }
                 fillPaint.color = colorInt
                 nativeCanvas.drawText(text, x, y, fillPaint)

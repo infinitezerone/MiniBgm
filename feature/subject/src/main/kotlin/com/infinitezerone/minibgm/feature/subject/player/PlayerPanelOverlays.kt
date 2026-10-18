@@ -22,6 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.infinitezerone.minibgm.core.designsystem.component.OverlayProviderScope
 import com.infinitezerone.minibgm.core.designsystem.component.OverlayRequest
+import com.infinitezerone.minibgm.core.model.DanmakuEpisodeCandidate
+import com.infinitezerone.minibgm.core.model.DanmakuMatch
 
 /**
  * 播放器面板类浮层请求（设置面板 / 横屏选集抽屉 / 竖屏选集弹层）。
@@ -31,7 +33,9 @@ import com.infinitezerone.minibgm.core.designsystem.component.OverlayRequest
  * 收敛进 BgmOverlayHost 后：单槽天然互斥、每个面板自带 BackHandler（同层优先级由
  * 单槽语义自动保证）、打开-关闭-取结果的因果写在同一处挂起调用里。
  */
-data object PlayerSettingsRequest : OverlayRequest<Unit>
+data class PlayerSettingsRequest(
+    val initialTab: PlayerSettingsTab = PlayerSettingsTab.PLAYBACK,
+) : OverlayRequest<Unit>
 
 data object PlayerEpisodeQueueRequest : OverlayRequest<Unit>
 
@@ -109,6 +113,12 @@ fun OverlayProviderScope.playerSettingsPanel(
     isDanmakuEnabled: () -> Boolean,
     onToggleDanmaku: () -> Unit,
     onOpenDanmakuPicker: (() -> Unit)?,
+    danmakuMatch: () -> DanmakuMatch? = { null },
+    onSelectDanmakuCandidate: (DanmakuEpisodeCandidate) -> Unit = {},
+    danmakuAlpha: () -> Float = { 1.0f },
+    onSelectDanmakuAlpha: (Float) -> Unit = {},
+    danmakuDurationMs: () -> Long = { 8500L },
+    onSelectDanmakuDurationMs: (Long) -> Unit = {},
     danmakuTimeOffsetMs: () -> Long = { 0L },
     onSelectDanmakuTimeOffset: (Long) -> Unit = {},
     isLooping: () -> Boolean,
@@ -121,7 +131,7 @@ fun OverlayProviderScope.playerSettingsPanel(
     onSelectAudio: (PlayerTrackOption) -> Unit,
     isLandscape: () -> Boolean = { false },
 ) {
-    overlay<PlayerSettingsRequest, Unit> { _, onRespond ->
+    overlay<PlayerSettingsRequest, Unit> { request, onRespond ->
         val landscape = isLandscape()
         if (landscape) {
             val visibleState =
@@ -154,10 +164,17 @@ fun OverlayProviderScope.playerSettingsPanel(
                                 open()
                             }
                         },
+                    danmakuMatch = danmakuMatch(),
+                    onSelectDanmakuCandidate = onSelectDanmakuCandidate,
+                    danmakuAlpha = danmakuAlpha(),
+                    onSelectDanmakuAlpha = onSelectDanmakuAlpha,
+                    danmakuDurationMs = danmakuDurationMs(),
+                    onSelectDanmakuDurationMs = onSelectDanmakuDurationMs,
                     danmakuTimeOffsetMs = danmakuTimeOffsetMs(),
                     onSelectDanmakuTimeOffset = onSelectDanmakuTimeOffset,
                     isLooping = isLooping(),
                     onToggleLoop = onToggleLoop,
+                    initialTab = request.initialTab,
                     onClose = { visibleState.targetState = false },
                 )
             }
@@ -184,10 +201,17 @@ fun OverlayProviderScope.playerSettingsPanel(
                             open()
                         }
                     },
+                danmakuMatch = danmakuMatch(),
+                onSelectDanmakuCandidate = onSelectDanmakuCandidate,
+                danmakuAlpha = danmakuAlpha(),
+                onSelectDanmakuAlpha = onSelectDanmakuAlpha,
+                danmakuDurationMs = danmakuDurationMs(),
+                onSelectDanmakuDurationMs = onSelectDanmakuDurationMs,
                 danmakuTimeOffsetMs = danmakuTimeOffsetMs(),
                 onSelectDanmakuTimeOffset = onSelectDanmakuTimeOffset,
                 isLooping = isLooping(),
                 onToggleLoop = onToggleLoop,
+                initialTab = request.initialTab,
                 onDismiss = { onRespond(Unit) },
             )
         }

@@ -89,6 +89,20 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 弹幕不透明度（0.1f ~ 1.0f） */
+    suspend fun setDanmakuAlpha(alpha: Float) {
+        dataStore.updateData { current ->
+            current.copy(danmakuAlpha = alpha.coerceIn(0.1f, 1f))
+        }
+    }
+
+    /** 弹幕滚动时长毫秒数 */
+    suspend fun setDanmakuDurationMs(durationMs: Long) {
+        dataStore.updateData { current ->
+            current.copy(danmakuDurationMs = durationMs.coerceAtLeast(1_000L))
+        }
+    }
+
     /** 播放结束自动连播下一集 */
     suspend fun setAutoNextEnabled(enabled: Boolean) {
         dataStore.updateData { current ->

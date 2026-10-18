@@ -2518,6 +2518,8 @@ class ArchitectureRulesTest {
             "autoNextEnabled" to "setAutoNextEnabled",
             // 关闭字幕：稳定立场，重启后仍要「字幕关」（引擎参数只表达本次播放）
             "subtitlesDisabled" to "setSubtitlesDisabled",
+            "danmakuAlpha" to "setDanmakuAlpha",
+            "danmakuDurationMs" to "setDanmakuDurationMs",
         )
 
     /** PlayerScreen 允许保留的 UI 局部状态（全部是瞬态交互，不是用户偏好） */
