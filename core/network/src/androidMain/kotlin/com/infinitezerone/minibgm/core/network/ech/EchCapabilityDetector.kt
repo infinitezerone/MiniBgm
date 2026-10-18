@@ -74,7 +74,9 @@ object EchCapabilityDetector {
     /**
      * 判断域名是否已知支持 ECH（静态种子、动态注册或内存探测成功）。
      */
-    fun isEchEligible(host: String): Boolean = isSeedHost(host) || cache[host.trim().lowercase()] == SupportStatus.SUPPORTED
+    fun isEchEligible(host: String): Boolean =
+        isSeedHost(host) ||
+            (cache[host.trim().lowercase()] == SupportStatus.SUPPORTED && !AdaptiveDnsResolver.isEchCoolingDown(host))
 
     /**
      * 判断指定 host 是否支持通过 ECH 引擎访问。

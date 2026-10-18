@@ -200,6 +200,9 @@ class EchHttpClientEngine(
             val nativeResp = nativeCall.response
             if (nativeResp.errorMessage != null && nativeResp.errorMessage.isNotBlank()) {
                 AdaptiveDnsResolver.recordFailure(host)
+                // 只对「本次真的尝试了 ECH」的失败降级：enableEch=false 时的连接失败
+                // 与 ECH 无关，标记它会把明文可用误判成 ECH 不可用
+                if (enableEch) AdaptiveDnsResolver.markEchHandshakeFailure(host)
                 logger.w { "ECH native fetch failed: ${nativeResp.errorMessage} ($urlString)" }
                 throw IOException("ECH connection failed: ${nativeResp.errorMessage}")
             }

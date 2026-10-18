@@ -1,6 +1,10 @@
 package com.infinitezerone.minibgm.core.network
 
 import io.ktor.client.plugins.HttpTimeoutConfig
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 /**
  * 请求预算的唯一解释器：区分「没有 HttpTimeout 能力」与「能力存在但显式关闭」。
@@ -19,3 +23,13 @@ internal fun resolveRequestBudgetMillis(
         timeoutConfig.requestTimeoutMillis == null -> HttpTimeoutConfig.INFINITE_TIMEOUT_MS
         else -> timeoutConfig.requestTimeoutMillis!!
     }
+
+/**
+ * 墙钟超时：`withTimeout` 跟随调用方调度器的时钟——测试的虚拟时间会瞬间烧完预算，
+ * 自定义调度器也可能把它拖偏。而"这条链最多花多久"是墙钟语义，统一切到
+ * [Dispatchers.Default] 执行，保证按真实时间计。
+ */
+internal suspend fun <T> withWallClockTimeout(
+    timeoutMillis: Long,
+    block: suspend CoroutineScope.() -> T,
+): T = withContext(Dispatchers.Default) { withTimeout(timeoutMillis, block) }

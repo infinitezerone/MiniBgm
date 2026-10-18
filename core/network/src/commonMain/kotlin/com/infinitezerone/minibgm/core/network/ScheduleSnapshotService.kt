@@ -1,13 +1,15 @@
 package com.infinitezerone.minibgm.core.network
 
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.Serializable
 
 /**
@@ -82,6 +84,12 @@ data class SeasonSnapshotDto(
 
 typealias SeasonSnapshotItemDto = ScheduleSnapshotItemDto
 
+/** 快照是多 CDN 串行兜底：单 CDN 8s × 5 最坏 40s，冷启动等不起 */
+private const val SNAPSHOT_TOTAL_BUDGET_MILLIS = 20_000L
+
+/** 快照正文上限：正常快照 1–3 MB；无上限时一个坏 CDN 就能把内存打满 */
+private const val MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024
+
 interface ScheduleSnapshotService {
     /** 拉取当前快照；所有 CDN 均不可达时抛出异常，由调用方降级到本地缓存。 */
     suspend fun getSnapshot(): ScheduleSnapshotDto =
@@ -103,66 +111,85 @@ interface ScheduleSnapshotService {
 internal class ScheduleSnapshotServiceImpl(
     private val client: HttpClient,
     private val cdnUrls: List<String> = DEFAULT_SCHEDULE_SNAPSHOT_URLS,
+    private val chainBudgetMillis: Long = SNAPSHOT_TOTAL_BUDGET_MILLIS,
 ) : ScheduleSnapshotService {
-    override suspend fun getSnapshot(ifNoneMatchEtag: String?): ScheduleSnapshotResult {
-        var lastException: Throwable? = null
-        for (url in cdnUrls) {
-            try {
-                val response =
-                    client.get(url) {
-                        if (!ifNoneMatchEtag.isNullOrBlank()) {
-                            header(HttpHeaders.IfNoneMatch, ifNoneMatchEtag)
+    override suspend fun getSnapshot(ifNoneMatchEtag: String?): ScheduleSnapshotResult =
+        try {
+            withWallClockTimeout(chainBudgetMillis) {
+                var lastException: Throwable? = null
+                for (url in cdnUrls) {
+                    try {
+                        val response =
+                            client.get(url) {
+                                if (!ifNoneMatchEtag.isNullOrBlank()) {
+                                    header(HttpHeaders.IfNoneMatch, ifNoneMatchEtag)
+                                }
+                                timeout {
+                                    requestTimeoutMillis = 8_000
+                                    connectTimeoutMillis = 5_000
+                                    socketTimeoutMillis = 8_000
+                                }
+                            }
+                        if (response.status == HttpStatusCode.NotModified) {
+                            return@withWallClockTimeout ScheduleSnapshotResult.NotModified
                         }
-                        timeout {
-                            requestTimeoutMillis = 8_000
-                            connectTimeoutMillis = 5_000
-                            socketTimeoutMillis = 8_000
+                        if (response.status == HttpStatusCode.OK) {
+                            val etag = response.headers[HttpHeaders.ETag]
+                            val text = response.readLimitedText(MAX_SNAPSHOT_BYTES)
+                            val snapshot =
+                                BgmHttpClient.jsonConfig.decodeFromString(ScheduleSnapshotDto.serializer(), text)
+                            return@withWallClockTimeout ScheduleSnapshotResult.Modified(snapshot, etag)
                         }
+                    } catch (e: CancellationException) {
+                        // 取消不是"这个 CDN 失败"，继续试下一个会让取消失效
+                        throw e
+                    } catch (e: Throwable) {
+                        lastException = e
                     }
-                if (response.status == HttpStatusCode.NotModified) {
-                    return ScheduleSnapshotResult.NotModified
                 }
-                if (response.status == HttpStatusCode.OK) {
-                    val etag = response.headers[HttpHeaders.ETag]
-                    return ScheduleSnapshotResult.Modified(response.body<ScheduleSnapshotDto>(), etag)
-                }
-            } catch (e: CancellationException) {
-                // 取消不是"这个 CDN 失败"，继续试下一个会让取消失效
-                throw e
-            } catch (e: Throwable) {
-                lastException = e
+                throw lastException ?: IllegalStateException("Failed to fetch schedule snapshot from CDN endpoints")
             }
+        } catch (e: TimeoutCancellationException) {
+            // 外层若已取消（调用方自己的 withTimeout），超时只是取消的副产物，必须继续上抛
+            currentCoroutineContext().ensureActive()
+            throw BgmNetworkException.Timeout(cause = e)
         }
-        throw lastException ?: IllegalStateException("Failed to fetch schedule snapshot from CDN endpoints")
-    }
 
     override suspend fun getSeasonSnapshot(
         year: Int,
         seasonKey: String,
-    ): SeasonSnapshotDto? {
-        val path = "data/seasons/$year-$seasonKey.json"
-        val urls = cdnUrls.map { it.replace("data/snapshot.json", path) }
-        for (url in urls) {
-            try {
-                val response =
-                    client.get(url) {
-                        timeout {
-                            requestTimeoutMillis = 6_000
-                            connectTimeoutMillis = 4_000
-                            socketTimeoutMillis = 6_000
+    ): SeasonSnapshotDto? =
+        try {
+            withWallClockTimeout(chainBudgetMillis) {
+                val path = "data/seasons/$year-$seasonKey.json"
+                val urls = cdnUrls.map { it.replace("data/snapshot.json", path) }
+                for (url in urls) {
+                    try {
+                        val response =
+                            client.get(url) {
+                                timeout {
+                                    requestTimeoutMillis = 6_000
+                                    connectTimeoutMillis = 4_000
+                                    socketTimeoutMillis = 6_000
+                                }
+                            }
+                        if (response.status == HttpStatusCode.OK) {
+                            val text = response.readLimitedText(MAX_SNAPSHOT_BYTES)
+                            return@withWallClockTimeout BgmHttpClient.jsonConfig
+                                .decodeFromString(SeasonSnapshotDto.serializer(), text)
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Throwable) {
+                        // 逐个 CDN 尝试
                     }
-                if (response.status == HttpStatusCode.OK) {
-                    return response.body<SeasonSnapshotDto>()
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Throwable) {
-                // 逐个 CDN 尝试
+                null
             }
+        } catch (e: TimeoutCancellationException) {
+            currentCoroutineContext().ensureActive()
+            null
         }
-        return null
-    }
 
     companion object {
         val DEFAULT_SCHEDULE_SNAPSHOT_URLS =

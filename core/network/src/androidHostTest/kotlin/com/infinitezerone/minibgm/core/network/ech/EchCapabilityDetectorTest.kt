@@ -239,4 +239,34 @@ class EchCapabilityDetectorTest {
             assertFalse(result)
             assertFalse(AdaptiveDnsResolver.isEchEligible("flaky-cdn.net"))
         }
+
+    @Test
+    fun cooldown_demotes_host_even_when_doh_reported_ech() =
+        runTest {
+            val mockEngine =
+                MockEngine {
+                    respond(
+                        content =
+                            """
+                            {
+                              "Status": 0,
+                              "Answer": [
+                                {"name": "cooled-ech.org.", "type": 65, "data": "1 . ech=AQID"}
+                              ]
+                            }
+                            """.trimIndent(),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            val client = HttpClient(mockEngine)
+
+            assertTrue(EchCapabilityDetector.isEchSupported("cooled-ech.org", client))
+            assertTrue(EchCapabilityDetector.isEchEligible("cooled-ech.org"))
+
+            AdaptiveDnsResolver.markEchHandshakeFailure("cooled-ech.org")
+
+            // 图片路由据此从 ECH 通道切回直连，不再为每张图白等 4s
+            assertFalse(EchCapabilityDetector.isEchEligible("cooled-ech.org"))
+        }
 }

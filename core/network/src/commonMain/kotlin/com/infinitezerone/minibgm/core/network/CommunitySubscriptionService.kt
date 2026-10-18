@@ -12,7 +12,6 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.cancel
-import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -210,7 +209,7 @@ internal class CommunitySubscriptionServiceImpl(
                 ) {
                     return ParsedSourceBatch()
                 }
-                val rawText = readLimitedText(response)
+                val rawText = response.readLimitedText(MAX_SUBSCRIPTION_BYTES)
                 return parseSourcesFromText(rawText, url)
             }
             @Suppress("UNREACHABLE_CODE")
@@ -221,22 +220,6 @@ internal class CommunitySubscriptionServiceImpl(
         } catch (_: Throwable) {
             ParsedSourceBatch()
         }
-    }
-
-    /**
-     * 订阅响应体上限：正常订阅包远小于 2 MB；无上限时一个慢速大包就能把内存打满。
-     * 超限时截断，后续 JSON 解析失败会安全降级为空批次。
-     */
-    private suspend fun readLimitedText(response: HttpResponse): String {
-        val channel = response.bodyAsChannel()
-        val buffer = ByteArray(MAX_SUBSCRIPTION_BYTES)
-        var offset = 0
-        while (offset < buffer.size) {
-            val read = channel.readAvailable(buffer, offset, buffer.size - offset)
-            if (read <= 0) break
-            offset += read
-        }
-        return buffer.decodeToString(0, offset)
     }
 
     internal fun extractSourceFromHtml(

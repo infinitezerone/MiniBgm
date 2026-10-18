@@ -18,13 +18,9 @@ import io.ktor.http.Url
 import io.ktor.utils.io.cancel
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 
 /** 单次页面抓取的正文上限：够覆盖播放页源码，又不至于把抓取变成下载 */
 const val MAX_PAGE_BYTES: Int = 512 * 1024
@@ -156,12 +152,12 @@ internal class PageFetchServiceImpl(
                 name.isNotBlank() && name.isSafeHeaderValue() && value.isSafeHeaderValue()
             }
         return try {
-            withRedirectChainBudget {
+            withWallClockTimeout(redirectChainMillis) {
                 var current = target
                 var currentMethod = HttpMethod.Post
                 var redirects = 0
                 while (true) {
-                    if (!UrlSafety.isAllowedRemoteUrl(current)) return@withRedirectChainBudget null
+                    if (!UrlSafety.isAllowedRemoteUrl(current)) return@withWallClockTimeout null
                     val response =
                         if (currentMethod == HttpMethod.Post) {
                             untrustedClient.post(current) {
@@ -186,15 +182,15 @@ internal class PageFetchServiceImpl(
                     val location = response.headers[HttpHeaders.Location]
                     if (response.status.value in 300..399 && location != null) {
                         response.bodyAsChannel().cancel()
-                        if (++redirects > MAX_REDIRECTS) return@withRedirectChainBudget null
-                        current = UrlSafety.resolveRedirect(current, location) ?: return@withRedirectChainBudget null
+                        if (++redirects > MAX_REDIRECTS) return@withWallClockTimeout null
+                        current = UrlSafety.resolveRedirect(current, location) ?: return@withWallClockTimeout null
                         // 307/308 保持原方法与 body；301/302/303 按浏览器惯例降级为 GET
                         if (response.status.value != 307 && response.status.value != 308) {
                             currentMethod = HttpMethod.Get
                         }
                         continue
                     }
-                    return@withRedirectChainBudget extractFetchedPage(response)
+                    return@withWallClockTimeout extractFetchedPage(response)
                 }
                 @Suppress("UNREACHABLE_CODE")
                 null
@@ -230,7 +226,7 @@ internal class PageFetchServiceImpl(
             // 探测不套 UrlSafety：局域网/NAS 直链是合法目标（见 UrlSafety KDoc）。
             // 但 30x 必须自己跟：共享 client 的自动重定向会跨 host 带走规则头，
             // 且无法给整条链设预算。
-            withRedirectChainBudget {
+            withWallClockTimeout(redirectChainMillis) {
                 var current = target
                 var redirects = 0
                 while (true) {
@@ -245,20 +241,20 @@ internal class PageFetchServiceImpl(
                     val location = response.headers[HttpHeaders.Location]
                     if (response.status.value !in 300..399 || location == null) {
                         response.bodyAsChannel().cancel()
-                        return@withRedirectChainBudget StreamProbe.Responded(
+                        return@withWallClockTimeout StreamProbe.Responded(
                             status = response.status.value,
                             contentType = response.headers[HttpHeaders.ContentType]?.substringBefore(';')?.trim(),
                         )
                     }
                     response.bodyAsChannel().cancel()
-                    if (++redirects > MAX_REDIRECTS) return@withRedirectChainBudget StreamProbe.Failed("重定向次数过多")
+                    if (++redirects > MAX_REDIRECTS) return@withWallClockTimeout StreamProbe.Failed("重定向次数过多")
                     val next =
                         UrlSafety.resolveRedirect(current, location)
-                            ?: return@withRedirectChainBudget StreamProbe.Failed("重定向目标不可信")
+                            ?: return@withWallClockTimeout StreamProbe.Failed("重定向目标不可信")
                     if (!next.startsWith("http://", ignoreCase = true) &&
                         !next.startsWith("https://", ignoreCase = true)
                     ) {
-                        return@withRedirectChainBudget StreamProbe.Failed("重定向目标不可信")
+                        return@withWallClockTimeout StreamProbe.Failed("重定向目标不可信")
                     }
                     current = next
                 }
@@ -279,18 +275,6 @@ internal class PageFetchServiceImpl(
     }
 
     /**
-     * 给整条重定向链一个**墙钟**预算。
-     *
-     * 刻意切到 [Dispatchers.Default]：`withTimeout` 跟随调用方调度器的时钟，
-     * 而"这条链最多花多久"是墙钟语义——测试的虚拟时间会瞬间烧完预算，
-     * 自定义调度器也可能把它拖偏。墙钟预算不该由调用方调度器决定。
-     */
-    private suspend fun <T> withRedirectChainBudget(block: suspend CoroutineScope.() -> T): T =
-        withContext(Dispatchers.Default) {
-            withTimeout(redirectChainMillis, block)
-        }
-
-    /**
      * GET 30x 逐跳跟随：每一跳都重新过 [UrlSafety]，最多 [MAX_REDIRECTS] 跳。
      * 返回 null 表示目标不可信/跳转过多，调用方按"没有结果"降级。
      */
@@ -300,11 +284,11 @@ internal class PageFetchServiceImpl(
         accept: String,
     ): HttpResponse? =
         try {
-            withRedirectChainBudget {
+            withWallClockTimeout(redirectChainMillis) {
                 var current = startUrl
                 var redirects = 0
                 while (true) {
-                    if (!UrlSafety.isAllowedRemoteUrl(current)) return@withRedirectChainBudget null
+                    if (!UrlSafety.isAllowedRemoteUrl(current)) return@withWallClockTimeout null
                     val response =
                         untrustedClient.get(current) {
                             header(HttpHeaders.Accept, accept)
@@ -313,11 +297,11 @@ internal class PageFetchServiceImpl(
                         }
                     val location = response.headers[HttpHeaders.Location]
                     if (response.status.value !in 300..399 || location == null) {
-                        return@withRedirectChainBudget response
+                        return@withWallClockTimeout response
                     }
                     response.bodyAsChannel().cancel()
-                    if (++redirects > MAX_REDIRECTS) return@withRedirectChainBudget null
-                    current = UrlSafety.resolveRedirect(current, location) ?: return@withRedirectChainBudget null
+                    if (++redirects > MAX_REDIRECTS) return@withWallClockTimeout null
+                    current = UrlSafety.resolveRedirect(current, location) ?: return@withWallClockTimeout null
                 }
                 @Suppress("UNREACHABLE_CODE")
                 null

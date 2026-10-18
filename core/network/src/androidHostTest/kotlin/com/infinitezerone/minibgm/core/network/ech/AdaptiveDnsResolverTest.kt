@@ -222,4 +222,24 @@ class AdaptiveDnsResolverTest {
             }
             assertTrue(backedOff, "后台解析失败后应将 freshUntil 推后以退避冷却")
         }
+
+    /**
+     * 握手失败的 host 仍被 DoH 标为"支持 ECH"，不冷却就会每个请求先撞一次必然失败的握手；
+     * 但种子域名（抗 SNI 阻断）失败也要继续尝试，不能被一次抖动永久降级。
+     */
+    @Test
+    fun markEchHandshakeFailure_demotes_dynamic_host_but_never_static_seed() {
+        AdaptiveDnsResolver.init(tempDir)
+        AdaptiveDnsResolver.registerEchHost("acg.rip")
+        assertTrue(AdaptiveDnsResolver.isEchEligible("acg.rip"))
+        assertTrue(AdaptiveDnsResolver.isEchEligible("sub.acg.rip"))
+
+        AdaptiveDnsResolver.markEchHandshakeFailure("ACG.RIP")
+
+        assertFalse(AdaptiveDnsResolver.isEchEligible("acg.rip"))
+        assertFalse(AdaptiveDnsResolver.isEchEligible("sub.acg.rip"))
+
+        AdaptiveDnsResolver.markEchHandshakeFailure("bgm.tv")
+        assertTrue(AdaptiveDnsResolver.isEchEligible("bgm.tv"), "静态种子永不因握手失败降级")
+    }
 }

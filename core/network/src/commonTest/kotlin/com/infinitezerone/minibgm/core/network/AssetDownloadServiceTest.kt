@@ -6,11 +6,16 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.HttpTimeoutCapability
 import io.ktor.client.plugins.HttpTimeoutConfig
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -85,6 +90,58 @@ class AssetDownloadServiceTest {
                 budget,
                 "下载必须显式关闭请求预算，否则会被 client 级默认值覆盖，长下载中途被掐断",
             )
+        }
+
+    @Test
+    fun `Content-Range 起点解析`() {
+        assertEquals(50L, parseContentRangeStart("bytes 50-99/200"))
+        assertEquals(0L, parseContentRangeStart("bytes 0-99/200"))
+        assertNull(parseContentRangeStart("bytes */200"))
+        assertNull(parseContentRangeStart("items 1-2/3"))
+        assertNull(parseContentRangeStart(null))
+    }
+
+    @Test
+    fun `206 起点与请求 offset 不一致时抛错而不是错位追加`() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond(
+                        content = ByteArray(4),
+                        status = HttpStatusCode.PartialContent,
+                        headers = headersOf(HttpHeaders.ContentRange to listOf("bytes 100-103/200")),
+                    )
+                }
+            val service = AssetDownloadServiceImpl(HttpClient(engine))
+
+            val error =
+                assertFailsWith<IOException> {
+                    service.streamAsset("https://example.com/a.bin", rangeStart = 50L) { _, _, _, _ -> }
+                }
+            assertTrue(error.message.orEmpty().contains("Content-Range"))
+        }
+
+    @Test
+    fun `206 起点与请求 offset 一致时正常续传`() =
+        runTest {
+            val engine =
+                MockEngine {
+                    respond(
+                        content = ByteArray(4),
+                        status = HttpStatusCode.PartialContent,
+                        headers = headersOf(HttpHeaders.ContentRange to listOf("bytes 50-53/200")),
+                    )
+                }
+            val service = AssetDownloadServiceImpl(HttpClient(engine))
+            var partial = false
+
+            val total =
+                service.streamAsset("https://example.com/a.bin", rangeStart = 50L) { _, _, _, isPartial ->
+                    partial = isPartial
+                }
+
+            assertEquals(4L, total)
+            assertTrue(partial)
         }
 
     @Test

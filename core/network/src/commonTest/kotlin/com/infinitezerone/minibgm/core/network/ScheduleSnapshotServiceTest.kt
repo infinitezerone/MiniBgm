@@ -9,6 +9,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -207,5 +208,35 @@ class ScheduleSnapshotServiceTest {
 
             assertFailsWith<CancellationException> { service.getSnapshot() }
             assertEquals(1, calls.size, "取消后不应再尝试后续 CDN")
+        }
+
+    /** 5 个 CDN 串行、每个 8s，最坏 40s；总预算把整条链压在一个墙钟上界内。 */
+    @Test
+    fun getSnapshot_budget_exhausted_throwsTimeoutInsteadOfTryingEveryCdn() =
+        runTest {
+            var calls = 0
+            val engine =
+                MockEngine { _ ->
+                    calls++
+                    delay(2_000)
+                    respond(
+                        content = sampleSnapshotJson,
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                    )
+                }
+            val service =
+                ScheduleSnapshotServiceImpl(
+                    createClient(engine),
+                    listOf(
+                        "https://cdn1.example.com/snapshot.json",
+                        "https://cdn2.example.com/snapshot.json",
+                        "https://cdn3.example.com/snapshot.json",
+                    ),
+                    chainBudgetMillis = 50,
+                )
+
+            assertFailsWith<BgmNetworkException.Timeout> { service.getSnapshot(null) }
+            assertEquals(1, calls, "超预算后不该再继续试下一个 CDN")
         }
 }

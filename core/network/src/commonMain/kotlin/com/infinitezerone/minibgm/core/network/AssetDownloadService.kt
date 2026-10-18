@@ -34,6 +34,21 @@ interface AssetDownloadService {
     ): Long
 }
 
+/**
+ * 解析 `Content-Range: bytes 123-456/789` 的起点；格式不合法返回 null。
+ *
+ * 只校验"能解析出来的起点"：部分服务端会省略该头（不合规但存在），
+ * 此时无法核对，按旧行为接受。
+ */
+internal fun parseContentRangeStart(header: String?): Long? {
+    val value = header?.trim()?.takeIf { it.startsWith("bytes ", ignoreCase = true) } ?: return null
+    return value
+        .substringAfter(' ', "")
+        .substringBefore('-')
+        .trim()
+        .toLongOrNull()
+}
+
 internal fun isLoopbackHttpUrl(url: String): Boolean {
     val normalized = url.trim().lowercase()
     return normalized.startsWith("http://127.0.0.1:") ||
@@ -80,6 +95,17 @@ internal class AssetDownloadServiceImpl(
 
                 val isPartial = status == HttpStatusCode.PartialContent
                 val isOk = status == HttpStatusCode.OK
+
+                if (isPartial) {
+                    // 换 CDN 节点/镜像内容不一致时，服务端可能回一个起点不同的 206；
+                    // 按旧 offset 追加会写出错位文件，且最终大小可能刚好对上，极难发现
+                    val actualStart = parseContentRangeStart(response.headers[HttpHeaders.ContentRange])
+                    if (actualStart != null && actualStart != rangeStart) {
+                        throw IOException(
+                            "HTTP 206 Content-Range start=$actualStart != requested $rangeStart",
+                        )
+                    }
+                }
 
                 if (!isPartial && !isOk) {
                     throw IOException("HTTP ${status.value}: ${response.status.description}")

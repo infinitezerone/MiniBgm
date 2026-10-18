@@ -72,6 +72,15 @@ internal object AdaptiveDnsResolver {
 
     private val dynamicEchHosts = ConcurrentHashMap.newKeySet<String>()
 
+    /**
+     * ECH 握手失败后的降级窗口。
+     *
+     * 只作用于动态注册的第三方 host：种子域名失败仍要重试（见 [isStaticEchHost]）。
+     * 10 分钟足以跨过一次代理/网络抖动，又不会让"恢复后回到 ECH"等太久。
+     */
+    private const val ECH_FAILURE_COOLDOWN_MILLIS = 10L * 60 * 1000
+    private val echCooldown = EchFailureCooldown(ECH_FAILURE_COOLDOWN_MILLIS)
+
     fun init(filesDir: File) {
         hostsFile = File(filesDir, HOSTS_FILE_NAME)
         loadPersistedHosts()
@@ -116,14 +125,35 @@ internal object AdaptiveDnsResolver {
         domain: String,
     ): Boolean = host.equals(domain, ignoreCase = true) || host.endsWith(".$domain", ignoreCase = true)
 
-    fun isEchEligible(host: String): Boolean =
+    /**
+     * 写死在代码里的种子域名：抗 SNI 阻断是它们的首要目标，握手失败也继续尝试，
+     * 绝不因为一次网络抖动就被永久降级成明文。
+     */
+    internal fun isStaticEchHost(host: String): Boolean =
         isDomainOrSubdomain(host, "bgm.tv") ||
             isDomainOrSubdomain(host, "bangumi.tv") ||
             isDomainOrSubdomain(host, "chii.in") ||
             isDomainOrSubdomain(host, "sda1.dev") ||
             isDomainOrSubdomain(host, "kitsu.io") ||
-            isDomainOrSubdomain(host, "cloudflare-dns.com") ||
-            dynamicEchHosts.any { isDomainOrSubdomain(host, it) }
+            isDomainOrSubdomain(host, "cloudflare-dns.com")
+
+    fun isEchEligible(host: String): Boolean =
+        (isStaticEchHost(host) || dynamicEchHosts.any { isDomainOrSubdomain(host, it) }) &&
+            !isEchCoolingDown(host)
+
+    /** 握手失败的冷却期：期间该 host 直连明文，避免每个请求先白撞一次 ECH。 */
+    fun isEchCoolingDown(host: String): Boolean = echCooldown.isCoolingDown(host)
+
+    fun markEchHandshakeFailure(host: String) {
+        val normalized = host.trim().lowercase()
+        if (normalized.isBlank() || isStaticEchHost(normalized)) return
+        if (echCooldown.mark(normalized)) {
+            logger.w {
+                "[DNS] ECH handshake failed for $normalized; routing plain for " +
+                    "${ECH_FAILURE_COOLDOWN_MILLIS / 60_000} min"
+            }
+        }
+    }
 
     /** 判断域名是否由 Cloudflare 提供服务。这些 host 才会拿到候选地址列表。 */
     fun isCloudflareHosted(host: String): Boolean = isEchEligible(host) || isDomainOrSubdomain(host, "anilist.co")
@@ -398,6 +428,7 @@ internal object AdaptiveDnsResolver {
         dnsCache.clear()
         dynamicEchHosts.clear()
         refreshingHosts.clear()
+        echCooldown.clear()
         hostsFile = null
     }
 

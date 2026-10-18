@@ -13,7 +13,9 @@ import kotlin.test.assertTrue
  * 3. 自建 HttpClient(CIO) 给回环流打补丁，而不是收敛到 RoutingEngine；
  * 4. 抓取/订阅接受任意 URL，且响应体无上限；
  * 5. 30x 跨 host 时把规则自带的 Cookie/Authorization 一并交给第三方；
- * 6. 重定向链每跳各自计超时，最坏把调用方拖成 6 倍等待。
+ * 6. 重定向链每跳各自计超时，最坏把调用方拖成 6 倍等待；
+ * 7. ECH 握手失败后不冷却，每个请求都先白撞一次；
+ * 8. 206 续传不核 Content-Range 起点，换 CDN 节点写出错位文件。
  */
 class NetworkContractRulesTest {
     private val projectRoot: File by lazy {
@@ -66,8 +68,28 @@ class NetworkContractRulesTest {
         if (!pageFetch.contains("applyRuleHeaders") || !pageFetch.contains("CREDENTIAL_HEADERS")) {
             violations.add("PageFetchService.kt 跨域跳转未剥离凭据头：规则自带的 Cookie/Authorization 会跟着 30x 走")
         }
-        if (!pageFetch.contains("MAX_REDIRECT_CHAIN_MILLIS") || !pageFetch.contains("withTimeout")) {
-            violations.add("PageFetchService.kt 重定向链没有整体预算：多跳各卡单跳超时会让调用方干等")
+        if (!pageFetch.contains("MAX_REDIRECT_CHAIN_MILLIS") || !pageFetch.contains("withWallClockTimeout")) {
+            violations.add("PageFetchService.kt 重定向链没有整体预算（或退回了跟随调用方调度器时钟的 withTimeout）")
+        }
+
+        if (!assetDownload.contains("parseContentRangeStart")) {
+            violations.add("AssetDownloadService.kt 未校验 206 的 Content-Range 起点：换节点续传会写出错位文件")
+        }
+
+        val echEngine =
+            read("core/network/src/androidMain/kotlin/com/infinitezerone/minibgm/core/network/ech/EchHttpClientEngine.kt")
+        val adaptiveDnsResolver =
+            read("core/network/src/androidMain/kotlin/com/infinitezerone/minibgm/core/network/ech/AdaptiveDnsResolver.kt")
+        if (!echEngine.contains("markEchHandshakeFailure") ||
+            !adaptiveDnsResolver.contains("ECH_FAILURE_COOLDOWN_MILLIS")
+        ) {
+            violations.add("ECH 握手失败没有冷却：每个请求都会先白撞一次必然失败的握手")
+        }
+
+        val snapshot =
+            read("core/network/src/commonMain/kotlin/com/infinitezerone/minibgm/core/network/ScheduleSnapshotService.kt")
+        if (!snapshot.contains("SNAPSHOT_TOTAL_BUDGET_MILLIS") || !snapshot.contains("readLimitedText")) {
+            violations.add("ScheduleSnapshotService.kt 多 CDN 串行链没有总预算或正文上限")
         }
 
         val tokenService =
