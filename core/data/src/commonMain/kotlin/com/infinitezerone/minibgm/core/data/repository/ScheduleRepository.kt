@@ -418,7 +418,10 @@ internal class ScheduleRepositoryImpl(
     override suspend fun refreshAllSchedules(force: Boolean): AppResult<Unit> {
         if (!force) {
             val lastSync = userPreferences.userPreferences.firstOrNull()?.bangumiDataLastSyncTimestamp ?: 0L
-            if (TimeUtils.nowEpochMillis() - lastSync < REFRESH_THROTTLE_MILLIS) {
+            // 节流时间戳在 DataStore、时刻表在 Room：清库/清缓存后时间戳仍在，
+            // 只看时间戳会让空时刻表一直"很新鲜"、永远不再请求。本地没有条目时必须放行。
+            val hasLocalSchedules = runCatchingCancellable { scheduleDao.countSchedules() > 0 }.getOrDefault(false)
+            if (hasLocalSchedules && TimeUtils.nowEpochMillis() - lastSync < REFRESH_THROTTLE_MILLIS) {
                 return AppResult.Success(Unit)
             }
         }
@@ -475,13 +478,20 @@ internal class ScheduleRepositoryImpl(
      * 快照下载失败时保持本地现状（fail-open），等待下一班 CI / 刷新。
      */
     private suspend fun syncAirEvents() {
+        // 空表 + 旧 ETag = 304：本地一条没有，远端却回"没变化"，空表永远得不到回填。
+        // 清库 / 清缓存 / 首次安装都可能撞上，所以本地为空时不带 ETag 强制拉全量。
+        val hasLocalSchedules = runCatchingCancellable { scheduleDao.countSchedules() > 0 }.getOrDefault(false)
         val cachedEtag =
-            runCatchingCancellable {
-                userPreferences.userPreferences
-                    .firstOrNull()
-                    ?.scheduleSnapshotEtag
-                    ?.ifBlank { null }
-            }.getOrNull()
+            if (!hasLocalSchedules) {
+                null
+            } else {
+                runCatchingCancellable {
+                    userPreferences.userPreferences
+                        .firstOrNull()
+                        ?.scheduleSnapshotEtag
+                        ?.ifBlank { null }
+                }.getOrNull()
+            }
         val snapshotResult =
             runCatchingCancellable { snapshotService.getSnapshot(cachedEtag) }.getOrNull()
                 ?: return

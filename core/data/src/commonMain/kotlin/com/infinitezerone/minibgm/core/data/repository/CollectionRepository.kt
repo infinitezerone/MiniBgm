@@ -4,6 +4,7 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.TokenProvider
 import com.infinitezerone.minibgm.core.common.UserDataClearable
+import com.infinitezerone.minibgm.core.common.runCatchingCancellable
 import com.infinitezerone.minibgm.core.database.dao.UserCollectionDao
 import com.infinitezerone.minibgm.core.database.entity.UserCollectionEntity
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -678,8 +679,12 @@ internal class CollectionRepositoryImpl(
                     if (inMemoryLastSync > 0 && (now - inMemoryLastSync < RETRY_COOL_DOWN_MILLIS)) {
                         return AppResult.Success(Unit)
                     }
-                    // 2. 正常 6 小时节流：若存在有效历史同步记录且在 6 小时内，直接命中节流
-                    if (lastSync > 0 && (now - lastSync < COLLECTIONS_SYNC_THROTTLE_MILLIS)) {
+                    // 2. 正常 6 小时节流：若存在有效历史同步记录且在 6 小时内，直接命中节流。
+                    //    但本地收藏表为空时（清库/清缓存后 DataStore 时间戳还在）必须放行，
+                    //    否则界面会一直停在空收藏。
+                    val hasLocalCollections =
+                        runCatchingCancellable { userCollectionDao.countCollections() > 0 }.getOrDefault(false)
+                    if (hasLocalCollections && lastSync > 0 && (now - lastSync < COLLECTIONS_SYNC_THROTTLE_MILLIS)) {
                         return AppResult.Success(Unit)
                     }
                 }

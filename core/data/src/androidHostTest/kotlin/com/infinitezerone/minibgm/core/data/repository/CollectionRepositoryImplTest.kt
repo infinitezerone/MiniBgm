@@ -82,6 +82,8 @@ class CollectionRepositoryImplTest {
     private class FakeUserCollectionDao : UserCollectionDao {
         val stored = MutableStateFlow<List<UserCollectionEntity>>(emptyList())
 
+        override suspend fun countCollections(): Int = stored.value.size
+
         override fun getCollectionsByType(
             userId: Long,
             type: Int,

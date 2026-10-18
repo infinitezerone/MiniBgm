@@ -28,6 +28,10 @@ interface AirScheduleDao {
     @Query("SELECT * FROM air_schedules")
     suspend fun getAllSchedulesList(): List<AirScheduleEntity>
 
+    /** 仅用于判断"本地是否还有时刻表"：空表时缓存 ETag / 节流时间戳都不可信 */
+    @Query("SELECT COUNT(*) FROM air_schedules")
+    suspend fun countSchedules(): Int
+
     @Query("SELECT * FROM air_schedules WHERE bgmId IN (:ids)")
     suspend fun getSchedulesByIds(ids: List<Long>): List<AirScheduleEntity>
 
@@ -169,6 +173,10 @@ data class WatchingFootprintProjection(
 
 @Dao
 interface UserCollectionDao {
+    /** 仅用于判断"本地是否还有收藏"：空表时 DataStore 里的同步时间戳不可信 */
+    @Query("SELECT COUNT(*) FROM user_collections")
+    suspend fun countCollections(): Int
+
     @Query("SELECT * FROM user_collections WHERE userId = :userId AND type = :type ORDER BY updatedAt DESC")
     fun getCollectionsByType(
         userId: Long,

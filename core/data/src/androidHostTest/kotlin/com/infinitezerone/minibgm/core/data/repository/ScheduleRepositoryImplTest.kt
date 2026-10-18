@@ -64,6 +64,8 @@ class ScheduleRepositoryImplTest {
 
         override suspend fun getAllSchedulesList(): List<AirScheduleEntity> = schedulesFlow.value
 
+        override suspend fun countSchedules(): Int = schedulesFlow.value.size
+
         override suspend fun getSchedulesByIds(ids: List<Long>): List<AirScheduleEntity> = schedulesFlow.value.filter { it.bgmId in ids }
 
         override suspend fun insertSchedules(schedules: List<AirScheduleEntity>) {
@@ -180,7 +182,10 @@ class ScheduleRepositoryImplTest {
                 customSnapshot = value
             }
 
+        val requestedEtags = mutableListOf<String?>()
+
         override suspend fun getSnapshot(ifNoneMatchEtag: String?): ScheduleSnapshotResult {
+            requestedEtags += ifNoneMatchEtag
             if (customSnapshot != null) return ScheduleSnapshotResult.Modified(customSnapshot!!, etag = "custom-etag")
 
             data class ItemMeta(
@@ -1989,6 +1994,64 @@ class ScheduleRepositoryImplTest {
             assertTrue(stored.any { it.bgmId == 2001L && it.sitesJson.contains("bilibili") })
             // 关键断言 3：对外流与 DAO 最终态一致（不存在更晚的中间态外发）
             assertEquals(emissions.last(), repo.getAllSchedulesStream().first())
+        }
+
+    /**
+     * 清库/清缓存后 DataStore 里的同步时间戳与快照 ETag 仍在：
+     * 空时刻表会被 12h 节流挡住，或者带着旧 ETag 拿到 304 永远不回填。
+     * 本地没有条目时必须当"从未同步"处理。
+     */
+    @Test
+    fun refreshAllSchedules_emptyLocalTable_ignoresThrottleAndPersistedEtag() =
+        runTest {
+            val weekStartSec = TimeUtils.cstWeekStartEpochMillis(TimeUtils.nowEpochMillis()) / 1000
+            val snapshotService =
+                FakeScheduleSnapshotService().apply {
+                    snapshot =
+                        ScheduleSnapshotDto(
+                            schema = "minibgm-schedule-snapshot/1",
+                            generatedAt = "",
+                            items =
+                                listOf(
+                                    ScheduleSnapshotItemDto(
+                                        anilistId = 7001L,
+                                        bgmId = 7001L,
+                                        title = "清库后的新番",
+                                        titleCn = "清库后的新番",
+                                        countryOfOrigin = "JP",
+                                        format = "TV",
+                                        status = "RELEASING",
+                                        airDate = "2026-10-20",
+                                        sites = listOf(ScheduleSnapshotSiteDto(site = "bangumi", id = "7001")),
+                                        episodes =
+                                            listOf(
+                                                ScheduleSnapshotEpisodeDto(
+                                                    n = 1,
+                                                    t = weekStartSec + 12 * 3600,
+                                                ),
+                                            ),
+                                    ),
+                                ),
+                        )
+                }
+            val prefs = createTestUserPreferencesDataSource()
+            prefs.setScheduleSnapshotEtag("stale-etag")
+            prefs.setBangumiDataLastSyncTimestamp(TimeUtils.nowEpochMillis())
+            val dao = FakeAirScheduleDao()
+
+            val repo =
+                createRepository(
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    snapshotService = snapshotService,
+                    userPreferences = prefs,
+                )
+
+            val result = repo.refreshAllSchedules(force = false)
+
+            assertIs<AppResult.Success<Unit>>(result)
+            assertEquals(listOf<String?>(null), snapshotService.requestedEtags, "空表必须不带 ETag 强制拉全量")
+            assertTrue(dao.getAllSchedulesList().isNotEmpty(), "空表必须被回填，而不是被节流或 304 挡住")
         }
 
     @Test
