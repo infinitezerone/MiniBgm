@@ -73,14 +73,28 @@ impl StreamServer {
         // 1. 初始化标准文件系统存储工厂（利用 OS Page Cache 高性能零拷贝，彻底杜绝 OOM）
         let storage_factory = FilesystemStorageFactory::default().boxed();
 
+        let dht_nodes_path = config.save_dir.join("dht_nodes.json");
+        let dht_bootstrap = vec![
+            "router.bittorrent.com:6881".to_string(),
+            "router.utorrent.com:6881".to_string(),
+            "dht.transmissionbt.com:6881".to_string(),
+            "dht.libtorrent.org:25401".to_string(),
+            "dht.aelitis.com:6881".to_string(),
+        ];
+
         let session_opts = SessionOptions {
             default_storage_factory: Some(storage_factory),
             fastresume: false,
             persistence: None,
             dht: Some(librqbit::DhtSessionConfig {
-                persistence: None,
+                persistence: Some(librqbit::dht::DhtPersistenceConfig {
+                    config_filename: Some(dht_nodes_path),
+                    dump_interval: Some(Duration::from_secs(30)),
+                }),
+                bootstrap_addrs: Some(dht_bootstrap),
                 ..Default::default()
             }),
+            client_name_and_version: Some("qBittorrent/4.6.5".to_string()),
             cancellation_token: Some(cancel_token.clone()),
             ..Default::default()
         };

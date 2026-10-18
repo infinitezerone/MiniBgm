@@ -17,3 +17,6 @@ codegen-units = 1
 # 而不是让整个 App 进程 abort。JNI 边界本身无法 unwind，那里的 panic 仍会终止进程。
 panic = "unwind"
 strip = true
+
+[patch.crates-io]
+rustls-platform-verifier = { path = "crates/rustls-platform-verifier" }
