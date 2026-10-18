@@ -12,12 +12,20 @@ import java.io.File
  *
  * 从未崩溃过（目录不存在）时返回 null / 清空为无操作，不抛异常：用户点开一个空列表不该看到报错。
  *
- * 刻意接收**目录**而不是 `Context`：路径由调用方（DI）用 `crashLogDir()` 算好，
+ * 刻意接收**目录提供者**而不是 `Context`：路径由调用方（DI）用 `crashLogDir()` 算好，
  * 这里就只剩纯粹的目录读写，单测拿临时目录即可覆盖全部分支，不必上 Robolectric。
+ *
+ * 目录**延迟解析**：`Context.filesDir` 会触发 `ensurePrivateDirExists` 的真实磁盘访问，
+ * 在 Koin 解析单例（启动期、主线程）时直接算路径会被 StrictMode 记为 DiskReadViolation；
+ * 改成首次在 [Dispatchers.IO] 里读取时才求值，启动路径上就没有这次读盘。
  */
 class FileCrashLogRepository(
-    private val crashDir: File,
+    private val crashDirProvider: () -> File,
 ) : CrashLogRepository {
+    constructor(crashDir: File) : this({ crashDir })
+
+    private val crashDir: File by lazy(LazyThreadSafetyMode.SYNCHRONIZED) { crashDirProvider() }
+
     override suspend fun latest(): CrashLog? =
         withContext(Dispatchers.IO) {
             val file =

@@ -17,31 +17,38 @@ import java.io.File
  * 删除是 best-effort：文件被占用/已删除都忽略，下一次 store 会再 trim 一次。
  */
 internal class BoundedCacheStorage(
-    private val delegate: CacheStorage,
+    private val delegateProvider: () -> CacheStorage,
     private val directory: File,
     private val maxBytes: Long,
 ) : CacheStorage {
+    /**
+     * 真实存储延迟到**第一次在 IO 线程上使用**时才创建：
+     * Ktor 的 `FileStorage` 构造函数会 `mkdirs()`，而单例在 Koin 解析期（启动主线程）就构造，
+     * 直接创建会被 StrictMode 记成 DiskRead/DiskWriteViolation。
+     */
+    private val delegate: CacheStorage by lazy(LazyThreadSafetyMode.SYNCHRONIZED) { delegateProvider() }
+
     override suspend fun store(
         url: Url,
         data: CachedResponseData,
     ) {
-        delegate.store(url, data)
+        withContext(Dispatchers.IO) { delegate.store(url, data) }
         trim()
     }
 
     override suspend fun find(
         url: Url,
         varyKeys: Map<String, String>,
-    ): CachedResponseData? = delegate.find(url, varyKeys)
+    ): CachedResponseData? = withContext(Dispatchers.IO) { delegate.find(url, varyKeys) }
 
-    override suspend fun findAll(url: Url): Set<CachedResponseData> = delegate.findAll(url)
+    override suspend fun findAll(url: Url): Set<CachedResponseData> = withContext(Dispatchers.IO) { delegate.findAll(url) }
 
     override suspend fun remove(
         url: Url,
         varyKeys: Map<String, String>,
-    ) = delegate.remove(url, varyKeys)
+    ) = withContext(Dispatchers.IO) { delegate.remove(url, varyKeys) }
 
-    override suspend fun removeAll(url: Url) = delegate.removeAll(url)
+    override suspend fun removeAll(url: Url) = withContext(Dispatchers.IO) { delegate.removeAll(url) }
 
     private suspend fun trim() =
         withContext(Dispatchers.IO) {

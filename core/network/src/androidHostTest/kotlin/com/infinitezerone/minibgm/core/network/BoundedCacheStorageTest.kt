@@ -74,7 +74,7 @@ class BoundedCacheStorageTest {
                     writeBytes(ByteArray(60))
                     setLastModified(2_000L)
                 }
-            val storage = BoundedCacheStorage(NoopStorage(), dir, maxBytes = 100)
+            val storage = BoundedCacheStorage({ NoopStorage() }, dir, maxBytes = 100)
 
             storage.store(Url("https://api.example.com/comment/2"), responseData())
 
@@ -95,7 +95,7 @@ class BoundedCacheStorageTest {
                     writeBytes(ByteArray(40))
                     setLastModified(2_000L)
                 }
-            val storage = BoundedCacheStorage(NoopStorage(), dir, maxBytes = 100)
+            val storage = BoundedCacheStorage({ NoopStorage() }, dir, maxBytes = 100)
 
             storage.store(Url("https://api.example.com/comment/3"), responseData())
 

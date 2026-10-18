@@ -29,7 +29,8 @@ import org.koin.dsl.module
 val platformDataModule =
     module {
         single<NetworkMonitor> { ConnectivityManagerNetworkMonitor(androidContext()) }
-        single<CrashLogRepository> { FileCrashLogRepository(crashLogDir(androidContext())) }
+        // 目录延迟到 IO 线程首次访问时再解析：`filesDir` 的取值本身就是一次磁盘检查
+        single<CrashLogRepository> { FileCrashLogRepository { crashLogDir(androidContext()) } }
         single<SeasonalDiskCache> { FileSeasonalDiskCache(androidContext().cacheDir.resolve("seasonal_cache")) }
         single<TorrentFeedDiskCache> { FileTorrentFeedDiskCache(androidContext().cacheDir.resolve("torrent_feed_cache")) }
         single<AssetDownloader> {
