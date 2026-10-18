@@ -708,6 +708,10 @@ fun SubjectSourcesBottomSheet(
                                                     episodeSort = episode?.episodeNumber ?: 0f,
                                                     episodeType = episode?.type ?: 0,
                                                     initialRuleId = rule.id,
+                                                    // 直链是这条规则解析出来的：把来源一并带进播放器，
+                                                    // 面板与观看记录才能显示真实源名，而不是「默认直链」
+                                                    initialSourceId = rule.id,
+                                                    initialSourceName = rule.name,
                                                 )
                                             onInternalPlayClick(route)
                                         } else {

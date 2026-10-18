@@ -67,6 +67,7 @@ class PlayerViewModelTest {
         startIndex: Int = 0,
         initialRuleId: String = "",
         initialSourceName: String = "",
+        initialSourceId: String = "",
         episodeId: Long = this.episodeId,
     ) = PlayerRoute(
         subjectId = subjectId,
@@ -76,6 +77,7 @@ class PlayerViewModelTest {
         startIndex = startIndex,
         initialRuleId = initialRuleId,
         initialSourceName = initialSourceName,
+        initialSourceId = initialSourceId,
     )
 
     private fun viewModel(
@@ -509,6 +511,30 @@ class PlayerViewModelTest {
                     playbackResolverRepository = resolverReturning("https://example.com/r1.m3u8"),
                 )
             advanceUntilIdle()
+
+            viewModel.onDurationChanged(240_000L)
+            viewModel.onProgressChanged(30_000L)
+            viewModel.flushPlaybackPosition()
+            advanceUntilIdle()
+
+            val entry = requireNotNull(historyRepo.getHistoryByEpisode(episodeId))
+            assertEquals("r1", entry.sourceId)
+            assertEquals("R1", entry.sourceName)
+        }
+
+    /**
+     * 从观看记录回放时播的是历史直链（playingSourceId = direct）：
+     * 落断点必须保留原始来源，否则第二次从历史进入就退化成「默认直链」。
+     */
+    @Test
+    fun flushPlaybackPosition_keepsOriginWhenReplayingHistoryDirectLink() =
+        runTest {
+            val historyRepo = FakePlaybackHistoryRepository()
+            val viewModel =
+                viewModel(
+                    route = route(initialSourceId = "r1", initialSourceName = "R1"),
+                    playbackHistoryRepository = historyRepo,
+                )
 
             viewModel.onDurationChanged(240_000L)
             viewModel.onProgressChanged(30_000L)

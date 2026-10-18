@@ -66,6 +66,9 @@ internal const val POSITION_SAVE_TICKS = 20
 /** 位置太短没有恢复价值 */
 internal const val MIN_RESUME_POSITION_MS = 5_000L
 
+/** 伪源 ID：入口直给的那条 URL（历史回放 / 助手 / 本地 / BT）都归到这条线上 */
+internal const val DIRECT_SOURCE_ID = "direct"
+
 /**
  * 单次取源的关键词尝试总时限。
  *
@@ -505,7 +508,7 @@ class PlayerViewModel(
                 }
             list.add(
                 PlayerSourceTab(
-                    id = "direct",
+                    id = DIRECT_SOURCE_ID,
                     name = defaultName,
                     isDirect = true,
                     nameRes = nameRes,
@@ -969,8 +972,14 @@ class PlayerViewModel(
         val epId = if (state.episodeId > 0L) state.episodeId else route.episodeId
         if (epId <= 0L || position <= 0L) return
         session.episodePositions[epId] = position
-        // 记录"这条直链是谁给的"：历史里据此显示源名，播放器面板也据此给直链贴上来源标签
+        // 记录"这条直链是谁给的"：历史里据此显示源名，播放器面板也据此给直链贴上来源标签。
+        // 从观看记录进入时播的是历史直链（playingSourceId = direct），不能把来源覆盖成 direct，
+        // 否则第二次从历史进来就退化成无信息的「默认直链」。
         val playingTab = state.sources.firstOrNull { it.id == state.playingSourceId }
+        val keepOrigin =
+            state.playingSourceId == DIRECT_SOURCE_ID &&
+                route.initialSourceId.isNotBlank() &&
+                route.initialSourceId != DIRECT_SOURCE_ID
         viewModelScope.launch {
             playbackHistoryRepository?.saveHistory(
                 PlaybackHistory(
@@ -981,8 +990,8 @@ class PlayerViewModel(
                     episodeSort = state.episodeSort,
                     coverUrl = state.subjectCoverUrl,
                     streamUrl = state.streamUrl,
-                    sourceId = state.playingSourceId.orEmpty(),
-                    sourceName = playingTab?.rule?.name.orEmpty(),
+                    sourceId = if (keepOrigin) route.initialSourceId else state.playingSourceId.orEmpty(),
+                    sourceName = if (keepOrigin) route.initialSourceName else playingTab?.rule?.name.orEmpty(),
                     positionMs = position,
                     durationMs = session.latestDurationMs,
                     updatedAt = System.currentTimeMillis(),

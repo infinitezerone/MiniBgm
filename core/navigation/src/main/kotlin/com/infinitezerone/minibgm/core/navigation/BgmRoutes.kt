@@ -167,6 +167,11 @@ data class PlayerRoute(
      * 仅用于给「默认直链」贴上来源标签，不参与任何选源决策。
      */
     val initialSourceName: String = "",
+    /**
+     * 入口携带的直链来源 ID（观看记录回放时 = 上次使用的规则 ID）。
+     * 用于在回放历史直链期间**保留来源归属**，避免下次从历史进入时退化成「默认直链」。
+     */
+    val initialSourceId: String = "",
 ) : DetailChainRoute
 
 /** 播放队列里的一条分集（与 [PlayerRoute] 同生命周期，仅用于播放器内换集与连播） */
