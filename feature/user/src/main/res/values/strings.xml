@@ -159,6 +159,18 @@
     <string name="feature_user_history_clear_all_action">清空</string>
     <string name="feature_user_history_deleted">已删除该观看记录</string>
     <string name="feature_user_history_cleared">已清空观看记录</string>
+    <string name="feature_user_history_subject_deleted">已删除该番剧的观看记录</string>
+    <string name="feature_user_history_delete_subject_message">将删除「%1$s」的全部观看记录与断点进度。</string>
+    <string name="feature_user_history_group_count">共 %1$d 集</string>
+    <string name="feature_user_history_group_expand">展开分集</string>
+    <string name="feature_user_history_group_collapse">收起分集</string>
+    <string name="feature_user_history_group_more">更多操作</string>
+    <string name="feature_user_history_group_delete">删除这部番的全部记录</string>
+    <string name="feature_user_history_time_just_now">刚刚</string>
+    <string name="feature_user_history_time_minutes_ago">%1$d 分钟前</string>
+    <string name="feature_user_history_time_hours_ago">%1$d 小时前</string>
+    <string name="feature_user_history_time_yesterday">昨天</string>
+    <string name="feature_user_history_time_days_ago">%1$d 天前</string>
 
     <!-- 9. 播放规则对话框 -->
     <string name="feature_user_rule_vars_title">支持的占位符变量</string>

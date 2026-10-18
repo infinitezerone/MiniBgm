@@ -85,13 +85,63 @@ class HistoryViewModelTest {
             assertEquals(R.string.feature_user_history_cleared, event.messageRes)
         }
 
+    @Test
+    fun uiState_groupsEpisodesBySubject_andExpansionIsHeldInUiState() =
+        runTest {
+            val historyRepo = FakePlaybackHistoryRepository()
+            historyRepo.saveHistory(history(episodeId = 101L, subjectId = 7L, updatedAt = 1_000L))
+            historyRepo.saveHistory(history(episodeId = 102L, subjectId = 7L, updatedAt = 2_000L))
+            historyRepo.saveHistory(history(episodeId = 201L, subjectId = 9L, updatedAt = 500L))
+
+            val viewModel = HistoryViewModel(historyRepo)
+            val initial = viewModel.uiState.first { it.groups.isNotEmpty() }
+            assertEquals(2, initial.groups.size)
+            assertEquals(
+                102L,
+                initial.groups
+                    .first()
+                    .latest.episodeId,
+            )
+            assertTrue(initial.expandedSubjectIds.isEmpty())
+
+            viewModel.toggleSubjectExpanded(7L)
+            val expanded = viewModel.uiState.first { 7L in it.expandedSubjectIds }
+            assertEquals(setOf(7L), expanded.expandedSubjectIds)
+
+            viewModel.toggleSubjectExpanded(7L)
+            val collapsed = viewModel.uiState.first { 7L !in it.expandedSubjectIds }
+            assertTrue(collapsed.expandedSubjectIds.isEmpty())
+        }
+
+    @Test
+    fun deleteSubjectHistory_removesEveryEpisodeOfThatSubjectAndEmitsSnackbar() =
+        runTest {
+            val historyRepo = FakePlaybackHistoryRepository()
+            historyRepo.saveHistory(history(episodeId = 101L, subjectId = 7L, updatedAt = 1_000L))
+            historyRepo.saveHistory(history(episodeId = 102L, subjectId = 7L, updatedAt = 2_000L))
+            historyRepo.saveHistory(history(episodeId = 201L, subjectId = 9L, updatedAt = 500L))
+
+            val viewModel = HistoryViewModel(historyRepo)
+            viewModel.deleteSubjectHistory(7L)
+            advanceUntilIdle()
+
+            assertNull(historyRepo.getHistoryByEpisode(101L))
+            assertNull(historyRepo.getHistoryByEpisode(102L))
+            assertEquals(201L, historyRepo.getHistoryByEpisode(201L)?.episodeId)
+
+            val event = viewModel.events.first()
+            assertIs<HistoryUiEvent.ShowSnackbar>(event)
+            assertEquals(R.string.feature_user_history_subject_deleted, event.messageRes)
+        }
+
     private fun history(
         episodeId: Long,
+        subjectId: Long = 1001L,
         positionMs: Long = 0L,
         updatedAt: Long = 0L,
     ) = PlaybackHistory(
         episodeId = episodeId,
-        subjectId = 1001L,
+        subjectId = subjectId,
         subjectName = "葬送的芙莉莲",
         episodeName = "第 1 话",
         episodeSort = 1f,

@@ -35,6 +35,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogActio
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.user.components.PlaybackHistoryCard
 import kotlinx.coroutines.launch
@@ -168,22 +169,21 @@ fun HistoryScreen(
                     contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    items(uiState.history, key = { it.episodeId }) { entry ->
+                    items(
+                        items = uiState.groups,
+                        key = { group ->
+                            group.subjectId
+                                .takeIf { it > 0L }
+                                ?.let { "s:$it" }
+                                ?: "e:${group.latest.episodeId}"
+                        },
+                    ) { group ->
                         PlaybackHistoryCard(
-                            history = entry,
-                            onResume = {
-                                onPlayHistory(
-                                    PlayerRoute(
-                                        subjectId = entry.subjectId,
-                                        episodeId = entry.episodeId,
-                                        streamUrl = entry.streamUrl,
-                                        episodeName = entry.episodeName,
-                                        subjectName = entry.subjectName,
-                                        episodeSort = entry.episodeSort,
-                                    ),
-                                )
-                            },
-                            onDelete = {
+                            group = group,
+                            expanded = group.subjectId in uiState.expandedSubjectIds,
+                            onToggleExpanded = { viewModel.toggleSubjectExpanded(group.subjectId) },
+                            onResume = { entry -> onPlayHistory(entry.toPlayerRoute()) },
+                            onDeleteEpisode = { entry ->
                                 scope.launch {
                                     val confirmed =
                                         overlayHostState.await(
@@ -203,6 +203,35 @@ fun HistoryScreen(
                                     }
                                 }
                             },
+                            onDeleteGroup = {
+                                scope.launch {
+                                    val groupName = group.subjectName.ifBlank { group.latest.episodeName }
+                                    val confirmed =
+                                        overlayHostState.await(
+                                            ConfirmDialogAction(
+                                                title = context.getString(R.string.feature_user_history_delete_title),
+                                                message =
+                                                    context.getString(
+                                                        if (group.subjectId > 0L) {
+                                                            R.string.feature_user_history_delete_subject_message
+                                                        } else {
+                                                            R.string.feature_user_history_delete_message
+                                                        },
+                                                        groupName,
+                                                    ),
+                                                confirmText = context.getString(R.string.feature_user_action_delete),
+                                                isDestructive = true,
+                                            ),
+                                        )
+                                    if (confirmed) {
+                                        if (group.subjectId > 0L) {
+                                            viewModel.deleteSubjectHistory(group.subjectId)
+                                        } else {
+                                            viewModel.deleteHistory(group.latest.episodeId)
+                                        }
+                                    }
+                                }
+                            },
                         )
                     }
                 }
@@ -214,3 +243,14 @@ fun HistoryScreen(
         }
     }
 }
+
+/** 历史记录 → 播放器路由：点击即按该分集的断点续播 */
+private fun PlaybackHistory.toPlayerRoute(): PlayerRoute =
+    PlayerRoute(
+        subjectId = subjectId,
+        episodeId = episodeId,
+        streamUrl = streamUrl,
+        episodeName = episodeName,
+        subjectName = subjectName,
+        episodeSort = episodeSort,
+    )
