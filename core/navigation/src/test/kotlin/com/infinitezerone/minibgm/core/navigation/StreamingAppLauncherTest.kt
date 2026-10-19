@@ -91,4 +91,26 @@ class StreamingAppLauncherTest {
         assertEquals("https://example.com/ep1.mp4", target.videoUrl)
         assertEquals("org.videolan.vlc", target.packageName)
     }
+
+    @Test
+    fun launchVideoWithChooser_withNonExistentFile_returnsFalse() {
+        val dummyContext = android.content.ContextWrapper(null)
+        val nonExistentFile = java.io.File("/path/to/non_existent.mkv")
+        val result = StreamingAppLauncher.launchVideoWithChooser(dummyContext, nonExistentFile)
+        assertFalse(result)
+    }
+
+    @Test
+    fun launchStreamWithChooser_withBlankUrl_returnsFalse() {
+        val dummyContext = android.content.ContextWrapper(null)
+        val result = StreamingAppLauncher.launchStreamWithChooser(dummyContext, "  ")
+        assertFalse(result)
+    }
+
+    @Test
+    fun launchMediaWithChooser_withBlankPath_returnsFalse() {
+        val dummyContext = android.content.ContextWrapper(null)
+        val result = StreamingAppLauncher.launchMediaWithChooser(dummyContext, "")
+        assertFalse(result)
+    }
 }

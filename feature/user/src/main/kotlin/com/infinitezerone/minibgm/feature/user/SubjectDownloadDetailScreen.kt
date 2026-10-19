@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -22,6 +24,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +47,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
+import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
@@ -50,6 +55,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.LocalFeatureCapabiliti
 import com.infinitezerone.minibgm.core.model.TorrentTask
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import com.infinitezerone.minibgm.core.navigation.launchMediaWithChooser
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
@@ -72,6 +78,24 @@ fun SubjectDownloadDetailScreen(
 ) {
     val downloadGroups by viewModel.downloadGroups.collectAsStateWithLifecycle()
     val group = downloadGroups.firstOrNull { it.subjectId == subjectId }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    ObserveAsEvents(viewModel.events) { event ->
+        when (event) {
+            is DownloadEvent.ExportSuccess -> {
+                snackbarHostState.showSnackbar(context.getString(R.string.feature_user_downloads_export_success))
+            }
+            is DownloadEvent.ExportFailed -> {
+                val message =
+                    event.message?.let {
+                        context.getString(R.string.feature_user_downloads_export_failed, it)
+                    } ?: context.getString(R.string.feature_user_downloads_export_failed_generic)
+                snackbarHostState.showSnackbar(message)
+            }
+        }
+    }
+
     SubjectDownloadDetailContent(
         subjectId = subjectId,
         subjectName = subjectName,
@@ -83,9 +107,11 @@ fun SubjectDownloadDetailScreen(
         onDeleteTask = viewModel::deleteTask,
         onRedownloadTask = viewModel::redownloadTask,
         onBatchDeleteTasks = viewModel::deleteTasks,
+        onExportToGallery = viewModel::exportToGallery,
         onPauseAll = { viewModel.pauseAllForSubject(subjectId) },
         onResumeAll = { viewModel.resumeAllForSubject(subjectId) },
         onDeleteAll = { viewModel.deleteAllForSubject(subjectId) },
+        snackbarHostState = snackbarHostState,
         modifier = modifier,
     )
 }
@@ -103,9 +129,11 @@ internal fun SubjectDownloadDetailContent(
     onDeleteTask: (String) -> Unit,
     onRedownloadTask: (String) -> Unit = {},
     onBatchDeleteTasks: (List<String>) -> Unit = {},
+    onExportToGallery: (String) -> Unit = {},
     onPauseAll: () -> Unit,
     onResumeAll: () -> Unit,
     onDeleteAll: () -> Unit,
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
     modifier: Modifier = Modifier,
 ) {
     val tasks = group?.sortedTasks ?: emptyList()
@@ -129,6 +157,7 @@ internal fun SubjectDownloadDetailContent(
         }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             BgmTopAppBar(
                 title = {
@@ -380,6 +409,7 @@ internal fun SubjectDownloadDetailContent(
                             }
                         },
                         onRedownload = { onRedownloadTask(task.id) },
+                        onExportToGallery = { onExportToGallery(task.id) },
                     )
                 }
             }
@@ -450,8 +480,11 @@ internal fun EpisodeDownloadCard(
     onResume: () -> Unit,
     onDelete: () -> Unit,
     onRedownload: () -> Unit = {},
+    onExportToGallery: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     val isCompleted = task.status == TorrentTaskStatus.COMPLETED
     val isError = task.status == TorrentTaskStatus.ERROR
     val canStreamWhileDownloading =
@@ -686,23 +719,104 @@ internal fun EpisodeDownloadCard(
                                 modifier = Modifier.size(20.dp),
                             )
                         }
-                    } else {
-                        when (task.status) {
-                            TorrentTaskStatus.COMPLETED -> {
-                                if (isInternalPlayerEnabled && onPlay != null) {
-                                    FilledTonalIconButton(
-                                        onClick = onPlay,
-                                        modifier = Modifier.size(36.dp),
-                                    ) {
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.DeleteBorder,
+                                contentDescription = stringResource(R.string.feature_user_action_delete),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    } else if (task.status == TorrentTaskStatus.COMPLETED) {
+                        if (isInternalPlayerEnabled && onPlay != null) {
+                            FilledTonalIconButton(
+                                onClick = onPlay,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.PlayArrow,
+                                    contentDescription = stringResource(R.string.feature_user_downloads_play_offline),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                        Box {
+                            IconButton(
+                                onClick = { menuExpanded = true },
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.MoreVert,
+                                    contentDescription = stringResource(R.string.feature_user_downloads_action_more),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.feature_user_downloads_open_with_external)) },
+                                    leadingIcon = {
                                         Icon(
-                                            imageVector = BgmIcons.PlayArrow,
-                                            contentDescription = stringResource(R.string.feature_user_downloads_play_offline),
+                                            imageVector = BgmIcons.OpenInNew,
+                                            contentDescription = null,
                                             modifier = Modifier.size(20.dp),
                                         )
-                                    }
+                                    },
+                                    onClick = {
+                                        menuExpanded = false
+                                        context.launchMediaWithChooser(
+                                            mediaUriOrPath = task.savePath,
+                                            title = task.episodeName.ifBlank { task.title },
+                                            chooserTitle = context.getString(R.string.feature_user_downloads_open_with_external),
+                                        )
+                                    },
+                                )
+                                if (onExportToGallery != null) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.feature_user_downloads_export_to_gallery)) },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = BgmIcons.Download,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                        },
+                                        onClick = {
+                                            menuExpanded = false
+                                            onExportToGallery()
+                                        },
+                                    )
                                 }
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = stringResource(R.string.feature_user_action_delete),
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = BgmIcons.DeleteBorder,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onDelete()
+                                    },
+                                )
                             }
-
+                        }
+                    } else {
+                        when (task.status) {
                             TorrentTaskStatus.DOWNLOADING -> {
                                 if (canStreamWhileDownloading && isInternalPlayerEnabled && onPlay != null) {
                                     FilledTonalIconButton(
@@ -769,19 +883,21 @@ internal fun EpisodeDownloadCard(
                                     )
                                 }
                             }
-                        }
-                    }
 
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(36.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.DeleteBorder,
-                            contentDescription = stringResource(R.string.feature_user_action_delete),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            modifier = Modifier.size(18.dp),
-                        )
+                            else -> Unit
+                        }
+
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.DeleteBorder,
+                                contentDescription = stringResource(R.string.feature_user_action_delete),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
                     }
                 }
             }

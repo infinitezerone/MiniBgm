@@ -6,4 +6,7 @@
     <cache-path name="torrents" path="torrents/" />
     <!-- 应用私有扩展与模块目录 -->
     <files-path name="modules" path="modules/" />
+    <!-- 离线下载视频目录（支持外部播放器与相册授权读取） -->
+    <external-files-path name="external_downloads" path="downloads/" />
+    <files-path name="internal_downloads" path="downloads/" />
 </paths>

@@ -3475,6 +3475,46 @@ class ArchitectureRulesTest {
         }
     }
 
+    /**
+     * 下载视频外部调用与相册导出安全规范。
+     *
+     * 架构约束：
+     * 1. app/src/main/res/xml/file_paths.xml 必须声明 downloads/ 目录授权，防止 FileProvider 在拉起外部播放器时报 IllegalArgumentException；
+     * 2. StreamingAppLauncher 必须显式添加 FLAG_GRANT_READ_URI_PERMISSION，防止第三方播放器无权读取沙盒媒体；
+     * 3. AndroidTorrentRepository 导出至 MediaStore 时必须对 IS_PENDING 与 RELATIVE_PATH 进行规范维护。
+     */
+    @Test
+    fun external_media_sharing_and_gallery_export_must_satisfy_security_and_system_specs() {
+        val filePathsXml = File(projectRoot, "app/src/main/res/xml/file_paths.xml")
+        assertTrue(filePathsXml.isFile, "file_paths.xml 未找到")
+        val filePathsContent = filePathsXml.readText()
+        assertTrue(
+            filePathsContent.contains("path=\"downloads/\""),
+            "file_paths.xml 必须包含 downloads/ 路径映射以支持下载媒体的 FileProvider 安全共享",
+        )
+
+        val launcherFile =
+            File(projectRoot, "core/navigation/src/main/kotlin/com/infinitezerone/minibgm/core/navigation/StreamingAppLauncher.kt")
+        assertTrue(launcherFile.isFile, "StreamingAppLauncher.kt 未找到")
+        val launcherContent = launcherFile.readText()
+        assertTrue(
+            launcherContent.contains("FLAG_GRANT_READ_URI_PERMISSION"),
+            "StreamingAppLauncher 必须为外部播放器 Intent 赋予 FLAG_GRANT_READ_URI_PERMISSION 读取权限",
+        )
+
+        val repoFile =
+            File(
+                projectRoot,
+                "core/data/src/androidMain/kotlin/com/infinitezerone/minibgm/core/data/repository/AndroidTorrentRepository.kt",
+            )
+        assertTrue(repoFile.isFile, "AndroidTorrentRepository.kt 未找到")
+        val repoContent = repoFile.readText()
+        assertTrue(
+            repoContent.contains("IS_PENDING"),
+            "AndroidTorrentRepository 必须在 Android 10+ 导出相册时控制 IS_PENDING 状态",
+        )
+    }
+
     /** [inner] 是否出现在以 [blockToken] 开头、花括号配对的代码块内 */
     private fun mentionsInsideBlock(
         code: String,

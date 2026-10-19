@@ -1101,6 +1101,91 @@ class AndroidTorrentRepository(
         }
     }
 
+    override suspend fun exportTaskToGallery(taskId: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            restoreDeferred.await()
+            val task =
+                _tasks.value.firstOrNull { it.id == taskId }
+                    ?: return@withContext Result.failure(IllegalArgumentException("任务不存在: $taskId"))
+
+            if (task.status != TorrentTaskStatus.COMPLETED || task.savePath.isBlank()) {
+                return@withContext Result.failure(IllegalStateException("任务未完成或文件路径为空"))
+            }
+
+            val sourceFile = File(task.savePath)
+            if (!sourceFile.exists() || sourceFile.length() <= 0L) {
+                return@withContext Result.failure(IOException("目标文件不存在或为空: ${task.savePath}"))
+            }
+
+            val fileName = sourceFile.name
+            val extension = sourceFile.extension.lowercase()
+            val mimeType =
+                when (extension) {
+                    "mkv" -> "video/x-matroska"
+                    "mp4" -> "video/mp4"
+                    "webm" -> "video/webm"
+                    "ts", "m2ts" -> "video/mp2t"
+                    "avi" -> "video/x-msvideo"
+                    else -> "video/*"
+                }
+
+            runCatching {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    val values =
+                        android.content.ContentValues().apply {
+                            put(android.provider.MediaStore.Video.Media.DISPLAY_NAME, fileName)
+                            put(android.provider.MediaStore.Video.Media.MIME_TYPE, mimeType)
+                            put(
+                                android.provider.MediaStore.Video.Media.RELATIVE_PATH,
+                                "${android.os.Environment.DIRECTORY_MOVIES}/MiniBgm",
+                            )
+                            put(android.provider.MediaStore.Video.Media.IS_PENDING, 1)
+                        }
+
+                    val resolver = context.contentResolver
+                    val collection = android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                    val itemUri =
+                        resolver.insert(collection, values)
+                            ?: throw IOException("向 MediaStore 插入记录失败")
+
+                    try {
+                        resolver.openOutputStream(itemUri)?.use { outputStream ->
+                            sourceFile.inputStream().use { inputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                        } ?: throw IOException("无法打开 MediaStore 输出流")
+
+                        values.clear()
+                        values.put(android.provider.MediaStore.Video.Media.IS_PENDING, 0)
+                        resolver.update(itemUri, values, null, null)
+                        logger.i { "任务 $taskId 已成功导出至系统相册 (MediaStore): $itemUri" }
+                        itemUri.toString()
+                    } catch (e: Exception) {
+                        resolver.delete(itemUri, null, null)
+                        throw e
+                    }
+                } else {
+                    val moviesDir =
+                        File(
+                            android.os.Environment.getExternalStoragePublicDirectory(
+                                android.os.Environment.DIRECTORY_MOVIES,
+                            ),
+                            "MiniBgm",
+                        ).apply { mkdirs() }
+                    val targetFile = File(moviesDir, fileName)
+                    sourceFile.copyTo(targetFile, overwrite = true)
+                    android.media.MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(targetFile.absolutePath),
+                        arrayOf(mimeType),
+                        null,
+                    )
+                    logger.i { "任务 $taskId 已成功导出至系统媒体目录: ${targetFile.absolutePath}" }
+                    targetFile.absolutePath
+                }
+            }
+        }
+
     companion object {
         const val DEFAULT_PEER_CONNECT_TIMEOUT_MS = 45_000L
         const val PEER_CONNECT_TIMEOUT_MESSAGE = "连接做种节点超时（暂无可用源），请点击重试或更换其他资源"

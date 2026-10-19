@@ -6,13 +6,27 @@ import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
 import com.infinitezerone.minibgm.core.model.DownloadStorageUsage
 import com.infinitezerone.minibgm.core.model.SubjectDownloadGroup
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+/**
+ * 离线下载界面一次性事件（由 [com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents] 消费）
+ */
+sealed interface DownloadEvent {
+    data object ExportSuccess : DownloadEvent
+
+    data class ExportFailed(
+        val message: String? = null,
+    ) : DownloadEvent
+}
 
 /**
  * 离线缓存与多任务下载视图模型。
@@ -25,6 +39,9 @@ class DownloadViewModel(
 ) : ViewModel() {
     private val _storageUsage = MutableStateFlow(DownloadStorageUsage())
     val storageUsage: StateFlow<DownloadStorageUsage> = _storageUsage.asStateFlow()
+
+    private val _events = Channel<DownloadEvent>(Channel.BUFFERED)
+    val events: Flow<DownloadEvent> = _events.receiveAsFlow()
 
     init {
         viewModelScope.launch {
@@ -148,6 +165,21 @@ class DownloadViewModel(
         viewModelScope.launch {
             val tasks = torrentRepository.tasks.value.filter { it.subjectId == subjectId }
             tasks.forEach { torrentRepository.cancelDownload(it.id, deleteFiles) }
+        }
+    }
+
+    /**
+     * 将指定已完成任务的本地文件导出至系统媒体库（相册/Movies 目录）。
+     */
+    fun exportToGallery(taskId: String) {
+        viewModelScope.launch {
+            val result = torrentRepository.exportTaskToGallery(taskId)
+            if (result.isSuccess) {
+                _events.send(DownloadEvent.ExportSuccess)
+            } else {
+                val errorMsg = result.exceptionOrNull()?.message
+                _events.send(DownloadEvent.ExportFailed(errorMsg))
+            }
         }
     }
 }

@@ -5,8 +5,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import androidx.core.content.FileProvider
 import com.infinitezerone.minibgm.core.common.intent.ExternalPlayerTarget
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
+import java.io.File
 
 /**
  * 播放源启动结果
@@ -136,6 +138,116 @@ object StreamingAppLauncher {
             false
         }
     }
+
+    /**
+     * 将本地视频文件经由 [FileProvider] 授予安全只读权限，并以系统选择器（Chooser）形式唤起外部播放器/相册：
+     * 兼容手机已安装的相册、系统自带视频、mpv、VLC、MX Player 等所有声明处理视频媒体格式的外部应用。
+     */
+    fun launchVideoWithChooser(
+        context: Context,
+        file: File,
+        title: String? = null,
+        chooserTitle: String? = null,
+    ): Boolean {
+        if (!file.isFile || file.length() <= 0L) return false
+        val authority = "${context.packageName}.fileprovider"
+        val contentUri =
+            try {
+                FileProvider.getUriForFile(context, authority, file)
+            } catch (_: Exception) {
+                return false
+            }
+
+        val extension = file.extension.lowercase()
+        val mimeType =
+            when (extension) {
+                "mkv" -> "video/x-matroska"
+                "mp4" -> "video/mp4"
+                "webm" -> "video/webm"
+                "ts", "m2ts" -> "video/mp2t"
+                "avi" -> "video/x-msvideo"
+                else -> "video/*"
+            }
+
+        return try {
+            val intent =
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(contentUri, mimeType)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    if (!title.isNullOrBlank()) {
+                        putExtra(Intent.EXTRA_TITLE, title)
+                    }
+                    if (context !is Activity) {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                }
+            val chooser =
+                Intent.createChooser(intent, chooserTitle).apply {
+                    if (context !is Activity) {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                }
+            context.startActivity(chooser)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * 将在线流媒体或本地回环流 URL 以系统选择器（Chooser）形式唤起外部播放器。
+     */
+    fun launchStreamWithChooser(
+        context: Context,
+        streamUrl: String,
+        title: String? = null,
+        chooserTitle: String? = null,
+    ): Boolean {
+        if (streamUrl.isBlank()) return false
+        return try {
+            val intent =
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(Uri.parse(streamUrl), "video/*")
+                    if (!title.isNullOrBlank()) {
+                        putExtra(Intent.EXTRA_TITLE, title)
+                    }
+                    if (context !is Activity) {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                }
+            val chooser =
+                Intent.createChooser(intent, chooserTitle).apply {
+                    if (context !is Activity) {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                }
+            context.startActivity(chooser)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * 自动判别本地文件路径或网络流 URL，以系统选择器形式唤起外部播放器。
+     */
+    fun launchMediaWithChooser(
+        context: Context,
+        mediaUriOrPath: String,
+        title: String? = null,
+        chooserTitle: String? = null,
+    ): Boolean {
+        if (mediaUriOrPath.isBlank()) return false
+        val cleanPath = mediaUriOrPath.removePrefix("file://")
+        val file = File(cleanPath)
+        return if (file.exists() && file.isFile) {
+            launchVideoWithChooser(context, file, title, chooserTitle)
+        } else if (mediaUriOrPath.startsWith("http://") || mediaUriOrPath.startsWith("https://")) {
+            launchStreamWithChooser(context, mediaUriOrPath, title, chooserTitle)
+        } else {
+            false
+        }
+    }
 }
 
 /**
@@ -153,3 +265,12 @@ fun Context.launchExternalPlayer(
     target: ExternalPlayerTarget,
     onPlayerNotInstalled: ((appName: String, packageName: String) -> Unit)? = null,
 ): Boolean = StreamingAppLauncher.launchExternalPlayer(this, target, onPlayerNotInstalled)
+
+/**
+ * [Context] 扩展以系统选择器形式唤起外部播放器播放指定媒体文件或流。
+ */
+fun Context.launchMediaWithChooser(
+    mediaUriOrPath: String,
+    title: String? = null,
+    chooserTitle: String? = null,
+): Boolean = StreamingAppLauncher.launchMediaWithChooser(this, mediaUriOrPath, title, chooserTitle)

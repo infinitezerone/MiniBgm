@@ -165,4 +165,13 @@ class FakeTorrentRepository : TorrentRepository {
     override suspend fun verifyTaskFiles() {
         // no-op in fake
     }
+
+    var exportTaskToGalleryResult: Result<String> = Result.success("content://media/external/video/media/12345")
+    var exportTaskToGalleryCallCount: Int = 0
+        private set
+
+    override suspend fun exportTaskToGallery(taskId: String): Result<String> {
+        exportTaskToGalleryCallCount++
+        return exportTaskToGalleryResult
+    }
 }

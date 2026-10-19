@@ -402,6 +402,12 @@
     <string name="feature_user_downloads_group_error_format">%1$d 集异常 · %2$s</string>
     <string name="feature_user_downloads_card_summary">%1$d 个任务下载中 · %2$s</string>
     <string name="feature_user_downloads_card_all_done">%1$d 部番剧已离线</string>
+    <string name="feature_user_downloads_open_with_external">以其他应用打开</string>
+    <string name="feature_user_downloads_export_to_gallery">保存到系统相册</string>
+    <string name="feature_user_downloads_export_success">已保存至系统相册 (Movies/MiniBgm)</string>
+    <string name="feature_user_downloads_export_failed">保存至相册失败：%1$s</string>
+    <string name="feature_user_downloads_export_failed_generic">保存至相册失败</string>
+    <string name="feature_user_downloads_action_more">更多操作</string>
 
     <!-- 20. 现代开发者选项面板 (In-App Developer Options) -->
     <string name="feature_user_section_developer">开发者</string>

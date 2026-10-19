@@ -117,4 +117,12 @@ interface TorrentRepository {
      * 校验已完成任务物理文件的存在性，更新任务的 isFileMissing 状态。
      */
     suspend fun verifyTaskFiles()
+
+    /**
+     * 将已完成下载的本地视频文件导出至系统媒体库（相册/Movies 目录）。
+     *
+     * @param taskId 目标任务 ID
+     * @return 成功时返回导出的目标文件路径或 MediaStore URI 字符串
+     */
+    suspend fun exportTaskToGallery(taskId: String): Result<String>
 }

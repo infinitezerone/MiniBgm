@@ -1305,6 +1305,78 @@ class TorrentRepositoryTest {
                 tempRoot.deleteRecursively()
             }
         }
+
+    @Test
+    fun exportTaskToGallery_withNonExistentTask_returnsFailure() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("torrent-export-test").toFile()
+            try {
+                val repo = createTestRepository(tempRoot, testScheduler)
+                val result = repo.exportTaskToGallery("non-existent-id")
+                assertTrue(result.isFailure)
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
+
+    @Test
+    fun exportTaskToGallery_withUncompletedTask_returnsFailure() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("torrent-export-test-uncompleted").toFile()
+            try {
+                val repo = createTestRepository(tempRoot, testScheduler)
+                val taskId = repo.startDownload("Ep 01", "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567")
+                val result = repo.exportTaskToGallery(taskId)
+                assertTrue(result.isFailure)
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
+
+    private fun createTestRepository(
+        tempRoot: File,
+        testScheduler: kotlinx.coroutines.test.TestCoroutineScheduler,
+        dao: FakeTorrentTaskDao = FakeTorrentTaskDao(),
+    ): AndroidTorrentRepository {
+        val context =
+            object : ContextWrapper(null) {
+                override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+            }
+        val downloader =
+            object : AssetDownloader {
+                override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                override suspend fun downloadAsset(
+                    rawUrl: String,
+                    destinationPath: String,
+                    customMirrorPrefix: String?,
+                ): DownloadState = DownloadState.Completed(destinationPath, 0L)
+
+                override fun cancelDownload() = Unit
+            }
+        val streamService =
+            object : AssetDownloadService {
+                override suspend fun streamAsset(
+                    url: String,
+                    rangeStart: Long,
+                    onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
+                ): Long = 0L
+            }
+        return AndroidTorrentRepository(
+            context = context,
+            assetDownloader = downloader,
+            assetDownloadService = streamService,
+            streamEngine = FakeTorrentStreamEngine(initialInstalled = true),
+            torrentTaskDao = dao,
+            ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+            startForegroundService = { _, _, _ -> },
+            peerConnectTimeoutMs = 0L,
+        )
+    }
 }
 
 private fun validTorrentBytes(): ByteArray = "d8:announce14:http://tracker4:infod6:lengthi1e4:name3:abcee".toByteArray(Charsets.ISO_8859_1)

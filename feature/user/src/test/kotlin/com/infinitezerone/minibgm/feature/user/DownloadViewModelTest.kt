@@ -199,4 +199,33 @@ class DownloadViewModelTest {
             assertEquals(500L * 1024L * 1024L, usage.downloadSizeBytes)
             assertEquals(20L * 1024L * 1024L * 1024L, usage.availableBytes)
         }
+
+    @Test
+    fun exportToGallery_whenSuccess_emitsExportSuccessEvent() =
+        runTest {
+            val repository = FakeTorrentRepository()
+            repository.exportTaskToGalleryResult = Result.success("content://media/external/video/media/100")
+            val viewModel = DownloadViewModel(repository)
+
+            viewModel.exportToGallery("task-1")
+            val event = viewModel.events.first()
+
+            assertEquals(1, repository.exportTaskToGalleryCallCount)
+            assertEquals(DownloadEvent.ExportSuccess, event)
+        }
+
+    @Test
+    fun exportToGallery_whenFailure_emitsExportFailedEvent() =
+        runTest {
+            val repository = FakeTorrentRepository()
+            repository.exportTaskToGalleryResult = Result.failure(IllegalStateException("文件未完成"))
+            val viewModel = DownloadViewModel(repository)
+
+            viewModel.exportToGallery("task-2")
+            val event = viewModel.events.first()
+
+            assertEquals(1, repository.exportTaskToGalleryCallCount)
+            assertTrue(event is DownloadEvent.ExportFailed)
+            assertEquals("文件未完成", (event as DownloadEvent.ExportFailed).message)
+        }
 }
