@@ -174,6 +174,37 @@ class DownloadViewModel(
     }
 
     /**
+     * 全局暂停所有进行中/解析中/排队中的下载任务。
+     */
+    fun pauseAll() {
+        viewModelScope.launch {
+            val allTasks = torrentRepository.tasks.value
+            val active =
+                allTasks.filter {
+                    it.status == TorrentTaskStatus.DOWNLOADING ||
+                        it.status == TorrentTaskStatus.RESOLVING ||
+                        it.status == TorrentTaskStatus.QUEUED
+                }
+            active.forEach { torrentRepository.pauseDownload(it.id) }
+        }
+    }
+
+    /**
+     * 全局继续所有已暂停/出错的下载任务。
+     */
+    fun resumeAll() {
+        viewModelScope.launch {
+            val allTasks = torrentRepository.tasks.value
+            val paused =
+                allTasks.filter {
+                    it.status == TorrentTaskStatus.PAUSED ||
+                        it.status == TorrentTaskStatus.ERROR
+                }
+            paused.forEach { torrentRepository.resumeDownload(it.id) }
+        }
+    }
+
+    /**
      * 将指定已完成任务的本地文件导出至系统媒体库（相册/Movies 目录）。
      */
     fun exportToGallery(taskId: String) {

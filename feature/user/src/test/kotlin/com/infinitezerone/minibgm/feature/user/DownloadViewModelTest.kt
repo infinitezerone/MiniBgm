@@ -258,4 +258,22 @@ class DownloadViewModelTest {
             viewModel.resumeTasks(listOf("task-1", "task-2"))
             assertEquals(2, repository.resumeDownloadCallCount)
         }
+
+    @Test
+    fun pauseAll_and_resumeAll_delegateToRepository() =
+        runTest {
+            val repository = FakeTorrentRepository()
+            repository.startDownload(
+                title = "Task 1",
+                magnetUrl = "magnet:?xt=urn:btih:1111",
+                totalBytes = 1000L,
+            )
+            val viewModel = DownloadViewModel(repository)
+
+            viewModel.pauseAll()
+            assertEquals(1, repository.pauseDownloadCallCount)
+
+            viewModel.resumeAll()
+            assertEquals(1, repository.resumeDownloadCallCount)
+        }
 }

@@ -416,6 +416,11 @@
     <string name="feature_user_downloads_batch_export_success">已将 %1$d 个视频保存至系统相册</string>
     <string name="feature_user_downloads_batch_export_partial">%1$d 个保存成功，%2$d 个失败</string>
     <string name="feature_user_downloads_batch_export_failed">批量保存至相册失败</string>
+    <string name="feature_user_downloads_tab_all">全部 (%1$d)</string>
+    <string name="feature_user_downloads_tab_downloading">下载中 (%1$d)</string>
+    <string name="feature_user_downloads_tab_completed">已完成 (%1$d)</string>
+    <string name="feature_user_downloads_filter_empty">没有符合该分类的番剧</string>
+    <string name="feature_user_downloads_filter_reset">查看全部番剧</string>
 
     <!-- 20. 现代开发者选项面板 (In-App Developer Options) -->
     <string name="feature_user_section_developer">开发者</string>
