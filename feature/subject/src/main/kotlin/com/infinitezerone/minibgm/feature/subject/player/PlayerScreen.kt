@@ -8,6 +8,7 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Rect
 import android.util.Rational
+import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -81,7 +82,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.Tracks
+import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaSession
@@ -1244,8 +1249,131 @@ private fun PlayerVideoSurface(
 }
 
 /**
- * 软字幕图层：使用 media3 官方 [SubtitleView] 渲染内嵌或外挂字幕（ASS/SSA 特效字幕、SRT 等）。
- * [ContentFrame] 仅承载视频图形图层，通过在此处叠加 [SubtitleView] 并监听 [Player.Listener.onCues] 补齐字幕呈现。
+ * 与 [Player] 直连的软字幕呈现视图。
+ *
+ * 避坑说明：
+ * 绝不能经由 Compose [mutableStateOf] / [AndroidView.update] 中转高频字幕事件。
+ * 在 Compose 节点转移（如横竖屏与 PiP 的 [movableContentOf] 切换）期间，
+ * AndroidViewHolder 的快照观察器容易丢失或吞没更新，导致字幕永远卡死在某一帧、
+ * 且在控制面板点击「关闭字幕」也无法清空。
+ *
+ * 本控件将 [Player.Listener] 绑定到自身 [View.OnAttachStateChangeListener]：
+ * 1. 附着到窗口时立即挂载监听，脱离窗口时注销并置空，避免跨生命周期泄漏与幽灵展示；
+ * 2. 直连分发 [Player.Listener.onCues]，零中转零延迟；
+ * 3. 拦截 [onTrackSelectionParametersChanged]、[onTracksChanged] 与 [onPositionDiscontinuity]：
+ *    当字幕被用户显式关闭时立即调用 [setCues(emptyList())] 强制清屏，切轨或快进快退时同步最新字幕。
+ */
+@OptIn(UnstableApi::class)
+internal class PlayerBoundSubtitleView(
+    context: Context,
+    private val player: Player,
+) : android.widget.FrameLayout(context),
+    View.OnAttachStateChangeListener {
+    private val subtitleView =
+        SubtitleView(context).apply {
+            setStyle(
+                CaptionStyleCompat(
+                    // foregroundColor =
+                    android.graphics.Color.WHITE,
+                    // backgroundColor =
+                    android.graphics.Color.TRANSPARENT,
+                    // windowColor =
+                    android.graphics.Color.TRANSPARENT,
+                    // edgeType =
+                    CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                    // edgeColor =
+                    android.graphics.Color.BLACK,
+                    // typeface =
+                    null,
+                ),
+            )
+            setApplyEmbeddedStyles(true)
+            setApplyEmbeddedFontSizes(true)
+            setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * 1.05f)
+            setBottomPaddingFraction(0.06f)
+            isClickable = false
+            isFocusable = false
+        }
+
+    private val playerListener =
+        object : Player.Listener {
+            override fun onCues(cueGroup: CueGroup) {
+                syncCues(cueGroup.cues)
+            }
+
+            override fun onTrackSelectionParametersChanged(parameters: TrackSelectionParameters) {
+                if (parameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) {
+                    syncCues(emptyList())
+                } else {
+                    syncCues(player.currentCues.cues)
+                }
+            }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                syncCues(player.currentCues.cues)
+            }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int,
+            ) {
+                syncCues(player.currentCues.cues)
+            }
+        }
+
+    init {
+        addView(
+            subtitleView,
+            LayoutParams(
+                LayoutParams.MATCH_PARENT,
+                LayoutParams.MATCH_PARENT,
+            ),
+        )
+        addOnAttachStateChangeListener(this)
+        if (isAttachedToWindow) {
+            player.addListener(playerListener)
+            syncCues(player.currentCues.cues)
+        }
+    }
+
+    var renderedCues: List<Cue> = emptyList()
+        private set
+
+    fun syncCues(cues: List<Cue> = player.currentCues.cues) {
+        val target =
+            if (player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) {
+                emptyList()
+            } else {
+                cues
+            }
+        renderedCues = target
+        subtitleView.setCues(target)
+    }
+
+    override fun onViewAttachedToWindow(v: View) {
+        player.removeListener(playerListener)
+        player.addListener(playerListener)
+        syncCues(player.currentCues.cues)
+    }
+
+    override fun onViewDetachedFromWindow(v: View) {
+        player.removeListener(playerListener)
+        renderedCues = emptyList()
+        subtitleView.setCues(emptyList())
+    }
+
+    fun release() {
+        removeOnAttachStateChangeListener(this)
+        player.removeListener(playerListener)
+        renderedCues = emptyList()
+        subtitleView.setCues(emptyList())
+    }
+}
+
+/**
+ * 软字幕图层：使用 [PlayerBoundSubtitleView] 渲染内嵌或外挂字幕（ASS/SSA 特效字幕、SRT 等）。
+ * [ContentFrame] 仅承载视频图形图层，通过在此处叠加并直连 [Player.Listener] 补齐字幕呈现。
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -1253,51 +1381,18 @@ private fun PlayerSubtitleOverlay(
     player: Player,
     modifier: Modifier = Modifier,
 ) {
-    var cues by remember(player) { mutableStateOf(player.currentCues.cues) }
-
-    DisposableEffect(player) {
-        val listener =
-            object : Player.Listener {
-                override fun onCues(cueGroup: CueGroup) {
-                    cues = cueGroup.cues
-                }
-            }
-        player.addListener(listener)
-        cues = player.currentCues.cues
-        onDispose {
-            player.removeListener(listener)
-        }
-    }
-
     AndroidView(
         factory = { ctx ->
-            SubtitleView(ctx).apply {
-                setStyle(
-                    CaptionStyleCompat(
-                        // foregroundColor =
-                        android.graphics.Color.WHITE,
-                        // backgroundColor =
-                        android.graphics.Color.TRANSPARENT,
-                        // windowColor =
-                        android.graphics.Color.TRANSPARENT,
-                        // edgeType =
-                        CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                        // edgeColor =
-                        android.graphics.Color.BLACK,
-                        // typeface =
-                        null,
-                    ),
-                )
-                setApplyEmbeddedStyles(true)
-                setApplyEmbeddedFontSizes(true)
-                setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * 1.05f)
-                setBottomPaddingFraction(0.06f)
-                isClickable = false
-                isFocusable = false
-            }
+            PlayerBoundSubtitleView(ctx, player)
         },
-        update = { subtitleView ->
-            subtitleView.setCues(cues)
+        update = { view ->
+            view.syncCues()
+        },
+        onReset = { view ->
+            view.syncCues(emptyList())
+        },
+        onRelease = { view ->
+            view.release()
         },
         modifier = modifier,
     )

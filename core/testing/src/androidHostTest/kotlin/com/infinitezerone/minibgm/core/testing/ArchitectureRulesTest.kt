@@ -2407,6 +2407,54 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 播放器软字幕图层必须直连 [Player.Listener] 且随 [View.OnAttachStateChangeListener] 挂载/卸载。
+     *
+     * 事故复盘（2026-10-19）：
+     * 旧实现将 [Player.Listener.onCues] 写入 Compose `mutableStateOf(cues)` 并经 `AndroidView.update`
+     * 派发给 SubtitleView。当播放器在横竖屏（或 PiP）切换时，因外层使用了 `movableContentOf`，
+     * 视图节点被从旧窗口脱离并移至新窗口，在此期间 AndroidViewHolder 的快照观察器被 clear，
+     * 导致字幕更新观察永久断裂：字幕永久冻结在切屏时刻的某一帧；且用户在设置面板点击「关闭字幕」时，
+     * 尽管 ExoPlayer 正确发出了空字幕组，快照观察器也因断开而无法将空字幕推入 SubtitleView，
+     * 使得冻结字幕死死停留在画面中央。
+     *
+     * 红线要求：
+     * 1. 严禁在 PlayerSubtitleOverlay 声明 `mutableStateOf` 中转高频字幕；
+     * 2. 必须使用直连视图 [PlayerBoundSubtitleView]；
+     * 3. 必须通过 View.OnAttachStateChangeListener 管理窗口附着生命周期，且关闭字幕时强制置空。
+     */
+    @Test
+    fun player_subtitle_overlay_must_bind_directly_to_player_listener_without_compose_state() {
+        val violations = mutableListOf<String>()
+        val screenPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt"
+        val code = KotlinSourceScanner.sanitize(File(projectRoot, screenPath).readText())
+
+        val overlayBody =
+            Regex("""fun\s+PlayerSubtitleOverlay\s*\([\s\S]*?\)\s*\{([\s\S]*?)\}""")
+                .find(code)
+                ?.groupValues
+                ?.get(1)
+
+        if (overlayBody?.contains("mutableStateOf") == true) {
+            violations.add("$screenPath 的 PlayerSubtitleOverlay 函数体声明了 mutableStateOf：高频字幕事件绝不能经 Compose 快照中转，必须直连 Player.Listener")
+        }
+
+        if (!code.contains("PlayerBoundSubtitleView") || !code.contains("OnAttachStateChangeListener")) {
+            violations.add("$screenPath 必须使用 PlayerBoundSubtitleView 并在 OnAttachStateChangeListener 中绑定与解绑 Player.Listener")
+        }
+
+        if (!code.contains("disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)")) {
+            violations.add("$screenPath 的字幕组件必须检查 disabledTrackTypes.contains(C.TRACK_TYPE_TEXT) 并在关闭时清空字幕")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反「播放器软字幕图层必须直连监听且安全承接横竖屏迁移」架构红线：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
     @Test
     fun comment_sort_order_must_be_a_shared_persisted_preference() {
         val violations = mutableListOf<String>()

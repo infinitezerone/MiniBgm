@@ -12,10 +12,10 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 ## 构建与验证
 
-提交前唯一入口：`.\tools\jgate.ps1`（Linux/CI `bash tools/jgate`）；提交用 `tools/jcommit.ps1 -m "feat: ..."`（强制先验后提）。门禁做什么、目标如何推断、md 改动的白名单跳过、`--fast` 与 CI 的差异、诊断产物在哪——全部由 `.\tools\jgate.ps1 --help` 自述，本文件不复述——`--help` 就是门禁的用法规格，改 jgate 行为必须同 commit 改 help。
+提交前唯一入口：`.\tools\jgate.ps1`（Linux/CI `bash tools/jgate`）；提交用 `tools/jcommit.ps1 -m "feat: ..."`（强制先验后提）。门禁细节、白名单跳过、`--fast` 与诊断产物由 `.\tools\jgate.ps1 --help` 自述（用法规格，改行为必同 commit 改 help）。
 
 - `--fast` 只是本机减负：本机绿 != CI 绿，提交前必须复跑一次不带 `--fast` 的。
-- 素材体积门：单张 > 200 KB 或合计 > 1 MB 硬拦（压 800px WebP）；单元测试配置唯一真源 `configureAndroidUnitTests()`，禁止各自手抄 `tasks.withType<Test>`；依赖图变更后 `./gradlew graphUpdate`，Lint 存量基线用 `updateLintBaseline`，质量门 `./gradlew :core:testing:crapCheck`（CRAP ≤ 30）。
+- 素材体积门：单张 > 200 KB 或合计 > 1 MB 硬拦（压 800px WebP）；单元测试配置唯一真源 `configureAndroidUnitTests()`，禁止手抄 `tasks.withType<Test>`；依赖图变更后 `./gradlew graphUpdate`，Lint 基线用 `updateLintBaseline`，质量门 `./gradlew :core:testing:crapCheck`（CRAP ≤ 30）。
 - Rust 原生库：ABI 集合唯一真源 `native/abis.txt`（构建脚本、release workflow、`SUPPORTED_ABIS` 全与它对齐）；Gradle 绝不跨界调度 Cargo/NDK，只经 `registerPrebuiltJniLibs` 挂载产物并在缺库时硬失败；`libminibgm_torrent.so` 在 release 由 `configureOnDemandNativePackaging` 排除、按需下载。
 
 编码中间态用 `.\tools\quick-check.ps1` 秒级自查（等价 `jgate quick`）。
@@ -41,7 +41,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 - 播放器会话：续播点按**分集**绑定（`selectEpisode` / `switchTo` 按 `episodeId` 存取，与直链/源解耦；`player_view_model_playback_resume_must_bind_strictly_to_playback_history_repo`），同分集换线路沿用当前进度；
   - 「选中」≠「正在播」：徽标、健康度归因与上次可用源读 `playingSourceId`（`onPlaybackReady` / `onPlaybackError` 归属在播源）；切源失败回退选中项 + 轻提示，禁全屏错误盖住仍在播画面；选中项按**源标识**找回（下标仅位置语义）。
   - 引擎重置只重置媒体字段（`isLooping` 由 `repeatMode` 持有），轨道 override 只清「跟着上一份媒体选的」（`player_media_state_reset_must_preserve_engine_side_preferences`）。
-  - 长期偏好（弹幕/连播/画中画/关闭字幕）经 `SettingsRepository` 落库由 `PlayViewPreferences` 投影回读，禁 VM 内存翻转、禁 UI `remember`；「关闭字幕」只记立场且走单向 `applySubtitlesDisabledPreference`；倍速/画幅/单集循环刻意不落库（`player_view_preferences_must_be_persisted_not_held_in_session_state`）。
+  - 长期偏好（弹幕/连播/画中画/关字幕）经 `SettingsRepository` 投影回读，禁 VM/UI 翻转；「关字幕」只记立场且走单向 `applySubtitlesDisabledPreference`；软字幕禁 Compose 快照中转，须 View 附着直连监听且横竖屏迁移与关闭时清空（`player_subtitle_overlay_must_bind_directly_to_player_listener_without_compose_state`）；倍速/画幅/循环不落库（`player_view_preferences_must_be_persisted_not_held_in_session_state`）。
   - 弹幕关闭即零请求（拉取去重、分集纠正随开关收起；`danmaku_match_entry_must_be_gated_by_the_danmaku_toggle`）；动态弹道排版与防追尾防重叠，底部保留字幕避让，禁 hashCode 盲取模与每帧 measureText（`danmaku_view_must_use_dynamic_track_allocation_and_not_hash_modulo`）。
   - 三处评论区共用排序偏好（`SettingsRepository.setCommentSortOrder` + `CommentSortOrder.fromKey`；`comment_sort_order_must_be_a_shared_persisted_preference`）。
   - `DefaultMediaSourceFactory` 包 `DefaultDataSource.Factory` 支持 `file://`（`exoplayer_engine_media_source_factory_must_wrap_default_data_source`）；线路生成剔除 `TORRENT`（`player_view_model_must_filter_out_torrent_rules_from_online_sources`）；结构化 API 禁当直链（`isLikelyMediaStream` 断言接口型 URL）；播放错误浮层同时给 `onNextSource` 与 `onOpenSourcesPanel`。
