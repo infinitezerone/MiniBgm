@@ -67,7 +67,7 @@ fun HistoryScreen(
             is HistoryUiEvent.ShowSnackbar -> {
                 val text =
                     event.message?.takeIf { it.isNotBlank() }
-                        ?: context.getString(event.messageRes)
+                        ?: context.resources.getString(event.messageRes)
                 snackbarHostState.showSnackbar(text)
             }
         }
@@ -93,9 +93,9 @@ fun HistoryScreen(
                                     val confirmed =
                                         overlayHostState.await(
                                             ConfirmDialogAction(
-                                                title = context.getString(R.string.feature_user_history_clear_all_title),
-                                                message = context.getString(R.string.feature_user_history_clear_all_message),
-                                                confirmText = context.getString(R.string.feature_user_history_clear_all_action),
+                                                title = context.resources.getString(R.string.feature_user_history_clear_all_title),
+                                                message = context.resources.getString(R.string.feature_user_history_clear_all_message),
+                                                confirmText = context.resources.getString(R.string.feature_user_history_clear_all_action),
                                                 isDestructive = true,
                                             ),
                                         )
@@ -188,13 +188,13 @@ fun HistoryScreen(
                                     val confirmed =
                                         overlayHostState.await(
                                             ConfirmDialogAction(
-                                                title = context.getString(R.string.feature_user_history_delete_title),
+                                                title = context.resources.getString(R.string.feature_user_history_delete_title),
                                                 message =
-                                                    context.getString(
+                                                    context.resources.getString(
                                                         R.string.feature_user_history_delete_message,
                                                         entry.subjectName.ifBlank { entry.episodeName },
                                                     ),
-                                                confirmText = context.getString(R.string.feature_user_action_delete),
+                                                confirmText = context.resources.getString(R.string.feature_user_action_delete),
                                                 isDestructive = true,
                                             ),
                                         )
@@ -209,9 +209,9 @@ fun HistoryScreen(
                                     val confirmed =
                                         overlayHostState.await(
                                             ConfirmDialogAction(
-                                                title = context.getString(R.string.feature_user_history_delete_title),
+                                                title = context.resources.getString(R.string.feature_user_history_delete_title),
                                                 message =
-                                                    context.getString(
+                                                    context.resources.getString(
                                                         if (group.subjectId > 0L) {
                                                             R.string.feature_user_history_delete_subject_message
                                                         } else {
@@ -219,7 +219,7 @@ fun HistoryScreen(
                                                         },
                                                         groupName,
                                                     ),
-                                                confirmText = context.getString(R.string.feature_user_action_delete),
+                                                confirmText = context.resources.getString(R.string.feature_user_action_delete),
                                                 isDestructive = true,
                                             ),
                                         )

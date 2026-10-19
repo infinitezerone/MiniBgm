@@ -441,8 +441,11 @@ internal fun SubjectDownloadDetailContent(
                                                         R.string.feature_user_downloads_batch_delete_confirm_message,
                                                         count,
                                                     ),
-                                                confirmText = context.getString(R.string.feature_user_action_delete),
-                                                dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
+                                                confirmText = context.resources.getString(R.string.feature_user_action_delete),
+                                                dismissText =
+                                                    context.resources.getString(
+                                                        DesignSystemR.string.core_designsystem_action_cancel,
+                                                    ),
                                                 isDestructive = true,
                                             ),
                                         )
@@ -560,14 +563,14 @@ internal fun SubjectDownloadDetailContent(
                                 val confirmed =
                                     overlayHostState.await(
                                         ConfirmDialogAction(
-                                            title = context.getString(R.string.feature_user_downloads_delete_task_title),
+                                            title = context.resources.getString(R.string.feature_user_downloads_delete_task_title),
                                             message =
-                                                context.getString(
+                                                context.resources.getString(
                                                     R.string.feature_user_downloads_delete_task_message,
                                                     task.episodeName.ifBlank { task.title },
                                                 ),
-                                            confirmText = context.getString(R.string.feature_user_action_delete),
-                                            dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
+                                            confirmText = context.resources.getString(R.string.feature_user_action_delete),
+                                            dismissText = context.resources.getString(DesignSystemR.string.core_designsystem_action_cancel),
                                             isDestructive = true,
                                         ),
                                     )
@@ -605,7 +608,7 @@ internal fun SubjectDownloadDetailContent(
                 context.launchMediaWithChooser(
                     mediaUriOrPath = mediaPathOrUrl,
                     title = currentTask.episodeName.ifBlank { currentTask.title },
-                    chooserTitle = context.getString(R.string.feature_user_downloads_open_with_external),
+                    chooserTitle = context.resources.getString(R.string.feature_user_downloads_open_with_external),
                 )
             },
             onExportToGallery = {
@@ -619,14 +622,14 @@ internal fun SubjectDownloadDetailContent(
                     val confirmed =
                         overlayHostState.await(
                             ConfirmDialogAction(
-                                title = context.getString(R.string.feature_user_downloads_delete_task_title),
+                                title = context.resources.getString(R.string.feature_user_downloads_delete_task_title),
                                 message =
-                                    context.getString(
+                                    context.resources.getString(
                                         R.string.feature_user_downloads_delete_task_message,
                                         currentTask.episodeName.ifBlank { currentTask.title },
                                     ),
-                                confirmText = context.getString(R.string.feature_user_action_delete),
-                                dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
+                                confirmText = context.resources.getString(R.string.feature_user_action_delete),
+                                dismissText = context.resources.getString(DesignSystemR.string.core_designsystem_action_cancel),
                                 isDestructive = true,
                             ),
                         )
@@ -993,7 +996,10 @@ internal fun EpisodeDownloadCard(
                                                 context.launchMediaWithChooser(
                                                     mediaUriOrPath = mediaPathOrUrl,
                                                     title = task.episodeName.ifBlank { task.title },
-                                                    chooserTitle = context.getString(R.string.feature_user_downloads_open_with_external),
+                                                    chooserTitle =
+                                                        context.resources.getString(
+                                                            R.string.feature_user_downloads_open_with_external,
+                                                        ),
                                                 )
                                             },
                                         )
