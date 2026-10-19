@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 
 class PlayerViewComponentsTest {
     @Test
@@ -74,10 +75,10 @@ class PlayerViewComponentsTest {
     fun calculateSeekDeltaMs_scalesForStandardAnimeEpisodes() {
         val totalMs = 24 * 60 * 1000L // 24 minutes standard anime
         val width = 1000f
-        // Full screen drag: 180s (3 minutes)
-        assertEquals(180_000L, calculateSeekDeltaMs(1000f, width, totalMs))
-        // 10% screen drag: 18s
-        assertEquals(18_000L, calculateSeekDeltaMs(100f, width, totalMs))
+        // 片长 1/10 = 144s（2.4 分钟），略大于一个 OP，一次扫屏足够跳过片头
+        assertEquals(144_000L, calculateSeekDeltaMs(1000f, width, totalMs))
+        // 10% screen drag: 14.4s
+        assertEquals(14_400L, calculateSeekDeltaMs(100f, width, totalMs))
     }
 
     @Test
@@ -86,6 +87,46 @@ class PlayerViewComponentsTest {
         val width = 1000f
         // 10% of 90min is 9min = 540s
         assertEquals(540_000L, calculateSeekDeltaMs(1000f, width, totalMs))
+    }
+
+    @Test
+    fun seekSpanMs_isContinuousAcrossLegacyBandBoundaries() {
+        val width = 1000f
+        // 历史实现用 when 分段：5:00 → 5:01 一屏跨度从 60s 突跳到 180s（3 倍）。
+        // 这种断层会让同样手势在不同片长上突然变灵敏，用户无法建立肌肉记忆。
+        val at5 = calculateSeekDeltaMs(width, width, 5 * 60_000L)
+        val justAfter5 = calculateSeekDeltaMs(width, width, 5 * 60_000L + 1_000L)
+        assertTrue("5 分钟边界处一屏跨度不应跳变", abs(at5 - justAfter5) <= 1_000L)
+
+        // 30:00 → 30:01 旧实现从 10% 突跳到 16.7%
+        val at30 = calculateSeekDeltaMs(width, width, 30 * 60_000L)
+        val justAfter30 = calculateSeekDeltaMs(width, width, 30 * 60_000L + 1_000L)
+        assertTrue("30 分钟边界处一屏跨度不应跳变", abs(at30 - justAfter30) <= 1_000L)
+    }
+
+    @Test
+    fun seekSpanMs_growsMonotonicallyWithDuration() {
+        var previous = 0L
+        listOf(30L, 60L, 3 * 60L, 5 * 60L, 10 * 60L, 24 * 60L, 30 * 60L, 90 * 60L, 150 * 60L, 240 * 60L)
+            .map { it * 1_000L }
+            .forEach { durationMs ->
+                val span = seekSpanMs(durationMs)
+                assertTrue("一屏跨度必须随时长单调不减（时长 $durationMs）", span >= previous)
+                previous = span
+            }
+    }
+
+    @Test
+    fun seekSpanMs_clampsShortAndLongContent() {
+        // 短片：托底 60s，保证一屏就有可感知的位移
+        assertEquals(60_000L, seekSpanMs(30_000L))
+        assertEquals(60_000L, seekSpanMs(3 * 60_000L))
+        // 长片：封顶 15min，避免一屏扫过头
+        assertEquals(900_000L, seekSpanMs(150 * 60_000L))
+        assertEquals(900_000L, seekSpanMs(240 * 60_000L))
+        // 中间区间：恒为片长 1/10
+        assertEquals(144_000L, seekSpanMs(24 * 60_000L))
+        assertEquals(540_000L, seekSpanMs(90 * 60_000L))
     }
 
     @Test

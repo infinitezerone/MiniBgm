@@ -79,23 +79,28 @@ internal data class DoubleTapIndicatorState(
 )
 
 /**
- * 进度拖拽自适应计算算法：
- * 针对短视频、普通 24 分钟番剧、长电影设定更跟手的滑屏距离跨度。
+ * 一屏横滑对应的时长跨度：片长 1/10，短线托底 60s（短片/预告一屏也有感），长片封顶 15min。
+ *
+ * 用**恒定比例**而不是分段秒数：一屏占比跨片长恒定（横穿全片恒为 10 次），
+ * 精调精度稳定在 0.3–2s/2dp。固定秒数派（一屏 ≈ 90s，为了一屏跳过 OP）会让
+ * 90 分钟剧场版要扫 60 次、150 分钟要扫 100 次——粗定位已由进度条与双击 ±10s 承担。
  */
+internal fun seekSpanMs(totalDurationMs: Long): Long =
+    if (totalDurationMs <= 0L) {
+        0L
+    } else {
+        (totalDurationMs / SEEK_SPAN_DIVISOR).coerceIn(MIN_SEEK_SPAN_MS, MAX_SEEK_SPAN_MS)
+    }
+
+/** 拖动位移 → 目标时长增量（正负对称，width 为可拖动的整屏宽度） */
 internal fun calculateSeekDeltaMs(
     dragDeltaX: Float,
     width: Float,
     totalDurationMs: Long,
 ): Long {
-    if (width <= 0f || totalDurationMs <= 0L) return 0L
-    val fraction = dragDeltaX / width
-    val maxSpanMs =
-        when {
-            totalDurationMs <= 5 * 60 * 1000L -> 60 * 1000L
-            totalDurationMs <= 30 * 60 * 1000L -> 180 * 1000L
-            else -> (totalDurationMs * 0.10f).toLong().coerceIn(300 * 1000L, 900 * 1000L)
-        }
-    return (fraction * maxSpanMs).toLong()
+    if (width <= 0f) return 0L
+    // 用 Double 而不是 Float 中间量：900s 跨度下 Float 尾数误差会让边界值少 1ms
+    return (dragDeltaX.toDouble() / width.toDouble() * seekSpanMs(totalDurationMs)).toLong()
 }
 
 /**
@@ -138,7 +143,6 @@ internal fun Modifier.playerGestures(
     onSingleTap: () -> Unit,
     onDoubleTapSeek: (Long) -> Unit,
     onDoubleTapPlayPause: () -> Unit,
-    onSeekConfirm: (Long) -> Unit,
     onFastForwardStart: () -> Unit,
     onFastForwardEnd: () -> Unit,
     onHudStateChange: (GestureHudState) -> Unit,
@@ -146,7 +150,10 @@ internal fun Modifier.playerGestures(
     isLocked: Boolean = false,
     onDoubleTapAction: (DoubleTapSide, Int) -> Unit = { _, _ -> },
     onHaptic: (HapticFeedbackType) -> Unit = {},
-    onScrubbing: (isScrubbing: Boolean, progress: Float) -> Unit = { _, _ -> },
+    onScrubStart: (Float) -> Unit = {},
+    onScrubbing: (Float) -> Unit = {},
+    onScrubEnd: (Float) -> Unit = {},
+    onScrubCancel: () -> Unit = {},
 ): Modifier =
     this then
         PlayerGesturesElement(
@@ -157,7 +164,6 @@ internal fun Modifier.playerGestures(
             onSingleTap = onSingleTap,
             onDoubleTapSeek = onDoubleTapSeek,
             onDoubleTapPlayPause = onDoubleTapPlayPause,
-            onSeekConfirm = onSeekConfirm,
             onFastForwardStart = onFastForwardStart,
             onFastForwardEnd = onFastForwardEnd,
             onHudStateChange = onHudStateChange,
@@ -165,7 +171,10 @@ internal fun Modifier.playerGestures(
             isLocked = isLocked,
             onDoubleTapAction = onDoubleTapAction,
             onHaptic = onHaptic,
+            onScrubStart = onScrubStart,
             onScrubbing = onScrubbing,
+            onScrubEnd = onScrubEnd,
+            onScrubCancel = onScrubCancel,
         )
 
 private data class PlayerGesturesElement(
@@ -176,7 +185,6 @@ private data class PlayerGesturesElement(
     val onSingleTap: () -> Unit,
     val onDoubleTapSeek: (Long) -> Unit,
     val onDoubleTapPlayPause: () -> Unit,
-    val onSeekConfirm: (Long) -> Unit,
     val onFastForwardStart: () -> Unit,
     val onFastForwardEnd: () -> Unit,
     val onHudStateChange: (GestureHudState) -> Unit,
@@ -184,7 +192,10 @@ private data class PlayerGesturesElement(
     val isLocked: Boolean = false,
     val onDoubleTapAction: (DoubleTapSide, Int) -> Unit = { _, _ -> },
     val onHaptic: (HapticFeedbackType) -> Unit = {},
-    val onScrubbing: (isScrubbing: Boolean, progress: Float) -> Unit = { _, _ -> },
+    val onScrubStart: (Float) -> Unit = {},
+    val onScrubbing: (Float) -> Unit = {},
+    val onScrubEnd: (Float) -> Unit = {},
+    val onScrubCancel: () -> Unit = {},
 ) : ModifierNodeElement<PlayerGesturesNode>() {
     override fun create(): PlayerGesturesNode =
         PlayerGesturesNode(
@@ -195,7 +206,6 @@ private data class PlayerGesturesElement(
             onSingleTap = onSingleTap,
             onDoubleTapSeek = onDoubleTapSeek,
             onDoubleTapPlayPause = onDoubleTapPlayPause,
-            onSeekConfirm = onSeekConfirm,
             onFastForwardStart = onFastForwardStart,
             onFastForwardEnd = onFastForwardEnd,
             onHudStateChange = onHudStateChange,
@@ -203,7 +213,10 @@ private data class PlayerGesturesElement(
             isLocked = isLocked,
             onDoubleTapAction = onDoubleTapAction,
             onHaptic = onHaptic,
+            onScrubStart = onScrubStart,
             onScrubbing = onScrubbing,
+            onScrubEnd = onScrubEnd,
+            onScrubCancel = onScrubCancel,
         )
 
     override fun update(node: PlayerGesturesNode) {
@@ -215,7 +228,6 @@ private data class PlayerGesturesElement(
             onSingleTap = onSingleTap,
             onDoubleTapSeek = onDoubleTapSeek,
             onDoubleTapPlayPause = onDoubleTapPlayPause,
-            onSeekConfirm = onSeekConfirm,
             onFastForwardStart = onFastForwardStart,
             onFastForwardEnd = onFastForwardEnd,
             onHudStateChange = onHudStateChange,
@@ -223,7 +235,10 @@ private data class PlayerGesturesElement(
             isLocked = isLocked,
             onDoubleTapAction = onDoubleTapAction,
             onHaptic = onHaptic,
+            onScrubStart = onScrubStart,
             onScrubbing = onScrubbing,
+            onScrubEnd = onScrubEnd,
+            onScrubCancel = onScrubCancel,
         )
     }
 
@@ -244,7 +259,6 @@ private class PlayerGesturesNode(
     var onSingleTap: () -> Unit,
     var onDoubleTapSeek: (Long) -> Unit,
     var onDoubleTapPlayPause: () -> Unit,
-    var onSeekConfirm: (Long) -> Unit,
     var onFastForwardStart: () -> Unit,
     var onFastForwardEnd: () -> Unit,
     var onHudStateChange: (GestureHudState) -> Unit,
@@ -252,7 +266,10 @@ private class PlayerGesturesNode(
     var isLocked: Boolean = false,
     var onDoubleTapAction: (DoubleTapSide, Int) -> Unit = { _, _ -> },
     var onHaptic: (HapticFeedbackType) -> Unit = {},
-    var onScrubbing: (isScrubbing: Boolean, progress: Float) -> Unit = { _, _ -> },
+    var onScrubStart: (Float) -> Unit = {},
+    var onScrubbing: (Float) -> Unit = {},
+    var onScrubEnd: (Float) -> Unit = {},
+    var onScrubCancel: () -> Unit = {},
 ) : DelegatingNode() {
     private var isFastForwarding = false
     private var dragMode = DragMode.NONE
@@ -329,7 +346,6 @@ private class PlayerGesturesNode(
         onSingleTap: () -> Unit,
         onDoubleTapSeek: (Long) -> Unit,
         onDoubleTapPlayPause: () -> Unit,
-        onSeekConfirm: (Long) -> Unit,
         onFastForwardStart: () -> Unit,
         onFastForwardEnd: () -> Unit,
         onHudStateChange: (GestureHudState) -> Unit,
@@ -337,7 +353,10 @@ private class PlayerGesturesNode(
         isLocked: Boolean = false,
         onDoubleTapAction: (DoubleTapSide, Int) -> Unit = { _, _ -> },
         onHaptic: (HapticFeedbackType) -> Unit = {},
-        onScrubbing: (isScrubbing: Boolean, progress: Float) -> Unit = { _, _ -> },
+        onScrubStart: (Float) -> Unit = {},
+        onScrubbing: (Float) -> Unit = {},
+        onScrubEnd: (Float) -> Unit = {},
+        onScrubCancel: () -> Unit = {},
     ) {
         this.context = context
         this.isPlaying = isPlaying
@@ -346,7 +365,6 @@ private class PlayerGesturesNode(
         this.onSingleTap = onSingleTap
         this.onDoubleTapSeek = onDoubleTapSeek
         this.onDoubleTapPlayPause = onDoubleTapPlayPause
-        this.onSeekConfirm = onSeekConfirm
         this.onFastForwardStart = onFastForwardStart
         this.onFastForwardEnd = onFastForwardEnd
         this.onHudStateChange = onHudStateChange
@@ -354,7 +372,10 @@ private class PlayerGesturesNode(
         this.isLocked = isLocked
         this.onDoubleTapAction = onDoubleTapAction
         this.onHaptic = onHaptic
+        this.onScrubStart = onScrubStart
         this.onScrubbing = onScrubbing
+        this.onScrubEnd = onScrubEnd
+        this.onScrubCancel = onScrubCancel
     }
 
     @Suppress("unused")
@@ -473,7 +494,7 @@ private class PlayerGesturesNode(
                                     } else {
                                         0f
                                     }
-                                onScrubbing(true, initialFraction)
+                                onScrubStart(initialFraction)
                             } else if (abs(dragAccumulatedY) > thresholdPx) {
                                 dragMode =
                                     if (startOffset.x < width * 0.5f) {
@@ -496,7 +517,7 @@ private class PlayerGesturesNode(
                                     val deltaMs = calculateSeekDeltaMs(effectiveDragX, width.toFloat(), total)
                                     seekTargetMs = (initialPositionMs + deltaMs).coerceIn(0L, total)
                                     val currentProgress = (seekTargetMs.toFloat() / total.toFloat()).coerceIn(0f, 1f)
-                                    onScrubbing(true, currentProgress)
+                                    onScrubbing(currentProgress)
                                     onHudStateChange(GestureHudState.Seek(seekTargetMs, total, seekTargetMs - initialPositionMs))
                                 }
                             }
@@ -523,28 +544,27 @@ private class PlayerGesturesNode(
                         }
                     },
                     onDragEnd = {
-                        if (isLocked) return@detectDragGestures
                         val wasSeeking = dragMode == DragMode.HORIZONTAL_SEEK
                         val total = totalDurationMs()
-                        if (wasSeeking && total > 0L) {
-                            onSeekConfirm(seekTargetMs)
-                        }
-                        if (wasSeeking) {
-                            val finalProgress = if (total > 0L) (seekTargetMs.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
-                            onScrubbing(false, finalProgress)
-                        }
+                        // 复位与 HUD 收起永远执行：拖动途中按下锁屏键时也绝不能让进度条卡在拖动态
                         dragMode = DragMode.NONE
                         onTriggerHudDismiss()
+                        if (wasSeeking) {
+                            when {
+                                // 锁定途中被按下：只退出拖动态，不提交定位
+                                isLocked -> onScrubCancel()
+                                total <= 0L -> onScrubEnd(0f)
+                                // 位移不足一次可感知的跳转（原地 seek 在 HLS 上会重缓冲）：按取消处理
+                                abs(seekTargetMs - initialPositionMs) < MIN_SEEK_COMMIT_DELTA_MS -> onScrubCancel()
+                                else -> onScrubEnd((seekTargetMs.toFloat() / total.toFloat()).coerceIn(0f, 1f))
+                            }
+                        }
                     },
                     onDragCancel = {
-                        if (isLocked) return@detectDragGestures
-                        if (dragMode == DragMode.HORIZONTAL_SEEK) {
-                            val total = totalDurationMs()
-                            val cancelProgress = if (total > 0L) (seekTargetMs.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
-                            onScrubbing(false, cancelProgress)
-                        }
+                        val wasSeeking = dragMode == DragMode.HORIZONTAL_SEEK
                         dragMode = DragMode.NONE
                         onTriggerHudDismiss()
+                        if (wasSeeking) onScrubCancel()
                     },
                 )
             },
@@ -569,12 +589,14 @@ internal fun PlayerGestureDetector(
     onSingleTap: () -> Unit,
     onDoubleTapSeek: (Long) -> Unit,
     onDoubleTapPlayPause: () -> Unit,
-    onSeekConfirm: (Long) -> Unit,
     onFastForwardStart: () -> Unit,
     onFastForwardEnd: () -> Unit,
     modifier: Modifier = Modifier,
     isLocked: Boolean = false,
-    onScrubbing: (isScrubbing: Boolean, progress: Float) -> Unit = { _, _ -> },
+    onScrubStart: (Float) -> Unit = {},
+    onScrubbing: (Float) -> Unit = {},
+    onScrubEnd: (Float) -> Unit = {},
+    onScrubCancel: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -614,7 +636,6 @@ internal fun PlayerGestureDetector(
                     onSingleTap = onSingleTap,
                     onDoubleTapSeek = onDoubleTapSeek,
                     onDoubleTapPlayPause = onDoubleTapPlayPause,
-                    onSeekConfirm = onSeekConfirm,
                     onFastForwardStart = onFastForwardStart,
                     onFastForwardEnd = onFastForwardEnd,
                     onHudStateChange = { hudState = it },
@@ -628,7 +649,10 @@ internal fun PlayerGestureDetector(
                     onHaptic = { type ->
                         haptic.performHapticFeedback(type)
                     },
+                    onScrubStart = onScrubStart,
                     onScrubbing = onScrubbing,
+                    onScrubEnd = onScrubEnd,
+                    onScrubCancel = onScrubCancel,
                 ),
     ) {
         content()
@@ -899,3 +923,11 @@ private fun YouTubeDoubleTapIndicator(
 
 private const val DOUBLE_TAP_WINDOW_MS = 800L
 private const val DOUBLE_TAP_COMMIT_DELAY_MS = 650L
+
+/** 一屏横滑 ≈ 片长的 1/10；短片托底、长片封顶，保证跨片长手感连续 */
+private const val SEEK_SPAN_DIVISOR = 10L
+private const val MIN_SEEK_SPAN_MS = 60_000L
+private const val MAX_SEEK_SPAN_MS = 900_000L
+
+/** 横向拖动位移小于该值视为「没拖」，不向引擎提交定位（原地 seek 在流式源上会触发一次重缓冲） */
+private const val MIN_SEEK_COMMIT_DELTA_MS = 300L

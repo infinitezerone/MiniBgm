@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,8 +83,7 @@ internal fun PlayerControlsOverlay(
     position: StateFlow<Long>,
     bufferedPosition: StateFlow<Long>,
     totalDuration: Long,
-    isScrubbing: Boolean,
-    scrubProgress: Float,
+    scrub: PlayerScrubState,
     isLandscape: Boolean,
     resizeMode: PlayerResizeMode,
     errorMessage: String?,
@@ -91,7 +91,7 @@ internal fun PlayerControlsOverlay(
     onPlayPauseToggle: () -> Unit,
     onRewind10: () -> Unit,
     onForward10: () -> Unit,
-    onScrubStart: () -> Unit,
+    onScrubStart: (Float) -> Unit,
     onScrubbing: (Float) -> Unit,
     onScrubEnd: (Float) -> Unit,
     onToggleFullscreen: () -> Unit,
@@ -287,14 +287,8 @@ internal fun PlayerControlsOverlay(
             // 位置单独订阅：只有底部栏（且仅在可见时才组合）随 500ms 位置跳重组
             val currentPosition by position.collectAsStateWithLifecycle()
             val currentBufferedPosition by bufferedPosition.collectAsStateWithLifecycle()
-            val progress =
-                if (isScrubbing) {
-                    scrubProgress
-                } else if (totalDuration > 0L) {
-                    (currentPosition.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
-                } else {
-                    0f
-                }
+            // 拖动进度由 PlayerScrubState 持有，读点下沉到 PlayerScrubProgressBar / PlayerScrubTimeText 叶子，
+            // 这里只算与拖动无关的缓冲进度，避免每帧重组整块控制层
             val bufferedProgress =
                 if (totalDuration > 0L) {
                     (currentBufferedPosition.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
@@ -315,10 +309,11 @@ internal fun PlayerControlsOverlay(
                                 .padding(bottom = 2.dp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        PlayerProgressBar(
-                            progress = progress,
+                        PlayerScrubProgressBar(
+                            scrub = scrub,
+                            currentPosition = currentPosition,
+                            totalDuration = totalDuration,
                             bufferedProgress = bufferedProgress,
-                            isScrubbing = isScrubbing,
                             onScrubStart = onScrubStart,
                             onScrubbing = onScrubbing,
                             onScrubEnd = onScrubEnd,
@@ -375,22 +370,19 @@ internal fun PlayerControlsOverlay(
 
                         Spacer(modifier = Modifier.width(4.dp))
 
-                        // 合并时间文本（01:23 / 24:12）
-                        val displayPosition =
-                            if (isScrubbing) (scrubProgress * totalDuration).toLong() else currentPosition
+                        // 合并时间文本（01:23 / 24:12）：拖动中读 PlayerScrubState 的实时进度
                         val hasHours = totalDuration >= 3600_000L
                         val timeTextStyle =
                             MaterialTheme.typography.labelSmall.copy(
                                 fontFeatureSettings = "tnum",
                             )
-                        Text(
-                            text =
-                                "${formatDuration(
-                                    displayPosition,
-                                    forceHours = hasHours,
-                                )} / ${formatDuration(totalDuration, forceHours = hasHours)}",
+                        PlayerScrubTimeText(
+                            scrub = scrub,
+                            currentPosition = currentPosition,
+                            totalDuration = totalDuration,
+                            forceHours = hasHours,
+                            showTotal = true,
                             style = timeTextStyle,
-                            fontWeight = FontWeight.Medium,
                             color = Color.White.copy(alpha = 0.95f),
                         )
 
@@ -495,18 +487,19 @@ internal fun PlayerControlsOverlay(
                     Spacer(modifier = Modifier.width(4.dp))
 
                     // 2. 当前时间（启用 tnum 等宽数字并固定最小占位，杜绝数字跳动挤压进度条产生肉眼可见的伸缩抖动）
-                    val displayPosition =
-                        if (isScrubbing) (scrubProgress * totalDuration).toLong() else currentPosition
                     val hasHours = totalDuration >= 3600_000L
                     val timeMinWidth = if (hasHours) 56.dp else 40.dp
                     val timeTextStyle =
                         MaterialTheme.typography.labelSmall.copy(
                             fontFeatureSettings = "tnum",
                         )
-                    Text(
-                        text = formatDuration(displayPosition, forceHours = hasHours),
+                    PlayerScrubTimeText(
+                        scrub = scrub,
+                        currentPosition = currentPosition,
+                        totalDuration = totalDuration,
+                        forceHours = hasHours,
+                        showTotal = false,
                         style = timeTextStyle,
-                        fontWeight = FontWeight.Medium,
                         color = Color.White.copy(alpha = 0.95f),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.widthIn(min = timeMinWidth),
@@ -519,10 +512,11 @@ internal fun PlayerControlsOverlay(
                         modifier = Modifier.weight(1f),
                         contentAlignment = Alignment.Center,
                     ) {
-                        PlayerProgressBar(
-                            progress = progress,
+                        PlayerScrubProgressBar(
+                            scrub = scrub,
+                            currentPosition = currentPosition,
+                            totalDuration = totalDuration,
                             bufferedProgress = bufferedProgress,
-                            isScrubbing = isScrubbing,
                             onScrubStart = onScrubStart,
                             onScrubbing = onScrubbing,
                             onScrubEnd = onScrubEnd,
@@ -632,6 +626,76 @@ private fun ControlsBarTextAction(
             maxLines = 1,
         )
     }
+}
+
+/**
+ * 拖动进度条叶子：拖动中的实时比例只在这里读 [PlayerScrubState]。
+ * 每帧拖动只重组这一个节点，不再带着顶栏/底栏/按钮组整块控制层一起重组。
+ */
+@Composable
+private fun PlayerScrubProgressBar(
+    scrub: PlayerScrubState,
+    currentPosition: Long,
+    totalDuration: Long,
+    bufferedProgress: Float,
+    onScrubStart: (Float) -> Unit,
+    onScrubbing: (Float) -> Unit,
+    onScrubEnd: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scrubState = scrub.state
+    val progress =
+        when {
+            scrubState.active -> scrubState.fraction
+            totalDuration > 0L -> (currentPosition.toFloat() / totalDuration.toFloat()).coerceIn(0f, 1f)
+            else -> 0f
+        }
+    PlayerProgressBar(
+        progress = progress,
+        isScrubbing = scrubState.active,
+        bufferedProgress = bufferedProgress,
+        onScrubStart = onScrubStart,
+        onScrubbing = onScrubbing,
+        onScrubEnd = onScrubEnd,
+        modifier = modifier,
+    )
+}
+
+/**
+ * 时间文本叶子：与进度条同理，拖动中的实时位置只在本节点内读，避免整块控制层按帧重组。
+ */
+@Composable
+private fun PlayerScrubTimeText(
+    scrub: PlayerScrubState,
+    currentPosition: Long,
+    totalDuration: Long,
+    forceHours: Boolean,
+    showTotal: Boolean,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign = TextAlign.Start,
+) {
+    val scrubState = scrub.state
+    val displayPosition =
+        if (scrubState.active) {
+            (scrubState.fraction * totalDuration).toLong()
+        } else {
+            currentPosition
+        }
+    Text(
+        text =
+            if (showTotal) {
+                "${formatDuration(displayPosition, forceHours)} / ${formatDuration(totalDuration, forceHours)}"
+            } else {
+                formatDuration(displayPosition, forceHours)
+            },
+        style = style,
+        fontWeight = FontWeight.Medium,
+        color = color,
+        textAlign = textAlign,
+        modifier = modifier,
+    )
 }
 
 /**

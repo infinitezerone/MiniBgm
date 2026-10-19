@@ -59,6 +59,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -105,6 +106,7 @@ import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -195,8 +197,8 @@ fun PlayerScreen(
     val tracksSnapshot by controller.tracksSnapshot.collectAsStateWithLifecycle()
     val videoAspectRatio by controller.videoAspectRatio.collectAsStateWithLifecycle()
     var isScreenLocked by remember { mutableStateOf(false) }
-    var isScrubbing by remember { mutableStateOf(false) }
-    var scrubProgress by remember { mutableFloatStateOf(0f) }
+    // 拖动进度唯一真源：屏幕横向手势与底部进度条共用同一份状态（不再各自维护 isScrubbing + scrubProgress）
+    val scrub = remember { PlayerScrubState() }
     var lastResumedEpisodeId by remember { mutableStateOf<Long?>(null) }
     var resumeOverlayPosition by remember { mutableStateOf<Long?>(null) }
     var playerReady by remember { mutableStateOf(false) }
@@ -385,7 +387,7 @@ fun PlayerScreen(
     LaunchedEffect(uiState.streamUrl, uiState.requestHeaders) {
         if (uiState.streamUrl != playback.mediaUrl) {
             playerReady = false
-            isScrubbing = false
+            scrub.cancel()
             snackbarHostState.currentSnackbarData?.dismiss()
         }
         val initialPosition = uiState.resumePositionMs.takeIf { it >= MIN_RESUME_POSITION_MS } ?: 0L
@@ -438,11 +440,15 @@ fun PlayerScreen(
         controller.applySubtitlesDisabledPreference(uiState.subtitlesDisabled)
     }
 
-    // 控制栏自动隐藏
-    LaunchedEffect(areControlsVisible, playback.isPlaying, isScrubbing) {
-        if (areControlsVisible && playback.isPlaying && !isScrubbing) {
-            delay(CONTROLS_AUTO_HIDE_MS)
-            areControlsVisible = false
+    // 控制栏自动隐藏：拖动期间不计时。
+    // 用 snapshotFlow 观察拖动态而不是把它读进组合作用域，否则拖动每帧都会重组整页
+    LaunchedEffect(areControlsVisible, playback.isPlaying, scrub) {
+        if (!areControlsVisible || !playback.isPlaying) return@LaunchedEffect
+        snapshotFlow { scrub.state.active }.collectLatest { isScrubbingNow ->
+            if (!isScrubbingNow) {
+                delay(CONTROLS_AUTO_HIDE_MS)
+                areControlsVisible = false
+            }
         }
     }
 
@@ -584,15 +590,13 @@ fun PlayerScreen(
             isLandscape = config.isLandscape,
             isLocked = config.isLocked,
             controlsVisible = areControlsVisible,
-            isScrubbing = isScrubbing,
-            scrubProgress = scrubProgress,
+            scrub = scrub,
             playbackSpeed = playbackSpeed,
             resizeMode = resizeMode,
             showEpisodeQueue = config.showEpisodeQueue,
             onSingleTap = { areControlsVisible = !areControlsVisible },
             onDoubleTapSeek = controller::seekTo,
             onDoubleTapPlayPause = controller::togglePlayPause,
-            onSeekConfirm = controller::seekTo,
             onFastForwardStart = { controller.setPlaybackSpeed(2f) },
             onFastForwardEnd = { controller.setPlaybackSpeed(playbackSpeed) },
             onPlayPauseToggle = controller::togglePlayPause,
@@ -601,18 +605,16 @@ fun PlayerScreen(
                 val maxPos = if (playback.durationMs > 0L) playback.durationMs else Long.MAX_VALUE
                 controller.seekTo((position.value + 10_000L).coerceAtMost(maxPos))
             },
-            onScrubStart = { isScrubbing = true },
-            onScrubbing = { scrubProgress = it },
-            onGestureScrubbing = { scrubbing, progress ->
-                isScrubbing = scrubbing
-                scrubProgress = progress
-            },
-            onScrubEnd = { progress ->
-                isScrubbing = false
+            onScrubStart = scrub::begin,
+            onScrubbing = scrub::update,
+            // 唯一的提交点：进度的落库/跳转只在这里发生，手势与进度条共用同一条路径
+            onScrubEnd = { fraction ->
+                scrub.end(fraction)
                 if (playback.durationMs > 0L) {
-                    controller.seekTo((progress * playback.durationMs).toLong())
+                    controller.seekTo((fraction * playback.durationMs).toLong())
                 }
             },
+            onScrubCancel = scrub::cancel,
             onBackClick = config.onBackClick,
             onToggleFullscreen = config.onToggleFullscreen,
             onCycleResizeMode = ::cycleResizeMode,
@@ -954,24 +956,22 @@ private fun PlayerVideoStage(
     isLandscape: Boolean,
     isLocked: Boolean,
     controlsVisible: Boolean,
-    isScrubbing: Boolean,
-    scrubProgress: Float,
+    scrub: PlayerScrubState,
     playbackSpeed: Float,
     resizeMode: PlayerResizeMode,
     showEpisodeQueue: Boolean,
     onSingleTap: () -> Unit,
     onDoubleTapSeek: (Long) -> Unit,
     onDoubleTapPlayPause: () -> Unit,
-    onSeekConfirm: (Long) -> Unit,
     onFastForwardStart: () -> Unit,
     onFastForwardEnd: () -> Unit,
     onPlayPauseToggle: () -> Unit,
     onRewind10: () -> Unit,
     onForward10: () -> Unit,
-    onScrubStart: () -> Unit,
+    onScrubStart: (Float) -> Unit,
     onScrubbing: (Float) -> Unit,
     onScrubEnd: (Float) -> Unit,
-    onGestureScrubbing: (isScrubbing: Boolean, progress: Float) -> Unit = { _, _ -> },
+    onScrubCancel: () -> Unit,
     onBackClick: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onCycleResizeMode: () -> Unit,
@@ -1009,11 +1009,13 @@ private fun PlayerVideoStage(
             onSingleTap = onSingleTap,
             onDoubleTapSeek = onDoubleTapSeek,
             onDoubleTapPlayPause = onDoubleTapPlayPause,
-            onSeekConfirm = onSeekConfirm,
             onFastForwardStart = onFastForwardStart,
             onFastForwardEnd = onFastForwardEnd,
             isLocked = isLocked,
-            onScrubbing = onGestureScrubbing,
+            onScrubStart = onScrubStart,
+            onScrubbing = onScrubbing,
+            onScrubEnd = onScrubEnd,
+            onScrubCancel = onScrubCancel,
         ) {
             when {
                 streamUrl.isNotBlank() -> {
@@ -1082,13 +1084,13 @@ private fun PlayerVideoStage(
             // 位置单独订阅：只有底边进度线随 500ms 位置跳重组
             val currentPosition by position.collectAsStateWithLifecycle()
             val currentBufferedPosition by bufferedPosition.collectAsStateWithLifecycle()
+            // 拖动中读 PlayerScrubState：本节点是独立的重组作用域，不会波及整页
+            val scrubState = scrub.state
             val progressFraction =
-                if (isScrubbing) {
-                    scrubProgress
-                } else if (playback.durationMs > 0L) {
-                    (currentPosition.toFloat() / playback.durationMs.toFloat()).coerceIn(0f, 1f)
-                } else {
-                    0f
+                when {
+                    scrubState.active -> scrubState.fraction
+                    playback.durationMs > 0L -> (currentPosition.toFloat() / playback.durationMs.toFloat()).coerceIn(0f, 1f)
+                    else -> 0f
                 }
             val bufferedFraction =
                 if (playback.durationMs > 0L) {
@@ -1146,8 +1148,7 @@ private fun PlayerVideoStage(
                 position = position,
                 bufferedPosition = bufferedPosition,
                 totalDuration = playback.durationMs,
-                isScrubbing = isScrubbing,
-                scrubProgress = scrubProgress,
+                scrub = scrub,
                 isLandscape = isLandscape,
                 resizeMode = resizeMode,
                 errorMessage = errorMessage,

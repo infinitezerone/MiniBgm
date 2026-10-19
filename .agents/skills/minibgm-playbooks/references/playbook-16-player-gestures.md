@@ -13,5 +13,16 @@
      * 所有随滑动手势高频变化的数字文本，必须显式配置 `fontFeatureSettings = "tnum"`（启用 OpenType 表格等宽数字），使 `0`~`9` 每一个字符占据严格相等的字形宽度；
      * 百分比文字必须显式声明固定槽位宽度，如 `Modifier.width(36.dp)` 配合 `textAlign = TextAlign.End`，杜绝数字从 1 位变 3 位时撑大或缩小外层容器；
      * 屏幕滑动进度指示卡片（`SeekFeedbackCard`）声明 `Modifier.widthIn(min = 160.dp)` 最小稳定宽度，杜绝卡片随秒数晃动。
-  3. **红线拦截**：
+  3. **拖动状态唯一真源（Single Scrub Holder）**：
+     * 屏幕横向手势与底部进度条（横屏通栏 / 竖屏单行）共用 `PlayerScrubState`（`PlayerScrubState.kt`），
+       禁止再各自维护 `isScrubbing` + `scrubProgress` 两个平行变量或两套回调协议；
+     * 快照 `PlayerScrubSnapshot(active, fraction)` 一次写成（两者必须同帧一致，否则会读出「未拖动但进度停在拖动点」）；
+     * seek 提交只有一个出口 `onScrubEnd(fraction)`，手势层不得自行提交（否则与进度条路径重复 seek）；
+     * 零位移（< 300ms）视为没拖，走 `onScrubCancel`——原地 seek 在流式源上会触发一次重缓冲；
+     * 读点下沉到 `PlayerScrubProgressBar` / `PlayerScrubTimeText` 叶子，禁止在控制层根部读拖动状态（每帧重组整块控制层）；
+     * 拖动途中按锁屏键时 `onDragEnd` 仍必须复位（历史缺陷：提前 return 导致进度条永久卡在拖动态）。
+     * 灵敏度用**恒定比例** `clamp(片长 / 10, 60s, 15min)`：分段秒数在 5 / 30 分钟边界会产生 3 倍突变，
+       同一手势突然变灵敏；`seekSpanMs` / `calculateSeekDeltaMs` 的单测钉住连续性与单调性。
+  4. **红线拦截**：
      * `ArchitectureRulesTest#player_gesture_hud_must_not_jitter_and_use_tnum_and_avoid_dual_hud_conflict` 物理断言 `fontFeatureSettings = "tnum"`、固定宽度及禁止双击调用中央 Seek HUD。
+     * `ArchitectureRulesTest#player_scrub_state_must_be_the_single_source_of_truth` 物理断言拖动状态只经 `PlayerScrubState`、手势层不再自行提交 seek、零位移守卫存在。

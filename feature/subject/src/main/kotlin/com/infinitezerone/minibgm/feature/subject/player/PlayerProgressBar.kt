@@ -33,7 +33,8 @@ import androidx.compose.ui.unit.dp
 internal fun PlayerProgressBar(
     progress: Float,
     isScrubbing: Boolean,
-    onScrubStart: () -> Unit,
+    /** 按下点比例即初值：交给状态持有者一步落位，避免首帧先归零再跳回 */
+    onScrubStart: (Float) -> Unit,
     onScrubbing: (Float) -> Unit,
     onScrubEnd: (Float) -> Unit,
     modifier: Modifier = Modifier,
@@ -78,18 +79,18 @@ internal fun PlayerProgressBar(
                         val width = size.width.toFloat()
                         val thumbRadiusPx = 7.dp.toPx()
                         val fraction = calculateProgressBarFraction(down.position.x, width, thumbRadiusPx)
-                        currentOnScrubStart()
+                        currentOnScrubStart(fraction)
                         currentOnScrubbing(fraction)
 
                         var currentFraction = fraction
-                        val dragSuccess =
-                            drag(down.id) { change ->
-                                if (change.positionChange() != Offset.Zero) {
-                                    change.consume()
-                                    currentFraction = calculateProgressBarFraction(change.position.x, width, thumbRadiusPx)
-                                    currentOnScrubbing(currentFraction)
-                                }
+                        // 轻点进度条同样以 up 结束（drag 返回 false），故这里不区分取消，统一按落点定位
+                        drag(down.id) { change ->
+                            if (change.positionChange() != Offset.Zero) {
+                                change.consume()
+                                currentFraction = calculateProgressBarFraction(change.position.x, width, thumbRadiusPx)
+                                currentOnScrubbing(currentFraction)
                             }
+                        }
                         currentOnScrubEnd(currentFraction)
                     }
                 },

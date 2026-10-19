@@ -2652,8 +2652,6 @@ class ArchitectureRulesTest {
             "playbackSpeed",
             "resizeMode",
             "isScreenLocked",
-            "isScrubbing",
-            "scrubProgress",
             "lastResumedEpisodeId",
             "resumeOverlayPosition",
             "playerReady",
@@ -3241,6 +3239,71 @@ class ArchitectureRulesTest {
         assertTrue(
             violations.isEmpty(),
             "违反播放器手势 HUD 稳定性与防冲突红线：\n" + violations.joinToString("\n"),
+        )
+    }
+
+    /**
+     * 播放器拖动进度唯一真源红线。
+     *
+     * 同一份拖动状态曾拆成 `isScrubbing` + `scrubProgress` 两个平行变量、两套回调
+     * （进度条走 onScrubStart/onScrubbing/onScrubEnd，屏幕手势走 onScrubbing(Boolean, Float)），
+     * 代价有三：
+     * ① 两者必须同帧变化，分开存能造出「未在拖动，但进度停在旧拖动点」的非法中间态；
+     * ② 拖动中按下锁屏键时 `onDragEnd` 提前 return，复位被跳过，进度条永久卡在拖动态；
+     * ③ 每帧拖动都经 PlayerScreen 提升的参数向下重组整块控制层。
+     *
+     * 现在拖动状态收敛到 PlayerScrubState（单字段原子快照），手势与进度条共用同一组回调，
+     * seek 提交只有一个出口（onScrubEnd），手势层不再自行提交定位。
+     */
+    @Test
+    fun player_scrub_state_must_be_the_single_source_of_truth() {
+        val playerDir = "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player"
+        val holderFile = File(projectRoot, "$playerDir/PlayerScrubState.kt")
+        assertTrue(holderFile.isFile, "PlayerScrubState.kt 未找到：拖动状态没有唯一真源")
+
+        val violations = mutableListOf<String>()
+        val holder = KotlinSourceScanner.sanitize(holderFile.readText())
+        if (!holder.contains("internal data class PlayerScrubSnapshot(") ||
+            !holder.contains("val active: Boolean") ||
+            !holder.contains("val fraction: Float")
+        ) {
+            violations.add("PlayerScrubSnapshot 必须把 active/fraction 合成一个不可变快照，禁止拆成两个平行变量")
+        }
+        if (!holder.contains("var state by mutableStateOf(")) {
+            violations.add("PlayerScrubState 必须用单个 mutableStateOf 持有快照")
+        }
+
+        listOf("PlayerGestureDetector.kt", "PlayerProgressBar.kt", "PlayerControlsOverlay.kt", "PlayerScreen.kt").forEach { name ->
+            val code = KotlinSourceScanner.sanitize(File(projectRoot, "$playerDir/$name").readText())
+            if (code.contains("scrubProgress")) {
+                violations.add("$name 仍出现 scrubProgress：拖动进度必须只经 PlayerScrubState，禁止恢复平行变量")
+            }
+            if (code.contains("onScrubbing: (isScrubbing: Boolean")) {
+                violations.add(
+                    "$name 仍保留 onScrubbing(Boolean, Float) 旧协议：手势与进度条必须共用 onScrubStart/onScrubbing/onScrubEnd",
+                )
+            }
+        }
+
+        val gesture = KotlinSourceScanner.sanitize(File(projectRoot, "$playerDir/PlayerGestureDetector.kt").readText())
+        if (!gesture.contains("onScrubStart(") || !gesture.contains("onScrubCancel(")) {
+            violations.add("PlayerGestureDetector 未把拖动透传给 onScrubStart/onScrubCancel")
+        }
+        if (gesture.contains("onSeekConfirm")) {
+            violations.add("PlayerGestureDetector 仍自行提交 seek：拖动结束必须只走 onScrubEnd 单一出口，否则与进度条提交路径重复")
+        }
+        if (!gesture.contains("abs(seekTargetMs - initialPositionMs)")) {
+            violations.add("PlayerGestureDetector 缺少零位移守卫：原地 seek 在流式源上会触发一次重缓冲")
+        }
+
+        val screen = KotlinSourceScanner.sanitize(File(projectRoot, "$playerDir/PlayerScreen.kt").readText())
+        if (!screen.contains("PlayerScrubState()")) {
+            violations.add("PlayerScreen 未创建 PlayerScrubState：拖动状态必须由单一持有者承载")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反播放器拖动进度唯一真源红线：\n" + violations.joinToString("\n"),
         )
     }
 
