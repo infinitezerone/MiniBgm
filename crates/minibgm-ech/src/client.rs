@@ -1051,8 +1051,13 @@ async fn connect_wave(
     let mut exhausted = false;
 
     loop {
-        // 到点补位：首个立即起跑，其后每个 STAGGER 起一个（RFC 8305 §5）
-        while in_flight.len() < HEDGE_MAX_INFLIGHT && tokio::time::Instant::now() >= next_launch {
+        // 到点补位：首个立即起跑，其后每个 STAGGER 起一个（RFC 8305 §5）。
+        // 在途尝试已全部失败时不再等档位——立即起跑下一个候选：否则「瞬时失败」
+        // （linux 上本机端口 ECONNREFUSED 只需 0~1ms）会让剩余候选永远轮不到，
+        // 直接把可用的备选地址判死（CI 上 test_connect_wave_... 正是这样暴露的）。
+        while in_flight.len() < HEDGE_MAX_INFLIGHT
+            && (tokio::time::Instant::now() >= next_launch || in_flight.is_empty())
+        {
             let Some(addr) = candidates.next() else {
                 exhausted = true;
                 break;
