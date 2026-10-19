@@ -3586,6 +3586,58 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 播放器锁定屏规范：
+     * 1. PlayerGestureDetector.kt 在 isLocked 时单击必须调用 onSingleTap()，严禁裸 return 吞掉点击导致无法唤出解锁键；
+     * 2. PlayerScreen.kt 的 BackHandler 必须拦截 isScreenLocked，禁止误触物理返回键/侧边手势退出全屏破锁；
+     * 3. PlayerScreen.kt 的传感器方向联动必须由 isScreenLocked 守卫，禁止旋转手机退出全屏并解锁；
+     * 4. PlayerScreen.kt 进入 PiP 时必须重置 isScreenLocked = false。
+     */
+    @Test
+    fun player_screen_lock_must_prevent_exit_and_allow_tap_wake() {
+        val gestureFile =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerGestureDetector.kt",
+            )
+        assertTrue(gestureFile.isFile, "PlayerGestureDetector.kt 未找到")
+        val gestureCode = KotlinSourceScanner.sanitize(gestureFile.readText())
+
+        // 验证 isLocked 分支调用了 onSingleTap()
+        val tapLockPattern = Regex("""if\s*\(\s*isLocked\s*\)\s*\{\s*onSingleTap\(\)\s*return@detectTapGestures\s*\}""")
+        assertTrue(
+            tapLockPattern.containsMatchIn(gestureCode),
+            "PlayerGestureDetector 在 isLocked 时单击必须调用 onSingleTap() 唤出解锁键，严禁直接 return 吞掉点击",
+        )
+
+        val screenFile =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt",
+            )
+        assertTrue(screenFile.isFile, "PlayerScreen.kt 未找到")
+        val screenCode = KotlinSourceScanner.sanitize(screenFile.readText())
+
+        // BackHandler 必须拦截 isScreenLocked
+        assertTrue(
+            screenCode.contains("if (isScreenLocked)") && mentionsInsideBlock(screenCode, "BackHandler", "isScreenLocked"),
+            "PlayerScreen 的 BackHandler 必须显式拦截 isScreenLocked，防止返回手势破锁退出全屏",
+        )
+
+        // 传感器转屏必须守卫 isScreenLocked
+        val sensorLockPattern = Regex("""LaunchedEffect\([^)]*isScreenLocked[^)]*\)\s*\{[^}]*isScreenLocked[^}]*return@LaunchedEffect""")
+        assertTrue(
+            sensorLockPattern.containsMatchIn(screenCode),
+            "PlayerScreen 的重力感应转屏必须在 isScreenLocked 时跳过，防止物理旋转手机破锁切竖屏",
+        )
+
+        // 进入 PiP 必须重置 isScreenLocked
+        assertTrue(
+            mentionsInsideBlock(screenCode, "LaunchedEffect(isInPipMode)", "isScreenLocked = false"),
+            "PlayerScreen 进入 PiP 模式时必须重置 isScreenLocked = false",
+        )
+    }
+
     /** [inner] 是否出现在以 [blockToken] 开头、花括号配对的代码块内 */
     private fun mentionsInsideBlock(
         code: String,

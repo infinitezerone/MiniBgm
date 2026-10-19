@@ -289,9 +289,9 @@ fun PlayerScreen(
             }
     }
 
-    // 物理传感器旋转联动：跟随系统横竖屏自动切入/切出全屏（PiP 模式下忽略小窗配置方向）
-    LaunchedEffect(isSystemLandscape, isInPipMode) {
-        if (isInPipMode) return@LaunchedEffect
+    // 物理传感器旋转联动：跟随系统横竖屏自动切入/切出全屏（PiP 模式与屏幕锁定下忽略传感器方向）
+    LaunchedEffect(isSystemLandscape, isInPipMode, isScreenLocked) {
+        if (isInPipMode || isScreenLocked) return@LaunchedEffect
         if (isSystemLandscape != isLandscape) {
             isLandscape = isSystemLandscape
             val act = activity
@@ -311,10 +311,11 @@ fun PlayerScreen(
         }
     }
 
-    // 进入 PiP 后释放方向锁定并关闭抽屉，使得后续点击小窗恢复时根据用户当前手机物理朝向自适应展开且不遮挡画面
+    // 进入 PiP 后释放方向锁定、解除屏幕锁定并关闭抽屉，使得后续点击小窗恢复时根据用户当前手机物理朝向自适应展开且不遮挡画面
     LaunchedEffect(isInPipMode) {
         if (isInPipMode) {
             overlayHostState.cancelActive()
+            isScreenLocked = false
             val act = activity
             if (act != null && act.requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
                 act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -492,9 +493,20 @@ fun PlayerScreen(
     }
 
     // 面板类浮层各自注册 BackHandler（OverlayHost 单槽，同一时刻只有最上层面板拦截返回键）；
-    // 这里只剩页面级回退：横屏先退全屏，竖屏交给导航返回
+    // 这里只剩页面级回退：横屏屏幕锁定拦截并唤出解锁提示，未锁定时退全屏；竖屏交给导航返回
     BackHandler {
         if (isLandscape) {
+            if (isScreenLocked) {
+                areControlsVisible = true
+                coroutineScope.launch {
+                    snackbarHostState.currentSnackbarData?.dismiss()
+                    snackbarHostState.showSnackbar(
+                        message = context.getString(R.string.feature_subject_player_screen_locked),
+                        duration = SnackbarDuration.Short,
+                    )
+                }
+                return@BackHandler
+            }
             toggleFullscreen(false)
         } else {
             onBackClick()
@@ -701,6 +713,7 @@ fun PlayerScreen(
                         onToggleFullscreen = { toggleFullscreen(false) },
                         onOpenEpisodeQueue = openEpisodeQueuePanel,
                         onToggleLock = {
+                            overlayHostState.cancelActive()
                             isScreenLocked = !isScreenLocked
                             coroutineScope.launch {
                                 snackbarHostState.currentSnackbarData?.dismiss()

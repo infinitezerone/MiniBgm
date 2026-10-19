@@ -384,7 +384,10 @@ private class PlayerGesturesNode(
             SuspendingPointerInputModifierNode {
                 detectTapGestures(
                     onTap = { offset ->
-                        if (isLocked) return@detectTapGestures
+                        if (isLocked) {
+                            onSingleTap()
+                            return@detectTapGestures
+                        }
                         val now = System.currentTimeMillis()
                         val width = size.width
                         val isLeftActive =
