@@ -276,4 +276,32 @@ class DownloadViewModelTest {
             viewModel.resumeAll()
             assertEquals(1, repository.resumeDownloadCallCount)
         }
+
+    @Test
+    fun cleanTorrentTitle_stripsReleaseGroupAndExtension() {
+        val raw = "[LoliHouse] Oshi no Ko - 01 [WebRip 1080p HEVC-10bit AAC ASSx2].mkv"
+        val cleaned = cleanTorrentTitle(raw)
+        assertEquals("Oshi no Ko - 01 [WebRip 1080p HEVC-10bit AAC ASSx2]", cleaned)
+
+        val rawChs = "【澄空学园】葬送的芙莉莲 第01话.mp4"
+        val cleanedChs = cleanTorrentTitle(rawChs)
+        assertEquals("葬送的芙莉莲 第01话", cleanedChs)
+    }
+
+    @Test
+    fun extractMediaTags_extractsResolutionCodecAndFormat() {
+        val task =
+            com.infinitezerone.minibgm.core.model.TorrentTask(
+                id = "t1",
+                title = "[NC-Raws] Frieren - 01 [1080p][HEVC][AAC].mkv",
+                magnetUrl = "magnet:?xt=urn:btih:abc",
+                savePath = "/downloads/Frieren_01.mkv",
+                totalBytes = 1024L * 1024L * 1024L * 2,
+            )
+        val tags = extractMediaTags(task)
+        assertTrue(tags.contains("1080P"))
+        assertTrue(tags.contains("HEVC"))
+        assertTrue(tags.contains("MKV"))
+        assertTrue(tags.contains("2.0 GB"))
+    }
 }

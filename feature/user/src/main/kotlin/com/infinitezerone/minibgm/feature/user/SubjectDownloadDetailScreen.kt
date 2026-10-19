@@ -5,12 +5,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,6 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -47,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +71,7 @@ import com.infinitezerone.minibgm.core.model.TorrentTask
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.launchMediaWithChooser
+import com.infinitezerone.minibgm.feature.user.components.VideoTaskDetailBottomSheet
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
@@ -175,6 +181,7 @@ internal fun SubjectDownloadDetailContent(
 
     var isBatchMode by remember { mutableStateOf(false) }
     var selectedTaskIds by remember { mutableStateOf(emptySet<String>()) }
+    var detailTaskForSheet by remember { mutableStateOf<TorrentTask?>(null) }
 
     val hasActive =
         tasks.any {
@@ -508,6 +515,7 @@ internal fun SubjectDownloadDetailContent(
                 ) { task ->
                     EpisodeDownloadCard(
                         task = task,
+                        subjectCoverUrl = group?.subjectCoverUrl.orEmpty(),
                         isBatchMode = isBatchMode,
                         isSelected = selectedTaskIds.contains(task.id),
                         onToggleSelect = {
@@ -570,6 +578,7 @@ internal fun SubjectDownloadDetailContent(
                         },
                         onRedownload = { onRedownloadTask(task.id) },
                         onExportToGallery = { onExportToGallery(task.id) },
+                        onShowDetail = { detailTaskForSheet = task },
                     )
                 }
             }
@@ -578,6 +587,55 @@ internal fun SubjectDownloadDetailContent(
 
     BgmOverlayHost(hostState = overlayHostState) {
         confirmDialog()
+    }
+
+    if (detailTaskForSheet != null) {
+        val currentTask = detailTaskForSheet!!
+        VideoTaskDetailBottomSheet(
+            task = currentTask,
+            subjectCoverUrl = group?.subjectCoverUrl.orEmpty(),
+            onDismiss = { detailTaskForSheet = null },
+            onPlayExternal = {
+                val mediaPathOrUrl =
+                    if (currentTask.isCompleted && currentTask.savePath.isNotBlank()) {
+                        currentTask.savePath
+                    } else {
+                        currentTask.streamUrl
+                    }
+                context.launchMediaWithChooser(
+                    mediaUriOrPath = mediaPathOrUrl,
+                    title = currentTask.episodeName.ifBlank { currentTask.title },
+                    chooserTitle = context.getString(R.string.feature_user_downloads_open_with_external),
+                )
+            },
+            onExportToGallery = {
+                onExportToGallery(currentTask.id)
+            },
+            onRedownload = {
+                onRedownloadTask(currentTask.id)
+            },
+            onDelete = {
+                coroutineScope.launch {
+                    val confirmed =
+                        overlayHostState.await(
+                            ConfirmDialogAction(
+                                title = context.getString(R.string.feature_user_downloads_delete_task_title),
+                                message =
+                                    context.getString(
+                                        R.string.feature_user_downloads_delete_task_message,
+                                        currentTask.episodeName.ifBlank { currentTask.title },
+                                    ),
+                                confirmText = context.getString(R.string.feature_user_action_delete),
+                                dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
+                                isDestructive = true,
+                            ),
+                        )
+                    if (confirmed) {
+                        onDeleteTask(currentTask.id)
+                    }
+                }
+            },
+        )
     }
 }
 
@@ -632,6 +690,7 @@ private fun SubjectHeaderCard(
 @Composable
 internal fun EpisodeDownloadCard(
     task: TorrentTask,
+    subjectCoverUrl: String = "",
     isBatchMode: Boolean = false,
     isSelected: Boolean = false,
     onToggleSelect: () -> Unit = {},
@@ -641,6 +700,7 @@ internal fun EpisodeDownloadCard(
     onDelete: () -> Unit,
     onRedownload: () -> Unit = {},
     onExportToGallery: (() -> Unit)? = null,
+    onShowDetail: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -661,59 +721,114 @@ internal fun EpisodeDownloadCard(
             } else if (isPlayable) {
                 onPlay
             } else {
-                {}
+                onShowDetail
             },
         shape = BgmShapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (isBatchMode) {
                 Checkbox(
                     checked = isSelected,
                     onCheckedChange = { onToggleSelect() },
-                    modifier = Modifier.padding(end = 6.dp),
+                    modifier = Modifier.padding(end = 4.dp),
                 )
             }
 
-            Surface(
-                shape = BgmShapes.small,
-                color =
-                    when {
-                        task.isFileMissing -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
-                        isCompleted -> MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                        isError -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
-                        else -> MaterialTheme.colorScheme.surfaceContainerHighest
-                    },
+            // 1. 16:9 宽屏视频封面预览
+            Box(
+                modifier =
+                    Modifier
+                        .width(104.dp)
+                        .aspectRatio(16f / 9f)
+                        .clip(BgmShapes.small),
             ) {
-                Text(
-                    text =
-                        if (task.episodeSort > 0f) {
-                            stringResource(R.string.feature_user_downloads_ep_sort, task.episodeSort.toInt())
-                        } else {
-                            stringResource(R.string.feature_user_downloads_ep_all)
-                        },
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color =
-                        when {
-                            task.isFileMissing -> MaterialTheme.colorScheme.error
-                            isCompleted -> MaterialTheme.colorScheme.primary
-                            isError -> MaterialTheme.colorScheme.error
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                CoverImage(
+                    url = task.subjectCoverUrl.ifBlank { subjectCoverUrl },
+                    contentDescription = task.title,
+                    aspectRatio = 16f / 9f,
+                    cornerRadius = 8.dp,
+                    modifier = Modifier.fillMaxSize(),
                 )
+
+                // 播放标志浮层 (当可直接播放时)
+                if (isPlayable) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.25f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.55f),
+                            modifier = Modifier.size(26.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = BgmIcons.PlayArrow,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(15.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 左下角：集数微胶囊 (如 "01" 或 "全集")
+                Surface(
+                    shape = RoundedCornerShape(topEnd = 4.dp),
+                    color = Color.Black.copy(alpha = 0.68f),
+                    modifier = Modifier.align(Alignment.BottomStart),
+                ) {
+                    Text(
+                        text =
+                            if (task.episodeSort > 0f) {
+                                stringResource(R.string.feature_user_downloads_ep_sort, task.episodeSort.toInt())
+                            } else {
+                                stringResource(R.string.feature_user_downloads_ep_all)
+                            },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+
+                // 贴底极细进度条 (下载中状态)
+                if (task.status == TorrentTaskStatus.DOWNLOADING) {
+                    LinearProgressIndicator(
+                        progress = { task.progress },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(3.dp)
+                                .align(Alignment.BottomCenter),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color.Transparent,
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
+            // 2. 信息中栏
             Column(modifier = Modifier.weight(1f)) {
+                val displayTitle =
+                    remember(task.episodeName, task.title, task.episodeSort) {
+                        when {
+                            task.episodeName.isNotBlank() -> task.episodeName
+                            else -> cleanTorrentTitle(task.title)
+                        }
+                    }
                 Text(
-                    text = task.episodeName.ifBlank { task.title },
+                    text = displayTitle,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -722,173 +837,130 @@ internal fun EpisodeDownloadCard(
 
                 Spacer(modifier = Modifier.height(3.dp))
 
-                if (task.isFileMissing) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.ErrorOutline,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(13.dp),
-                        )
+                // 媒体参数胶囊标签组
+                MediaMetadataTagsRow(task = task)
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                // 状态与动态进度
+                when {
+                    task.isFileMissing -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.ErrorOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(13.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.feature_user_downloads_file_missing),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+
+                    task.status == TorrentTaskStatus.COMPLETED -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.CheckCircle,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(13.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.feature_user_downloads_status_completed),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                    }
+
+                    task.status == TorrentTaskStatus.DOWNLOADING -> {
+                        val statusText =
+                            if (task.isConnectingPeers) {
+                                "${task.percentage}% · ${stringResource(R.string.feature_user_downloads_status_connecting_peers)}"
+                            } else {
+                                val peerSuffix =
+                                    if (task.connectedPeers > 0) {
+                                        " · " + stringResource(R.string.feature_user_downloads_peers_count, task.connectedPeers)
+                                    } else {
+                                        ""
+                                    }
+                                "${task.percentage}% · ${task.formattedDownloadSpeed}$peerSuffix"
+                            }
                         Text(
-                            text = stringResource(R.string.feature_user_downloads_file_missing),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
+                            text = statusText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        LinearProgressIndicator(
+                            progress = { task.progress },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .clip(BgmShapes.small),
                         )
                     }
-                } else {
-                    when (task.status) {
-                        TorrentTaskStatus.COMPLETED -> {
-                            val ext =
-                                task.savePath
-                                    .substringAfterLast('.', "")
-                                    .uppercase()
-                                    .takeIf { it.isNotBlank() && it.length <= 4 }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.CheckCircle,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(13.dp),
-                                )
-                                Text(
-                                    text = stringResource(R.string.feature_user_downloads_status_completed_detail, task.formattedProgress),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                                if (ext != null) {
-                                    Surface(
-                                        shape = BgmShapes.extraSmall,
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                    ) {
-                                        Text(
-                                            text = ext,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                                        )
-                                    }
-                                }
-                            }
-                        }
 
-                        TorrentTaskStatus.DOWNLOADING -> {
-                            val statusText =
-                                if (task.isConnectingPeers) {
-                                    "${task.percentage}% · ${stringResource(R.string.feature_user_downloads_status_connecting_peers)}"
-                                } else {
-                                    val peerSuffix =
-                                        if (task.connectedPeers > 0) {
-                                            " · " + stringResource(R.string.feature_user_downloads_peers_count, task.connectedPeers)
-                                        } else {
-                                            ""
-                                        }
-                                    "${task.percentage}% · ${task.formattedDownloadSpeed}$peerSuffix"
-                                }
-                            Text(
-                                text = statusText,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            LinearProgressIndicator(
-                                progress = { task.progress },
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(4.dp)
-                                        .clip(BgmShapes.small),
-                            )
-                            Spacer(modifier = Modifier.height(3.dp))
-                            Text(
-                                text = task.formattedProgress,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                    task.status == TorrentTaskStatus.PAUSED -> {
+                        Text(
+                            text = stringResource(R.string.feature_user_downloads_status_paused_detail, task.formattedProgress),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
 
-                        TorrentTaskStatus.PAUSED -> {
-                            Text(
-                                text = stringResource(R.string.feature_user_downloads_status_paused_detail, task.formattedProgress),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                    task.status == TorrentTaskStatus.RESOLVING -> {
+                        Text(
+                            text = stringResource(R.string.feature_user_downloads_status_resolving),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
 
-                        TorrentTaskStatus.RESOLVING -> {
-                            Text(
-                                text = stringResource(R.string.feature_user_downloads_status_resolving),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            LinearProgressIndicator(
-                                progress = { task.progress },
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(4.dp)
-                                        .clip(BgmShapes.small),
-                            )
-                            if (task.totalBytes > 0L) {
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Text(
-                                    text = task.formattedProgress,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
+                    task.status == TorrentTaskStatus.QUEUED -> {
+                        Text(
+                            text = stringResource(R.string.feature_user_downloads_status_queued_detail, task.formattedProgress),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
 
-                        TorrentTaskStatus.QUEUED -> {
-                            Text(
-                                text = stringResource(R.string.feature_user_downloads_status_queued_detail, task.formattedProgress),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-
-                        TorrentTaskStatus.ERROR -> {
-                            Text(
-                                text = task.errorMessage ?: stringResource(R.string.feature_user_downloads_status_error),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.error,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            if (task.downloadedBytes > 0L || task.totalBytes > 0L) {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = task.formattedProgress,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
+                    task.status == TorrentTaskStatus.ERROR -> {
+                        Text(
+                            text = task.errorMessage ?: stringResource(R.string.feature_user_downloads_status_error),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.error,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
 
             if (!isBatchMode) {
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     // 主动作按钮 (至多 1 个)
                     when {
@@ -979,6 +1051,22 @@ internal fun EpisodeDownloadCard(
                             expanded = menuExpanded,
                             onDismissRequest = { menuExpanded = false },
                         ) {
+                            // 任务与文件详情 (二级抽屉入口)
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.feature_user_downloads_action_detail)) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = BgmIcons.Info,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onShowDetail()
+                                },
+                            )
+
                             // 边下边播 (下载中且已生成播放流时)
                             if (canStreamWhileDownloading && isInternalPlayerEnabled && onPlay != null) {
                                 DropdownMenuItem(
@@ -1073,4 +1161,89 @@ internal fun EpisodeDownloadCard(
             }
         }
     }
+}
+
+@Composable
+private fun MediaMetadataTagsRow(
+    task: TorrentTask,
+    modifier: Modifier = Modifier,
+) {
+    val tags =
+        remember(task.title, task.savePath, task.totalBytes, task.downloadedBytes) {
+            extractMediaTags(task)
+        }
+    if (tags.isEmpty()) return
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        tags.forEach { tag ->
+            Surface(
+                shape = BgmShapes.extraSmall,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            ) {
+                Text(
+                    text = tag,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                )
+            }
+        }
+    }
+}
+
+internal fun extractMediaTags(task: TorrentTask): List<String> {
+    val list = mutableListOf<String>()
+    val searchStr = "${task.title} ${task.savePath}".uppercase()
+
+    // 1. 分辨率
+    when {
+        searchStr.contains("4K") || searchStr.contains("2160P") -> list.add("4K")
+        searchStr.contains("1080P") -> list.add("1080P")
+        searchStr.contains("720P") -> list.add("720P")
+    }
+
+    // 2. 编码
+    when {
+        searchStr.contains("HEVC") || searchStr.contains("H.265") || searchStr.contains("X265") -> list.add("HEVC")
+        searchStr.contains("AVC") || searchStr.contains("H.264") || searchStr.contains("X264") -> list.add("AVC")
+        searchStr.contains("AV1") -> list.add("AV1")
+    }
+
+    // 3. 容器格式
+    val ext =
+        task.savePath
+            .substringAfterLast('.', "")
+            .ifBlank {
+                task.title.substringAfterLast('.', "")
+            }.uppercase()
+    if (ext in listOf("MKV", "MP4", "WEBM")) {
+        list.add(ext)
+    }
+
+    // 4. 大小
+    val sizeBytes = if (task.totalBytes > 0L) task.totalBytes else task.downloadedBytes
+    if (sizeBytes > 0L) {
+        val mb = sizeBytes / (1024.0 * 1024.0)
+        val sizeLabel =
+            if (mb >= 1024) {
+                "%.1f GB".format(mb / 1024.0)
+            } else {
+                "%.0f MB".format(mb)
+            }
+        list.add(sizeLabel)
+    }
+
+    return list.take(4)
+}
+
+internal fun cleanTorrentTitle(rawTitle: String): String {
+    if (rawTitle.isBlank()) return ""
+    var title = rawTitle.trim()
+    title = title.replaceFirst(Regex("^(\\[[^\\]]+\\]|【[^】]+】)\\s*"), "")
+    title = title.replace(Regex("\\.(mkv|mp4|avi|flv)$", RegexOption.IGNORE_CASE), "")
+    return title.ifBlank { rawTitle }
 }

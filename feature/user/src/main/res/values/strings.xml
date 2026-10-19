@@ -464,6 +464,27 @@
     <string name="feature_user_rule_url_copied">规则 URL 模板已复制</string>
     <string name="feature_user_subscription_clear_message">确定要取消当前订阅源吗？已导入的本地规则将被保留。</string>
     <string name="feature_user_rules_empty_filtered">当前分类下暂无规则</string>
+    <!-- 22. 视频下载卡片与二级详情抽屉 -->
+    <string name="feature_user_downloads_detail_sheet_title">视频与任务详情</string>
+    <string name="feature_user_downloads_detail_raw_name">原始资源名称</string>
+    <string name="feature_user_downloads_detail_section_file">本地文件属性</string>
+    <string name="feature_user_downloads_detail_file_path">本地存储路径</string>
+    <string name="feature_user_downloads_detail_file_size">文件大小</string>
+    <string name="feature_user_downloads_detail_file_format">封装格式</string>
+    <string name="feature_user_downloads_detail_section_network">传输与网络 (BT)</string>
+    <string name="feature_user_downloads_detail_info_hash">特征哈希 (InfoHash)</string>
+    <string name="feature_user_downloads_detail_peers">做种与连接节点</string>
+    <string name="feature_user_downloads_detail_peers_count">%1$d 个 Peers（%2$d 个做种）</string>
+    <string name="feature_user_downloads_detail_error_title">异常诊断信息</string>
+    <string name="feature_user_downloads_detail_copied">已复制到剪贴板</string>
+    <string name="feature_user_downloads_detail_action_copy_path">复制路径</string>
+    <string name="feature_user_downloads_detail_action_copy_hash">复制哈希</string>
+    <string name="feature_user_downloads_action_detail">任务与文件详情</string>
+    <string name="feature_user_downloads_detail_bytes_format">%1$s (%2$s 字节)</string>
+    <string name="feature_user_downloads_detail_status_title">当前状态</string>
+    <string name="feature_user_downloads_detail_created_time">创建时间：%1$s</string>
+    <string name="feature_user_downloads_detail_completed_time">完成时间：%1$s</string>
+    <string name="feature_user_downloads_detail_progress_label">传输进度：%1$s (%2$d%%)</string>
 </resources>
 
 
