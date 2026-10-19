@@ -1,5 +1,10 @@
 package com.infinitezerone.minibgm.feature.user
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,15 +14,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +37,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -93,6 +103,22 @@ fun SubjectDownloadDetailScreen(
                     } ?: context.getString(R.string.feature_user_downloads_export_failed_generic)
                 snackbarHostState.showSnackbar(message)
             }
+            is DownloadEvent.BatchExportResult -> {
+                val message =
+                    when {
+                        event.failureCount == 0 ->
+                            context.getString(R.string.feature_user_downloads_batch_export_success, event.successCount)
+                        event.successCount > 0 ->
+                            context.getString(
+                                R.string.feature_user_downloads_batch_export_partial,
+                                event.successCount,
+                                event.failureCount,
+                            )
+                        else ->
+                            context.getString(R.string.feature_user_downloads_batch_export_failed)
+                    }
+                snackbarHostState.showSnackbar(message)
+            }
         }
     }
 
@@ -108,6 +134,9 @@ fun SubjectDownloadDetailScreen(
         onRedownloadTask = viewModel::redownloadTask,
         onBatchDeleteTasks = viewModel::deleteTasks,
         onExportToGallery = viewModel::exportToGallery,
+        onBatchExportToGallery = viewModel::exportTasksToGallery,
+        onBatchPauseTasks = viewModel::pauseTasks,
+        onBatchResumeTasks = viewModel::resumeTasks,
         onPauseAll = { viewModel.pauseAllForSubject(subjectId) },
         onResumeAll = { viewModel.resumeAllForSubject(subjectId) },
         onDeleteAll = { viewModel.deleteAllForSubject(subjectId) },
@@ -130,6 +159,9 @@ internal fun SubjectDownloadDetailContent(
     onRedownloadTask: (String) -> Unit = {},
     onBatchDeleteTasks: (List<String>) -> Unit = {},
     onExportToGallery: (String) -> Unit = {},
+    onBatchExportToGallery: (List<String>) -> Unit = {},
+    onBatchPauseTasks: (List<String>) -> Unit = {},
+    onBatchResumeTasks: (List<String>) -> Unit = {},
     onPauseAll: () -> Unit,
     onResumeAll: () -> Unit,
     onDeleteAll: () -> Unit,
@@ -198,7 +230,7 @@ internal fun SubjectDownloadDetailContent(
                 actions = {
                     if (isBatchMode) {
                         val allSelected = tasks.isNotEmpty() && selectedTaskIds.size == tasks.size
-                        androidx.compose.material3.TextButton(
+                        TextButton(
                             onClick = {
                                 selectedTaskIds = if (allSelected) emptySet() else tasks.map { it.id }.toSet()
                             },
@@ -211,45 +243,6 @@ internal fun SubjectDownloadDetailContent(
                                         R.string.feature_user_downloads_select_all
                                     },
                                 ),
-                            )
-                        }
-
-                        IconButton(
-                            enabled = selectedTaskIds.isNotEmpty(),
-                            onClick = {
-                                coroutineScope.launch {
-                                    val count = selectedTaskIds.size
-                                    val confirmed =
-                                        overlayHostState.await(
-                                            ConfirmDialogAction(
-                                                title = context.getString(R.string.feature_user_downloads_batch_delete_confirm_title),
-                                                message =
-                                                    context.getString(
-                                                        R.string.feature_user_downloads_batch_delete_confirm_message,
-                                                        count,
-                                                    ),
-                                                confirmText = context.getString(R.string.feature_user_action_delete),
-                                                dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
-                                                isDestructive = true,
-                                            ),
-                                        )
-                                    if (confirmed) {
-                                        onBatchDeleteTasks(selectedTaskIds.toList())
-                                        selectedTaskIds = emptySet()
-                                        isBatchMode = false
-                                    }
-                                }
-                            },
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.Delete,
-                                contentDescription = stringResource(R.string.feature_user_downloads_batch_delete_confirm_title),
-                                tint =
-                                    if (selectedTaskIds.isNotEmpty()) {
-                                        MaterialTheme.colorScheme.error
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                                    },
                             )
                         }
                     } else {
@@ -310,6 +303,173 @@ internal fun SubjectDownloadDetailContent(
                     }
                 },
             )
+        },
+        bottomBar = {
+            AnimatedVisibility(
+                visible = isBatchMode,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            ) {
+                val selectedCompletedTaskIds =
+                    remember(selectedTaskIds, tasks) {
+                        tasks
+                            .filter { selectedTaskIds.contains(it.id) && it.status == TorrentTaskStatus.COMPLETED && !it.isFileMissing }
+                            .map { it.id }
+                    }
+                val selectedActiveTaskIds =
+                    remember(selectedTaskIds, tasks) {
+                        tasks
+                            .filter {
+                                selectedTaskIds.contains(it.id) &&
+                                    (
+                                        it.status == TorrentTaskStatus.DOWNLOADING ||
+                                            it.status == TorrentTaskStatus.RESOLVING ||
+                                            it.status == TorrentTaskStatus.QUEUED
+                                    )
+                            }.map { it.id }
+                    }
+                val selectedPausedTaskIds =
+                    remember(selectedTaskIds, tasks) {
+                        tasks
+                            .filter {
+                                selectedTaskIds.contains(it.id) &&
+                                    (it.status == TorrentTaskStatus.PAUSED || it.status == TorrentTaskStatus.ERROR)
+                            }.map { it.id }
+                    }
+
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    tonalElevation = 6.dp,
+                    shadowElevation = 8.dp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // 存相册
+                        FilledTonalButton(
+                            onClick = {
+                                if (selectedCompletedTaskIds.isNotEmpty()) {
+                                    onBatchExportToGallery(selectedCompletedTaskIds)
+                                }
+                            },
+                            enabled = selectedCompletedTaskIds.isNotEmpty(),
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.Download,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text =
+                                    if (selectedCompletedTaskIds.isNotEmpty()) {
+                                        "${stringResource(R.string.feature_user_downloads_batch_export)} (${selectedCompletedTaskIds.size})"
+                                    } else {
+                                        stringResource(R.string.feature_user_downloads_batch_export)
+                                    },
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                            )
+                        }
+
+                        // 暂停 / 恢复
+                        if (selectedActiveTaskIds.isNotEmpty()) {
+                            FilledTonalButton(
+                                onClick = { onBatchPauseTasks(selectedActiveTaskIds) },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.Pause,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = stringResource(R.string.feature_user_downloads_batch_pause),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    maxLines = 1,
+                                )
+                            }
+                        } else if (selectedPausedTaskIds.isNotEmpty()) {
+                            FilledTonalButton(
+                                onClick = { onBatchResumeTasks(selectedPausedTaskIds) },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.PlayArrow,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = stringResource(R.string.feature_user_downloads_batch_resume),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+
+                        // 删除
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
+                                    val count = selectedTaskIds.size
+                                    val confirmed =
+                                        overlayHostState.await(
+                                            ConfirmDialogAction(
+                                                title = context.getString(R.string.feature_user_downloads_batch_delete_confirm_title),
+                                                message =
+                                                    context.getString(
+                                                        R.string.feature_user_downloads_batch_delete_confirm_message,
+                                                        count,
+                                                    ),
+                                                confirmText = context.getString(R.string.feature_user_action_delete),
+                                                dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
+                                                isDestructive = true,
+                                            ),
+                                        )
+                                    if (confirmed) {
+                                        onBatchDeleteTasks(selectedTaskIds.toList())
+                                        selectedTaskIds = emptySet()
+                                        isBatchMode = false
+                                    }
+                                }
+                            },
+                            enabled = selectedTaskIds.isNotEmpty(),
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError,
+                                ),
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.Delete,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = stringResource(R.string.feature_user_downloads_batch_delete),
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
+            }
         },
         modifier = modifier,
     ) { innerPadding ->
@@ -582,6 +742,11 @@ internal fun EpisodeDownloadCard(
                 } else {
                     when (task.status) {
                         TorrentTaskStatus.COMPLETED -> {
+                            val ext =
+                                task.savePath
+                                    .substringAfterLast('.', "")
+                                    .uppercase()
+                                    .takeIf { it.isNotBlank() && it.length <= 4 }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -597,6 +762,20 @@ internal fun EpisodeDownloadCard(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
+                                if (ext != null) {
+                                    Surface(
+                                        shape = BgmShapes.extraSmall,
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    ) {
+                                        Text(
+                                            text = ext,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                        )
+                                    }
+                                }
                             }
                         }
 
@@ -707,58 +886,122 @@ internal fun EpisodeDownloadCard(
             if (!isBatchMode) {
                 Spacer(modifier = Modifier.width(8.dp))
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (task.isFileMissing) {
-                        FilledTonalIconButton(
-                            onClick = onRedownload,
-                            modifier = Modifier.size(36.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.Refresh,
-                                contentDescription = stringResource(R.string.feature_user_downloads_action_redownload),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                        IconButton(
-                            onClick = onDelete,
-                            modifier = Modifier.size(36.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.DeleteBorder,
-                                contentDescription = stringResource(R.string.feature_user_action_delete),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    } else if (task.status == TorrentTaskStatus.COMPLETED) {
-                        if (isInternalPlayerEnabled && onPlay != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    // 主动作按钮 (至多 1 个)
+                    when {
+                        task.isFileMissing -> {
                             FilledTonalIconButton(
-                                onClick = onPlay,
+                                onClick = onRedownload,
                                 modifier = Modifier.size(36.dp),
                             ) {
                                 Icon(
-                                    imageVector = BgmIcons.PlayArrow,
-                                    contentDescription = stringResource(R.string.feature_user_downloads_play_offline),
+                                    imageVector = BgmIcons.Refresh,
+                                    contentDescription = stringResource(R.string.feature_user_downloads_action_redownload),
                                     modifier = Modifier.size(20.dp),
                                 )
                             }
                         }
-                        Box {
-                            IconButton(
-                                onClick = { menuExpanded = true },
+
+                        task.status == TorrentTaskStatus.COMPLETED -> {
+                            if (isInternalPlayerEnabled && onPlay != null) {
+                                FilledTonalIconButton(
+                                    onClick = onPlay,
+                                    modifier = Modifier.size(36.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = BgmIcons.PlayArrow,
+                                        contentDescription = stringResource(R.string.feature_user_downloads_play_offline),
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
+                        }
+
+                        task.status == TorrentTaskStatus.DOWNLOADING ||
+                            task.status == TorrentTaskStatus.RESOLVING ||
+                            task.status == TorrentTaskStatus.QUEUED -> {
+                            FilledTonalIconButton(
+                                onClick = onPause,
                                 modifier = Modifier.size(36.dp),
                             ) {
                                 Icon(
-                                    imageVector = BgmIcons.MoreVert,
-                                    contentDescription = stringResource(R.string.feature_user_downloads_action_more),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp),
+                                    imageVector = BgmIcons.Pause,
+                                    contentDescription = stringResource(R.string.feature_user_downloads_status_paused),
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
-                            DropdownMenu(
-                                expanded = menuExpanded,
-                                onDismissRequest = { menuExpanded = false },
+                        }
+
+                        task.status == TorrentTaskStatus.PAUSED -> {
+                            FilledTonalIconButton(
+                                onClick = onResume,
+                                modifier = Modifier.size(36.dp),
                             ) {
+                                Icon(
+                                    imageVector = BgmIcons.PlayArrow,
+                                    contentDescription = stringResource(R.string.feature_user_downloads_all_resume),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+
+                        task.status == TorrentTaskStatus.ERROR -> {
+                            FilledTonalIconButton(
+                                onClick = onResume,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.Refresh,
+                                    contentDescription = stringResource(R.string.feature_user_downloads_action_retry),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    // 更多操作 (⋮) 统一收口辅助与破坏性操作
+                    Box {
+                        IconButton(
+                            onClick = { menuExpanded = true },
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.MoreVert,
+                                contentDescription = stringResource(R.string.feature_user_downloads_action_more),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                        ) {
+                            // 边下边播 (下载中且已生成播放流时)
+                            if (canStreamWhileDownloading && isInternalPlayerEnabled && onPlay != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.feature_user_downloads_stream_while_downloading)) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = BgmIcons.PlayArrow,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    },
+                                    onClick = {
+                                        menuExpanded = false
+                                        onPlay()
+                                    },
+                                )
+                            }
+
+                            // 以其他应用打开 (落盘完成或有流地址时)
+                            val canOpenExternal =
+                                (isCompleted && task.savePath.isNotBlank() && !task.isFileMissing) ||
+                                    (task.streamUrl.isNotBlank())
+                            if (canOpenExternal) {
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.feature_user_downloads_open_with_external)) },
                                     leadingIcon = {
@@ -770,132 +1013,59 @@ internal fun EpisodeDownloadCard(
                                     },
                                     onClick = {
                                         menuExpanded = false
+                                        val mediaPathOrUrl =
+                                            if (isCompleted && task.savePath.isNotBlank()) {
+                                                task.savePath
+                                            } else {
+                                                task.streamUrl
+                                            }
                                         context.launchMediaWithChooser(
-                                            mediaUriOrPath = task.savePath,
+                                            mediaUriOrPath = mediaPathOrUrl,
                                             title = task.episodeName.ifBlank { task.title },
                                             chooserTitle = context.getString(R.string.feature_user_downloads_open_with_external),
                                         )
                                     },
                                 )
-                                if (onExportToGallery != null) {
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.feature_user_downloads_export_to_gallery)) },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = BgmIcons.Download,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(20.dp),
-                                            )
-                                        },
-                                        onClick = {
-                                            menuExpanded = false
-                                            onExportToGallery()
-                                        },
-                                    )
-                                }
+                            }
+
+                            // 保存到系统相册 (仅已完成文件)
+                            if (isCompleted && !task.isFileMissing && onExportToGallery != null) {
                                 DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = stringResource(R.string.feature_user_action_delete),
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    },
+                                    text = { Text(stringResource(R.string.feature_user_downloads_export_to_gallery)) },
                                     leadingIcon = {
                                         Icon(
-                                            imageVector = BgmIcons.DeleteBorder,
+                                            imageVector = BgmIcons.Download,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.error,
                                             modifier = Modifier.size(20.dp),
                                         )
                                     },
                                     onClick = {
                                         menuExpanded = false
-                                        onDelete()
+                                        onExportToGallery()
                                     },
                                 )
                             }
-                        }
-                    } else {
-                        when (task.status) {
-                            TorrentTaskStatus.DOWNLOADING -> {
-                                if (canStreamWhileDownloading && isInternalPlayerEnabled && onPlay != null) {
-                                    FilledTonalIconButton(
-                                        onClick = onPlay,
-                                        modifier = Modifier.size(36.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.PlayArrow,
-                                            contentDescription = stringResource(R.string.feature_user_downloads_play_offline),
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                }
-                                IconButton(
-                                    onClick = onPause,
-                                    modifier = Modifier.size(36.dp),
-                                ) {
+
+                            // 删除下载
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = stringResource(R.string.feature_user_action_delete),
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                },
+                                leadingIcon = {
                                     Icon(
-                                        imageVector = BgmIcons.Pause,
-                                        contentDescription = stringResource(R.string.feature_user_downloads_status_paused),
+                                        imageVector = BgmIcons.DeleteBorder,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(20.dp),
                                     )
-                                }
-                            }
-
-                            TorrentTaskStatus.RESOLVING,
-                            TorrentTaskStatus.QUEUED,
-                            -> {
-                                IconButton(
-                                    onClick = onPause,
-                                    modifier = Modifier.size(36.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.Pause,
-                                        contentDescription = stringResource(R.string.feature_user_downloads_status_paused),
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
-                            }
-
-                            TorrentTaskStatus.PAUSED,
-                            TorrentTaskStatus.ERROR,
-                            -> {
-                                IconButton(
-                                    onClick = onResume,
-                                    modifier = Modifier.size(36.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.PlayArrow,
-                                        contentDescription =
-                                            if (isError) {
-                                                stringResource(R.string.feature_user_downloads_action_retry)
-                                            } else {
-                                                stringResource(R.string.feature_user_downloads_all_resume)
-                                            },
-                                        tint =
-                                            if (isError) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
-                            }
-
-                            else -> Unit
-                        }
-
-                        IconButton(
-                            onClick = onDelete,
-                            modifier = Modifier.size(36.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.DeleteBorder,
-                                contentDescription = stringResource(R.string.feature_user_action_delete),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                modifier = Modifier.size(18.dp),
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onDelete()
+                                },
                             )
                         }
                     }

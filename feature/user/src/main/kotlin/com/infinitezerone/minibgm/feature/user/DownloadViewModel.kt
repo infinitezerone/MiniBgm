@@ -26,6 +26,11 @@ sealed interface DownloadEvent {
     data class ExportFailed(
         val message: String? = null,
     ) : DownloadEvent
+
+    data class BatchExportResult(
+        val successCount: Int,
+        val failureCount: Int,
+    ) : DownloadEvent
 }
 
 /**
@@ -180,6 +185,51 @@ class DownloadViewModel(
                 val errorMsg = result.exceptionOrNull()?.message
                 _events.send(DownloadEvent.ExportFailed(errorMsg))
             }
+        }
+    }
+
+    /**
+     * 批量暂停指定任务。
+     */
+    fun pauseTasks(taskIds: List<String>) {
+        if (taskIds.isEmpty()) return
+        viewModelScope.launch {
+            taskIds.forEach { torrentRepository.pauseDownload(it) }
+        }
+    }
+
+    /**
+     * 批量恢复/继续指定任务。
+     */
+    fun resumeTasks(taskIds: List<String>) {
+        if (taskIds.isEmpty()) return
+        viewModelScope.launch {
+            taskIds.forEach { torrentRepository.resumeDownload(it) }
+        }
+    }
+
+    /**
+     * 批量将指定已完成任务的本地文件导出至系统媒体库（相册/Movies 目录）。
+     */
+    fun exportTasksToGallery(taskIds: List<String>) {
+        if (taskIds.isEmpty()) return
+        viewModelScope.launch {
+            var success = 0
+            var failure = 0
+            for (taskId in taskIds) {
+                val result = torrentRepository.exportTaskToGallery(taskId)
+                if (result.isSuccess) {
+                    success++
+                } else {
+                    failure++
+                }
+            }
+            _events.send(
+                DownloadEvent.BatchExportResult(
+                    successCount = success,
+                    failureCount = failure,
+                ),
+            )
         }
     }
 }

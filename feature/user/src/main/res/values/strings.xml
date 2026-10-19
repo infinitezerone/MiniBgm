@@ -408,6 +408,14 @@
     <string name="feature_user_downloads_export_failed">保存至相册失败：%1$s</string>
     <string name="feature_user_downloads_export_failed_generic">保存至相册失败</string>
     <string name="feature_user_downloads_action_more">更多操作</string>
+    <string name="feature_user_downloads_stream_while_downloading">边下边播</string>
+    <string name="feature_user_downloads_batch_export">存相册</string>
+    <string name="feature_user_downloads_batch_pause">暂停</string>
+    <string name="feature_user_downloads_batch_resume">继续</string>
+    <string name="feature_user_downloads_batch_delete">删除</string>
+    <string name="feature_user_downloads_batch_export_success">已将 %1$d 个视频保存至系统相册</string>
+    <string name="feature_user_downloads_batch_export_partial">%1$d 个保存成功，%2$d 个失败</string>
+    <string name="feature_user_downloads_batch_export_failed">批量保存至相册失败</string>
 
     <!-- 20. 现代开发者选项面板 (In-App Developer Options) -->
     <string name="feature_user_section_developer">开发者</string>
