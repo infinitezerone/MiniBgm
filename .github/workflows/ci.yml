@@ -152,5 +152,38 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # lint 会走到 :core:data:verifyPrebuiltJniLibs（jniLibs 合并前的前置校验），
+      # 缺预构建 .so 时直接失败；因此与 build 作业一样先编出 Rust 原生库。
+      # 缓存 key 与 build 作业共用 cargo-build，避免两个作业各编一遍。
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-build-
+
+      - name: Install cargo-ndk
+        run: which cargo-ndk >/dev/null 2>&1 || cargo install cargo-ndk --locked
+
+      - name: Install Android NDK
+        run: |
+          SDKMANAGER="$(command -v sdkmanager || echo "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager")"
+          if ! yes | "$SDKMANAGER" --install "ndk;27.2.12479018" > /dev/null 2>&1; then
+            echo "::warning::NDK 27.2.12479018 安装失败，回退使用镜像自带 NDK"
+          fi
+          ls -1 "${ANDROID_HOME}/ndk"
+
+      - name: Build Rust Android native libraries
+        run: bash tools/build-native
+
       - name: Lint Debug (baseline ratchet)
         run: ./gradlew lintDebug --stacktrace
