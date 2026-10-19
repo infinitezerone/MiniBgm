@@ -4,7 +4,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 ## 版本控制
 
-仓库与 jj colocate，历史操作用 `jj commit` / `jj git push`；提交摘要遵循 Conventional Commits（如 `feat(core:ai): xxx` / `chore: xxx`）。git 只读（log/diff/show/ls-remote/tag/clone）——git 写子命令被 VCS 层的 `tools/githooks` 硬拒，新 clone 跑一次 `tools/githooks/setup.sh` 接线，`tools/jgate` 会自愈补配；jj 不运行 git 钩子，与合法路径零冲突。
+仓库与 jj colocate，历史操作用 `jj commit` / `jj git push`；提交摘要遵循 Conventional Commits。git 只读——写子命令被 `tools/githooks` 硬拒，新 clone 跑 `tools/githooks/setup.sh` 接线，`tools/jgate` 自愈补配；jj 不跑 git 钩子。
 
 - 一个提交一个目的；同一文件别混两个目的——事后 `jj split` 拆不出可编译的中间态。
 - 同一时刻只允许一条 Gradle 命令在跑（长构建后台 + 足够超时，避免 daemon 互踩）。
@@ -22,13 +22,13 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 ## 硬红线
 
-机械执行：源语义由 `:core:testing` 的 ArchitectureRulesTest，依赖图由 build-logic 的 ModuleBoundaryConventionPlugin（配置期断言）。**本文件自身也受机械预算约束**（总字数与单行长度，见 `agents_doc_must_stay_an_index_under_context_budget`）：新行为约束的落点永远是测试，这里只留一句索引，要加文字必须先删等量文字（确需扩写须显式上调常量并说明理由）。以下为索引，细节看测试：
+机械执行：源语义由 `:core:testing` 的 ArchitectureRulesTest，依赖图由 build-logic 的 ModuleBoundaryConventionPlugin（配置期断言）。**本文件自身也受机械预算约束**（总字数与单行长度，见 `agents_doc_must_stay_an_index_under_context_budget`）：新行为约束的落点永远是测试，这里只留一句索引，要加文字必须先删等量文字（确需扩写须显式上调常量并说明理由）。
 
 1. feature 互不依赖；UI 只经 `:core:data` 仓库；`:core:model` 纯 Kotlin；feature 无原始 IO、无颜色字面量、不外露可变状态（MutableStateFlow 一律禁止；对外只暴露只读 StateFlow，或 Compose State 持有者的只读类型——多字段原子更新用 `Snapshot.withMutableSnapshot`，不用 `update { it.copy(…) }`）；Flow 算子（`map` / `onEach` / `filter` / `transform` 等）lambda 内严禁 `launch` 副作用协程——任务流在下载期间每秒发射，在 lambda 内 launch 会堆积无界协程，持续刷新必须改用单条收集协程串行执行（StateFlow 自带 conflate 背压；ArchitectureRulesTest 拦截）；路由密封于 `BgmRoute` 并声明堆叠层。
-2. 瞬态交互收敛：UI 确认/交互浮层统一由 `BgmOverlayHost` + `overlayHostState.await(...)` 挂起承接，严禁散落 `var showDialog`；通用登录提示收口 `BgmLoginPromptDialog`；一次性事件严禁裸 `collect`，必须 `ObserveAsEvents`（STARTED）；事件文案一律 `@StringRes` + 格式化参数下发、UI 侧解析（服务端消息经 message 透传），严禁 VM 内联文案；Composable 内禁止 `LocalContext.current.getString(...)`（不感知配置变更），静态文案用 `stringResource`，非 Composable 上下文经 `resources.getString`；播放器线路选择只走 `PlayerSourcesBottomSheet`（复用 `BgmSourcesBottomSheet`，横竖屏抽屉同源主题 token——禁硬编码黑底，卡片行/空态一律 `BgmSourceActionCard` / `SourceEmptyStateCard`，见 `player_sources_panel_must_be_theme_driven` 与 `player_sources_panel_must_reuse_design_system`），选集抽屉专注选集；分集微操作与播放源收敛于 `SubjectSourcesBottomSheet`（支持原位切集，禁抽屉套抽屉）；多按钮横排必须显式 `contentPadding`（禁裸 Button 48dp 内边距截断中文）；底栏空态与配置跳转唯一真源 `BgmSourceActionCard`，跳外部界面必须经 `runAfterDismiss` / `onDismissAndRun`。
+2. 瞬态交互收敛：UI 浮层统一由 `BgmOverlayHost` + `overlayHostState.await(...)` 挂起承接，严禁散落 `var showDialog`；通用登录提示收口 `BgmLoginPromptDialog`；一次性事件严禁裸 `collect`，须 `ObserveAsEvents`（STARTED）；事件文案一律 `@StringRes` + 格式化参数下发、UI 解析（服务端消息经 message 透传），严禁 VM 内联文案；Composable 内禁止 `LocalContext.current.getString(...)`，静态文案用 `stringResource`，非 Composable 上下文经 `resources.getString`；线路选择只走 `PlayerSourcesBottomSheet`（复用 `BgmSourcesBottomSheet`，横竖屏抽屉同源主题 token——禁硬编码黑底，卡片行/空态一律 `BgmSourceActionCard` / `SourceEmptyStateCard`，见 `player_sources_panel_must_be_theme_driven` 与 `player_sources_panel_must_reuse_design_system`），选集抽屉专注选集；分集微操作与播放源收敛于 `SubjectSourcesBottomSheet`（支持原位切集，禁抽屉套抽屉）；多按钮横排显式 `contentPadding`（禁裸 Button 48dp 内边距截断）；底栏空态与跳转真源 `BgmSourceActionCard`，跳外部界面经 `runAfterDismiss` / `onDismissAndRun`；横屏抽屉动效与关闭走 snapshotFlow 且 BackHandler 条件启闭（`player_right_drawer_must_bind_lifecycle_and_conditional_back_handler`）。
 3. 可播地址只来自 `findPlayableSources`；一切写操作止于 PENDING_CONFIRMATION 提案卡，用户确认才落库。
 4. 凭据只存在于 `AuthTokensDataSource`；不绕过/削弱 `BgmPkce`；不剥离或覆盖 `User-Agent`；关键写操作包 `withContext(NonCancellable)`。
-5. DI 真实性与契约闭环：底层平台模块（如 platformDataModule）与 feature ViewModel 必须保持依赖定义闭环；严禁在单测中仅用手工假模块伪造 Koin 验证，必须通过真实容器集成测试（AppModuleTest）断言全量解析，严禁构造器新增依赖后遗漏注册引发运行时 NoDefinitionFoundException。手工 `viewModel { XxxViewModel(...) }` 块必须把目标类**全部带 `= null` 默认值的可选依赖**显式传上，避免漏传在真机上静默退化（红线 `manual_view_model_blocks_must_inject_every_optional_dependency` 把关）。
+5. DI 真实性与契约闭环：底层平台模块与 feature ViewModel 保持定义闭环；经 AppModuleTest 断言全量解析，禁构造器新增依赖后漏注册引发运行时 NoDefinitionFoundException。手工 `viewModel { XxxViewModel(...) }` 块必须把目标类**全部带 `= null` 默认值的可选依赖**显式传上，避免漏传在真机上静默退化（红线 `manual_view_model_blocks_must_inject_every_optional_dependency` 把关）。
 
 ## 领域规则
 

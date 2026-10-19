@@ -3383,6 +3383,69 @@ class ArchitectureRulesTest {
         }
     }
 
+    /**
+     * 播放器横屏右侧抽屉（PlayerRightDrawerContainer）必须将关闭动效响应绑定至快照流与下树清理，
+     * 且 BackHandler 必须按目标显隐状态条件启闭（`enabled = visibleState.targetState`）：
+     *
+     * 1. 动效结束自动响应：严禁使用 `SideEffect` 判定 `visibleState.isIdle && !visibleState.currentState`。
+     *    `SideEffect` 仅在宿主重组时执行，抽屉退出动效结束时内部状态变更不会触发宿主重组，导致 `onRespond()` 永不执行，
+     *    `OverlayHostState` 挂起协程永久泄漏，隐蔽层级残留在 UI 树；必须通过 `snapshotFlow` 监听动效完成。
+     * 2. 下树兜底响应：必须通过 `DisposableEffect(Unit)` 在 `onDispose` 时触发兜底响应，防止横竖屏切换/页面退出/PiP 强制下树时挂起协程挂死。
+     * 3. 返回键条件使能：严禁注册无条件的裸 `BackHandler { onDismissRequest() }`；必须声明 `BackHandler(enabled = visibleState.targetState)`。
+     *    否则关闭动画期间或残留层级会永久霸占 Android `OnBackPressedDispatcher` 栈顶，拦截并吞掉所有后续返回键，导致横屏模式下系统返回键彻底失灵。
+     */
+    @Test
+    fun player_right_drawer_must_bind_lifecycle_and_conditional_back_handler() {
+        val file =
+            File(projectRoot, "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerPanelOverlays.kt")
+        assertTrue(file.isFile, "PlayerPanelOverlays.kt 未找到")
+        val code = KotlinSourceScanner.sanitize(file.readText())
+
+        val drawerToken = "fun PlayerRightDrawerContainer"
+        val drawerStart = code.indexOf(drawerToken)
+        assertTrue(drawerStart >= 0, "PlayerRightDrawerContainer 未找到")
+
+        // 提取 PlayerRightDrawerContainer 函数体
+        val openBrace = code.indexOf('{', drawerStart)
+        assertTrue(openBrace >= 0, "PlayerRightDrawerContainer 函数体未找到")
+        var depth = 0
+        var closeBrace = openBrace
+        while (closeBrace < code.length) {
+            when (code[closeBrace]) {
+                '{' -> depth++
+                '}' -> {
+                    depth--
+                    if (depth == 0) break
+                }
+            }
+            closeBrace++
+        }
+        val drawerBody = code.substring(openBrace, minOf(closeBrace + 1, code.length))
+
+        // 1. 严禁使用 SideEffect 判定退出动效完成
+        if (drawerBody.contains("SideEffect")) {
+            fail("PlayerRightDrawerContainer 严禁使用 SideEffect：宿主未重组时退出动效结束无法触发响应，导致挂起协程泄漏与返回键失效")
+        }
+
+        // 2. 动效完成必须使用 snapshotFlow 收集
+        if (!drawerBody.contains("snapshotFlow")) {
+            fail("PlayerRightDrawerContainer 必须使用 snapshotFlow 监听退出动效结束并触发 onRespond")
+        }
+
+        // 3. 必须包含 DisposableEffect 兜底下树清理
+        if (!drawerBody.contains("DisposableEffect") || !drawerBody.contains("onDispose")) {
+            fail("PlayerRightDrawerContainer 必须声明 DisposableEffect(Unit).onDispose 进行下树兜底清理，避免横竖屏切换时协程泄漏")
+        }
+
+        // 4. BackHandler 必须按 targetState 条件使能
+        val hasConditionalBackHandler =
+            drawerBody.contains("BackHandler(enabled = visibleState.targetState)") ||
+                drawerBody.contains("BackHandler(enabled =")
+        if (!hasConditionalBackHandler) {
+            fail("PlayerRightDrawerContainer 的 BackHandler 必须声明 enabled = visibleState.targetState，防止关闭后拦截后续系统返回键")
+        }
+    }
+
     /** [inner] 是否出现在以 [blockToken] 开头、花括号配对的代码块内 */
     private fun mentionsInsideBlock(
         code: String,

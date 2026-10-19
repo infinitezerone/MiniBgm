@@ -15,8 +15,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,17 +52,26 @@ data object PlayerSourcesRequest : OverlayRequest<Unit>
  * 半透明黑色渐变蒙层背景（点击收起） + 右侧平滑滑入滑出抽屉 + 返回键优雅收起 + 动效结束自动响应。
  */
 @Composable
-private fun PlayerRightDrawerContainer(
+internal fun PlayerRightDrawerContainer(
     visibleState: MutableTransitionState<Boolean>,
     onDismissRequest: () -> Unit,
     onRespond: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    BackHandler { onDismissRequest() }
-    SideEffect {
-        if (visibleState.isIdle && !visibleState.currentState) {
-            onRespond()
+    val currentOnRespond by rememberUpdatedState(onRespond)
+    BackHandler(enabled = visibleState.targetState) { onDismissRequest() }
+    LaunchedEffect(visibleState) {
+        snapshotFlow { visibleState.isIdle && !visibleState.currentState }
+            .collect { isClosed ->
+                if (isClosed) {
+                    currentOnRespond()
+                }
+            }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            currentOnRespond()
         }
     }
     Box(modifier = modifier.fillMaxSize()) {

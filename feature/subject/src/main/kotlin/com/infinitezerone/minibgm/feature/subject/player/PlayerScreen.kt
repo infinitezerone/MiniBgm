@@ -237,6 +237,9 @@ fun PlayerScreen(
         // 面板类浮层随形态切换收起（横竖两套布局不同，保留面板意义不大）
         overlayHostState.cancelActive()
         isLandscape = landscape
+        if (!landscape) {
+            isScreenLocked = false
+        }
         val act = activity ?: return
         act.requestedOrientation =
             if (landscape) {
