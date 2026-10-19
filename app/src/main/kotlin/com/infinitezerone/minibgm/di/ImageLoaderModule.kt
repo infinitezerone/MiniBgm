@@ -32,6 +32,9 @@ import io.ktor.client.request.header
 import io.ktor.http.HttpHeaders
 import io.ktor.utils.io.InternalAPI
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeout
@@ -84,9 +87,14 @@ private class ImageRoutingEngine(
                         primaryEngine.execute(data)
                     }
                 }
+            } catch (timeout: TimeoutCancellationException) {
+                currentCoroutineContext().ensureActive()
+                EchCapabilityDetector.markEchFailure(host)
+                fallbackEngine.execute(data)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Throwable) {
+                EchCapabilityDetector.markEchFailure(host)
                 fallbackEngine.execute(data)
             }
         }

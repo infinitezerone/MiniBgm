@@ -3329,6 +3329,14 @@ class ArchitectureRulesTest {
             violations.add("ImageRoutingEngine 缺少 probeAsyncIfUnknown(host) 异步探测，未知图床无法自愈升级走 ECH")
         }
 
+        // 超时与异常必须降级且标记冷却，不能因通用 CancellationException 误抛导致断流
+        if (!content.contains("TimeoutCancellationException")) {
+            violations.add("ImageRoutingEngine 必须捕获 TimeoutCancellationException 降级至 fallbackEngine，避免将超时误当做外部取消而中断图片加载")
+        }
+        if (!content.contains("EchCapabilityDetector.markEchFailure(host)")) {
+            violations.add("ImageRoutingEngine 降级时必须调用 EchCapabilityDetector.markEchFailure(host) 记录冷却，避免后续图片持续卡顿 4 秒")
+        }
+
         assertTrue(
             violations.isEmpty(),
             "违反第三方图床 Fail-Open 路由红线：\n" + violations.joinToString("\n"),

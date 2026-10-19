@@ -79,6 +79,13 @@ object EchCapabilityDetector {
             (cache[host.trim().lowercase()] == SupportStatus.SUPPORTED && !AdaptiveDnsResolver.isEchCoolingDown(host))
 
     /**
+     * 标记指定 host 的 ECH 握手或连接超时失败，触发冷却窗口。
+     */
+    fun markEchFailure(host: String) {
+        AdaptiveDnsResolver.markEchHandshakeFailure(host)
+    }
+
+    /**
      * 判断指定 host 是否支持通过 ECH 引擎访问。
      *
      * @param host 待检测的目标域名

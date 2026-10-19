@@ -269,4 +269,32 @@ class EchCapabilityDetectorTest {
             // 图片路由据此从 ECH 通道切回直连，不再为每张图白等 4s
             assertFalse(EchCapabilityDetector.isEchEligible("cooled-ech.org"))
         }
+
+    @Test
+    fun markEchFailure_triggers_cooldown_and_makes_host_ineligible() =
+        runTest {
+            val mockEngine =
+                MockEngine {
+                    respond(
+                        content =
+                            """
+                            {
+                              "Status": 0,
+                              "Answer": [
+                                {"name": "mark-fail-ech.org.", "type": 65, "data": "1 . ech=AQID"}
+                              ]
+                            }
+                            """.trimIndent(),
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            val client = HttpClient(mockEngine)
+
+            assertTrue(EchCapabilityDetector.isEchSupported("mark-fail-ech.org", client))
+            assertTrue(EchCapabilityDetector.isEchEligible("mark-fail-ech.org"))
+
+            EchCapabilityDetector.markEchFailure("mark-fail-ech.org")
+            assertFalse(EchCapabilityDetector.isEchEligible("mark-fail-ech.org"))
+        }
 }
