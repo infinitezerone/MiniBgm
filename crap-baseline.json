@@ -160,6 +160,36 @@
       "method": "invokeSuspend",
       "category": "coverage-gap",
       "reason": "Dead-seed watchdog probe inside startStream, only 29% covered"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/data/repository/AndroidTorrentRepository$exportTaskToGallery$2",
+      "method": "invokeSuspend",
+      "category": "platform",
+      "reason": "Exporting video to MediaStore via ContentResolver requires Android framework environment"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/di/NetworkModuleKt",
+      "method": "networkModule$lambda$0$11",
+      "category": "coverage-gap",
+      "reason": "Koin factory lambda for PageFetchService configuring HTTP cache"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/ech/CloudflareRanges",
+      "method": "ipv6ToBytes",
+      "category": "structural",
+      "reason": "IPv6 byte parsing with multiple colon and compression segments"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/ech/EchNetworkMonitor",
+      "method": "start",
+      "category": "platform",
+      "reason": "Registers ConnectivityManager.NetworkCallback against the live Android platform"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/data/download/AndroidTorrentStreamEngine$installPlugin$2",
+      "method": "invokeSuspend",
+      "category": "platform",
+      "reason": "Plugin installation involving dynamic DEX and native library loading"
     }
   ]
 }
