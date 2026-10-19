@@ -203,8 +203,9 @@ fun resolveLanguageName(languageCode: String?): String? {
     if (languageCode.isNullOrBlank() || languageCode.equals("und", ignoreCase = true)) return null
     val clean = languageCode.lowercase().trim()
     return when {
-        clean in listOf("zh", "chi", "zho", "zh-cn", "zh-hans", "chs") -> "中文 (简体)"
-        clean in listOf("zh-tw", "zh-hk", "zh-hant", "cht") -> "中文 (繁体)"
+        clean in listOf("zh-cn", "zh-hans", "zh-sg", "chs") -> "中文 (简体)"
+        clean in listOf("zh-tw", "zh-hk", "zh-mo", "zh-hant", "cht") -> "中文 (繁体)"
+        clean in listOf("zh", "chi", "zho") -> "中文"
         clean in listOf("ja", "jpn", "jp") -> "日语"
         clean in listOf("en", "eng") -> "英语"
         clean in listOf("ko", "kor") -> "韩语"
@@ -222,6 +223,26 @@ fun resolveLanguageName(languageCode: String?): String? {
             }
         }
     }
+}
+
+private fun isTraditionalChineseLabel(label: String): Boolean {
+    val clean = label.lowercase()
+    return clean.contains("繁") ||
+        clean == "tc" ||
+        clean == "cht" ||
+        clean.contains("big5") ||
+        clean.contains("繁体") ||
+        clean.contains("繁體")
+}
+
+private fun isSimplifiedChineseLabel(label: String): Boolean {
+    val clean = label.lowercase()
+    return clean.contains("简") ||
+        clean == "sc" ||
+        clean == "chs" ||
+        clean.contains("gb") ||
+        clean.contains("简体") ||
+        clean.contains("簡體")
 }
 
 /**
@@ -255,13 +276,32 @@ fun formatTrackDisplayDetails(
     index: Int,
     defaultLabel: String,
 ): String {
-    val langName = resolveLanguageName(language)
     val rawLabel = label?.trim()?.takeIf { it.isNotBlank() }
+    val resolvedLang = resolveLanguageName(language)
+    val langName =
+        when {
+            resolvedLang == "中文" && rawLabel != null -> {
+                when {
+                    isTraditionalChineseLabel(rawLabel) -> "中文 (繁体)"
+                    isSimplifiedChineseLabel(rawLabel) -> "中文 (简体)"
+                    else -> resolvedLang
+                }
+            }
+            else -> resolvedLang
+        }
 
     val baseName =
         when {
             rawLabel != null && langName != null -> {
-                if (rawLabel.contains(langName, ignoreCase = true)) rawLabel else "$langName ($rawLabel)"
+                if (rawLabel.contains(langName, ignoreCase = true)) {
+                    rawLabel
+                } else if (rawLabel.equals("chs", ignoreCase = true) || rawLabel.equals("sc", ignoreCase = true)) {
+                    "中文 (简体)"
+                } else if (rawLabel.equals("cht", ignoreCase = true) || rawLabel.equals("tc", ignoreCase = true)) {
+                    "中文 (繁体)"
+                } else {
+                    "$langName ($rawLabel)"
+                }
             }
             rawLabel != null -> rawLabel
             langName != null -> langName
@@ -289,6 +329,58 @@ fun formatTrackDisplayDetails(
     }
 
     return "$baseName$suffix"
+}
+
+/**
+ * 对轨道名称列表进行防重消歧：
+ * 1. 若同片源下存在两条未标明变体的通用「中文」字幕/音轨，按番剧发布惯例（SC_TC）自动归一为「中文 (简体)」与「中文 (繁体)」；
+ * 2. 对其他重复名称追加序号索引（如「日语 · 双声道 #1」、「日语 · 双声道 #2」），彻底杜绝同名混淆。
+ */
+fun disambiguateTrackNames(names: List<String>): List<String> {
+    if (names.size <= 1) return names
+
+    fun splitBaseAndSuffix(name: String): Pair<String, String> {
+        val suffixes = listOf(" [默认] [强制]", " [强制] [默认]", " [默认]", " [强制]")
+        for (s in suffixes) {
+            if (name.endsWith(s)) {
+                return name.removeSuffix(s) to s
+            }
+        }
+        return name to ""
+    }
+
+    val pairs = names.map { splitBaseAndSuffix(it) }
+    val baseCounts = pairs.groupingBy { it.first }.eachCount()
+    val isDualGenericChinese = baseCounts["中文"] == 2
+
+    val seen = mutableMapOf<String, Int>()
+    return pairs.map { (base, suffix) ->
+        val count = baseCounts[base] ?: 1
+        if (count > 1) {
+            val idx = (seen[base] ?: 0) + 1
+            seen[base] = idx
+            if (base == "中文" && isDualGenericChinese) {
+                val newBase = if (idx == 1) "中文 (简体)" else "中文 (繁体)"
+                "$newBase$suffix"
+            } else {
+                "$base #$idx$suffix"
+            }
+        } else {
+            "$base$suffix"
+        }
+    }
+}
+
+/**
+ * 对播放器轨道项列表进行防重消歧。
+ */
+fun disambiguateTrackOptions(options: List<PlayerTrackOption>): List<PlayerTrackOption> {
+    if (options.size <= 1) return options
+    val names = options.map { it.name }
+    val disambiguatedNames = disambiguateTrackNames(names)
+    return options.zip(disambiguatedNames) { opt, newName ->
+        if (opt.name != newName) opt.copy(name = newName) else opt
+    }
 }
 
 /**
@@ -403,8 +495,8 @@ fun extractPlayerTracksSnapshot(player: Player): PlayerTracksSnapshot {
         qualityMode = qualityMode,
         currentAutoQualityName = currentAutoQualityName,
         currentVideoSizeQualityName = currentVideoSizeQualityName,
-        subtitleTracks = subtitleOptions,
-        audioTracks = audioOptions,
+        subtitleTracks = disambiguateTrackOptions(subtitleOptions),
+        audioTracks = disambiguateTrackOptions(audioOptions),
         subtitleMode = subtitleMode,
         hasSelectableTracks = hasSelectable,
     )

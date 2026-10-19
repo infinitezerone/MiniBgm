@@ -92,7 +92,8 @@ class PlayerViewComponentsTest {
     fun resolveLanguageName_mapsCommonCodes() {
         assertEquals("中文 (简体)", resolveLanguageName("zh-CN"))
         assertEquals("中文 (简体)", resolveLanguageName("zh-Hans"))
-        assertEquals("中文 (简体)", resolveLanguageName("chi"))
+        assertEquals("中文", resolveLanguageName("chi"))
+        assertEquals("中文", resolveLanguageName("zh"))
         assertEquals("中文 (繁体)", resolveLanguageName("zh-Hant"))
         assertEquals("中文 (繁体)", resolveLanguageName("cht"))
         assertEquals("日语", resolveLanguageName("ja"))
@@ -113,6 +114,46 @@ class PlayerViewComponentsTest {
                 language = "zh-CN",
                 channelCount = 0,
                 selectionFlags = androidx.media3.common.C.SELECTION_FLAG_DEFAULT,
+                trackType = androidx.media3.common.C.TRACK_TYPE_TEXT,
+                index = 0,
+                defaultLabel = "字幕",
+            ),
+        )
+
+        // 当代码为通用中文 "chi"，但 label 明确含有繁/简指示时，应准确归一
+        assertEquals(
+            "中文 (繁体)",
+            formatTrackDisplayDetails(
+                label = "TC",
+                language = "chi",
+                channelCount = 0,
+                selectionFlags = 0,
+                trackType = androidx.media3.common.C.TRACK_TYPE_TEXT,
+                index = 0,
+                defaultLabel = "字幕",
+            ),
+        )
+
+        assertEquals(
+            "中文 (简体)",
+            formatTrackDisplayDetails(
+                label = "SC",
+                language = "chi",
+                channelCount = 0,
+                selectionFlags = 0,
+                trackType = androidx.media3.common.C.TRACK_TYPE_TEXT,
+                index = 0,
+                defaultLabel = "字幕",
+            ),
+        )
+
+        assertEquals(
+            "中文 (繁体) (繁日双语)",
+            formatTrackDisplayDetails(
+                label = "繁日双语",
+                language = "chi",
+                channelCount = 0,
+                selectionFlags = 0,
                 trackType = androidx.media3.common.C.TRACK_TYPE_TEXT,
                 index = 0,
                 defaultLabel = "字幕",
@@ -157,6 +198,29 @@ class PlayerViewComponentsTest {
                 defaultLabel = "字幕",
             ),
         )
+    }
+
+    @Test
+    fun disambiguateTrackNames_resolvesDuplicatesAndDualChinese() {
+        // 双中文无 label 且同为 chi 时，按 SC_TC 惯例分别归属为简体与繁体
+        val dualChinese = listOf("中文", "中文")
+        assertEquals(listOf("中文 (简体)", "中文 (繁体)"), disambiguateTrackNames(dualChinese))
+
+        // 带默认/强制标记的双中文
+        val dualChineseWithDefault = listOf("中文 [默认]", "中文")
+        assertEquals(listOf("中文 (简体) [默认]", "中文 (繁体)"), disambiguateTrackNames(dualChineseWithDefault))
+
+        // 重复音轨追加序号索引
+        val duplicateAudio = listOf("日语 · 双声道", "日语 · 双声道")
+        assertEquals(listOf("日语 · 双声道 #1", "日语 · 双声道 #2"), disambiguateTrackNames(duplicateAudio))
+
+        // 已区分的不做变动
+        val alreadyDistinct = listOf("中文 (简体)", "中文 (繁体)")
+        assertEquals(alreadyDistinct, disambiguateTrackNames(alreadyDistinct))
+
+        // 单轨不追加任何后缀
+        val singleTrack = listOf("中文")
+        assertEquals(singleTrack, disambiguateTrackNames(singleTrack))
     }
 
     @Test

@@ -2455,6 +2455,35 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 播放器音视频与字幕轨道快照必须进行防重消歧，且通用语言代码（chi/zho/zh）不得武断硬编码为单一变体。
+     *
+     * 事故复盘（2026-10-19）：
+     * 在压制规范的 MKV 片源（如 Crunchyroll WEB-DL 或合集）中，双语字幕按 ISO 639-2 规范均打上
+     * `chi` 标签且未填独立 Track Title。旧实现一刀切将 `chi`/`zh` 映射为「中文 (简体)」，
+     * 导致选轨弹窗中同时出现两个同名的「中文 (简体)」，繁体字幕被误标且用户只能盲选。
+     * 必须经 [disambiguateTrackOptions] 进行消歧（SC_TC 双中文自动归一为简/繁，多同名轨追加编号）。
+     */
+    @Test
+    fun player_tracks_snapshot_must_disambiguate_duplicate_tracks() {
+        val sheetPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerTrackSelectionSheet.kt"
+        val code = File(projectRoot, sheetPath).readText()
+
+        assertTrue(
+            code.contains("disambiguateTrackOptions(subtitleOptions)"),
+            "$sheetPath 的 subtitleTracks 必须经 disambiguateTrackOptions 消歧，防止同语言多轨重名混淆",
+        )
+        assertTrue(
+            code.contains("disambiguateTrackOptions(audioOptions)"),
+            "$sheetPath 的 audioTracks 必须经 disambiguateTrackOptions 消歧，防止同语言多音轨重名混淆",
+        )
+        assertTrue(
+            !Regex("""listOf\([^)]*"(?:chi|zh|zho)"[^)]*\)\s*->\s*"中文\s*\(简体\)"""").containsMatchIn(code),
+            "$sheetPath 严禁将通用宏语言代号 chi/zh/zho 武断硬编码映射为「中文 (简体)」，必须中立标为「中文」并经消歧处理",
+        )
+    }
+
     @Test
     fun comment_sort_order_must_be_a_shared_persisted_preference() {
         val violations = mutableListOf<String>()
