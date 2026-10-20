@@ -1,5 +1,12 @@
 package com.infinitezerone.minibgm.core.designsystem.theme
 
+import android.app.ActivityManager
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import android.os.PowerManager
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
@@ -7,6 +14,10 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme =
@@ -113,11 +124,60 @@ val MiniBgmLightColors: ColorScheme = LightColorScheme
 val MiniBgmDarkColors: ColorScheme = DarkColorScheme
 val MiniBgmAmoledDarkColors: ColorScheme = AmoledDarkColorScheme
 
+/**
+ * 低端机与省电模式下降级为实体材质。
+ *
+ * 2026 年的 Apple / Microsoft / 小米 / OPPO 都在做同一件事：玻璃是装饰层，设备扛不住时
+ * 必须无感退回实体面板。这里监听省电模式广播，低内存设备则在首次组合时直接判定。
+ */
+@Composable
+private fun rememberReducedTransparency(): Boolean {
+    val context = LocalContext.current
+    val powerManager = remember(context) { context.getSystemService(PowerManager::class.java) }
+    val activityManager = remember(context) { context.getSystemService(ActivityManager::class.java) }
+    val reduced =
+        remember {
+            mutableStateOf(
+                powerManager?.isPowerSaveMode == true ||
+                    activityManager?.isLowRamDevice == true,
+            )
+        }
+
+    DisposableEffect(context, powerManager, activityManager) {
+        val receiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(
+                    context: Context?,
+                    intent: Intent?,
+                ) {
+                    reduced.value =
+                        powerManager?.isPowerSaveMode == true ||
+                        activityManager?.isLowRamDevice == true
+                }
+            }
+        val filter = IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                context.registerReceiver(receiver, filter)
+            }
+        }
+        onDispose {
+            runCatching { context.unregisterReceiver(receiver) }
+        }
+    }
+
+    return reduced.value
+}
+
 @Composable
 fun MiniBgmTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     amoledDark: Boolean = false,
     dynamicColor: Boolean = false,
+    uiStyle: AppUiStyle = AppUiStyle.Brand,
     content: @Composable () -> Unit,
 ) {
     // minSdk 31 起 Material You 动态取色恒可用，无需再判 SDK_INT
@@ -133,10 +193,23 @@ fun MiniBgmTheme(
             else -> LightColorScheme
         }
 
-    androidx.compose.material3.MaterialTheme(
-        colorScheme = colorScheme,
-        typography = BgmTypography,
-        shapes = BgmShapes,
-        content = content,
-    )
+    val reducedTransparency = rememberReducedTransparency()
+
+    CompositionLocalProvider(
+        LocalAppUiStyle provides uiStyle,
+        LocalLuminousTokens provides
+            buildLuminousTokens(
+                darkTheme = darkTheme,
+                amoledDark = amoledDark,
+                colorScheme = colorScheme,
+                reducedTransparency = reducedTransparency,
+            ),
+    ) {
+        androidx.compose.material3.MaterialTheme(
+            colorScheme = colorScheme,
+            typography = BgmTypography,
+            shapes = BgmShapes,
+            content = content,
+        )
+    }
 }

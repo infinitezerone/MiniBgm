@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.R
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmOpacity
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 
@@ -84,7 +85,7 @@ fun AiringReminderPermissionDialog(
                 Text(
                     text = stringResource(R.string.core_designsystem_airing_perm_tip),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = BgmOpacity.overlay),
                 )
             }
         },

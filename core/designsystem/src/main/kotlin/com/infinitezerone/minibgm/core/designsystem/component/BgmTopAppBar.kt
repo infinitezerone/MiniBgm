@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.designsystem.component
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -23,10 +24,15 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.theme.AppUiStyle
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalAppUiStyle
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalLuminousTokens
 
 /**
  * MiniBgm 紧凑型现代顶栏：
@@ -45,12 +51,27 @@ fun BgmTopAppBar(
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     windowInsets: WindowInsets = TopAppBarDefaults.windowInsets,
-    colors: TopAppBarColors = TopAppBarDefaults.topAppBarColors(),
+    colors: TopAppBarColors? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
-    height: Dp = 48.dp,
+    height: Dp = BgmSpacing.TopBar.height,
 ) {
     val density = LocalDensity.current
     val contentHeightPx = with(density) { height.toPx() }
+    val uiStyle = LocalAppUiStyle.current
+    val tokens = LocalLuminousTokens.current
+    val useLuminousMaterial = uiStyle == AppUiStyle.Luminous && colors == null
+    val resolvedColors =
+        colors ?: if (useLuminousMaterial) {
+            TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.Transparent,
+                scrolledContainerColor = Color.Transparent,
+                navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            TopAppBarDefaults.topAppBarColors()
+        }
 
     // 收合上限以自身实际高度为准（覆盖 M3 默认的 56dp 假设）
     if (scrollBehavior != null) {
@@ -65,46 +86,75 @@ fun BgmTopAppBar(
         }
 
     Surface(
-        color = colors.containerColor,
+        color = resolvedColors.containerColor,
         modifier = modifier.fillMaxWidth().clipToBounds(),
     ) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(windowInsets)
-                    .height(contentHeight)
-                    .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CompositionLocalProvider(
-                LocalContentColor provides colors.navigationIconContentColor,
-                content = navigationIcon,
-            )
-            Box(
+        Box(modifier = Modifier.fillMaxWidth()) {
+            if (useLuminousMaterial) {
+                Box(
+                    modifier =
+                        Modifier
+                            .matchParentSize()
+                            .background(tokens.topBarBrush()),
+                )
+            }
+            Row(
                 modifier =
                     Modifier
-                        .weight(1f)
-                        .padding(horizontal = 8.dp),
-                contentAlignment = Alignment.CenterStart,
+                        .fillMaxWidth()
+                        .windowInsetsPadding(windowInsets)
+                        .height(contentHeight)
+                        .padding(horizontal = BgmSpacing.TopBar.horizontal),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                ProvideTextStyle(
-                    value =
-                        MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = colors.titleContentColor,
-                        ),
+                CompositionLocalProvider(
+                    LocalContentColor provides resolvedColors.navigationIconContentColor,
+                    content = navigationIcon,
+                )
+                Box(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .padding(horizontal = BgmSpacing.TopBar.titleHorizontal),
+                    contentAlignment = Alignment.CenterStart,
                 ) {
-                    title()
+                    ProvideTextStyle(
+                        value =
+                            MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                color = resolvedColors.titleContentColor,
+                            ),
+                    ) {
+                        title()
+                    }
+                }
+                CompositionLocalProvider(
+                    LocalContentColor provides resolvedColors.actionIconContentColor,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End,
+                        content = actions,
+                    )
                 }
             }
-            CompositionLocalProvider(
-                LocalContentColor provides colors.actionIconContentColor,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End,
-                    content = actions,
+            if (useLuminousMaterial) {
+                Box(
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(BgmSpacing.TopBar.hairline)
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors =
+                                        listOf(
+                                            Color.Transparent,
+                                            tokens.topBarHairline,
+                                            Color.Transparent,
+                                        ),
+                                ),
+                            ),
                 )
             }
         }

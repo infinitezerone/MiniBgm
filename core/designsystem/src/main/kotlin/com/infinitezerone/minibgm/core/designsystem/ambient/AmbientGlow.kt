@@ -3,7 +3,6 @@ package com.infinitezerone.minibgm.core.designsystem.ambient
 import android.graphics.Bitmap
 import androidx.compose.animation.VectorConverter
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,6 +30,7 @@ import coil3.BitmapImage
 import coil3.Image
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmMotion
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -54,9 +54,6 @@ private object AmbientGlowDefaults {
 
     /** 浅色表面上的光晕峰值透明度（柔和通透，保留前景色阶对比） */
     const val MAX_ALPHA_ON_LIGHT_SURFACE = 0.16f
-
-    /** 主色切换时的渐变时长 */
-    const val COLOR_ANIMATION_MILLIS = 450
 
     /** 主色降采样时短边像素上限 */
     const val SAMPLE_SHORTER_SIDE_CAP = 24
@@ -195,7 +192,7 @@ private fun rememberAmbientGlowBrush(
     LaunchedEffect(dominantColor) {
         animatedColor.animateTo(
             targetValue = dominantColor ?: Color.Transparent,
-            animationSpec = tween(durationMillis = AmbientGlowDefaults.COLOR_ANIMATION_MILLIS),
+            animationSpec = BgmMotion.standardTween(durationMillis = BgmMotion.ambientMillis),
         )
     }
 

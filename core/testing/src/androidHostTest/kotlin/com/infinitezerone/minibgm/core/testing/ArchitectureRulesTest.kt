@@ -55,6 +55,8 @@ import kotlin.test.fail
  * 25. 索引文件必须受机械上下文预算约束：`AGENTS.md` 是每轮会话都会注入的索引，新行为约束的落点
  *     永远是本测试，文档只留一句指向它；总字数与单行长度都设硬上限（想加文字必须先删等量文字），
  *     否则文档会退化成没人读、也拆不出可评审 diff 的巨型单行（源自两次规则追加只靠追加长句的复盘）
+ * 26. 材质分层：feature 内容层严禁使用 BgmGlassSurface；玻璃只属于系统 chrome / 瞬态浮层，
+ *     内容统一使用 BgmFloatingFrame 实体悬浮框（源自 ColorOS 17 / HyperOS 4 系统 UI 与系统应用的材质分工）
  *
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
@@ -863,6 +865,34 @@ class ArchitectureRulesTest {
                     violations.joinToString("\n"),
             )
         }
+    }
+
+    @Test
+    fun feature_content_never_uses_system_chrome_glass() {
+        val featureDir = File(projectRoot, "feature")
+        assertTrue(featureDir.isDirectory, "feature 目录未找到: ${featureDir.absolutePath}")
+
+        val violations = mutableListOf<String>()
+        featureDir
+            .walkTopDown()
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { sourceFile ->
+                val scanner = KotlinSourceScanner.fromFile(sourceFile)
+                scanner.containsToken("BgmGlassSurface").forEach { match ->
+                    violations.add(
+                        "${sourceFile.relativeTo(projectRoot).path}:${match.lineNumber} " +
+                            "feature 内容层使用了系统 chrome 玻璃 -> ${match.lineContent}",
+                    )
+                }
+            }
+
+        assertTrue(
+            violations.isEmpty(),
+            "违反材质分层：玻璃只允许用于悬浮导航、Snackbar 等系统 chrome / 瞬态浮层；" +
+                "内容卡片与容器必须使用 BgmFloatingFrame 的实体悬浮框：\n" +
+                violations.joinToString("\n"),
+        )
     }
 
     @Test

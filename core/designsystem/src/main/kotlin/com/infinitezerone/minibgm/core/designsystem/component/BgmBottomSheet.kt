@@ -1,13 +1,12 @@
 package com.infinitezerone.minibgm.core.designsystem.component
 
 import androidx.annotation.VisibleForTesting
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetDefaults
 import androidx.compose.material3.ModalBottomSheetProperties
@@ -22,6 +21,10 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.theme.AppUiStyle
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmMotion
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalAppUiStyle
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalLuminousTokens
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import java.lang.reflect.Method
@@ -39,17 +42,14 @@ val DefaultBottomSheetVelocityThreshold: Dp = 500.dp
  * 适用于元素永久离开屏幕（Dismiss / Exit），起步平稳柔和，逐渐变快，并在最高速度时滑出屏幕视野。
  * cubic-bezier(0.3, 0.0, 0.8, 0.15)
  */
-val BottomSheetEmphasizedAccelerateEasing = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
+val BottomSheetEmphasizedAccelerateEasing = BgmMotion.emphasizedAccelerateEasing
 
 /**
  * Material 3 规范中的 BottomSheet 收起/关闭动画：
  * 时长 250ms (md.sys.motion.duration.medium1)，配合 Emphasized Accelerate 加速度曲线。
  */
 val DefaultBottomSheetHideAnimationSpec: FiniteAnimationSpec<Float> =
-    tween(
-        durationMillis = 250,
-        easing = BottomSheetEmphasizedAccelerateEasing,
-    )
+    BgmMotion.emphasizedAccelerate(durationMillis = BgmMotion.standardMillis)
 
 @OptIn(ExperimentalMaterial3Api::class)
 private val setHideMotionSpecMethod: Method? by lazy {
@@ -173,27 +173,41 @@ fun BgmModalBottomSheet(
     sheetState: SheetState = rememberBgmBottomSheetState(),
     sheetMaxWidth: Dp = 600.dp,
     sheetGesturesEnabled: Boolean = true,
-    shape: Shape = BottomSheetDefaults.ExpandedShape,
-    containerColor: Color = BottomSheetDefaults.ContainerColor,
-    contentColor: Color = contentColorFor(containerColor),
+    shape: Shape? = null,
+    containerColor: Color? = null,
+    contentColor: Color? = null,
     tonalElevation: Dp = 0.dp,
-    scrimColor: Color = BottomSheetDefaults.ScrimColor,
+    scrimColor: Color? = null,
     dragHandle: @Composable (() -> Unit)? = { BottomSheetDefaults.DragHandle() },
     contentWindowInsets: @Composable () -> WindowInsets = { BottomSheetDefaults.windowInsets },
     properties: ModalBottomSheetProperties = ModalBottomSheetDefaults.properties,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val uiStyle = LocalAppUiStyle.current
+    val tokens = LocalLuminousTokens.current
+    val useLuminousMaterial = uiStyle == AppUiStyle.Luminous
+    val resolvedContainerColor =
+        containerColor ?: if (useLuminousMaterial) tokens.sheetContainer else BottomSheetDefaults.ContainerColor
+    val resolvedContentColor =
+        contentColor ?: if (useLuminousMaterial) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            contentColorFor(resolvedContainerColor)
+        }
+    val resolvedShape = shape ?: if (useLuminousMaterial) tokens.sheetShape else BottomSheetDefaults.ExpandedShape
+    val resolvedScrimColor = scrimColor ?: if (useLuminousMaterial) tokens.sheetScrim else BottomSheetDefaults.ScrimColor
+
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
         sheetState = sheetState,
         sheetMaxWidth = sheetMaxWidth,
         sheetGesturesEnabled = sheetGesturesEnabled,
-        shape = shape,
-        containerColor = containerColor,
-        contentColor = contentColor,
+        shape = resolvedShape,
+        containerColor = resolvedContainerColor,
+        contentColor = resolvedContentColor,
         tonalElevation = tonalElevation,
-        scrimColor = scrimColor,
+        scrimColor = resolvedScrimColor,
         dragHandle = dragHandle,
         contentWindowInsets = contentWindowInsets,
         properties = properties,

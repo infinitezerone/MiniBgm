@@ -23,6 +23,7 @@ import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.designsystem.ambient.toDominantColor
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmOpacity
 
 /**
  * 封面或头像在无有效图片 URL 时的占位语义类型
@@ -84,7 +85,7 @@ fun CoverImage(
             Icon(
                 imageVector = resolvedIcon,
                 contentDescription = contentDescription,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = BgmOpacity.placeholder),
                 modifier =
                     Modifier
                         .fillMaxSize(0.55f)

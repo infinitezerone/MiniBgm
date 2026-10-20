@@ -6,14 +6,22 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.theme.AppUiStyle
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmElevation
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmGlassLevel
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalAppUiStyle
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 
 /**
@@ -24,10 +32,10 @@ import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInf
  */
 object BgmSnackbarDefaults {
     /** 顶层页面在手机紧凑排版下避让悬浮胶囊底栏的推荐间距 */
-    val FloatingBarClearance: Dp = 88.dp
+    val FloatingBarClearance: Dp = BgmSpacing.Snackbar.floatingBarClearance
 
     /** 二级页面或大屏模式下，避让系统手势小白条/导航栏后的推荐默认底部呼吸间距 */
-    val DefaultBottomMargin: Dp = 12.dp
+    val DefaultBottomMargin: Dp = BgmSpacing.Snackbar.bottomMargin
 
     /**
      * 计算特定排版下的 Snackbar 底部安全避让间距
@@ -61,7 +69,7 @@ fun BgmSnackbarHost(
     modifier: Modifier = Modifier,
     isTopLevel: Boolean = false,
     bottomOffset: Dp = 0.dp,
-    snackbar: @Composable (SnackbarData) -> Unit = { Snackbar(it) },
+    snackbar: @Composable (SnackbarData) -> Unit = { snackbarData -> BgmSnackbar(snackbarData) },
 ) {
     val isWideScreen = LocalWindowAdaptiveInfo.current.isWide
     val bottomPadding =
@@ -79,4 +87,31 @@ fun BgmSnackbarHost(
                 .padding(bottom = bottomPadding),
         snackbar = snackbar,
     )
+}
+
+@Composable
+fun BgmSnackbar(snackbarData: SnackbarData) {
+    if (LocalAppUiStyle.current == AppUiStyle.Luminous) {
+        BgmLuminousSnackbar(snackbarData)
+    } else {
+        Snackbar(snackbarData)
+    }
+}
+
+@Composable
+private fun BgmLuminousSnackbar(snackbarData: SnackbarData) {
+    BgmGlassSurface(
+        shape = MaterialTheme.shapes.large,
+        level = BgmGlassLevel.Prominent,
+        shadowElevation = BgmElevation.floatingChrome,
+    ) {
+        Snackbar(
+            snackbarData = snackbarData,
+            shape = RectangleShape,
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            actionColor = MaterialTheme.colorScheme.primary,
+            dismissActionContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }

@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.R
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmOpacity
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 
 /**
@@ -157,7 +158,7 @@ fun BgmSourceActionCard(
         ) {
             Surface(
                 shape = CircleShape,
-                color = iconTint.copy(alpha = 0.12f),
+                color = iconTint.copy(alpha = BgmOpacity.tintWash),
                 modifier = Modifier.size(36.dp),
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -196,7 +197,7 @@ fun BgmSourceActionCard(
                 Icon(
                     imageVector = BgmIcons.OpenInNew,
                     contentDescription = stringResource(R.string.core_designsystem_sources_action_open),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = BgmOpacity.muted),
                     modifier = Modifier.size(18.dp),
                 )
             }
@@ -242,7 +243,7 @@ fun BgmSourcesExpandCard(
                             R.string.core_designsystem_sources_cd_expand
                         },
                     ),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = BgmOpacity.muted),
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -283,7 +284,6 @@ fun BgmSourcesBottomSheet(
     BgmModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = modifier,
     ) {
         Column(
@@ -300,7 +300,7 @@ fun BgmSourcesBottomSheet(
                 onClose = closeAction,
             )
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = BgmOpacity.divider))
 
             Spacer(modifier = Modifier.height(14.dp))
 

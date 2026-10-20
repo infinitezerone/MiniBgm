@@ -12,6 +12,10 @@
 1. 纯 UI 表现层模块，严禁直接依赖数据仓库层或网络/存储基础设施。
 2. 所有组件与色彩必须遵循 Material 3 设计规范，支持 Android 12+ 动态取色（Dynamic Color）与深浅色模式自适应。
 
+## 🎨 设计令牌来源
+
+跨组件 token 的来源、成熟规范基线与项目调参理由统一记录在 [`TOKEN_PROVENANCE.md`](TOKEN_PROVENANCE.md)。新增或修改 token 时必须同步更新该表；没有公开规范的视觉层标为 `PROJECT`，不要笼统写成「参考 M3」。
+
 ## Module dependency graph
 
 <!--region graph-->

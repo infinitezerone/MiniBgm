@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmOpacity
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import java.util.Locale
 
@@ -41,7 +42,7 @@ fun ScoreBadge(
     if (score <= 0.0) return
     Surface(
         shape = shape,
-        color = Color.Black.copy(alpha = 0.75f),
+        color = Color.Black.copy(alpha = BgmOpacity.overlay),
         modifier = modifier,
     ) {
         Row(

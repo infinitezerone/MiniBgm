@@ -1,12 +1,10 @@
 package com.infinitezerone.minibgm.core.designsystem.component
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,6 +41,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmMotion
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmOpacity
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -60,7 +60,7 @@ class SkeletonState(
     enabled: Boolean = true,
     shimmerEnabled: Boolean = true,
     angleDegrees: Float = 20f,
-    durationMillis: Int = 1500,
+    durationMillis: Int = BgmMotion.skeletonMillis,
     shimmerWidth: Float = 800f,
     val shimmerRatio: Float? = null,
     baseColor: Color = Color.Unspecified,
@@ -85,7 +85,7 @@ fun rememberSkeletonState(
     enabled: Boolean = true,
     shimmerEnabled: Boolean = true,
     angleDegrees: Float = 20f,
-    durationMillis: Int = 1500,
+    durationMillis: Int = BgmMotion.skeletonMillis,
     shimmerWidth: Float = 800f,
     shimmerRatio: Float? = null,
     baseColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -97,7 +97,7 @@ fun rememberSkeletonState(
             highlightColor
         } else if (isDarkSurface) {
             MaterialTheme.colorScheme.onSurface
-                .copy(alpha = 0.12f)
+                .copy(alpha = BgmOpacity.skeleton)
                 .compositeOver(MaterialTheme.colorScheme.surfaceBright)
         } else {
             MaterialTheme.colorScheme.surfaceBright
@@ -110,7 +110,7 @@ fun rememberSkeletonState(
             targetValue = 1f,
             animationSpec =
                 infiniteRepeatable(
-                    animation = tween(durationMillis, easing = FastOutSlowInEasing),
+                    animation = BgmMotion.standardTween(durationMillis),
                     repeatMode = RepeatMode.Restart,
                 ),
             label = "skeleton_progress",
@@ -167,7 +167,7 @@ fun Modifier.skeletonNode(
     val fallbackHighlight =
         if (isDarkSurface) {
             MaterialTheme.colorScheme.onSurface
-                .copy(alpha = 0.12f)
+                .copy(alpha = BgmOpacity.skeleton)
                 .compositeOver(MaterialTheme.colorScheme.surfaceBright)
         } else {
             MaterialTheme.colorScheme.surfaceBright
@@ -205,7 +205,7 @@ fun Modifier.skeletonNode(
     shape: Shape = RoundedCornerShape(4.dp),
     baseColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
     highlightColor: Color = Color.Unspecified,
-    durationMillis: Int = 1500,
+    durationMillis: Int = BgmMotion.skeletonMillis,
     shimmerWidth: Float = 800f,
     shimmerRatio: Float? = null,
     useRootCoordinates: Boolean = true,
@@ -225,7 +225,7 @@ fun Modifier.skeletonNode(
             highlightColor
         } else if (isDarkSurface) {
             MaterialTheme.colorScheme.onSurface
-                .copy(alpha = 0.12f)
+                .copy(alpha = BgmOpacity.skeleton)
                 .compositeOver(MaterialTheme.colorScheme.surfaceBright)
         } else {
             MaterialTheme.colorScheme.surfaceBright
@@ -257,7 +257,7 @@ fun Modifier.skeletonNode(
     shimmerEnabled: Boolean = true,
     angleDegrees: Float = 20f,
     shape: Shape = RoundedCornerShape(4.dp),
-    durationMillis: Int = 1500,
+    durationMillis: Int = BgmMotion.skeletonMillis,
     shimmerWidth: Float = 800f,
     shimmerRatio: Float? = null,
     useRootCoordinates: Boolean = true,
@@ -469,7 +469,7 @@ private class SkeletonNode(
                         progress.snapTo(0f)
                         progress.animateTo(
                             targetValue = 1f,
-                            animationSpec = tween(durationMillis, easing = FastOutSlowInEasing),
+                            animationSpec = BgmMotion.standardTween(durationMillis),
                         )
                     }
                 } catch (_: CancellationException) {

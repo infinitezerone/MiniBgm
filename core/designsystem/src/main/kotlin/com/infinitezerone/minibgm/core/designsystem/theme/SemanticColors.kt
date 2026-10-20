@@ -7,7 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 
 // ==========================================
-// ACG 收藏与状态语义色 (Radix / Perception-calibrated)
+// ACG 收藏与状态语义色 (Tailwind 色板 + 自定义暗色容器)
 // ==========================================
 
 /** 想看 (Wish) - 柔和鸢尾紫 (Soft Indigo-400) */
