@@ -498,13 +498,6 @@ fun PlayerScreen(
         if (isLandscape) {
             if (isScreenLocked) {
                 areControlsVisible = true
-                coroutineScope.launch {
-                    snackbarHostState.currentSnackbarData?.dismiss()
-                    snackbarHostState.showSnackbar(
-                        message = context.getString(R.string.feature_subject_player_screen_locked),
-                        duration = SnackbarDuration.Short,
-                    )
-                }
                 return@BackHandler
             }
             toggleFullscreen(false)
@@ -715,20 +708,6 @@ fun PlayerScreen(
                         onToggleLock = {
                             overlayHostState.cancelActive()
                             isScreenLocked = !isScreenLocked
-                            coroutineScope.launch {
-                                snackbarHostState.currentSnackbarData?.dismiss()
-                                snackbarHostState.showSnackbar(
-                                    message =
-                                        context.getString(
-                                            if (isScreenLocked) {
-                                                R.string.feature_subject_player_screen_locked
-                                            } else {
-                                                R.string.feature_subject_player_screen_unlocked
-                                            },
-                                        ),
-                                    duration = SnackbarDuration.Short,
-                                )
-                            }
                         },
                     ),
                 )

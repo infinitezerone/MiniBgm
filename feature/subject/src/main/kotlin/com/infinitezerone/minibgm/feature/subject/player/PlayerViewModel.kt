@@ -24,7 +24,6 @@ import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.DanmakuEpisodeCandidate
 import com.infinitezerone.minibgm.core.model.DanmakuItem
 import com.infinitezerone.minibgm.core.model.DanmakuMatch
-import com.infinitezerone.minibgm.core.model.DanmakuMatchState
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PlaybackHistory
@@ -1089,15 +1088,8 @@ class PlayerViewModel(
                 .onSuccess {
                     _uiState.update { it.copy(isWatched = true, autoMarked = true) }
                     _events.send(PlayerUiEvent.MarkedWatched(epNumber))
-                    _events.send(
-                        PlayerUiEvent.ShowSnackbar(
-                            messageRes = R.string.feature_subject_player_auto_marked_watched,
-                            formatArgs = listOf(epNumber.toString()),
-                        ),
-                    )
-                }.onError { _, message ->
+                }.onError { _, _ ->
                     session.hasTriggeredAutoMark = false
-                    _events.send(PlayerUiEvent.ShowSnackbar(message))
                 }
         }
     }
@@ -1529,14 +1521,6 @@ class PlayerViewModel(
                     }
                     if (shouldHintEmpty && result.items.isEmpty()) {
                         _events.send(PlayerUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_player_danmaku_empty_hint))
-                    }
-                    val match = result.match
-                    if (match?.state == DanmakuMatchState.FALLBACK &&
-                        match.candidates.isNotEmpty() &&
-                        !session.hasHintedDanmakuFallback
-                    ) {
-                        session.hasHintedDanmakuFallback = true
-                        _events.send(PlayerUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_player_danmaku_match_fallback_hint))
                     }
                 }
             }
