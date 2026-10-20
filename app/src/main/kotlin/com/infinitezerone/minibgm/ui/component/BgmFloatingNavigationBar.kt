@@ -234,7 +234,7 @@ private fun BgmFloatingNavItem(
         Spacer(modifier = Modifier.height(BgmSpacing.FloatingNav.labelGap))
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
             color = textColor,
             maxLines = 1,

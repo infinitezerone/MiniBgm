@@ -26,8 +26,8 @@ import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInf
 
 /**
  * 悬浮底栏避让间距与规范常量：
- * 手机端居中悬浮胶囊底栏自身高度 ~68dp + 底部下沉外边距 12dp = 80dp。
- * 加上 8dp 安全呼吸间距，合计 88dp，确保顶层页面 Snackbar 无论在手势条还是三大金刚键下
+ * 手机端居中悬浮胶囊底栏自身高度 ~52dp + 底部下沉外边距 12dp = 64dp。
+ * 加上 8dp 安全呼吸间距，合计 72dp，确保顶层页面 Snackbar 无论在手势条还是三大金刚键下
  * 均优雅悬浮在底栏正上方，严禁产生任何物理重叠遮挡。
  */
 object BgmSnackbarDefaults {
@@ -55,7 +55,7 @@ object BgmSnackbarDefaults {
  * MiniBgm 统一自适应 [SnackbarHost]：
  *
  * 1. 顶层目的地（isTopLevel = true 且处于手机紧凑排版时）：
- *    自动增加 [BgmSnackbarDefaults.FloatingBarClearance] (88dp) 底部安全避让间距，
+ *    自动增加 [BgmSnackbarDefaults.FloatingBarClearance] (72dp) 底部安全避让间距，
  *    使打卡、收藏修改、网络恢复等各类提示浮动于悬浮底栏上方，绝不遮挡底栏与触控区域；
  * 2. 二级详情页或平板宽屏模式（isTopLevel = false 或 isWideScreen）：
  *    底栏下沉隐藏或侧置为 NavigationRail，保留 [BgmSnackbarDefaults.DefaultBottomMargin] (12dp) 默认呼吸间距，

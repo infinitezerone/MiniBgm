@@ -9,7 +9,7 @@ class BgmFloatingPageScaffoldDefaultsTest {
     @Test
     fun floatingPageScaffold_keepsChromeSinkAndContentClearanceSeparate() {
         assertEquals(12.dp, BgmFloatingPageScaffoldDefaults.FloatingChromeSink)
-        assertEquals(88.dp, BgmFloatingPageScaffoldDefaults.ContentBottomClearance)
+        assertEquals(72.dp, BgmFloatingPageScaffoldDefaults.ContentBottomClearance)
         assertTrue(
             BgmFloatingPageScaffoldDefaults.ContentBottomClearance >
                 BgmFloatingPageScaffoldDefaults.FloatingChromeSink,

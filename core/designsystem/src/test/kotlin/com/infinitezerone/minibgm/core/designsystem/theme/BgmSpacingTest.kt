@@ -47,14 +47,14 @@ class BgmSpacingTest {
         assertEquals(220.dp, BgmSpacing.FloatingNav.minWidth)
         assertEquals(380.dp, BgmSpacing.FloatingNav.maxWidth)
         assertEquals(10.dp, BgmSpacing.FloatingNav.horizontalPadding)
-        assertEquals(6.dp, BgmSpacing.FloatingNav.verticalPadding)
+        assertEquals(4.dp, BgmSpacing.FloatingNav.verticalPadding)
         assertEquals(6.dp, BgmSpacing.FloatingNav.itemGap)
         assertEquals(64.dp, BgmSpacing.FloatingNav.itemMinWidth)
     }
 
     @Test
     fun snackbarClearance_matchesFloatingNavHeightPlusSinkAndBreatheRoom() {
-        val measuredFloatingNavHeight = 68.dp
+        val measuredFloatingNavHeight = 52.dp
         val barSinkMargin = 12.dp
         val breatheRoom = 8.dp
 

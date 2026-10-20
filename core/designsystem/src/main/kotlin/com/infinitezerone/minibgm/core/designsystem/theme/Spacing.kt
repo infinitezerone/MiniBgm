@@ -38,29 +38,29 @@ object BgmSpacing {
     }
 
     /**
-     * 手机端悬浮胶囊底栏：外圈 10/6dp 呼吸，项间距 6dp，
-     * 单项最小宽 64dp 以容纳中文标签并满足最小触控宽度。
+     * 手机端悬浮胶囊底栏：外圈 10/4dp 呼吸，项间距 6dp，
+     * 单项最小宽 64dp，高度紧凑收敛至 52dp 灵动微胶囊。
      */
     object FloatingNav {
         val minWidth: Dp = 220.dp
         val maxWidth: Dp = 380.dp
         val horizontalPadding: Dp = 10.dp
-        val verticalPadding: Dp = 6.dp
+        val verticalPadding: Dp = 4.dp
         val itemGap: Dp = 6.dp
         val itemMinWidth: Dp = 64.dp
-        val itemPadding: Dp = BgmSpacing.xs
-        val iconSize: Dp = 22.dp
-        val iconHorizontalPadding: Dp = BgmSpacing.lg
-        val iconVerticalPadding: Dp = BgmSpacing.xs
-        val labelGap: Dp = BgmSpacing.xxs
+        val itemPadding: Dp = BgmSpacing.xxs
+        val iconSize: Dp = 18.dp
+        val iconHorizontalPadding: Dp = 12.dp
+        val iconVerticalPadding: Dp = BgmSpacing.xxs
+        val labelGap: Dp = BgmSpacing.hairline
 
         /** 悬浮底栏背后的底部渐隐高度；由内容滚动到胶囊下方时的可读性决定。 */
-        val scrimHeight: Dp = 152.dp
+        val scrimHeight: Dp = 136.dp
     }
 
     /** Snackbar 避让：悬浮底栏高度与下沉外边距之和，再留 8dp 呼吸。 */
     object Snackbar {
-        val floatingBarClearance: Dp = 88.dp
+        val floatingBarClearance: Dp = 72.dp
         val bottomMargin: Dp = BgmSpacing.md
     }
 }
