@@ -24,8 +24,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -48,6 +46,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingFrame
+import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingFrameDefaults
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.ScoreBadge
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -325,7 +325,7 @@ fun ScheduleTimelineSingleCard(
     val score = schedule.ratingScore
     val isFirstEp = schedule.nextEpisodeNumber == 1
 
-    Card(
+    BgmFloatingFrame(
         onClick = {
             onSubjectClick(
                 SubjectDetailRoute(
@@ -337,26 +337,26 @@ fun ScheduleTimelineSingleCard(
                 ),
             )
         },
-        shape = RoundedCornerShape(12.dp),
-        colors =
-            CardDefaults.cardColors(
-                containerColor =
-                    if (isWatching) {
-                        MaterialTheme.colorScheme.surfaceContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerLow
-                    },
-            ),
+        containerColor =
+            if (isWatching) {
+                MaterialTheme.colorScheme.surfaceContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            },
         border =
             if (isWatching) {
                 BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
             } else {
-                null
+                BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = BgmFloatingFrameDefaults.BorderAlpha),
+                )
             },
-        modifier = modifier.fillMaxWidth().height(86.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+        modifier = modifier.fillMaxWidth().height(96.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 9.dp, vertical = 7.dp),
+            modifier = Modifier.fillMaxSize(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // 1. 封面海报（内部 72dp 高，宽约 50dp）
@@ -603,82 +603,79 @@ fun ScheduleUntimedSection(
 ) {
     var isExpanded by remember { mutableStateOf(true) }
 
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    BgmFloatingFrame(
+        contentPadding = PaddingValues(12.dp),
         modifier = modifier.fillMaxWidth().padding(top = 4.dp),
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Surface(
-                onClick = { isExpanded = !isExpanded },
-                color = Color.Transparent,
-                modifier = Modifier.fillMaxWidth(),
+        Surface(
+            onClick = { isExpanded = !isExpanded },
+            color = Color.Transparent,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.CloudQueue,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Text(
-                            text = stringResource(R.string.feature_schedule_untimed_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        ) {
-                            Text(
-                                text = stringResource(R.string.feature_schedule_untimed_count, schedules.size),
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                            )
-                        }
-                    }
-
-                    val arrowRotation by animateFloatAsState(
-                        targetValue = if (isExpanded) 180f else 0f,
-                        label = "untimed_expand_arrow",
-                    )
                     Icon(
-                        imageVector = BgmIcons.KeyboardArrowDown,
-                        contentDescription =
-                            if (isExpanded) {
-                                stringResource(R.string.feature_schedule_cd_collapse)
-                            } else {
-                                stringResource(R.string.feature_schedule_cd_expand)
-                            },
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.graphicsLayer(rotationZ = arrowRotation),
+                        imageVector = BgmIcons.CloudQueue,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
                     )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut(),
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(top = 10.dp),
-                ) {
-                    schedules.forEach { schedule ->
-                        ScheduleTimelineSingleCard(
-                            schedule = schedule,
-                            isWatching = watchingSubjectIds.contains(schedule.bgmId),
-                            onSubjectClick = onSubjectClick,
+                    Text(
+                        text = stringResource(R.string.feature_schedule_untimed_title),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.feature_schedule_untimed_count, schedules.size),
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                         )
                     }
+                }
+
+                val arrowRotation by animateFloatAsState(
+                    targetValue = if (isExpanded) 180f else 0f,
+                    label = "untimed_expand_arrow",
+                )
+                Icon(
+                    imageVector = BgmIcons.KeyboardArrowDown,
+                    contentDescription =
+                        if (isExpanded) {
+                            stringResource(R.string.feature_schedule_cd_collapse)
+                        } else {
+                            stringResource(R.string.feature_schedule_cd_expand)
+                        },
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.graphicsLayer(rotationZ = arrowRotation),
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut(),
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 10.dp),
+            ) {
+                schedules.forEach { schedule ->
+                    ScheduleTimelineSingleCard(
+                        schedule = schedule,
+                        isWatching = watchingSubjectIds.contains(schedule.bgmId),
+                        onSubjectClick = onSubjectClick,
+                    )
                 }
             }
         }

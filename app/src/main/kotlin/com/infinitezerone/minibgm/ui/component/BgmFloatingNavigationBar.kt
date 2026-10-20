@@ -48,6 +48,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGlassSurface
+import com.infinitezerone.minibgm.core.designsystem.theme.AppUiStyle
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmGlassLevel
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalAppUiStyle
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalLuminousTokens
 import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
 
 /**
@@ -64,34 +70,65 @@ fun BgmFloatingNavigationBar(
     modifier: Modifier = Modifier,
     isVertical: Boolean = false,
 ) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-        tonalElevation = 0.dp,
-        shadowElevation = 8.dp,
-        border =
-            BorderStroke(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
-            ),
-        modifier =
-            modifier
-                .wrapContentWidth()
-                .widthIn(min = 220.dp, max = 380.dp),
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+    val navModifier =
+        modifier
+            .wrapContentWidth()
+            .widthIn(min = BgmSpacing.FloatingNav.minWidth, max = BgmSpacing.FloatingNav.maxWidth)
+
+    if (LocalAppUiStyle.current == AppUiStyle.Luminous) {
+        BgmGlassSurface(
+            modifier = navModifier,
+            shape = CircleShape,
+            level = BgmGlassLevel.Prominent,
+            shadowElevation = 12.dp,
         ) {
-            TopLevelDestination.entries.forEach { destination ->
-                val isSelected = destination.route == currentDestination
-                BgmFloatingNavItem(
-                    destination = destination,
-                    isSelected = isSelected,
-                    onClick = { onDestinationSelected(destination.route) },
-                )
-            }
+            BgmFloatingNavigationRow(
+                currentDestination = currentDestination,
+                onDestinationSelected = onDestinationSelected,
+            )
+        }
+    } else {
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+            tonalElevation = 0.dp,
+            shadowElevation = 8.dp,
+            border =
+                BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
+                ),
+            modifier = navModifier,
+        ) {
+            BgmFloatingNavigationRow(
+                currentDestination = currentDestination,
+                onDestinationSelected = onDestinationSelected,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BgmFloatingNavigationRow(
+    currentDestination: NavKey,
+    onDestinationSelected: (NavKey) -> Unit,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(BgmSpacing.FloatingNav.itemGap, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier =
+            Modifier.padding(
+                horizontal = BgmSpacing.FloatingNav.horizontalPadding,
+                vertical = BgmSpacing.FloatingNav.verticalPadding,
+            ),
+    ) {
+        TopLevelDestination.entries.forEach { destination ->
+            val isSelected = destination.route == currentDestination
+            BgmFloatingNavItem(
+                destination = destination,
+                isSelected = isSelected,
+                onClick = { onDestinationSelected(destination.route) },
+            )
         }
     }
 }
@@ -104,11 +141,13 @@ private fun BgmFloatingNavItem(
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
+    val isLuminous = LocalAppUiStyle.current == AppUiStyle.Luminous
+    val tokens = LocalLuminousTokens.current
 
     val indicatorColor by animateColorAsState(
         targetValue =
             if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
+                if (isLuminous) tokens.navSelection else MaterialTheme.colorScheme.primaryContainer
             } else {
                 Color.Transparent
             },
@@ -119,7 +158,7 @@ private fun BgmFloatingNavItem(
     val iconColor by animateColorAsState(
         targetValue =
             if (isSelected) {
-                MaterialTheme.colorScheme.onPrimaryContainer
+                if (isLuminous) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimaryContainer
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
@@ -152,8 +191,8 @@ private fun BgmFloatingNavItem(
                         haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
                         onClick()
                     },
-                ).defaultMinSize(minWidth = 64.dp)
-                .padding(horizontal = 4.dp, vertical = 4.dp),
+                ).defaultMinSize(minWidth = BgmSpacing.FloatingNav.itemMinWidth)
+                .padding(BgmSpacing.FloatingNav.itemPadding),
     ) {
         val label = stringResource(destination.labelRes)
         Box(contentAlignment = Alignment.Center) {
@@ -197,7 +236,12 @@ private fun BgmFloatingNavItem(
                     )
                 },
                 label = "nav_icon_morph",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).size(22.dp),
+                modifier =
+                    Modifier
+                        .padding(
+                            horizontal = BgmSpacing.FloatingNav.iconHorizontalPadding,
+                            vertical = BgmSpacing.FloatingNav.iconVerticalPadding,
+                        ).size(BgmSpacing.FloatingNav.iconSize),
             ) { selected ->
                 Icon(
                     imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
@@ -207,7 +251,7 @@ private fun BgmFloatingNavItem(
                 )
             }
         }
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(BgmSpacing.FloatingNav.labelGap))
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,

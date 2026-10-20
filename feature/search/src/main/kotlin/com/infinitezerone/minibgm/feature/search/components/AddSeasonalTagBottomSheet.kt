@@ -103,7 +103,6 @@ fun AddSeasonalTagBottomSheet(
     BgmModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = modifier,
     ) {
         Column(

@@ -19,6 +19,7 @@ import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
+import com.infinitezerone.minibgm.core.designsystem.theme.AppUiStyle
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
                 darkTheme = darkTheme,
                 amoledDark = settings.amoledDarkMode,
                 dynamicColor = settings.dynamicColor,
+                uiStyle = AppUiStyle.Luminous,
             ) {
                 BgmApp(
                     snackbarHostState = snackbarHostState,

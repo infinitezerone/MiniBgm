@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.R
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbar
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarDefaults
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.designsystem.theme.ProvideWindowAdaptiveInfo
@@ -157,6 +158,7 @@ fun BgmApp(
                             Modifier
                                 .navigationBarsPadding()
                                 .padding(bottom = snackbarBottomPadding),
+                        snackbar = { BgmSnackbar(it) },
                     )
                 }
             },
