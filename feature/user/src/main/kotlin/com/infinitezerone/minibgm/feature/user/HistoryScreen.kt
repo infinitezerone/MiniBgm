@@ -16,6 +16,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,22 +38,24 @@ import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHos
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
+import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.user.components.PlaybackHistoryCard
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
 /**
- * 观看记录独立二级界面：
+ * 观看记录独立二级界面（Stateful 容器）：
  * - 集中展示用户在内置播放器中的播放历史与各分集断点进度；
- * - 支持点击一键按该分集断点续播；
- * - 支持单条删除与全量清空（均经由 [BgmOverlayHost] 确认弹窗）。
+ * - 支持点击一键按该分集断点续播，或跳转番剧条目详情；
+ * - 单集删除即时触发并支持 Snackbar 撤销；
+ * - 整剧删除与全量清空经由 [BgmOverlayHost] 确认弹窗。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
     onBackClick: () -> Unit,
     onPlayHistory: (PlayerRoute) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit = {},
     viewModel: HistoryViewModel = koinViewModel(),
     modifier: Modifier = Modifier,
 ) {
@@ -68,11 +71,104 @@ fun HistoryScreen(
                 val text =
                     event.message?.takeIf { it.isNotBlank() }
                         ?: context.resources.getString(event.messageRes)
-                snackbarHostState.showSnackbar(text)
+                val actionLabel =
+                    if (event.actionRes > 0) {
+                        context.resources.getString(event.actionRes)
+                    } else {
+                        null
+                    }
+                scope.launch {
+                    val result =
+                        snackbarHostState.showSnackbar(
+                            message = text,
+                            actionLabel = actionLabel,
+                        )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        viewModel.undoDelete()
+                    }
+                }
             }
         }
     }
 
+    HistoryContent(
+        uiState = uiState,
+        onBackClick = onBackClick,
+        onClearAll = {
+            scope.launch {
+                val confirmed =
+                    overlayHostState.await(
+                        ConfirmDialogAction(
+                            title = context.resources.getString(R.string.feature_user_history_clear_all_title),
+                            message = context.resources.getString(R.string.feature_user_history_clear_all_message),
+                            confirmText = context.resources.getString(R.string.feature_user_history_clear_all_action),
+                            isDestructive = true,
+                        ),
+                    )
+                if (confirmed) {
+                    viewModel.clearPlaybackHistory()
+                }
+            }
+        },
+        onResume = { entry -> onPlayHistory(entry.toPlayerRoute()) },
+        onSubjectClick = onSubjectClick,
+        onToggleExpanded = { subjectId -> viewModel.toggleSubjectExpanded(subjectId) },
+        onDeleteEpisode = { entry -> viewModel.deleteHistory(entry.episodeId) },
+        onDeleteGroup = { group ->
+            scope.launch {
+                val groupName = group.subjectName.ifBlank { group.latest.episodeName }
+                val confirmed =
+                    overlayHostState.await(
+                        ConfirmDialogAction(
+                            title = context.resources.getString(R.string.feature_user_history_delete_title),
+                            message =
+                                context.resources.getString(
+                                    if (group.subjectId > 0L) {
+                                        R.string.feature_user_history_delete_subject_message
+                                    } else {
+                                        R.string.feature_user_history_delete_message
+                                    },
+                                    groupName,
+                                ),
+                            confirmText = context.resources.getString(R.string.feature_user_action_delete),
+                            isDestructive = true,
+                        ),
+                    )
+                if (confirmed) {
+                    if (group.subjectId > 0L) {
+                        viewModel.deleteSubjectHistory(group.subjectId)
+                    } else {
+                        viewModel.deleteHistory(group.latest.episodeId)
+                    }
+                }
+            }
+        },
+        snackbarHost = { BgmSnackbarHost(hostState = snackbarHostState) },
+        overlayHost = {
+            BgmOverlayHost(hostState = overlayHostState) {
+                confirmDialog()
+            }
+        },
+        modifier = modifier,
+    )
+}
+
+/** 观看记录主体视图（Stateless）：专职骨架排版与列表呈现 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HistoryContent(
+    uiState: HistoryUiState,
+    onBackClick: () -> Unit,
+    onClearAll: () -> Unit,
+    onResume: (PlaybackHistory) -> Unit,
+    onSubjectClick: (SubjectDetailRoute) -> Unit,
+    onToggleExpanded: (Long) -> Unit,
+    onDeleteEpisode: (PlaybackHistory) -> Unit,
+    onDeleteGroup: (HistoryGroup) -> Unit,
+    snackbarHost: @Composable () -> Unit,
+    overlayHost: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Scaffold(
         topBar = {
             BgmTopAppBar(
@@ -87,24 +183,7 @@ fun HistoryScreen(
                 },
                 actions = {
                     if (uiState.history.isNotEmpty()) {
-                        IconButton(
-                            onClick = {
-                                scope.launch {
-                                    val confirmed =
-                                        overlayHostState.await(
-                                            ConfirmDialogAction(
-                                                title = context.resources.getString(R.string.feature_user_history_clear_all_title),
-                                                message = context.resources.getString(R.string.feature_user_history_clear_all_message),
-                                                confirmText = context.resources.getString(R.string.feature_user_history_clear_all_action),
-                                                isDestructive = true,
-                                            ),
-                                        )
-                                    if (confirmed) {
-                                        viewModel.clearPlaybackHistory()
-                                    }
-                                }
-                            },
-                        ) {
+                        IconButton(onClick = onClearAll) {
                             Icon(
                                 imageVector = BgmIcons.CleaningServices,
                                 contentDescription = stringResource(R.string.feature_user_history_clear_all_action),
@@ -114,7 +193,7 @@ fun HistoryScreen(
                 },
             )
         },
-        snackbarHost = { BgmSnackbarHost(hostState = snackbarHostState) },
+        snackbarHost = snackbarHost,
         modifier = modifier,
     ) { innerPadding ->
         when {
@@ -131,32 +210,12 @@ fun HistoryScreen(
             }
 
             uiState.history.isEmpty() -> {
-                Box(
+                HistoryEmptyState(
                     modifier =
                         Modifier
                             .fillMaxSize()
-                            .padding(innerPadding)
-                            .padding(32.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.History,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(56.dp),
-                        )
-                        Text(
-                            text = stringResource(R.string.feature_user_history_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
-                }
+                            .padding(innerPadding),
+                )
             }
 
             else -> {
@@ -181,65 +240,44 @@ fun HistoryScreen(
                         PlaybackHistoryCard(
                             group = group,
                             expanded = group.subjectId in uiState.expandedSubjectIds,
-                            onToggleExpanded = { viewModel.toggleSubjectExpanded(group.subjectId) },
-                            onResume = { entry -> onPlayHistory(entry.toPlayerRoute()) },
-                            onDeleteEpisode = { entry ->
-                                scope.launch {
-                                    val confirmed =
-                                        overlayHostState.await(
-                                            ConfirmDialogAction(
-                                                title = context.resources.getString(R.string.feature_user_history_delete_title),
-                                                message =
-                                                    context.resources.getString(
-                                                        R.string.feature_user_history_delete_message,
-                                                        entry.subjectName.ifBlank { entry.episodeName },
-                                                    ),
-                                                confirmText = context.resources.getString(R.string.feature_user_action_delete),
-                                                isDestructive = true,
-                                            ),
-                                        )
-                                    if (confirmed) {
-                                        viewModel.deleteHistory(entry.episodeId)
-                                    }
-                                }
-                            },
-                            onDeleteGroup = {
-                                scope.launch {
-                                    val groupName = group.subjectName.ifBlank { group.latest.episodeName }
-                                    val confirmed =
-                                        overlayHostState.await(
-                                            ConfirmDialogAction(
-                                                title = context.resources.getString(R.string.feature_user_history_delete_title),
-                                                message =
-                                                    context.resources.getString(
-                                                        if (group.subjectId > 0L) {
-                                                            R.string.feature_user_history_delete_subject_message
-                                                        } else {
-                                                            R.string.feature_user_history_delete_message
-                                                        },
-                                                        groupName,
-                                                    ),
-                                                confirmText = context.resources.getString(R.string.feature_user_action_delete),
-                                                isDestructive = true,
-                                            ),
-                                        )
-                                    if (confirmed) {
-                                        if (group.subjectId > 0L) {
-                                            viewModel.deleteSubjectHistory(group.subjectId)
-                                        } else {
-                                            viewModel.deleteHistory(group.latest.episodeId)
-                                        }
-                                    }
-                                }
-                            },
+                            onToggleExpanded = { onToggleExpanded(group.subjectId) },
+                            onResume = onResume,
+                            onSubjectClick = onSubjectClick,
+                            onDeleteEpisode = onDeleteEpisode,
+                            onDeleteGroup = { onDeleteGroup(group) },
                         )
                     }
                 }
             }
         }
 
-        BgmOverlayHost(hostState = overlayHostState) {
-            confirmDialog()
+        overlayHost()
+    }
+}
+
+/** 观看记录空状态视图 */
+@Composable
+private fun HistoryEmptyState(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.padding(32.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Icon(
+                imageVector = BgmIcons.History,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.size(56.dp),
+            )
+            Text(
+                text = stringResource(R.string.feature_user_history_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -250,8 +288,6 @@ private fun PlaybackHistory.toPlayerRoute(): PlayerRoute {
     return PlayerRoute(
         subjectId = subjectId,
         episodeId = episodeId,
-        // 若来自规则源，不传过期的静态单集直链（避免锁死单集直链队列），带上 initialRuleId 由规则引擎解析并支持下一集连播；
-        // 若纯直链/本地/离线则保留 streamUrl
         streamUrl = if (isRuleSource) "" else streamUrl,
         episodeName = episodeName,
         subjectName = subjectName,

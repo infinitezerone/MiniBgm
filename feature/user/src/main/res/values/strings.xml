@@ -147,6 +147,9 @@
     <string name="feature_user_rule_choice_subscription">订阅导入（TVBox 规则集）</string>
     <string name="feature_user_rule_choice_import_json">批量导入 JSON 规则</string>
     <string name="feature_user_history_empty">暂无观看记录。在内置播放器里播放过的番剧会自动出现在这里。</string>
+    <string name="feature_user_history_view_subject">查看条目详情</string>
+    <string name="feature_user_history_resume_play">继续播放</string>
+    <string name="feature_user_history_action_undo">撤销</string>
     <string name="feature_user_history_episode_label">第 %1$s 话</string>
     <string name="feature_user_history_progress">看到 %1$s / %2$s</string>
     <string name="feature_user_history_seen_only">看到 %1$s</string>

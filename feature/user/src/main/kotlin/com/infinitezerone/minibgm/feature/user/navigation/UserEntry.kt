@@ -85,12 +85,14 @@ fun EntryProviderScope<NavKey>.playbackRulesEntry(
 fun EntryProviderScope<NavKey>.historyEntry(
     onBackClick: () -> Unit = {},
     onPlayHistory: (PlayerRoute) -> Unit = {},
+    onSubjectClick: (SubjectDetailRoute) -> Unit = {},
     metadata: Map<String, Any> = emptyMap(),
 ) {
     entry<HistoryRoute>(metadata = metadata) {
         HistoryScreen(
             onBackClick = onBackClick,
             onPlayHistory = onPlayHistory,
+            onSubjectClick = onSubjectClick,
         )
     }
 }

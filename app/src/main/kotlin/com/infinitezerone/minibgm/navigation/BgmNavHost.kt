@@ -220,6 +220,7 @@ fun BgmNavHost(
                                 historyEntry(
                                     onBackClick = { navState.goBack() },
                                     onPlayHistory = { route -> navState.navigateTo(route) },
+                                    onSubjectClick = { route -> navState.navigateTo(route) },
                                     metadata = bgmDetailPane(),
                                 )
                             }

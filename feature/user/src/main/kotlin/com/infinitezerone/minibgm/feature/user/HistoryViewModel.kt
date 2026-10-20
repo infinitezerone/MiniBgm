@@ -36,6 +36,7 @@ sealed interface HistoryUiEvent {
     data class ShowSnackbar(
         val message: String? = null,
         @StringRes val messageRes: Int = 0,
+        @StringRes val actionRes: Int = 0,
     ) : HistoryUiEvent
 }
 
@@ -47,6 +48,7 @@ class HistoryViewModel(
     val events: Flow<HistoryUiEvent> = _events.receiveAsFlow()
 
     private val expandedSubjectIds = MutableStateFlow<Set<Long>>(emptySet())
+    private var lastDeletedEntry: PlaybackHistory? = null
 
     val uiState: StateFlow<HistoryUiState> =
         combine(
@@ -112,8 +114,24 @@ class HistoryViewModel(
     fun deleteHistory(episodeId: Long) {
         if (episodeId <= 0L) return
         viewModelScope.launch {
+            val entry = playbackHistoryRepository.getHistoryByEpisode(episodeId)
+            lastDeletedEntry = entry
             playbackHistoryRepository.deleteHistory(episodeId)
-            _events.send(HistoryUiEvent.ShowSnackbar(messageRes = R.string.feature_user_history_deleted))
+            _events.send(
+                HistoryUiEvent.ShowSnackbar(
+                    messageRes = R.string.feature_user_history_deleted,
+                    actionRes = if (entry != null) R.string.feature_user_history_action_undo else 0,
+                ),
+            )
+        }
+    }
+
+    /** 撤销上一次的单集历史删除 */
+    fun undoDelete() {
+        val entry = lastDeletedEntry ?: return
+        viewModelScope.launch {
+            playbackHistoryRepository.saveHistory(entry)
+            lastDeletedEntry = null
         }
     }
 
@@ -121,6 +139,7 @@ class HistoryViewModel(
     fun deleteSubjectHistory(subjectId: Long) {
         if (subjectId <= 0L) return
         viewModelScope.launch {
+            lastDeletedEntry = null
             playbackHistoryRepository.deleteHistoryBySubject(subjectId)
             expandedSubjectIds.update { it - subjectId }
             _events.send(HistoryUiEvent.ShowSnackbar(messageRes = R.string.feature_user_history_subject_deleted))
@@ -129,6 +148,7 @@ class HistoryViewModel(
 
     fun clearPlaybackHistory() {
         viewModelScope.launch {
+            lastDeletedEntry = null
             playbackHistoryRepository.clearAllHistory()
             expandedSubjectIds.value = emptySet()
             _events.send(HistoryUiEvent.ShowSnackbar(messageRes = R.string.feature_user_history_cleared))

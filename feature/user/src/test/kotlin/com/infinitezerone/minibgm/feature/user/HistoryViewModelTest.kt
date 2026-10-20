@@ -55,7 +55,24 @@ class HistoryViewModelTest {
             val event = viewModel.events.first()
             assertIs<HistoryUiEvent.ShowSnackbar>(event)
             assertEquals(R.string.feature_user_history_deleted, event.messageRes)
+            assertEquals(R.string.feature_user_history_action_undo, event.actionRes)
             assertNull(event.message)
+        }
+
+    @Test
+    fun undoDelete_restoresLastDeletedEpisode() =
+        runTest {
+            val historyRepo = FakePlaybackHistoryRepository()
+            historyRepo.saveHistory(history(episodeId = 101L, updatedAt = 1_000L))
+
+            val viewModel = HistoryViewModel(historyRepo)
+            viewModel.deleteHistory(101L)
+            advanceUntilIdle()
+            assertNull(historyRepo.getHistoryByEpisode(101L))
+
+            viewModel.undoDelete()
+            advanceUntilIdle()
+            assertEquals(101L, historyRepo.getHistoryByEpisode(101L)?.episodeId)
         }
 
     @Test
