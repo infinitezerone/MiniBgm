@@ -1,4 +1,5 @@
 import com.infinitezerone.minibgm.androidApplication
+import com.infinitezerone.minibgm.configureAndroidUnitTests
 import com.infinitezerone.minibgm.nativeAbis
 import java.util.Properties
 
@@ -56,6 +57,12 @@ val enableAbiSplits = (project.findProperty("minibgm.abiSplits") as? String)?.to
 
 androidApplication {
     namespace = "com.infinitezerone.minibgm"
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 
     defaultConfig {
         applicationId = "com.infinitezerone.minibgm"
@@ -168,5 +175,13 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.koin.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.rule)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     testImplementation(project(":core:testing"))
 }
+
+configureAndroidUnitTests()

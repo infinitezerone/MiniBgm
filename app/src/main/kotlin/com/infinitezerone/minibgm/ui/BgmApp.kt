@@ -29,12 +29,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.R
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
+import com.infinitezerone.minibgm.core.designsystem.component.BgmBackdrop
+import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingChromeScrim
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbar
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarDefaults
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
@@ -149,98 +152,110 @@ fun BgmApp(
             label = "app_snackbar_bottom_padding",
         )
 
-        Scaffold(
-            snackbarHost = {
-                if (activity?.isInPictureInPictureMode != true) {
-                    SnackbarHost(
-                        hostState = snackbarHostState,
+        BgmBackdrop(modifier = modifier.fillMaxSize()) {
+            Scaffold(
+                containerColor = Color.Transparent,
+                snackbarHost = {
+                    if (activity?.isInPictureInPictureMode != true) {
+                        SnackbarHost(
+                            hostState = snackbarHostState,
+                            modifier =
+                                Modifier
+                                    .navigationBarsPadding()
+                                    .padding(bottom = snackbarBottomPadding),
+                            snackbar = { BgmSnackbar(it) },
+                        )
+                    }
+                },
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                modifier = Modifier.fillMaxSize(),
+            ) { innerPadding ->
+                if (isWideScreen) {
+                    // 平板与折叠屏大屏：水平 Row 物理占位排版（NavigationRail 占独立宽度，完全不遮挡右侧内容与返回键）
+                    Row(
                         modifier =
                             Modifier
-                                .navigationBarsPadding()
-                                .padding(bottom = snackbarBottomPadding),
-                        snackbar = { BgmSnackbar(it) },
-                    )
-                }
-            },
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-            modifier = modifier.fillMaxSize(),
-        ) { innerPadding ->
-            if (isWideScreen) {
-                // 平板与折叠屏大屏：水平 Row 物理占位排版（NavigationRail 占独立宽度，完全不遮挡右侧内容与返回键）
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding),
-                ) {
-                    BgmNavigationRail(
-                        currentDestination = navState.currentTopLevelKey,
-                        onDestinationSelected = { route -> navState.navigateTo(route) },
-                    )
+                                .fillMaxSize()
+                                .padding(innerPadding),
+                    ) {
+                        BgmNavigationRail(
+                            currentDestination = navState.currentTopLevelKey,
+                            onDestinationSelected = { route -> navState.navigateTo(route) },
+                        )
+                        Box(
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                        ) {
+                            BgmNavHost(
+                                navState = navState,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            if (isAuthenticating && activity?.isInPictureInPictureMode != true) {
+                                OAuthProcessingDialog()
+                            }
+                        }
+                    }
+                } else {
+                    // 手机端：居中悬浮胶囊底栏（二级页面自动下沉隐藏，返回顶层平滑升起）
                     Box(
                         modifier =
                             Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
+                                .fillMaxSize()
+                                .padding(innerPadding),
                     ) {
                         BgmNavHost(
                             navState = navState,
                             modifier = Modifier.fillMaxSize(),
                         )
 
+                        AnimatedVisibility(
+                            visible = isTopLevel,
+                            enter = fadeIn(animationSpec = tween(200)),
+                            exit = fadeOut(animationSpec = tween(150)),
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        ) {
+                            BgmFloatingChromeScrim()
+                        }
+
+                        AnimatedVisibility(
+                            visible = isTopLevel,
+                            enter =
+                                slideInVertically(
+                                    initialOffsetY = { it * 2 },
+                                    animationSpec =
+                                        spring(
+                                            dampingRatio = 0.82f,
+                                            stiffness = Spring.StiffnessMediumLow,
+                                        ),
+                                ) + fadeIn(animationSpec = tween(200)),
+                            exit =
+                                slideOutVertically(
+                                    targetOffsetY = { it * 2 },
+                                    animationSpec =
+                                        spring(
+                                            dampingRatio = 0.82f,
+                                            stiffness = Spring.StiffnessMediumLow,
+                                        ),
+                                ) + fadeOut(animationSpec = tween(150)),
+                            modifier =
+                                Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .navigationBarsPadding()
+                                    .padding(bottom = 12.dp),
+                        ) {
+                            BgmFloatingNavigationBar(
+                                currentDestination = navState.currentTopLevelKey,
+                                onDestinationSelected = { route -> navState.navigateTo(route) },
+                                isVertical = false,
+                            )
+                        }
+
                         if (isAuthenticating && activity?.isInPictureInPictureMode != true) {
                             OAuthProcessingDialog()
                         }
-                    }
-                }
-            } else {
-                // 手机端：居中悬浮胶囊底栏（二级页面自动下沉隐藏，返回顶层平滑升起）
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding),
-                ) {
-                    BgmNavHost(
-                        navState = navState,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-
-                    AnimatedVisibility(
-                        visible = isTopLevel,
-                        enter =
-                            slideInVertically(
-                                initialOffsetY = { it * 2 },
-                                animationSpec =
-                                    spring(
-                                        dampingRatio = 0.82f,
-                                        stiffness = Spring.StiffnessMediumLow,
-                                    ),
-                            ) + fadeIn(animationSpec = tween(200)),
-                        exit =
-                            slideOutVertically(
-                                targetOffsetY = { it * 2 },
-                                animationSpec =
-                                    spring(
-                                        dampingRatio = 0.82f,
-                                        stiffness = Spring.StiffnessMediumLow,
-                                    ),
-                            ) + fadeOut(animationSpec = tween(150)),
-                        modifier =
-                            Modifier
-                                .align(Alignment.BottomCenter)
-                                .navigationBarsPadding()
-                                .padding(bottom = 12.dp),
-                    ) {
-                        BgmFloatingNavigationBar(
-                            currentDestination = navState.currentTopLevelKey,
-                            onDestinationSelected = { route -> navState.navigateTo(route) },
-                            isVertical = false,
-                        )
-                    }
-
-                    if (isAuthenticating && activity?.isInPictureInPictureMode != true) {
-                        OAuthProcessingDialog()
                     }
                 }
             }

@@ -10,7 +10,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -48,9 +47,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
-import com.infinitezerone.minibgm.core.designsystem.component.BgmGlassSurface
 import com.infinitezerone.minibgm.core.designsystem.theme.AppUiStyle
-import com.infinitezerone.minibgm.core.designsystem.theme.BgmGlassLevel
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalAppUiStyle
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalLuminousTokens
@@ -75,36 +72,19 @@ fun BgmFloatingNavigationBar(
             .wrapContentWidth()
             .widthIn(min = BgmSpacing.FloatingNav.minWidth, max = BgmSpacing.FloatingNav.maxWidth)
 
-    if (LocalAppUiStyle.current == AppUiStyle.Luminous) {
-        BgmGlassSurface(
-            modifier = navModifier,
-            shape = CircleShape,
-            level = BgmGlassLevel.Prominent,
-            shadowElevation = 12.dp,
-        ) {
-            BgmFloatingNavigationRow(
-                currentDestination = currentDestination,
-                onDestinationSelected = onDestinationSelected,
-            )
-        }
-    } else {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-            tonalElevation = 0.dp,
-            shadowElevation = 8.dp,
-            border =
-                BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
-                ),
-            modifier = navModifier,
-        ) {
-            BgmFloatingNavigationRow(
-                currentDestination = currentDestination,
-                onDestinationSelected = onDestinationSelected,
-            )
-        }
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 0.dp,
+        shadowElevation = 10.dp,
+        border = null,
+        modifier = navModifier,
+    ) {
+        BgmFloatingNavigationRow(
+            currentDestination = currentDestination,
+            onDestinationSelected = onDestinationSelected,
+        )
     }
 }
 
@@ -147,7 +127,7 @@ private fun BgmFloatingNavItem(
     val indicatorColor by animateColorAsState(
         targetValue =
             if (isSelected) {
-                if (isLuminous) tokens.navSelection else MaterialTheme.colorScheme.primaryContainer
+                MaterialTheme.colorScheme.primaryContainer
             } else {
                 Color.Transparent
             },
@@ -158,7 +138,7 @@ private fun BgmFloatingNavItem(
     val iconColor by animateColorAsState(
         targetValue =
             if (isSelected) {
-                if (isLuminous) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimaryContainer
+                MaterialTheme.colorScheme.onPrimaryContainer
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             },

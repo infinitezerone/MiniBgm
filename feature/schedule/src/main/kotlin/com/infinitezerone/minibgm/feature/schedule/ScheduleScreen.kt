@@ -15,11 +15,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -28,11 +33,9 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -65,6 +69,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 import com.infinitezerone.minibgm.core.designsystem.theme.FeatureGate
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
@@ -223,7 +228,197 @@ fun ScheduleScreen(
     }
 
     Scaffold(
-        topBar = {
+        containerColor = Color.Transparent,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = {
+            BgmSnackbarHost(
+                hostState = snackbarHostState,
+                isTopLevel = true,
+            )
+        },
+        modifier = modifier,
+    ) { _ ->
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(
+                            WindowInsets.systemBars.only(
+                                WindowInsetsSides.Horizontal + WindowInsetsSides.Top,
+                            ),
+                        ).padding(top = BgmSpacing.TopBar.height)
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                if (animationJob?.isActive == true) {
+                                    animationJob?.cancel()
+                                    animationJob = null
+                                }
+                            }
+                        }.nestedScroll(filterNestedScrollConnection),
+            ) {
+                val watchingCountMap =
+                    remember(uiState.daySchedules, uiState.watchingSubjectIds) {
+                        (0 until ScheduleViewModel.TOTAL_SCHEDULE_DAYS).associateWith {
+                            uiState.getWatchingCountForPage(it)
+                        }
+                    }
+
+                // 顶部星期胶囊导航（指示器 + 快速点击锚点）
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ModernDateCapsuleStrip(
+                        dateItems = uiState.dateItems,
+                        selectedPage = pagerState.currentPage,
+                        pagerState = pagerState,
+                        onSelectPage = { page ->
+                            if (page == pagerState.currentPage) {
+                                animationJob?.cancel()
+                                coroutineScope.launch {
+                                    animationJob = launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
+                                    pageListStates.getOrNull(page)?.animateScrollToItem(0)
+                                }
+                            } else {
+                                viewModel.selectPage(page)
+                                animationJob?.cancel()
+                                coroutineScope.launch {
+                                    animationJob = launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
+                                    pagerState.scrollToPage(page)
+                                }
+                            }
+                        },
+                        watchingCountMap = watchingCountMap,
+                        modifier = Modifier.widthIn(max = 840.dp),
+                    )
+                }
+
+                val currentPageTotal = uiState.getTotalCountForPage(pagerState.currentPage)
+                val currentPageWatching = uiState.getWatchingCountForPage(pagerState.currentPage)
+
+                var filterBarHeightPx by remember { mutableFloatStateOf(initialFilterBarHeightPx) }
+
+                // 内容视口：纯 GPU 摆放阶段平移（offset {}），完全无需 layout {} 重测与重组
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .clipToBounds(),
+                ) {
+                    // 主体：左右手势丝滑翻页的 HorizontalPager，通过 offset {} 跟随筛选条折叠平滑上移
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .offset {
+                                    val currentOffset = filterBarState.offset.takeIf { !it.isNaN() } ?: 0f
+                                    IntOffset(0, (filterBarHeightPx + currentOffset).roundToInt())
+                                },
+                    ) {
+                        PullToRefreshBox(
+                            isRefreshing = uiState.isRefreshing || (!uiState.hasSchedules && uiState.isLoading),
+                            onRefresh = { viewModel.refresh(force = true) },
+                            modifier = Modifier.fillMaxSize(),
+                        ) {
+                            when {
+                                !uiState.hasSchedules && uiState.isLoading -> {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.TopCenter,
+                                    ) {
+                                        ScheduleTimelineSkeleton(
+                                            modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
+                                        )
+                                    }
+                                }
+
+                                !uiState.hasSchedules && uiState.error != null -> {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        ScheduleErrorState(
+                                            errorMessage = uiState.error ?: stringResource(R.string.feature_schedule_error_network),
+                                            onRetry = viewModel::refresh,
+                                            modifier = Modifier.widthIn(max = 840.dp),
+                                        )
+                                    }
+                                }
+
+                                else -> {
+                                    HorizontalPager(
+                                        state = pagerState,
+                                        modifier = Modifier.fillMaxSize(),
+                                        key = { page -> page },
+                                    ) { page ->
+                                        val isTodayPage = page == ScheduleViewModel.TODAY_PAGE_INDEX
+                                        val timeGrouped =
+                                            remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
+                                                uiState.getTimeGroupedSchedulesForPage(page)
+                                            }
+                                        val allDaySchedules =
+                                            remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
+                                                uiState.getAllDaySchedulesForPage(page)
+                                            }
+                                        val listState = pageListStates.getOrElse(page) { rememberLazyListState() }
+
+                                        DayScheduleList(
+                                            pageIndex = page,
+                                            isTodayPage = isTodayPage,
+                                            timeGrouped = timeGrouped,
+                                            allDaySchedules = allDaySchedules,
+                                            uiState = uiState,
+                                            onSubjectClick = onSubjectClick,
+                                            onSwitchToAll = viewModel::toggleOnlyWatching,
+                                            listState = listState,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 筛选条：自然尺寸测量，仅在尺寸变化时更新锚点；仅在 placement 阶段平移
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .onSizeChanged { size ->
+                                    val height = size.height.toFloat()
+                                    if (height > 0f && height != filterBarHeightPx) {
+                                        filterBarHeightPx = height
+                                        filterBarState.updateAnchors(
+                                            DraggableAnchors {
+                                                FilterBarValue.EXPANDED at 0f
+                                                FilterBarValue.COLLAPSED at -height
+                                            },
+                                        )
+                                    }
+                                }.offset {
+                                    val currentOffset = filterBarState.offset.takeIf { !it.isNaN() } ?: 0f
+                                    IntOffset(0, currentOffset.roundToInt())
+                                }.anchoredDraggable(
+                                    state = filterBarState,
+                                    orientation = Orientation.Vertical,
+                                    flingBehavior = filterBarFlingBehavior,
+                                ),
+                        contentAlignment = Alignment.TopCenter,
+                    ) {
+                        FilterAndMetaBar(
+                            totalCount = currentPageTotal,
+                            watchingCount = currentPageWatching,
+                            onlyWatching = uiState.onlyWatching,
+                            onToggleOnlyWatching = viewModel::toggleOnlyWatching,
+                            isLoggedIn = uiState.isLoggedIn,
+                            onPromptLogin = viewModel::promptLogin,
+                            modifier = Modifier.widthIn(max = 840.dp),
+                        )
+                    }
+                }
+            }
+
             BgmTopAppBar(
                 title = {
                     Text(
@@ -246,194 +441,8 @@ fun ScheduleScreen(
                         )
                     }
                 },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
+                modifier = Modifier.align(Alignment.TopCenter),
             )
-        },
-        snackbarHost = {
-            BgmSnackbarHost(
-                hostState = snackbarHostState,
-                isTopLevel = true,
-            )
-        },
-        modifier = modifier,
-    ) { innerPadding ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false)
-                            if (animationJob?.isActive == true) {
-                                animationJob?.cancel()
-                                animationJob = null
-                            }
-                        }
-                    }.nestedScroll(filterNestedScrollConnection),
-        ) {
-            val watchingCountMap =
-                remember(uiState.daySchedules, uiState.watchingSubjectIds) {
-                    (0 until ScheduleViewModel.TOTAL_SCHEDULE_DAYS).associateWith {
-                        uiState.getWatchingCountForPage(it)
-                    }
-                }
-
-            // 顶部星期胶囊导航（指示器 + 快速点击锚点）
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                ModernDateCapsuleStrip(
-                    dateItems = uiState.dateItems,
-                    selectedPage = pagerState.currentPage,
-                    pagerState = pagerState,
-                    onSelectPage = { page ->
-                        if (page == pagerState.currentPage) {
-                            animationJob?.cancel()
-                            coroutineScope.launch {
-                                animationJob = launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
-                                pageListStates.getOrNull(page)?.animateScrollToItem(0)
-                            }
-                        } else {
-                            viewModel.selectPage(page)
-                            animationJob?.cancel()
-                            coroutineScope.launch {
-                                animationJob = launch { filterBarState.animateTo(FilterBarValue.EXPANDED) }
-                                pagerState.scrollToPage(page)
-                            }
-                        }
-                    },
-                    watchingCountMap = watchingCountMap,
-                    modifier = Modifier.widthIn(max = 840.dp),
-                )
-            }
-
-            val currentPageTotal = uiState.getTotalCountForPage(pagerState.currentPage)
-            val currentPageWatching = uiState.getWatchingCountForPage(pagerState.currentPage)
-
-            var filterBarHeightPx by remember { mutableFloatStateOf(initialFilterBarHeightPx) }
-
-            // 内容视口：纯 GPU 摆放阶段平移（offset {}），完全无需 layout {} 重测与重组
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .clipToBounds(),
-            ) {
-                // 主体：左右手势丝滑翻页的 HorizontalPager，通过 offset {} 跟随筛选条折叠平滑上移
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .offset {
-                                val currentOffset = filterBarState.offset.takeIf { !it.isNaN() } ?: 0f
-                                IntOffset(0, (filterBarHeightPx + currentOffset).roundToInt())
-                            },
-                ) {
-                    PullToRefreshBox(
-                        isRefreshing = uiState.isRefreshing || (!uiState.hasSchedules && uiState.isLoading),
-                        onRefresh = { viewModel.refresh(force = true) },
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        when {
-                            !uiState.hasSchedules && uiState.isLoading -> {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.TopCenter,
-                                ) {
-                                    ScheduleTimelineSkeleton(
-                                        modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
-                                    )
-                                }
-                            }
-
-                            !uiState.hasSchedules && uiState.error != null -> {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    ScheduleErrorState(
-                                        errorMessage = uiState.error ?: stringResource(R.string.feature_schedule_error_network),
-                                        onRetry = viewModel::refresh,
-                                        modifier = Modifier.widthIn(max = 840.dp),
-                                    )
-                                }
-                            }
-
-                            else -> {
-                                HorizontalPager(
-                                    state = pagerState,
-                                    modifier = Modifier.fillMaxSize(),
-                                    key = { page -> page },
-                                ) { page ->
-                                    val isTodayPage = page == ScheduleViewModel.TODAY_PAGE_INDEX
-                                    val timeGrouped =
-                                        remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
-                                            uiState.getTimeGroupedSchedulesForPage(page)
-                                        }
-                                    val allDaySchedules =
-                                        remember(uiState.daySchedules, page, uiState.onlyWatching, uiState.watchingSubjectIds) {
-                                            uiState.getAllDaySchedulesForPage(page)
-                                        }
-                                    val listState = pageListStates.getOrElse(page) { rememberLazyListState() }
-
-                                    DayScheduleList(
-                                        pageIndex = page,
-                                        isTodayPage = isTodayPage,
-                                        timeGrouped = timeGrouped,
-                                        allDaySchedules = allDaySchedules,
-                                        uiState = uiState,
-                                        onSubjectClick = onSubjectClick,
-                                        onSwitchToAll = viewModel::toggleOnlyWatching,
-                                        listState = listState,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 筛选条：自然尺寸测量，仅在尺寸变化时更新锚点；仅在 placement 阶段平移
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .onSizeChanged { size ->
-                                val height = size.height.toFloat()
-                                if (height > 0f && height != filterBarHeightPx) {
-                                    filterBarHeightPx = height
-                                    filterBarState.updateAnchors(
-                                        DraggableAnchors {
-                                            FilterBarValue.EXPANDED at 0f
-                                            FilterBarValue.COLLAPSED at -height
-                                        },
-                                    )
-                                }
-                            }.offset {
-                                val currentOffset = filterBarState.offset.takeIf { !it.isNaN() } ?: 0f
-                                IntOffset(0, currentOffset.roundToInt())
-                            }.anchoredDraggable(
-                                state = filterBarState,
-                                orientation = Orientation.Vertical,
-                                flingBehavior = filterBarFlingBehavior,
-                            ),
-                    contentAlignment = Alignment.TopCenter,
-                ) {
-                    FilterAndMetaBar(
-                        totalCount = currentPageTotal,
-                        watchingCount = currentPageWatching,
-                        onlyWatching = uiState.onlyWatching,
-                        onToggleOnlyWatching = viewModel::toggleOnlyWatching,
-                        isLoggedIn = uiState.isLoggedIn,
-                        onPromptLogin = viewModel::promptLogin,
-                        modifier = Modifier.widthIn(max = 840.dp),
-                    )
-                }
-            }
         }
     }
 

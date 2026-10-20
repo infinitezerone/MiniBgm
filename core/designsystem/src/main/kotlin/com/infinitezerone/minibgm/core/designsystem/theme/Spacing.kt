@@ -53,6 +53,9 @@ object BgmSpacing {
         val iconHorizontalPadding: Dp = BgmSpacing.lg
         val iconVerticalPadding: Dp = BgmSpacing.xs
         val labelGap: Dp = BgmSpacing.xxs
+
+        /** 悬浮底栏背后的底部渐隐高度；由内容滚动到胶囊下方时的可读性决定。 */
+        val scrimHeight: Dp = 152.dp
     }
 
     /** Snackbar 避让：悬浮底栏高度与下沉外边距之和，再留 8dp 呼吸。 */

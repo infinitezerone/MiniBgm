@@ -32,13 +32,15 @@
 | 字体 | `theme/Type.kt` | display 57/45/36，headline 32/28/24，title 20/16/14，body 16/14/12，label 14/12/11 | `M3` + `PROJECT` | 15 级 type scale 来自 M3；`titleLarge` 使用 20/26（M3 默认 22/28），行高、字重和字距按中日文条目密度微调；字体族使用系统默认。 |
 | 圆角 | `theme/Shape.kt` | `4 / 8 / 12 / 16 / 24dp` | `M3` + `PROJECT` | 前四档对齐 M3 Shapes；`extraLarge` 采用 24dp，而 M3 默认是 28dp，用于悬浮导航和底部抽屉。 |
 | 玻璃形状 | `theme/LuminousTokens.kt` | 玻璃 32dp、抽屉顶部 28dp、内层 20dp | `PROJECT` | 独立于 `BgmShapes` 的材质形状阶梯，只服务玻璃 chrome。修改时不能假设它属于 M3 圆角阶梯。 |
-| 间距 | `theme/Spacing.kt` | `4 / 8 / 12 / 16 / 20 / 24 / 32dp`；chrome 另有 `6 / 10 / 48 / 64 / 88dp` | `M3` + `PROJECT` | 基础阶梯沿用 4dp baseline grid；48dp 对应 Material 最小触控靶区；6/10/64/88dp 是悬浮底栏、胶囊呼吸和 Snackbar 避让的实测值。页面级边距仍由各 feature 持有。 |
+| 间距 | `theme/Spacing.kt` | `4 / 8 / 12 / 16 / 20 / 24 / 32dp`；chrome 另有 `6 / 10 / 48 / 64 / 88 / 152dp` | `M3` + `PROJECT` | 基础阶梯沿用 4dp baseline grid；48dp 对应 Material 最小触控靶区；6/10/64/88dp 是悬浮底栏、胶囊呼吸和 Snackbar 避让的实测值；152dp 是悬浮底栏背后渐隐 scrim 的高度，用于替代实时模糊保证文字对比度。页面级边距仍由各 feature 持有。 |
 | 阴影高度 | `theme/Elevation.kt` | `0 / 2 / 10 / 12dp` | `M3` + `PROJECT` | 借用 M3 的 elevation 语义，但不使用 M3 的 0/1/3/6/8/12 档位；数值按内容框、玻璃 chrome、瞬态浮层三种重量校准。 |
 | 透明度 | `theme/Opacity.kt` | `0.12 / 0.35 / 0.40 / 0.45 / 0.60 / 0.65 / 0.75 / 0.85` | `PROJECT` | 项目自定义语义档，用于骨架、分隔、描边、弱提示、Scrim 和高对比叠层。部分值接近 M3 state layer 的 0.12/0.38，但不是官方 token 映射。 |
 | 动效 | `theme/Motion.kt` | 完整 M3 `short1–extraLong4` 时长；7 条 M3 easing；Standard / Expressive 各 `fast/default/slow` 两组 spatial 与 effects 弹簧；旧 API 保留 `FastOutSlowIn` 与 `0.82/0.80` | `M3` + `M2` + `PROJECT` | `Durations` / `Easings` / `Springs` 为 M3 原始令牌；`spatialSpring` / `effectsSpring` 通过 `Scheme` + `Speed` 选择空间与视效参数；`standardTween` / `standardSpring` / `snappySpring` 是兼容层，保留既有观感；骨架屏 1500ms 为项目值。 |
 | 自适应断点 | `theme/AdaptiveLayout.kt` | compact `<600dp`、medium `600–839dp`、expanded `>=840dp` | `M3A` | 宽度断点来自 Material 3 Window Size Class；高度小于 480dp 时强制归入 `COMPACT` 是项目策略，不是 M3 规则。 |
 | 封面比例 | `theme/Dimens.kt` | 海报 `0.7`，人物 `0.72` | `PROJECT` | 海报当前使用约 5:7，而非标准 2:3（0.667）；人物立绘略瘦于海报。两者都是全站唯一来源。 |
-| 玻璃材质 | `theme/LuminousTokens.kt` | Subtle `0.68/0.46`、Regular `0.78/0.58`、Prominent `0.86/0.70`；grain `0.030/0.045`；glow `0.16/0.22/0.20` | `OS` + `PROJECT` | 视觉方向参考当前 Apple / HyperOS / ColorOS 的玻璃与光效，但没有公开 token 规范可逐值复制；三层 alpha、描边、内高光、grain 和 backdrop 均为项目校准。省电模式或低内存设备降级为实体材质。 |
+| 玻璃材质 | `theme/LuminousTokens.kt` | Subtle `0.68/0.46`、Regular `0.78/0.58`、Prominent `0.86/0.70`；glow `0.16/0.22/0.20` | `OS` + `PROJECT` | 视觉方向参考当前 Apple / HyperOS / ColorOS 的玻璃与光效，但没有公开 token 规范可逐值复制；三层 alpha、描边、内高光和 backdrop 均为项目校准。省电模式或低内存设备降级为实体材质。 |
+| 实体大圆盘按钮 | `component/BgmCircleActionButton.kt` | 40dp 纯净实体圆盘、无边框、2dp 阴影、surfaceContainerHighest 底色 | `OS` + `PROJECT` | 对齐现代旗舰系统应用与 ChatGPT 等无边框纯净实体大圆盘基座交互；零描边，依靠填充对比与柔和漫反射阴影自然浮起。 |
+| 双向天幕渐隐遮罩 | `component/BgmTopChromeScrim.kt`、`BgmFloatingChromeScrim.kt` | 顶部 108dp、底部 136dp 垂直多段平滑衰减渐变 | `OS` + `PROJECT` | 向上滚动时卡片与文本慢慢沉入顶端天幕消融，与状态栏完全融为一体；向下滚动时柔和掩映内容并平滑托起无边框实体 Dock 药丸。 |
 
 ## 已知偏离与保留决定
 

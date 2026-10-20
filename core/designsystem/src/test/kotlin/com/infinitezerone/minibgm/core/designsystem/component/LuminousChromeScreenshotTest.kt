@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.infinitezerone.minibgm.core.designsystem.theme.AppUiStyle
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmGlassLevel
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import org.junit.Rule
 import org.junit.Test
@@ -133,7 +134,15 @@ private fun LuminousChromePreview() {
         },
         floatingBottomBarSink = 28.dp,
     ) {
-        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
+        Column(
+            modifier =
+                Modifier.padding(
+                    start = 20.dp,
+                    end = 20.dp,
+                    top = BgmSpacing.TopBar.height + 24.dp,
+                    bottom = 24.dp,
+                ),
+        ) {
             Text(
                 text = "今晚更新",
                 style = MaterialTheme.typography.headlineSmall,
