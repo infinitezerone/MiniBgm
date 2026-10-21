@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.core.data.repository.resolver
 
+import com.infinitezerone.minibgm.core.data.repository.decodeBase64String
 import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
@@ -111,6 +112,92 @@ internal fun parseStreamManifest(
         .take(MAX_MANIFEST_ENTRIES)
 }
 
+private val PLAYER_CONFIG_REGEX =
+    Regex("""(?:player_aaaa|player_data)\s*=\s*(\{[^;]+?\})""", RegexOption.IGNORE_CASE)
+
+private val PLAYER_URL_FIELD_REGEX =
+    Regex(""""url"\s*:\s*"([^"]+)"""")
+
+private val PLAYER_ENCRYPT_FIELD_REGEX =
+    Regex(""""encrypt"\s*:\s*([0-9]+)""")
+
+private val DPLAYER_URL_REGEX =
+    Regex("""(?:video|player)\s*:\s*\{[^}]*?url\s*:\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+
+private val IFRAME_MEDIA_PARAM_REGEX =
+    Regex("""[?&](?:url|v|vid|source|play)=([^&"'>\s]+)""", RegexOption.IGNORE_CASE)
+
+private fun safeUrlDecode(input: String): String =
+    runCatching {
+        buildString {
+            var i = 0
+            while (i < input.length) {
+                if (input[i] == '%' && i + 2 < input.length) {
+                    val hex = input.substring(i + 1, i + 3)
+                    val code = hex.toIntOrNull(16)
+                    if (code != null) {
+                        append(code.toChar())
+                        i += 3
+                        continue
+                    }
+                }
+                append(input[i])
+                i++
+            }
+        }
+    }.getOrDefault(input)
+
+internal fun extractEmbeddedPlayerUrls(html: String): List<String> {
+    val results = mutableListOf<String>()
+
+    // 1. 匹配 DPlayer / Artplayer 等常见播放器 video: { url: "..." }
+    DPLAYER_URL_REGEX.findAll(html).forEach { match ->
+        val candidate = match.groupValues[1].trim()
+        if (isPlayableMediaUrl(candidate) ||
+            candidate.startsWith("http://", ignoreCase = true) ||
+            candidate.startsWith("https://", ignoreCase = true)
+        ) {
+            results.add(candidate)
+        }
+    }
+
+    // 2. 匹配 MacCMS / 苹果CMS 等内嵌的 player_aaaa / player_data 配置对象
+    PLAYER_CONFIG_REGEX.findAll(html).forEach { match ->
+        val jsonStr = match.groupValues[1]
+        val rawUrl =
+            PLAYER_URL_FIELD_REGEX
+                .find(jsonStr)
+                ?.groupValues
+                ?.get(1)
+                ?.trim()
+        val encrypt =
+            PLAYER_ENCRYPT_FIELD_REGEX
+                .find(jsonStr)
+                ?.groupValues
+                ?.get(1)
+                ?.toIntOrNull() ?: 0
+        if (!rawUrl.isNullOrBlank()) {
+            val decodedUrl =
+                when (encrypt) {
+                    1 -> decodeBase64String(rawUrl).trim()
+                    2 -> safeUrlDecode(rawUrl).trim()
+                    else -> rawUrl
+                }
+            if (decodedUrl.isNotBlank() &&
+                (
+                    isPlayableMediaUrl(decodedUrl) ||
+                        decodedUrl.startsWith("http://", ignoreCase = true) ||
+                        decodedUrl.startsWith("https://", ignoreCase = true)
+                )
+            ) {
+                results.add(decodedUrl)
+            }
+        }
+    }
+
+    return results
+}
+
 /**
  * 从页面正文抽取候选地址。
  *
@@ -152,22 +239,46 @@ internal fun extractPlayableSources(
         )
     }
 
-    val direct: List<PlayableSource> =
-        (
-            MEDIA_URL_REGEX.findAll(normalized).map { it.value } +
-                MEDIA_TAG_REGEX.findAll(normalized).map { it.groupValues[1] }
-        ).mapNotNull { absoluteUrl(it, origin) }
-            .filterNot { isInvalidMediaHost(it) }
-            .map { buildSource(it, PlaylistEntryKind.DIRECT) }
-            .toList()
-
-    val pages: List<PlayableSource> =
+    val rawIframeUrls =
         IFRAME_TAG_REGEX
             .findAll(normalized)
             .mapNotNull { absoluteUrl(it.groupValues[1], origin) }
-            .filterNot { candidate -> direct.any { it.url == candidate } }
-            .map { buildSource(it, PlaylistEntryKind.PAGE) }
             .toList()
+
+    // 从 iframe 参数（如 player.php?url=https://...m3u8）中直接提取内嵌直链
+    val iframeDirectUrls =
+        rawIframeUrls.mapNotNull { iframeUrl ->
+            val match = IFRAME_MEDIA_PARAM_REGEX.find(iframeUrl) ?: return@mapNotNull null
+            val rawParam = safeUrlDecode(match.groupValues[1].trim())
+            if (isPlayableMediaUrl(rawParam) ||
+                (rawParam.startsWith("http", ignoreCase = true) && (rawParam.contains(".m3u8") || rawParam.contains(".mp4")))
+            ) {
+                rawParam
+            } else {
+                null
+            }
+        }
+
+    val directCandidates =
+        (
+            MEDIA_URL_REGEX.findAll(normalized).map { it.value } +
+                MEDIA_TAG_REGEX.findAll(normalized).map { it.groupValues[1] } +
+                extractEmbeddedPlayerUrls(normalized) +
+                iframeDirectUrls
+        ).mapNotNull { absoluteUrl(it, origin) }
+            .filterNot { isInvalidMediaHost(it) }
+            .distinct()
+            .toList()
+
+    val direct: List<PlayableSource> =
+        directCandidates
+            .map { buildSource(it, PlaylistEntryKind.DIRECT) }
+
+    val pages: List<PlayableSource> =
+        rawIframeUrls
+            .filterNot { iframeUrl ->
+                direct.any { it.url == iframeUrl } || iframeDirectUrls.any { iframeUrl.contains(it) }
+            }.map { buildSource(it, PlaylistEntryKind.PAGE) }
 
     return (direct + pages).take(MAX_CANDIDATES_PER_PAGE)
 }

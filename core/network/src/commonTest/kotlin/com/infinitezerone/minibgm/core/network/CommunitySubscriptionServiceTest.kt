@@ -243,6 +243,57 @@ class CommunitySubscriptionServiceTest {
         }
 
     @Test
+    fun validateAndTestSubscription_supportsTvBoxXmlSites() =
+        runTest {
+            val tvBoxJson =
+                """
+                {
+                    "sites": [
+                        {
+                            "key": "xml_zy",
+                            "name": "量子XML采集",
+                            "type": 0,
+                            "api": "https://lzzy.com/inc/api.php",
+                            "searchable": 1
+                        }
+                    ],
+                    "parses": [
+                        {
+                            "name": "解析1",
+                            "type": 1,
+                            "url": "https://api.jx.com/?url="
+                        }
+                    ]
+                }
+                """.trimIndent()
+
+            val engine =
+                MockEngine { request ->
+                    respond(content = "<rss version=\"2.0\"><class></class></rss>", status = HttpStatusCode.OK)
+                }
+
+            val client =
+                HttpClient(engine) {
+                    install(ContentNegotiation) {
+                        json(Json { ignoreUnknownKeys = true })
+                    }
+                }
+
+            val service = CommunitySubscriptionServiceImpl(client = client)
+            val report = service.validateAndTestSubscription(tvBoxJson)
+
+            assertTrue(report.isHealthy)
+            assertEquals(1, report.totalRules)
+            val xmlSite = report.sources.single()
+            assertEquals("https://lzzy.com/inc/api.php?ac=videolist&wd={title}", xmlSite.urlTemplate)
+            assertEquals(RuleParserType.MACCMS, xmlSite.parserType)
+            assertEquals(PlaybackRuleKind.SOURCE, xmlSite.kind)
+            assertEquals(1, report.parses.size)
+            assertEquals("解析1", report.parses.first().name)
+            assertEquals(1, report.parses.first().type)
+        }
+
+    @Test
     fun validateAndTestSubscription_supportsTvBoxJsSpiderSites() =
         runTest {
             val tvBoxJson =

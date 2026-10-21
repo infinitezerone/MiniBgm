@@ -47,4 +47,15 @@ class MediaCandidateJudgeTest {
         assertEquals(2, MediaCandidateJudge.rank("https://cdn.example.com/stream/12345"))
         assertEquals(3, MediaCandidateJudge.rank("https://cdn.example.com/v/seg-1.ts"))
     }
+
+    @Test
+    fun `shouldBlockResource 拦截无用图片字体及统计广告以加速嗅探`() {
+        assertTrue(MediaCandidateJudge.shouldBlockResource("https://cdn.example.com/cover.png"))
+        assertTrue(MediaCandidateJudge.shouldBlockResource("https://cdn.example.com/banner.jpg?w=500"))
+        assertTrue(MediaCandidateJudge.shouldBlockResource("https://cdn.example.com/font.woff2"))
+        assertTrue(MediaCandidateJudge.shouldBlockResource("https://www.google-analytics.com/analytics.js"))
+        // 核心 JS 脚本和媒体流不被阻断
+        assertFalse(MediaCandidateJudge.shouldBlockResource("https://cdn.example.com/player.js"))
+        assertFalse(MediaCandidateJudge.shouldBlockResource("https://cdn.example.com/video.m3u8"))
+    }
 }

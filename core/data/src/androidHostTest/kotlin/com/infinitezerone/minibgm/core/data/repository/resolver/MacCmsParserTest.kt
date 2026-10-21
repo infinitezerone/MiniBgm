@@ -128,4 +128,49 @@ class MacCmsParserTest {
         assertEquals("主站 · 线路2", sources[1].siteName)
         assertEquals("https://route2.com/1.m3u8", sources[1].url)
     }
+
+    @Test
+    fun extractMacCmsSources_parsesXmlFeedAndExtractsCorrectEpisode() {
+        val xml =
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <rss version="2.0">
+                <list page="1" pagecount="1" pagesize="20" recordcount="2">
+                    <video>
+                        <id>501</id>
+                        <name><![CDATA[咒术回战 第二季]]></name>
+                        <type><![CDATA[国产真人剧]]></type>
+                        <dl>
+                            <dd flag="tv"><![CDATA[第01集${'$'}https://fake.com/tv1.m3u8]]></dd>
+                        </dl>
+                    </video>
+                    <video>
+                        <id>502</id>
+                        <name><![CDATA[咒术回战 第二季]]></name>
+                        <type><![CDATA[日本动漫]]></type>
+                        <dl>
+                            <dd flag="qiyi"><![CDATA[第01集${'$'}https://xml.example.com/ep01.m3u8#第02集${'$'}https://xml.example.com/ep02.m3u8]]></dd>
+                            <dd flag="youku"><![CDATA[第01集${'$'}https://xml.example.com/route2_01.m3u8#第02集${'$'}https://xml.example.com/route2_02.m3u8]]></dd>
+                        </dl>
+                    </video>
+                </list>
+            </rss>
+            """.trimIndent()
+
+        val sources =
+            extractMacCmsSources(
+                html = xml,
+                pageUrl = "https://example.com/api.php/provide/vod/at/xml",
+                epNumber = 2f,
+                siteName = "XML采集站",
+                title = "咒术回战 第二季",
+            )
+
+        assertEquals(2, sources.size)
+        assertEquals("XML采集站 · 线路1", sources[0].siteName)
+        assertEquals("https://xml.example.com/ep02.m3u8", sources[0].url)
+        assertEquals("第02集", sources[0].label)
+        assertEquals("XML采集站 · 线路2", sources[1].siteName)
+        assertEquals("https://xml.example.com/route2_02.m3u8", sources[1].url)
+    }
 }

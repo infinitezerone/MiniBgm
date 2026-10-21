@@ -18,6 +18,9 @@ internal object MediaCandidateJudge {
     private val STATIC_RESOURCE_SUFFIX =
         Regex("""\.(js|css|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|eot|html?|json|xml|txt|vtt|srt|ass)(?:[?#].*)?$""")
 
+    private val HEAVY_RESOURCE_SUFFIX =
+        Regex("""\.(png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|eot)(?:[?#].*)?$""", RegexOption.IGNORE_CASE)
+
     /** 广告与统计端点关键字：带 Range 的也只可能是误报，直接拒绝 */
     private val AD_KEYWORDS =
         listOf(
@@ -39,6 +42,17 @@ internal object MediaCandidateJudge {
             "outbrain",
             "criteo",
         )
+
+    /**
+     * 判断是否为无头嗅探时应直接拦截的静态资源（图片、字体或广告统计），
+     * 阻断其网络下载以提速并节省流量。
+     */
+    fun shouldBlockResource(url: String): Boolean {
+        val lower = url.lowercase()
+        if (HEAVY_RESOURCE_SUFFIX.containsMatchIn(lower)) return true
+        if (AD_KEYWORDS.any { it in lower }) return true
+        return false
+    }
 
     /**
      * 该请求是否按媒体候选采纳。

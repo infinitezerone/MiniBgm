@@ -118,6 +118,7 @@ internal fun isExplicitNonAnimeType(typeName: String?): Boolean {
             "泰剧",
             "海外剧",
             "综艺",
+            "真人",
             "真人秀",
             "纪录片",
             "短剧",
@@ -135,8 +136,93 @@ internal fun isExplicitNonAnimeType(typeName: String?): Boolean {
 }
 
 /**
+ * 跨格式 MacCMS 规范化条目模型（支持 JSON 与 XML 互通）。
+ */
+internal data class MacCmsRawEntry(
+    val vodName: String,
+    val typeName: String,
+    val playUrl: String,
+)
+
+private val XML_VIDEO_REGEX =
+    Regex("""<video\b[^>]*>(.*?)</video>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+
+private val XML_DD_REGEX =
+    Regex("""<dd\b[^>]*>(.*?)</dd>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+
+private fun extractXmlTagContent(
+    xml: String,
+    tagName: String,
+): String {
+    val regex = Regex("""<$tagName\b[^>]*>(.*?)</$tagName>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+    val raw =
+        regex
+            .find(xml)
+            ?.groupValues
+            ?.get(1)
+            ?.trim()
+            .orEmpty()
+    return raw.removePrefix("<![CDATA[").removeSuffix("]]>").trim()
+}
+
+private fun isXmlPayload(text: String): Boolean {
+    val trimmed = text.trimStart()
+    return trimmed.startsWith("<?xml", ignoreCase = true) ||
+        trimmed.startsWith("<rss", ignoreCase = true) ||
+        (trimmed.startsWith("<") && trimmed.contains("<video", ignoreCase = true))
+}
+
+internal fun parseMacCmsXmlEntries(xml: String): List<MacCmsRawEntry> =
+    XML_VIDEO_REGEX
+        .findAll(xml)
+        .mapNotNull { match ->
+            val video = match.groupValues[1]
+            val name = extractXmlTagContent(video, "name")
+            val type = extractXmlTagContent(video, "type")
+            val dds =
+                XML_DD_REGEX
+                    .findAll(video)
+                    .map {
+                        it.groupValues[1]
+                            .trim()
+                            .removePrefix("<![CDATA[")
+                            .removeSuffix("]]>")
+                            .trim()
+                    }.filter { it.isNotBlank() }
+                    .toList()
+            if (dds.isEmpty() && name.isBlank()) return@mapNotNull null
+            MacCmsRawEntry(
+                vodName = name,
+                typeName = type,
+                playUrl = dds.joinToString("$$$"),
+            )
+        }.toList()
+
+internal fun parseMacCmsJsonEntries(json: String): List<MacCmsRawEntry> {
+    val segments = splitMacCmsEntries(json)
+    return segments.mapNotNull { segment ->
+        val name = segmentVodName(segment).orEmpty()
+        val type = segmentTypeName(segment).orEmpty()
+        val playUrl =
+            MACCMS_PLAY_URL_REGEX
+                .find(segment)
+                ?.groupValues
+                ?.get(1)
+                ?.replace("\\/", "/")
+                .orEmpty()
+        if (playUrl.isBlank() && name.isBlank()) return@mapNotNull null
+        MacCmsRawEntry(
+            vodName = name,
+            typeName = type,
+            playUrl = playUrl,
+        )
+    }
+}
+
+/**
  * 抽取 MacCMS 剧集直链。
  *
+ * 核心策略（JSON 与 XML 格式共用）：
  * - 多条目响应优先取 [title] 对得上且通过季数/版本断言的那一段（同名续作、剧场版混在搜索结果里时避免播错番）；
  * - 排除真人电视剧、综艺等非动漫分类条目；
  * - 当指定了 [title] 时，只有满足标题与季数兼容的条目才会被采用；杜绝无条件回退第一段导致的盲目串季；
@@ -152,28 +238,31 @@ internal fun extractMacCmsSources(
 ): List<PlayableSource> {
     // HTML 内嵌 JSON 会把 & 转义成 &amp;，不还原则直链带着 &amp; 去播放必然取不到流
     val normalized = html.replace("\\/", "/").replace("&amp;", "&")
-    val segments = splitMacCmsEntries(normalized)
-    val matchedSegment =
-        if (title.isNotBlank()) {
-            segments.firstOrNull { entry ->
-                val typeName = segmentTypeName(entry)
-                if (isExplicitNonAnimeType(typeName)) return@firstOrNull false
+    val entries: List<MacCmsRawEntry> =
+        if (isXmlPayload(normalized)) {
+            parseMacCmsXmlEntries(normalized)
+        } else {
+            parseMacCmsJsonEntries(normalized)
+        }
+    if (entries.isEmpty()) return emptyList()
 
-                val vodName = segmentVodName(entry)
-                if (vodName != null) {
-                    titleMatches(vodName, title) && EpisodeSanityChecker.isSeasonAndEditionCompatible(title, vodName)
+    val matchedEntry =
+        if (title.isNotBlank()) {
+            entries.firstOrNull { entry ->
+                if (isExplicitNonAnimeType(entry.typeName)) return@firstOrNull false
+                if (entry.vodName.isNotBlank()) {
+                    titleMatches(entry.vodName, title) && EpisodeSanityChecker.isSeasonAndEditionCompatible(title, entry.vodName)
                 } else {
                     false
                 }
-            } ?: if (segments.size == 1) {
+            } ?: if (entries.size == 1) {
                 // 单条目响应（单番详情接口或只有一个结果）：
                 // 仅当 vodName 为空，或通过季数/版本与类型断言时采纳
-                val singleVodName = segmentVodName(segments.first())
-                val singleTypeName = segmentTypeName(segments.first())
-                if (!isExplicitNonAnimeType(singleTypeName) &&
-                    (singleVodName == null || EpisodeSanityChecker.isSeasonAndEditionCompatible(title, singleVodName))
+                val single = entries.first()
+                if (!isExplicitNonAnimeType(single.typeName) &&
+                    (single.vodName.isBlank() || EpisodeSanityChecker.isSeasonAndEditionCompatible(title, single.vodName))
                 ) {
-                    segments.first()
+                    single
                 } else {
                     null
                 }
@@ -181,69 +270,63 @@ internal fun extractMacCmsSources(
                 null
             }
         } else {
-            segments.firstOrNull { entry ->
-                !isExplicitNonAnimeType(segmentTypeName(entry))
-            }
+            entries.firstOrNull { !isExplicitNonAnimeType(it.typeName) }
         } ?: return emptyList()
 
-    val vodTitle = segmentVodName(matchedSegment).orEmpty()
+    val vodTitle = matchedEntry.vodName
     val referer = pageOrigin(pageUrl)?.let { mapOf("Referer" to it) }.orEmpty()
     val results = mutableListOf<PlayableSource>()
 
-    MACCMS_PLAY_URL_REGEX.find(matchedSegment)?.let { match ->
-        val playListStr = match.groupValues[1].replace("\\/", "/")
-        val routes = playListStr.split("$$$")
-
-        routes.forEachIndexed { routeIndex, routeContent ->
-            val routeEntries =
-                routeContent.split('#').mapNotNull { raw ->
-                    val parts = raw.split('$', limit = 2)
-                    if (parts.size >= 2) {
-                        val entryLabel = parts[0].trim()
-                        val mediaUrl = parts[1].trim()
-                        if (isPlayableMediaUrl(mediaUrl)) {
-                            entryLabel to mediaUrl
-                        } else {
-                            null
-                        }
+    val routes = matchedEntry.playUrl.split("$$$")
+    routes.forEachIndexed { routeIndex, routeContent ->
+        val routeEntries =
+            routeContent.split('#').mapNotNull { raw ->
+                val parts = raw.split('$', limit = 2)
+                if (parts.size >= 2) {
+                    val entryLabel = parts[0].trim()
+                    val mediaUrl = parts[1].trim()
+                    if (isPlayableMediaUrl(mediaUrl)) {
+                        entryLabel to mediaUrl
                     } else {
                         null
                     }
-                }
-            if (routeEntries.isEmpty()) return@forEachIndexed
-
-            // 收集当前线路的所有可用集号以进行拓扑判定
-            val availableSorts =
-                routeEntries.mapNotNull { (label, url) ->
-                    episodeNumberFromLabel(label) ?: episodeNumberFromUrl(url, allowWeak = true)
-                }
-            val targetEp =
-                if (epNumber > 0f) {
-                    EpisodeSanityChecker.normalizeEpisodeIndex(epNumber, availableSorts) ?: epNumber
                 } else {
-                    epNumber
+                    null
                 }
-            val targetEpInt = targetEp.toInt()
-            val paddedEp = targetEpInt.toString().padStart(2, '0')
-
-            val routeLabel = if (routes.size > 1) " · 线路${routeIndex + 1}" else ""
-            val finalSiteName = if (siteName.isNotBlank()) "$siteName$routeLabel" else siteName
-
-            for ((entryLabel, mediaUrl) in routeEntries) {
-                if (epNumber > 0f && !entryMatchesEpisode(entryLabel, mediaUrl, targetEpInt, paddedEp)) continue
-                results.add(
-                    PlayableSource(
-                        url = mediaUrl,
-                        kind = PlaylistEntryKind.DIRECT,
-                        label = entryLabel,
-                        episodeSort = epNumber,
-                        siteName = finalSiteName,
-                        pageUrl = pageUrl,
-                        headers = referer,
-                        matchedVodName = vodTitle,
-                    ),
-                )
             }
+        if (routeEntries.isEmpty()) return@forEachIndexed
+
+        // 收集当前线路的所有可用集号以进行拓扑判定
+        val availableSorts =
+            routeEntries.mapNotNull { (label, url) ->
+                episodeNumberFromLabel(label) ?: episodeNumberFromUrl(url, allowWeak = true)
+            }
+        val targetEp =
+            if (epNumber > 0f) {
+                EpisodeSanityChecker.normalizeEpisodeIndex(epNumber, availableSorts) ?: epNumber
+            } else {
+                epNumber
+            }
+        val targetEpInt = targetEp.toInt()
+        val paddedEp = targetEpInt.toString().padStart(2, '0')
+
+        val routeLabel = if (routes.size > 1) " · 线路${routeIndex + 1}" else ""
+        val finalSiteName = if (siteName.isNotBlank()) "$siteName$routeLabel" else siteName
+
+        for ((entryLabel, mediaUrl) in routeEntries) {
+            if (epNumber > 0f && !entryMatchesEpisode(entryLabel, mediaUrl, targetEpInt, paddedEp)) continue
+            results.add(
+                PlayableSource(
+                    url = mediaUrl,
+                    kind = PlaylistEntryKind.DIRECT,
+                    label = entryLabel,
+                    episodeSort = epNumber,
+                    siteName = finalSiteName,
+                    pageUrl = pageUrl,
+                    headers = referer,
+                    matchedVodName = vodTitle,
+                ),
+            )
         }
     }
     return results.distinctBy { it.url }.take(MAX_MANIFEST_ENTRIES)

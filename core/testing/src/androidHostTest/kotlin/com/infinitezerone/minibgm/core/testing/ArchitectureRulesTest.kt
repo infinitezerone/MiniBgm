@@ -3292,6 +3292,45 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * TVBox 聚合解析链与嗅探引擎安全提速红线（剧本 15）：
+     * 1. [TvBoxParseResolverImpl] 必须配置超时看门狗（PARSE_TIMEOUT_MS / withTimeoutOrNull），防止慢解析服务挂死；
+     * 2. HTTP 请求必须委托宿主 [PageFetchService] 或 [WebViewCaptureService]，零裸网络调用；
+     * 3. [MediaCandidateJudge] 必须拦截图片/字体等重型非媒体静态资源以加速嗅探。
+     */
+    @Test
+    fun tvbox_parses_must_enforce_timeout_and_route_through_page_fetch_or_webview() {
+        val resolverFile =
+            File(
+                projectRoot,
+                "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/resolver/parse/TvBoxParseResolver.kt",
+            )
+        assertTrue(resolverFile.isFile, "TvBoxParseResolver.kt 未找到")
+        val resolverContent = KotlinSourceScanner.sanitize(resolverFile.readText())
+
+        assertTrue(
+            resolverContent.contains("withTimeoutOrNull"),
+            "TvBoxParseResolver 必须具备超时保护，防止第三方解析接口挂起",
+        )
+        assertTrue(
+            resolverContent.contains("PageFetchService"),
+            "TvBoxParseResolver 必须通过 PageFetchService 发起网络请求",
+        )
+
+        val judgeFile =
+            File(
+                projectRoot,
+                "core/webview/src/main/kotlin/com/infinitezerone/minibgm/core/webview/MediaCandidateJudge.kt",
+            )
+        assertTrue(judgeFile.isFile, "MediaCandidateJudge.kt 未找到")
+        val judgeContent = KotlinSourceScanner.sanitize(judgeFile.readText())
+
+        assertTrue(
+            judgeContent.contains("shouldBlockResource"),
+            "MediaCandidateJudge 必须具备非必要静态资源拦截过滤能力",
+        )
+    }
+
     @Test
     fun player_gesture_hud_must_not_jitter_and_use_tnum_and_avoid_dual_hud_conflict() {
         val gestureFile =

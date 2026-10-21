@@ -23,6 +23,9 @@ private const val SESSION_BUDGET_MS = 30_000L
 /** 页面加载完成后再等待迟发媒体请求的宽限 */
 private const val AFTER_FINISH_GRACE_MS = 6_000L
 
+/** 捕获到高置信度流清单（.m3u8）或直链后的早停结算防抖延时 */
+private const val EARLY_SETTLE_MS = 300L
+
 /** 最多采纳的候选媒体请求数（与正则档一致） */
 private const val MAX_CANDIDATES = 12
 
@@ -46,6 +49,7 @@ class WebViewCaptureServiceImpl(
             var webview: WebView? = null
             var settled = false
             var graceTimeoutRunnable: Runnable? = null
+            var earlySettleRunnable: Runnable? = null
             var sessionTimeoutRunnable: Runnable? = null
 
             fun settle() {
@@ -53,6 +57,7 @@ class WebViewCaptureServiceImpl(
                 settled = true
                 sessionTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
                 graceTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                earlySettleRunnable?.let { mainHandler.removeCallbacks(it) }
                 val sources =
                     runCatching {
                         captured.entries
@@ -82,6 +87,13 @@ class WebViewCaptureServiceImpl(
                 }
             }
 
+            fun scheduleEarlySettle() {
+                if (settled || earlySettleRunnable != null) return
+                val runnable = Runnable { settle() }
+                earlySettleRunnable = runnable
+                mainHandler.postDelayed(runnable, EARLY_SETTLE_MS)
+            }
+
             fun record(request: WebResourceRequest) {
                 // WebView 内部线程上的回调：任何异常都会炸进程，全部吞掉——
                 // 深度解析是可选兜底档，失败就是"没有结果"
@@ -92,6 +104,7 @@ class WebViewCaptureServiceImpl(
                             .firstOrNull { it.key.equals("Range", ignoreCase = true) }
                             ?.value
                     if (!MediaCandidateJudge.isMediaCandidate(url, rangeHeader)) return
+                    val rank = MediaCandidateJudge.rank(url)
                     synchronized(captured) {
                         if (captured.containsKey(url)) return@synchronized
                         val headers =
@@ -101,8 +114,11 @@ class WebViewCaptureServiceImpl(
                                 request.requestHeaders["Origin"]?.let { put("Origin", it) }
                             }
                         captured[url] = headers
-                        ranks[url] = MediaCandidateJudge.rank(url)
+                        ranks[url] = rank
                         logger.d { "捕获媒体请求 ${request.requestHeaders["Referer"]?.let { "（带 Referer）" } ?: ""}: $url" }
+                    }
+                    if (rank <= 1) {
+                        mainHandler.post { scheduleEarlySettle() }
                     }
                 }.onFailure { e -> logger.w { "捕获回调异常（已忽略）: ${e.message}" } }
             }
@@ -111,6 +127,8 @@ class WebViewCaptureServiceImpl(
                 runCatching {
                     webview =
                         WebView(context).apply {
+                            settings.userAgentString =
+                                "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = false
                             settings.allowFileAccess = false
@@ -124,6 +142,14 @@ class WebViewCaptureServiceImpl(
                                         view: WebView,
                                         request: WebResourceRequest,
                                     ): android.webkit.WebResourceResponse? {
+                                        val url = request.url.toString()
+                                        if (MediaCandidateJudge.shouldBlockResource(url)) {
+                                            return android.webkit.WebResourceResponse(
+                                                "text/plain",
+                                                "UTF-8",
+                                                java.io.ByteArrayInputStream(ByteArray(0)),
+                                            )
+                                        }
                                         record(request)
                                         return null
                                     }
@@ -152,6 +178,7 @@ class WebViewCaptureServiceImpl(
                 mainHandler.post {
                     mainHandler.removeCallbacks(timeoutRunnable)
                     graceTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                    earlySettleRunnable?.let { mainHandler.removeCallbacks(it) }
                     webview?.stopLoading()
                     webview?.destroy()
                     webview = null

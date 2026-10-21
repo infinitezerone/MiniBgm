@@ -234,6 +234,12 @@ interface SettingsRepository {
      */
     suspend fun refreshPlaybackSubscription(): AppResult<RuleImportSummary>
 
+    /** 社区 TVBox 聚合解析接口配置列表流 */
+    val playbackParses: Flow<List<com.infinitezerone.minibgm.core.model.TvBoxParse>>
+
+    /** 更新社区 TVBox 聚合解析接口配置列表 */
+    suspend fun setPlaybackParses(parses: List<com.infinitezerone.minibgm.core.model.TvBoxParse>)
+
     /** 弹弹play 聚合弹幕配置流 */
     val danmakuConfig: Flow<DanmakuConfig>
 
@@ -389,6 +395,21 @@ internal class SettingsRepositoryImpl(
             }.onStart {
                 triggerSubscriptionHealingIfMissing()
             }
+
+    override val playbackParses: Flow<List<com.infinitezerone.minibgm.core.model.TvBoxParse>> =
+        userPreferences.userPreferences.map { prefs ->
+            if (prefs.playbackParsesJson.isBlank()) {
+                emptyList()
+            } else {
+                runCatching {
+                    json.decodeFromString<List<com.infinitezerone.minibgm.core.model.TvBoxParse>>(prefs.playbackParsesJson)
+                }.getOrDefault(emptyList())
+            }
+        }
+
+    override suspend fun setPlaybackParses(parses: List<com.infinitezerone.minibgm.core.model.TvBoxParse>) {
+        userPreferences.setPlaybackParsesJson(json.encodeToString(parses))
+    }
 
     override suspend fun setSyncInterval(interval: SyncInterval) {
         userPreferences.setSyncInterval(interval)
@@ -607,6 +628,9 @@ internal class SettingsRepositoryImpl(
                     if (report.errorMessage != null && report.sources.isEmpty()) {
                         throw IllegalStateException(report.errorMessage)
                     }
+                    if (report.parses.isNotEmpty()) {
+                        setPlaybackParses(report.parses)
+                    }
                     report.sources.map { source ->
                         source.toPlaybackSourceRule(
                             id = "sub_${source.name.hashCode().toUInt().toString(16)}",
@@ -718,6 +742,9 @@ internal class SettingsRepositoryImpl(
                 when (val reportResult = validateAndTestSubscription(url)) {
                     is AppResult.Success -> {
                         val report = reportResult.data
+                        if (report.parses.isNotEmpty()) {
+                            setPlaybackParses(report.parses)
+                        }
                         val candidateSources = report.sources
                         if (candidateSources.isEmpty()) {
                             AppResult.Error(IllegalStateException("订阅源中没有解析到有效播放源"))

@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.model
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /**
  * 社区开源订阅与动态发现的播放源规则。
@@ -53,6 +54,7 @@ data class SubscriptionValidationReport(
     val aliveRules: Int = 0,
     val averageLatencyMs: Long = 0L,
     val sources: List<DiscoveredSource> = emptyList(),
+    val parses: List<TvBoxParse> = emptyList(),
     val errorMessage: String? = null,
     /** 本应用没有执行路径的源类型（TVBox 爬虫/扩展源、脚本端点） */
     val skippedUnsupportedSites: Int = 0,
@@ -61,11 +63,31 @@ data class SubscriptionValidationReport(
 )
 
 /**
+ * TVBox 聚合解析接口模型。
+ *
+ * @property name 解析名称
+ * @property type 解析类型：0=网页嗅探/iframe, 1=JSON 直链接口, 2=深度嗅探, 3=脚本扩展
+ * @property url 解析地址（通常包含 `?url=`）
+ * @property ext 额外参数（支持字符串或 JSON 对象）
+ * @property header 自定义请求头
+ */
+@Serializable
+data class TvBoxParse(
+    val name: String = "",
+    val type: Int = 0,
+    val url: String = "",
+    val ext: JsonElement? = null,
+    val header: Map<String, String> = emptyMap(),
+)
+
+/**
  * 社区开源 TVBox 订阅结构兼容定义。
  */
 @Serializable
 data class TvBoxConfig(
     val sites: List<TvBoxSite> = emptyList(),
+    val parses: List<TvBoxParse> = emptyList(),
+    val flags: List<String> = emptyList(),
 )
 
 /**
@@ -139,13 +161,21 @@ data class TvBoxSite(
         }
         if (isScriptEndpoint(targetUrl)) return TvBoxSiteConversion.Unsupported
 
+        val hasCustomPlaceholder = targetUrl.contains("{title}", ignoreCase = true) || targetUrl.contains("{wd}", ignoreCase = true)
+        val parserType =
+            when {
+                type == TYPE_MACCMS -> RuleParserType.MACCMS
+                type == TYPE_XML && !hasCustomPlaceholder -> RuleParserType.MACCMS
+                else -> RuleParserType.AUTO
+            }
+
         return TvBoxSiteConversion.Supported(
             DiscoveredSource(
                 name = siteName,
                 urlTemplate = resolveUrlTemplate(targetUrl),
-                description = resolveDescription(),
+                description = resolveDescription(hasCustomPlaceholder),
                 kind = PlaybackRuleKind.SOURCE,
-                parserType = if (type == TYPE_MACCMS) RuleParserType.MACCMS else RuleParserType.AUTO,
+                parserType = parserType,
             ),
         )
     }
@@ -188,21 +218,26 @@ data class TvBoxSite(
 
     private fun resolveUrlTemplate(targetUrl: String): String =
         when {
-            type == TYPE_MACCMS -> if (targetUrl.contains("?")) "$targetUrl&ac=detail&wd={title}" else "$targetUrl?ac=detail&wd={title}"
             targetUrl.contains("{wd}", ignoreCase = true) -> targetUrl.replace("{wd}", "{title}", ignoreCase = true)
             targetUrl.contains("{title}", ignoreCase = true) -> targetUrl
+            type == TYPE_MACCMS -> if (targetUrl.contains("?")) "$targetUrl&ac=detail&wd={title}" else "$targetUrl?ac=detail&wd={title}"
+            type == TYPE_XML -> if (targetUrl.contains("?")) "$targetUrl&ac=videolist&wd={title}" else "$targetUrl?ac=videolist&wd={title}"
             targetUrl.contains("?") -> "$targetUrl&wd={title}"
             else -> "$targetUrl/search?query={title}"
         }
 
-    private fun resolveDescription(): String =
-        when (type) {
-            TYPE_MACCMS -> "TVBox MacCMS 采集源"
-            TYPE_SPIDER -> "TVBox 爬虫/扩展源"
+    private fun resolveDescription(hasCustomPlaceholder: Boolean = false): String =
+        when {
+            type == TYPE_XML && !hasCustomPlaceholder -> "TVBox XML 采集源"
+            type == TYPE_MACCMS -> "TVBox MacCMS 采集源"
+            type == TYPE_SPIDER -> "TVBox 爬虫/扩展源"
             else -> "TVBox 动漫源"
         }
 
     companion object {
+        /** TVBox 约定：XML 采集接口（苹果 CMS V8 等） */
+        private const val TYPE_XML = 0
+
         /** TVBox 约定：苹果 CMS V10 JSON 接口 */
         private const val TYPE_MACCMS = 1
 

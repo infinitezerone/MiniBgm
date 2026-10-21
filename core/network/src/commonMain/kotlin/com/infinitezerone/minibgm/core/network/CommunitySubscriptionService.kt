@@ -32,6 +32,7 @@ private const val MAX_REDIRECTS = 5
  */
 internal data class ParsedSourceBatch(
     val sources: List<DiscoveredSource> = emptyList(),
+    val parses: List<com.infinitezerone.minibgm.core.model.TvBoxParse> = emptyList(),
     val skippedUnsupported: Int = 0,
     val skippedMalformed: Int = 0,
 )
@@ -129,6 +130,7 @@ internal class CommunitySubscriptionServiceImpl(
             aliveRules = aliveList.size,
             averageLatencyMs = avgLatency,
             sources = sortedSources,
+            parses = batch.parses,
             skippedUnsupportedSites = batch.skippedUnsupported,
             skippedMalformedSites = batch.skippedMalformed,
         )
@@ -168,6 +170,7 @@ internal class CommunitySubscriptionServiceImpl(
             // 调用方就只能笼统说"没解析到"，分不清是不支持还是条目残缺
             return ParsedSourceBatch(
                 sources = conversions.filterIsInstance<TvBoxSiteConversion.Supported>().map { it.source },
+                parses = tvBox.parses,
                 skippedUnsupported = conversions.count { it is TvBoxSiteConversion.Unsupported },
                 skippedMalformed = conversions.count { it is TvBoxSiteConversion.Malformed },
             )

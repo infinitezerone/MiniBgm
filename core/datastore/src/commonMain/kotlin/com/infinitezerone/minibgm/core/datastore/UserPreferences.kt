@@ -103,6 +103,8 @@ data class UserPreferences(
     val lastPlaybackSourceId: String = "",
     /** 社区/外部播放规则订阅地址（空串表示未配置） */
     val playbackSubscriptionUrl: String = "",
+    /** 社区 TVBox 聚合解析接口配置列表 JSON (List<TvBoxParse>) */
+    val playbackParsesJson: String = "",
     /** 用户保存的季度导视与探索发现自定义常用筛选标签列表（有序） */
     val customFilterTags: List<String> = emptyList(),
     /** 弹幕服务端点（空串表示使用默认官方端点） */

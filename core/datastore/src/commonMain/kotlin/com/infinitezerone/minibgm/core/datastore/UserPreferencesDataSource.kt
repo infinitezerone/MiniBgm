@@ -311,6 +311,13 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 更新社区 TVBox 聚合解析接口配置列表 JSON */
+    suspend fun setPlaybackParsesJson(json: String) {
+        dataStore.updateData { current ->
+            current.copy(playbackParsesJson = json)
+        }
+    }
+
     /** 更新断点续播位置表 JSON（Map<播放地址, 毫秒>，上限与淘汰策略由写入方维护） */
     suspend fun setPlaybackPositionsJson(json: String) {
         dataStore.updateData { current ->

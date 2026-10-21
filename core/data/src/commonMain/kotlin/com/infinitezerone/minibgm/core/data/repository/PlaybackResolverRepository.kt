@@ -10,6 +10,8 @@ import com.infinitezerone.minibgm.core.data.repository.resolver.extractMacCmsSou
 import com.infinitezerone.minibgm.core.data.repository.resolver.findHomeEntryTitle
 import com.infinitezerone.minibgm.core.data.repository.resolver.macCmsProbeCandidates
 import com.infinitezerone.minibgm.core.data.repository.resolver.pageOrigin
+import com.infinitezerone.minibgm.core.data.repository.resolver.parse.TvBoxParseResolver
+import com.infinitezerone.minibgm.core.data.repository.resolver.parse.TvBoxParseResolverImpl
 import com.infinitezerone.minibgm.core.data.repository.resolver.parseStreamManifest
 import com.infinitezerone.minibgm.core.data.repository.resolver.probeSampleEpisodeUrl
 import com.infinitezerone.minibgm.core.data.repository.resolver.sniffPageOrSubPages
@@ -23,6 +25,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackRuleApi
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.ProbeSiteOutput
 import com.infinitezerone.minibgm.core.model.RuleParserType
+import com.infinitezerone.minibgm.core.model.TvBoxParse
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -97,6 +100,16 @@ interface PlaybackResolverRepository {
         )
 
     /**
+     * 将目标视频中间页或未直接可播地址通过 TVBox 聚合解析器转化为可直接起播的直链。
+     */
+    suspend fun resolveParse(
+        targetUrl: String,
+        epNumber: Float = 0f,
+        siteName: String = "",
+        candidateParses: List<TvBoxParse> = emptyList(),
+    ): List<PlayableSource> = emptyList()
+
+    /**
      * 探测指定页面的结构特征（是否包含 video 标签、自定义属性、iframe、MacCMS 标记等）。
      */
     suspend fun inspectPage(url: String): PageInspectionResult =
@@ -152,6 +165,8 @@ internal class PlaybackResolverRepositoryImpl(
     private val kitsuMappingResolver: KitsuMappingResolver = KitsuMappingResolverImpl(pageFetchService),
     private val tvBoxSpiderResolver: TvBoxSpiderResolver =
         TvBoxSpiderResolver(JsSpiderSandbox(pageFetchService), pageFetchService),
+    private val tvBoxParseResolver: TvBoxParseResolver =
+        TvBoxParseResolverImpl(pageFetchService, webViewCaptureService, JsSpiderSandbox(pageFetchService)),
 ) : PlaybackResolverRepository {
     override suspend fun resolvePages(
         pageUrls: List<String>,
@@ -255,6 +270,16 @@ internal class PlaybackResolverRepositoryImpl(
                     tvBoxSpiderResolver.resolveSpider(rule, title, epNumber)
                 }
             }
+        }
+
+    override suspend fun resolveParse(
+        targetUrl: String,
+        epNumber: Float,
+        siteName: String,
+        candidateParses: List<TvBoxParse>,
+    ): List<PlayableSource> =
+        withContext(Dispatchers.Default) {
+            tvBoxParseResolver.resolveParse(targetUrl, epNumber, siteName, candidateParses)
         }
 
     override suspend fun inspectPage(url: String): PageInspectionResult {

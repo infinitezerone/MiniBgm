@@ -308,6 +308,13 @@ class FakeSettingsRepository(
         playbackSubscriptionUrlState.value = url.trim()
     }
 
+    private val playbackParsesState = MutableStateFlow<List<com.infinitezerone.minibgm.core.model.TvBoxParse>>(emptyList())
+    override val playbackParses: Flow<List<com.infinitezerone.minibgm.core.model.TvBoxParse>> = playbackParsesState
+
+    override suspend fun setPlaybackParses(parses: List<com.infinitezerone.minibgm.core.model.TvBoxParse>) {
+        playbackParsesState.value = parses
+    }
+
     private val developerSettingsState =
         MutableStateFlow(
             com.infinitezerone.minibgm.core.model
