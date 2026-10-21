@@ -13,6 +13,8 @@ import com.infinitezerone.minibgm.core.data.repository.resolver.pageOrigin
 import com.infinitezerone.minibgm.core.data.repository.resolver.parseStreamManifest
 import com.infinitezerone.minibgm.core.data.repository.resolver.probeSampleEpisodeUrl
 import com.infinitezerone.minibgm.core.data.repository.resolver.sniffPageOrSubPages
+import com.infinitezerone.minibgm.core.data.repository.resolver.spider.JsSpiderSandbox
+import com.infinitezerone.minibgm.core.data.repository.resolver.spider.TvBoxSpiderResolver
 import com.infinitezerone.minibgm.core.model.MacCmsProbeResult
 import com.infinitezerone.minibgm.core.model.NetworkAuditTrace
 import com.infinitezerone.minibgm.core.model.PageInspectionResult
@@ -148,6 +150,8 @@ internal class PlaybackResolverRepositoryImpl(
     private val playbackRuleEngine: PlaybackRuleEngine = PlaybackRuleEngineImpl(pageFetchService),
     private val webViewCaptureService: WebViewCaptureService? = null,
     private val kitsuMappingResolver: KitsuMappingResolver = KitsuMappingResolverImpl(pageFetchService),
+    private val tvBoxSpiderResolver: TvBoxSpiderResolver =
+        TvBoxSpiderResolver(JsSpiderSandbox(pageFetchService), pageFetchService),
 ) : PlaybackResolverRepository {
     override suspend fun resolvePages(
         pageUrls: List<String>,
@@ -246,6 +250,9 @@ internal class PlaybackResolverRepositoryImpl(
                 }
                 RuleParserType.RSS_TORRENT -> {
                     emptyList()
+                }
+                RuleParserType.SPIDER -> {
+                    tvBoxSpiderResolver.resolveSpider(rule, title, epNumber)
                 }
             }
         }

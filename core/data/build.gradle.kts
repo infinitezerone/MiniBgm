@@ -106,6 +106,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.koin.core)
+            implementation(libs.quickjs.kt)
         }
         androidMain.dependencies {
             implementation(libs.koin.android)
@@ -122,5 +123,12 @@ kotlin {
                 implementation(libs.androidx.datastore)
             }
         }
+    }
+}
+
+configurations.matching { it.name.contains("HostTest", ignoreCase = true) || it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
+    resolutionStrategy.dependencySubstitution {
+        substitute(module("io.github.dokar3:quickjs-kt-android"))
+            .using(module("io.github.dokar3:quickjs-kt-jvm:1.0.15"))
     }
 }

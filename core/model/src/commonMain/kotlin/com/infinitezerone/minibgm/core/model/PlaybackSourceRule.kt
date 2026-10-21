@@ -17,6 +17,7 @@ enum class RuleParserType {
     STREMIO,
     PIPELINE,
     RSS_TORRENT,
+    SPIDER,
 }
 
 /** 流水线单步操作类型 */

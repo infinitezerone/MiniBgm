@@ -108,10 +108,35 @@ data class TvBoxSite(
      */
     fun convert(): TvBoxSiteConversion {
         val siteName = resolveSiteName() ?: return TvBoxSiteConversion.Malformed
-        // type 3 是需要 jar/js 爬虫实现的扩展源，本应用没有执行路径，收下只会变成废规则
-        if (type == TYPE_SPIDER) return TvBoxSiteConversion.Unsupported
+        // type 3 是爬虫/扩展源，若提供了可运行的 JS 脚本地址，映射为 SPIDER 解析器
+        if (type == TYPE_SPIDER) {
+            val scriptUrl = resolveSpiderScriptUrl()
+            if (scriptUrl != null) {
+                return TvBoxSiteConversion.Supported(
+                    DiscoveredSource(
+                        name = siteName,
+                        urlTemplate = scriptUrl,
+                        description = resolveDescription(),
+                        kind = PlaybackRuleKind.SOURCE,
+                        parserType = RuleParserType.SPIDER,
+                    ),
+                )
+            }
+            return TvBoxSiteConversion.Unsupported
+        }
 
         val targetUrl = resolveTargetUrl() ?: return TvBoxSiteConversion.Malformed
+        if (targetUrl.endsWith(".js", ignoreCase = true)) {
+            return TvBoxSiteConversion.Supported(
+                DiscoveredSource(
+                    name = siteName,
+                    urlTemplate = targetUrl,
+                    description = resolveDescription(),
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.SPIDER,
+                ),
+            )
+        }
         if (isScriptEndpoint(targetUrl)) return TvBoxSiteConversion.Unsupported
 
         return TvBoxSiteConversion.Supported(
@@ -124,6 +149,21 @@ data class TvBoxSite(
             ),
         )
     }
+
+    private fun resolveSpiderScriptUrl(): String? {
+        val primary = api?.trim().orEmpty()
+        val secondary = ext?.trim().orEmpty()
+        return when {
+            primary.endsWith(".js", ignoreCase = true) -> primary
+            secondary.endsWith(".js", ignoreCase = true) -> secondary
+            isHttpUrl(primary) && !primary.endsWith(".jar", ignoreCase = true) -> primary
+            isHttpUrl(secondary) && !secondary.endsWith(".jar", ignoreCase = true) -> secondary
+            else -> null
+        }
+    }
+
+    private fun isHttpUrl(url: String): Boolean =
+        url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)
 
     private fun resolveSiteName(): String? {
         val n = name.trim()

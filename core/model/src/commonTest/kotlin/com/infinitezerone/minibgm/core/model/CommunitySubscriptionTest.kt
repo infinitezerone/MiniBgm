@@ -55,34 +55,40 @@ class CommunitySubscriptionTest {
     }
 
     @Test
-    fun convert_reportsSpiderSitesAsUnsupported() {
-        // type 3 需要 jar/js 爬虫实现，本应用没有执行路径
-        val spider =
+    fun convert_supportsJsSpiderSitesWithSpiderParser() {
+        val jsSite =
             TvBoxSite(
-                name = "爬虫源",
-                type = 3,
-                ext = "https://example.com/spider?query={title}",
-            )
-        assertIs<TvBoxSiteConversion.Unsupported>(spider.convert())
-
-        // 端点指向脚本资源（TVBox 扩展源的常见形态）同样是废规则
-        val scriptEndpoint =
-            TvBoxSite(
-                name = "脚本源",
+                name = "JS爬虫源",
                 type = 3,
                 api = "https://example.com/js/spider.js",
             )
-        assertIs<TvBoxSiteConversion.Unsupported>(scriptEndpoint.convert())
+        val source = assertSupported(jsSite)
+        assertEquals(RuleParserType.SPIDER, source.parserType)
+        assertEquals(PlaybackRuleKind.SOURCE, source.kind)
+        assertEquals("https://example.com/js/spider.js", source.urlTemplate)
 
-        val jsWithoutSpiderType =
+        val cspSite =
             TvBoxSite(
-                name = "以脚本充当接口",
-                api = "https://example.com/spider.min.js",
+                name = "CSP扩展源",
+                type = 3,
+                api = "csp_Age",
+                ext = "https://example.com/age.js",
             )
-        assertIs<TvBoxSiteConversion.Unsupported>(jsWithoutSpiderType.convert())
+        val cspSource = assertSupported(cspSite)
+        assertEquals(RuleParserType.SPIDER, cspSource.parserType)
+        assertEquals("https://example.com/age.js", cspSource.urlTemplate)
 
-        val cspScheme = TvBoxSite(name = "私有爬虫协议", api = "csp_Custom")
-        assertIs<TvBoxSiteConversion.Malformed>(cspScheme.convert())
+        // jar 仍然不支持
+        val jarSite =
+            TvBoxSite(
+                name = "JAR源",
+                type = 3,
+                api = "https://example.com/spider.jar",
+            )
+        assertIs<TvBoxSiteConversion.Unsupported>(jarSite.convert())
+
+        val cspSchemeWithoutScript = TvBoxSite(name = "私有爬虫协议无扩展", api = "csp_Custom")
+        assertIs<TvBoxSiteConversion.Malformed>(cspSchemeWithoutScript.convert())
     }
 
     @Test

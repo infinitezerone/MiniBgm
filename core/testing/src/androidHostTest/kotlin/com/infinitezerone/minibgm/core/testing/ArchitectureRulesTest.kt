@@ -3263,6 +3263,35 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * TVBox JS 爬虫沙盒硬安全隔离红线（见 AGENTS.md 领域规则 & 剧本 15）：
+     * 1. [JsSpiderSandbox] 必须显式配置内存限制（`memoryLimit`）与执行超时保护（`evaluationTimeoutMillis`）；
+     * 2. 不可信脚本的网络能力必须经由宿主 `PageFetchService` 注入，严禁直连裸 Socket。
+     */
+    @Test
+    fun js_spider_sandbox_must_enforce_resource_limits_and_host_network() {
+        val sandboxFile =
+            File(
+                projectRoot,
+                "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/resolver/spider/JsSpiderSandbox.kt",
+            )
+        assertTrue(sandboxFile.isFile, "JsSpiderSandbox.kt 未找到")
+        val content = KotlinSourceScanner.sanitize(sandboxFile.readText())
+
+        assertTrue(
+            content.contains("memoryLimit ="),
+            "JsSpiderSandbox 必须显式声明 memoryLimit 内存配额，防止不可信脚本 OOM",
+        )
+        assertTrue(
+            content.contains("evaluationTimeoutMillis ="),
+            "JsSpiderSandbox 必须显式声明 evaluationTimeoutMillis 超时保护，防止第三方脚本死循环挂死",
+        )
+        assertTrue(
+            content.contains("PageFetchService"),
+            "JsSpiderSandbox 网络请求必须通过 PageFetchService 代理，享有统一的白名单与重定向审计",
+        )
+    }
+
     @Test
     fun player_gesture_hud_must_not_jitter_and_use_tnum_and_avoid_dual_hud_conflict() {
         val gestureFile =

@@ -243,6 +243,46 @@ class CommunitySubscriptionServiceTest {
         }
 
     @Test
+    fun validateAndTestSubscription_supportsTvBoxJsSpiderSites() =
+        runTest {
+            val tvBoxJson =
+                """
+                {
+                    "sites": [
+                        {
+                            "name": "Age动漫",
+                            "type": 3,
+                            "api": "csp_Age",
+                            "ext": "https://example.com/age.js"
+                        }
+                    ]
+                }
+                """.trimIndent()
+
+            val engine =
+                MockEngine { _ -> respond(content = "OK", status = HttpStatusCode.OK) }
+
+            val client =
+                HttpClient(engine) {
+                    install(ContentNegotiation) {
+                        json(Json { ignoreUnknownKeys = true })
+                    }
+                }
+
+            val service = CommunitySubscriptionServiceImpl(client = client)
+            val report = service.validateAndTestSubscription(tvBoxJson)
+
+            assertTrue(report.isHealthy)
+            assertEquals(1, report.totalRules)
+            val spider = report.sources.single()
+            assertEquals("Age动漫", spider.name)
+            assertEquals("https://example.com/age.js", spider.urlTemplate)
+            assertEquals(RuleParserType.SPIDER, spider.parserType)
+            assertEquals(PlaybackRuleKind.SOURCE, spider.kind)
+            assertEquals(0, report.skippedUnsupportedSites)
+        }
+
+    @Test
     fun validateAndTestSubscription_reportsSkippedSitesInsteadOfSilentlyDropping() =
         runTest {
             val tvBoxJson =
@@ -257,12 +297,12 @@ class CommunitySubscriptionServiceTest {
                         {
                             "name": "爬虫源",
                             "type": 3,
-                            "ext": "https://spider.example.tv/js/decrypt.js"
+                            "ext": "https://spider.example.tv/jar/decrypt.jar"
                         },
                         {
                             "name": "脚本端点",
                             "type": 0,
-                            "api": "https://bad.example.tv/js/spider.js"
+                            "api": "https://bad.example.tv/jar/spider.jar"
                         },
                         {
                             "name": "无接口地址",
@@ -299,7 +339,7 @@ class CommunitySubscriptionServiceTest {
                 """
                 {
                     "sites": [
-                        { "name": "爬虫源", "type": 3, "ext": "https://spider.example.tv/js/x.js" }
+                        { "name": "爬虫源", "type": 3, "ext": "https://spider.example.tv/jar/x.jar" }
                     ]
                 }
                 """.trimIndent()

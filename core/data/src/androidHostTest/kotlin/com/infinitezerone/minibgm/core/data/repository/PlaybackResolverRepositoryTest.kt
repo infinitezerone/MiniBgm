@@ -1381,4 +1381,40 @@ class PlaybackResolverRepositoryTest {
             assertEquals("https://cdn.example.com/ep1.m3u8", sources.single().url)
             assertEquals("Sousou no Frieren Ep 1", sources.single().label)
         }
+
+    @Test
+    fun `RuleParserType SPIDER 支持执行 JS 爬虫脚本并解析可播直链`() =
+        runTest {
+            val d = "$"
+            val spiderJs =
+                """
+                var spider = {
+                    search: function(wd) {
+                        return { list: [{ vod_id: "99", vod_name: wd }] };
+                    },
+                    detail: function(id) {
+                        return { vod_play_from: "极速", vod_play_url: "第1集${d}stream_01" };
+                    },
+                    play: function(flag, id) {
+                        return { url: "https://stream.fast.com/" + id + ".m3u8", parse: 0 };
+                    }
+                };
+                """.trimIndent()
+
+            val repo = PlaybackResolverRepositoryImpl(FakePageFetchService(emptyMap()))
+            val rule =
+                PlaybackSourceRule(
+                    id = "spider_test",
+                    name = "极速动漫",
+                    urlTemplate = spiderJs,
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.SPIDER,
+                )
+
+            val sources = repo.resolveRule(rule = rule, title = "葬送的芙莉莲", epNumber = 1f)
+
+            assertEquals(1, sources.size)
+            assertEquals("https://stream.fast.com/stream_01.m3u8", sources.single().url)
+            assertEquals("极速动漫 - 极速", sources.single().siteName)
+        }
 }

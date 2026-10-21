@@ -86,9 +86,11 @@ class PlaybackSourceRuleTest {
         assertTrue(rule(PlaybackRuleKind.SOURCE, RuleParserType.AUTO).isResolvable)
         // 专用解析器只在 SOURCE 下被分发
         assertTrue(rule(PlaybackRuleKind.SOURCE, RuleParserType.MACCMS).isResolvable)
+        assertTrue(rule(PlaybackRuleKind.SOURCE, RuleParserType.SPIDER).isResolvable)
         assertTrue(rule(PlaybackRuleKind.SOURCE, RuleParserType.PIPELINE, fetchStep).isResolvable)
         assertFalse(rule(PlaybackRuleKind.PAGE, RuleParserType.PIPELINE, fetchStep).isResolvable)
         assertFalse(rule(PlaybackRuleKind.PAGE, RuleParserType.STREMIO).isResolvable)
+        assertFalse(rule(PlaybackRuleKind.PAGE, RuleParserType.SPIDER).isResolvable)
         // 给了 pipeline 却没声明 PIPELINE 解析器，步骤同样会被丢掉
         assertFalse(rule(PlaybackRuleKind.SOURCE, RuleParserType.AUTO, fetchStep).isResolvable)
     }

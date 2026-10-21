@@ -14,3 +14,5 @@
      * `SettingsRepository.playbackRules` 流必须在启动时通过 `.onStart { triggerSubscriptionHealingIfMissing() }` 守卫订阅完整性：若配置了 `playbackSubscriptionUrl` 但当前规则数量 `<= 1`，后台自愈拉取全量订阅规则并补齐落库，无需用户手动折腾重置。
   4. **红线拦截**：
      * `ArchitectureRulesTest#subscription_sources_must_never_be_discarded_by_probe_status` 静态闭锁 `SettingsRepository` 禁按 `isAlive` 过滤，并校验探测存活判据。
+  5. **JS 爬虫沙盒隔离与执行配额保护**：
+     * TVBox `type: 3` (Spider) JS 脚本必须经由具备内存配额（<= 16MB）与执行超时看门狗（<= 15s）的沙盒执行，所有网络请求必须经由 `PageFetchService` 宿主注入，严禁直接使用底层 Socket。

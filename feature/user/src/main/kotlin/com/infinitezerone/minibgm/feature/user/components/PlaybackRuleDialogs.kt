@@ -596,6 +596,7 @@ internal fun parserTypeLabel(type: RuleParserType): String =
         RuleParserType.STREMIO -> "Stremio"
         RuleParserType.PIPELINE -> stringResource(R.string.feature_user_parser_pipeline)
         RuleParserType.RSS_TORRENT -> stringResource(R.string.feature_user_parser_rss_torrent)
+        RuleParserType.SPIDER -> "Spider"
     }
 
 /**
