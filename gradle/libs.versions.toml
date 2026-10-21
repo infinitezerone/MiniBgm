@@ -32,6 +32,7 @@ media3 = "1.11.1"
 roborazzi = "1.43.1"
 robolectric = "4.14.1"
 quickjs = "1.0.15"
+jsoup = "1.23.2"
 
 [libraries]
 android-desugar-jdk-libs = { group = "com.android.tools", name = "desugar_jdk_libs", version.ref = "desugar-jdk-libs" }
@@ -103,6 +104,7 @@ androidx-glance-material3 = { group = "androidx.glance", name = "glance-material
 touchlab-kermit = { group = "co.touchlab", name = "kermit", version.ref = "kermit" }
 quickjs-kt = { group = "io.github.dokar3", name = "quickjs-kt", version.ref = "quickjs" }
 quickjs-kt-jvm = { group = "io.github.dokar3", name = "quickjs-kt-jvm", version.ref = "quickjs" }
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 
 # Gradle Plugin Artifacts for build-logic
 android-gradlePlugin = { group = "com.android.tools.build", name = "gradle", version.ref = "agp" }

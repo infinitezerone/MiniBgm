@@ -4,6 +4,7 @@ import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import com.infinitezerone.minibgm.core.model.TvBoxParse
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -404,5 +405,107 @@ class EpisodeStreamResolverTest {
             assertNotNull(outcome)
             assertEquals("正常候选", outcome.matchedTitle)
             assertEquals("https://cdn.example.tv/survivor.m3u8", outcome.directSource?.url)
+        }
+
+    @Test
+    fun probeRule_pageCandidate_resolvedViaCandidateParses() =
+        runTest {
+            val parse = TvBoxParse(name = "测试解析", type = 1, url = "https://api.jx.com/?url=")
+            val stub =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = listOf(PlayableSource(url = "https://v.qq.com/play/1.html", kind = PlaylistEntryKind.PAGE))
+
+                    override suspend fun resolveParse(
+                        targetUrl: String,
+                        epNumber: Float,
+                        siteName: String,
+                        candidateParses: List<TvBoxParse>,
+                    ): List<PlayableSource> =
+                        if (candidateParses.isNotEmpty()) {
+                            listOf(direct("https://parsed.cdn.tv/live.m3u8"))
+                        } else {
+                            emptyList()
+                        }
+                }
+
+            val outcome =
+                EpisodeStreamResolver(stub).probeRule(
+                    rule = sourceRule(),
+                    baseTitles = listOf("目标片名"),
+                    epSort = 1f,
+                    subjectId = 1001L,
+                    candidateParses = listOf(parse),
+                )
+
+            assertNotNull(outcome)
+            assertEquals("https://parsed.cdn.tv/live.m3u8", outcome.directSource?.url)
+        }
+
+    @Test
+    fun probeRule_deadDirectFallsBackToPageParse() =
+        runTest {
+            val parse = TvBoxParse(name = "测试解析", type = 1, url = "https://api.jx.com/?url=")
+            val stub =
+                object : PlaybackResolverRepository {
+                    override suspend fun resolvePages(
+                        pageUrls: List<String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> = emptyList()
+
+                    override suspend fun resolveTemplate(
+                        url: String,
+                        headers: Map<String, String>,
+                        epNumber: Float,
+                        siteName: String,
+                        title: String,
+                    ): List<PlayableSource> =
+                        listOf(
+                            direct("https://cdn.example.tv/dead.m3u8"),
+                            PlayableSource(url = "https://v.qq.com/play/1.html", kind = PlaylistEntryKind.PAGE),
+                        )
+
+                    override suspend fun resolveParse(
+                        targetUrl: String,
+                        epNumber: Float,
+                        siteName: String,
+                        candidateParses: List<TvBoxParse>,
+                    ): List<PlayableSource> = listOf(direct("https://parsed.cdn.tv/live.m3u8"))
+                }
+            val deadVerifier =
+                object : PlaybackSourceVerifier {
+                    override suspend fun verify(source: PlayableSource): StreamVerification =
+                        if (source.url.contains("dead")) {
+                            StreamVerification.NotPlayable("404 Not Found")
+                        } else {
+                            StreamVerification.Playable
+                        }
+                }
+
+            val outcome =
+                EpisodeStreamResolver(stub, deadVerifier).probeRule(
+                    rule = sourceRule(),
+                    baseTitles = listOf("目标片名"),
+                    epSort = 1f,
+                    subjectId = 1001L,
+                    candidateParses = listOf(parse),
+                )
+
+            assertNotNull(outcome)
+            assertEquals("https://parsed.cdn.tv/live.m3u8", outcome.directSource?.url)
         }
 }

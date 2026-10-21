@@ -102,6 +102,19 @@ interface PageFetchService {
     ): FetchedPage?
 
     /**
+     * 发送原始载荷 POST（JSON、表单字符串等 Spider API 常见形态）。
+     *
+     * 默认实现返回 null：测试替身若需要验证载荷，应显式覆写，避免把原始 body 悄悄丢掉后
+     * 仍假装请求成功。生产实现与其他抓取共用 URL 安全校验、重定向预算和响应正文字节上限。
+     */
+    suspend fun postBody(
+        url: String,
+        body: String,
+        contentType: String? = null,
+        requestHeaders: Map<String, String> = emptyMap(),
+    ): FetchedPage? = null
+
+    /**
      * 直链首包探测：只取响应头，`Range: bytes=0-2047` 顺带限制服务端回包体积。
      *
      * 默认返回 [StreamProbe.Unsupported]，这样测试替身与不需要该能力的实现不必被迫实现，
@@ -227,6 +240,73 @@ internal class PageFetchServiceImpl(
             throw e
         } catch (e: Exception) {
             logger.w { "表单提交失败 $target: ${e.message}" }
+            null
+        }
+    }
+
+    override suspend fun postBody(
+        url: String,
+        body: String,
+        contentType: String?,
+        requestHeaders: Map<String, String>,
+    ): FetchedPage? {
+        val target = url.trim()
+        if (!target.startsWith("http://", ignoreCase = true) && !target.startsWith("https://", ignoreCase = true)) {
+            return null
+        }
+        if (!UrlSafety.isAllowedRemoteUrl(target)) return null
+        val safeHeaders =
+            requestHeaders.filter { (name, value) ->
+                name.isNotBlank() && name.isSafeHeaderValue() && value.isSafeHeaderValue()
+            }
+        return try {
+            withWallClockTimeout(redirectChainMillis) {
+                var current = target
+                var currentMethod = HttpMethod.Post
+                var redirects = 0
+                while (true) {
+                    if (!UrlSafety.isAllowedRemoteUrl(current)) return@withWallClockTimeout null
+                    val response =
+                        if (currentMethod == HttpMethod.Post) {
+                            untrustedClient.post(current) {
+                                header(HttpHeaders.Accept, "*/*")
+                                header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
+                                applyRuleHeaders(safeHeaders, target, current)
+                                contentType?.takeIf { it.isSafeHeaderValue() }?.let {
+                                    header(HttpHeaders.ContentType, it)
+                                }
+                                setBody(body)
+                            }
+                        } else {
+                            untrustedClient.get(current) {
+                                header(HttpHeaders.Accept, "*/*")
+                                header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
+                                applyRuleHeaders(safeHeaders, target, current)
+                            }
+                        }
+                    val location = response.headers[HttpHeaders.Location]
+                    if (response.status.value in 300..399 && location != null) {
+                        response.bodyAsChannel().cancel()
+                        if (++redirects > MAX_REDIRECTS) return@withWallClockTimeout null
+                        current = UrlSafety.resolveRedirect(current, location) ?: return@withWallClockTimeout null
+                        if (response.status.value != 307 && response.status.value != 308) {
+                            currentMethod = HttpMethod.Get
+                        }
+                        continue
+                    }
+                    return@withWallClockTimeout extractFetchedPage(response)
+                }
+                @Suppress("UNREACHABLE_CODE")
+                null
+            }
+        } catch (e: TimeoutCancellationException) {
+            currentCoroutineContext().ensureActive()
+            logger.w { "原始载荷提交重定向链超时 $target" }
+            null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.w { "原始载荷提交失败 $target: ${e.message}" }
             null
         }
     }

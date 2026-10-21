@@ -7,6 +7,7 @@ import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.core.network.FetchedPage
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -15,6 +16,9 @@ class TvBoxSpiderResolverTest {
     private class FakePageFetch(
         private val mockResponses: Map<String, String> = emptyMap(),
     ) : PageFetchService {
+        var lastPostBody: String? = null
+        var lastPostContentType: String? = null
+
         override suspend fun fetchHtml(
             url: String,
             requestHeaders: Map<String, String>,
@@ -28,6 +32,17 @@ class TvBoxSpiderResolverTest {
             formData: Map<String, String>,
             requestHeaders: Map<String, String>,
         ): FetchedPage? = fetchHtml(url, requestHeaders)
+
+        override suspend fun postBody(
+            url: String,
+            body: String,
+            contentType: String?,
+            requestHeaders: Map<String, String>,
+        ): FetchedPage? {
+            lastPostBody = body
+            lastPostContentType = contentType
+            return fetchHtml(url, requestHeaders)
+        }
     }
 
     @Test
@@ -174,5 +189,138 @@ class TvBoxSpiderResolverTest {
 
             val sources = resolver.resolveSpider(rule, title = "测试", epNumber = 1f)
             assertTrue(sources.isEmpty())
+        }
+
+    @Test
+    fun resolveSpider_passesExtToInitAndKeepsParseOneAsPage() =
+        runTest {
+            val d = "$"
+            val spiderJs =
+                """
+                var spider = {
+                    init: function(ext) {
+                        globalThis._ext = ext;
+                    },
+                    search: function(wd) {
+                        return { list: [{ vod_id: "9", vod_name: "测试番" }] };
+                    },
+                    detail: function(id) {
+                        return {
+                            list: [{
+                                vod_name: "测试番",
+                                vod_play_from: "解析线",
+                                vod_play_url: "第1集${d}ep1"
+                            }]
+                        };
+                    },
+                    play: function(flag, id) {
+                        return {
+                            parse: 1,
+                            url: "https://page.example/" + globalThis._ext.token + "/" + id,
+                            header: "Referer=https://ref.example/&User-Agent=BgmSpider"
+                        };
+                    }
+                };
+                """.trimIndent()
+            val fetch = FakePageFetch()
+            val resolver = TvBoxSpiderResolver(JsSpiderSandbox(fetch), fetch)
+            val ext = Json.parseToJsonElement("""{"token":"abc"}""")
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule_ext",
+                    name = "扩展源",
+                    urlTemplate = spiderJs,
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.SPIDER,
+                    ext = ext,
+                )
+
+            val source = resolver.resolveSpider(rule, title = "测试番", epNumber = 1f).single()
+
+            assertEquals(PlaylistEntryKind.PAGE, source.kind)
+            assertEquals("https://page.example/abc/ep1", source.url)
+            assertEquals("https://ref.example/", source.headers["Referer"])
+            assertEquals("BgmSpider", source.headers["User-Agent"])
+        }
+
+    @Test
+    fun resolveSpider_supportsSynchronousReqAndRawStringPostBody() =
+        runTest {
+            val d = "$"
+            val spiderJs =
+                """
+                var spider = {
+                    search: function(wd) {
+                        var res = req("https://api.spider.tv/search", {
+                            method: "POST",
+                            body: JSON.stringify({ keyword: wd }),
+                            headers: { "Content-Type": "application/json" }
+                        });
+                        return { list: JSON.parse(res.content).results };
+                    },
+                    detail: function(id) {
+                        return { vod_play_from: "线", vod_play_url: "第1集${d}ep1" };
+                    },
+                    play: function() { return "https://cdn.example/ep1.m3u8"; }
+                };
+                """.trimIndent()
+            val fetch = FakePageFetch(mapOf("https://api.spider.tv/search" to """{"results":[{"vod_id":"1","vod_name":"测试番"}]}"""))
+            val resolver = TvBoxSpiderResolver(JsSpiderSandbox(fetch), fetch)
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule_post",
+                    name = "POST源",
+                    urlTemplate = spiderJs,
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.SPIDER,
+                )
+
+            val sources = resolver.resolveSpider(rule, title = "测试番", epNumber = 1f)
+
+            assertEquals("https://cdn.example/ep1.m3u8", sources.single().url)
+            assertEquals("""{"keyword":"测试番"}""", fetch.lastPostBody)
+            assertEquals("application/json", fetch.lastPostContentType)
+        }
+
+    @Test
+    fun resolveSpider_exposesHtmlSelectorsAndUrlJoin() =
+        runTest {
+            val d = "$"
+            val spiderJs =
+                """
+                var spider = {
+                    search: function(wd) {
+                        var page = '<div class="item"><a href="/vod/7">测试番</a></div>';
+                        var title = pdfh(page, 'div.item&&a&&Text');
+                        var href = pdfh(page, 'div.item&&a&&href');
+                        var all = pdfa(page, 'div.item&&a');
+                        return {
+                            list: [{
+                                vod_id: join("https://site.example/base/", href),
+                                vod_name: title + (all.length === 1 ? "" : "-bad")
+                            }]
+                        };
+                    },
+                    detail: function(id) {
+                        return { vod_play_from: "线", vod_play_url: "第1集${d}ep1" };
+                    },
+                    play: function() { return "https://cdn.example/ep1.m3u8"; }
+                };
+                """.trimIndent()
+            val fetch = FakePageFetch()
+            val resolver = TvBoxSpiderResolver(JsSpiderSandbox(fetch), fetch)
+            val rule =
+                PlaybackSourceRule(
+                    id = "rule_html",
+                    name = "HTML源",
+                    urlTemplate = spiderJs,
+                    kind = PlaybackRuleKind.SOURCE,
+                    parserType = RuleParserType.SPIDER,
+                )
+
+            val sources = resolver.resolveSpider(rule, title = "测试番", epNumber = 1f)
+
+            assertEquals(1, sources.size)
+            assertEquals("https://cdn.example/ep1.m3u8", sources.single().url)
         }
 }

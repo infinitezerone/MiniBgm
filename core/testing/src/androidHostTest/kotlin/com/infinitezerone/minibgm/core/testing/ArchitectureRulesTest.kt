@@ -3293,6 +3293,64 @@ class ArchitectureRulesTest {
     }
 
     /**
+     * TVBox JS Spider 的 ext 必须从站点配置一路传到 `init(ext)`：
+     * 真实订阅里 ext 常承载签名、域名或接口开关（字符串或 JSON 对象），
+     * 只保留脚本地址而丢掉 ext 会让脚本初始化通过、后续请求全空，表现为“源能导入但永远没结果”。
+     *
+     * 同时 `req` 必须是同步 API（内部可等待宿主网络），否则标准 CatVod 脚本里
+     * `req(...).content` 会拿到 Promise；保留 `await req(...)` 兼容性。
+     */
+    @Test
+    fun tvbox_js_spider_must_forward_site_ext_and_keep_sync_req_compatibility() {
+        val modelContent =
+            KotlinSourceScanner.sanitize(
+                File(
+                    projectRoot,
+                    "core/model/src/commonMain/kotlin/com/infinitezerone/minibgm/core/model/CommunitySubscription.kt",
+                ).readText(),
+            )
+        assertTrue(
+            modelContent.contains("ext = resolveSpiderExt(scriptUrl)"),
+            "TvBoxSite.convert 必须把 Spider 的 ext 带到 DiscoveredSource，不能只保留脚本地址",
+        )
+        assertTrue(
+            modelContent.contains("ext = ext"),
+            "DiscoveredSource.toPlaybackSourceRule 必须继续透传 ext",
+        )
+
+        val resolverContent =
+            KotlinSourceScanner.sanitize(
+                File(
+                    projectRoot,
+                    "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/resolver/spider/TvBoxSpiderResolver.kt",
+                ).readText(),
+            )
+        val resolverRaw =
+            File(
+                projectRoot,
+                "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/resolver/spider/TvBoxSpiderResolver.kt",
+            ).readText()
+        assertTrue(
+            resolverRaw.contains("__bgm_call('init'") && resolverRaw.contains("encodeExtArgument(rule.ext)"),
+            "TvBoxSpiderResolver 必须把规则 ext 编码后传给 Spider init(ext)",
+        )
+
+        val sandboxRaw =
+            File(
+                projectRoot,
+                "core/data/src/commonMain/kotlin/com/infinitezerone/minibgm/core/data/repository/resolver/spider/JsSpiderSandbox.kt",
+            ).readText()
+        assertTrue(
+            sandboxRaw.contains("globalThis.req = function"),
+            "CatVod req 必须保持同步返回，兼容 req(...).content；async 版本会破坏标准脚本",
+        )
+        assertTrue(
+            sandboxRaw.contains("globalThis.pdfh") && sandboxRaw.contains("globalThis.pdfa"),
+            "JS Spider 沙盒必须提供 pdfh/pdfa HTML 选择器兼容层",
+        )
+    }
+
+    /**
      * TVBox 聚合解析链与嗅探引擎安全提速红线（剧本 15）：
      * 1. [TvBoxParseResolverImpl] 必须配置超时看门狗（PARSE_TIMEOUT_MS / withTimeoutOrNull），防止慢解析服务挂死；
      * 2. HTTP 请求必须委托宿主 [PageFetchService] 或 [WebViewCaptureService]，零裸网络调用；

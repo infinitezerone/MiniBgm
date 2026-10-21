@@ -2,6 +2,8 @@ package com.infinitezerone.minibgm.core.model
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 /**
  * 社区开源订阅与动态发现的播放源规则。
@@ -14,6 +16,7 @@ import kotlinx.serialization.json.JsonElement
  * @property kind 规则用途。**接口端点必须标 [PlaybackRuleKind.SOURCE]**：解析器分发只发生在取源侧，
  *   标成 PAGE 会让 [parserType] 在播放时被丢掉、静默降级成嗅探（见 [PlaybackSourceRule.isResolvable] 的说明）
  * @property parserType 与网页搜索模板相对；接口端点按响应形态选解析器
+ * @property ext TVBox 站点原始扩展参数；JS Spider 会原样传给 `init(ext)`
  */
 @Serializable
 data class DiscoveredSource(
@@ -24,6 +27,7 @@ data class DiscoveredSource(
     val isAlive: Boolean = true,
     val kind: PlaybackRuleKind = PlaybackRuleKind.PAGE,
     val parserType: RuleParserType = RuleParserType.AUTO,
+    val ext: JsonElement? = null,
 ) {
     /**
      * 转换为本地标准 [PlaybackSourceRule]。
@@ -37,6 +41,7 @@ data class DiscoveredSource(
             description = description,
             kind = kind,
             parserType = parserType,
+            ext = ext,
         )
 }
 
@@ -118,7 +123,7 @@ data class TvBoxSite(
     val name: String = "",
     val type: Int? = null,
     val api: String? = null,
-    val ext: String? = null,
+    val ext: JsonElement? = null,
     val searchable: Int? = 1,
 ) {
     /**
@@ -141,6 +146,7 @@ data class TvBoxSite(
                         description = resolveDescription(),
                         kind = PlaybackRuleKind.SOURCE,
                         parserType = RuleParserType.SPIDER,
+                        ext = resolveSpiderExt(scriptUrl),
                     ),
                 )
             }
@@ -156,6 +162,7 @@ data class TvBoxSite(
                     description = resolveDescription(),
                     kind = PlaybackRuleKind.SOURCE,
                     parserType = RuleParserType.SPIDER,
+                    ext = resolveSpiderExt(targetUrl),
                 ),
             )
         }
@@ -165,6 +172,10 @@ data class TvBoxSite(
         val parserType =
             when {
                 type == TYPE_MACCMS -> RuleParserType.MACCMS
+                type == TYPE_MACCMS_COMPAT -> {
+                    // TODO(tvbox): type=2 是 JSON API 兼容类型，补 ac=detail 与筛选参数差异后再落专用模板。
+                    RuleParserType.AUTO
+                }
                 type == TYPE_XML && !hasCustomPlaceholder -> RuleParserType.MACCMS
                 else -> RuleParserType.AUTO
             }
@@ -182,7 +193,7 @@ data class TvBoxSite(
 
     private fun resolveSpiderScriptUrl(): String? {
         val primary = api?.trim().orEmpty()
-        val secondary = ext?.trim().orEmpty()
+        val secondary = extText().orEmpty()
         return when {
             primary.endsWith(".js", ignoreCase = true) -> primary
             secondary.endsWith(".js", ignoreCase = true) -> secondary
@@ -191,6 +202,20 @@ data class TvBoxSite(
             else -> null
         }
     }
+
+    /** ext 既可能是 Spider 的初始化参数，也可能被旧配置拿来承载 `csp_` 的脚本地址。 */
+    private fun resolveSpiderExt(scriptUrl: String): JsonElement? {
+        val value = ext ?: return null
+        val text = extText()?.trim()
+        return if (text != null && text == scriptUrl) null else value
+    }
+
+    private fun extText(): String? =
+        when (val value = ext) {
+            null -> null
+            is JsonPrimitive -> value.contentOrNull
+            else -> null
+        }
 
     private fun isHttpUrl(url: String): Boolean =
         url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)
@@ -204,7 +229,7 @@ data class TvBoxSite(
 
     private fun resolveTargetUrl(): String? {
         val primary = api?.trim().orEmpty()
-        val candidate = primary.ifBlank { ext?.trim().orEmpty() }
+        val candidate = primary.ifBlank { extText()?.trim().orEmpty() }
         val isHttp =
             candidate.startsWith("http://", ignoreCase = true) ||
                 candidate.startsWith("https://", ignoreCase = true)
@@ -221,6 +246,10 @@ data class TvBoxSite(
             targetUrl.contains("{wd}", ignoreCase = true) -> targetUrl.replace("{wd}", "{title}", ignoreCase = true)
             targetUrl.contains("{title}", ignoreCase = true) -> targetUrl
             type == TYPE_MACCMS -> if (targetUrl.contains("?")) "$targetUrl&ac=detail&wd={title}" else "$targetUrl?ac=detail&wd={title}"
+            type == TYPE_MACCMS_COMPAT -> {
+                // TODO(tvbox): 当前沿用普通模板；确认 type=2 的兼容路径后与 type=1 对齐 ac=detail。
+                if (targetUrl.contains("?")) "$targetUrl&wd={title}" else "$targetUrl?wd={title}"
+            }
             type == TYPE_XML -> if (targetUrl.contains("?")) "$targetUrl&ac=videolist&wd={title}" else "$targetUrl?ac=videolist&wd={title}"
             targetUrl.contains("?") -> "$targetUrl&wd={title}"
             else -> "$targetUrl/search?query={title}"
@@ -240,6 +269,9 @@ data class TvBoxSite(
 
         /** TVBox 约定：苹果 CMS V10 JSON 接口 */
         private const val TYPE_MACCMS = 1
+
+        /** TVBox 约定：JSON API 兼容类型（不自动追加分类筛选参数） */
+        private const val TYPE_MACCMS_COMPAT = 2
 
         /** TVBox 约定：需要 jar/js 爬虫实现的扩展源 */
         private const val TYPE_SPIDER = 3

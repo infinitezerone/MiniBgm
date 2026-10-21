@@ -107,6 +107,7 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.koin.core)
             implementation(libs.quickjs.kt)
+            implementation(libs.jsoup)
         }
         androidMain.dependencies {
             implementation(libs.koin.android)

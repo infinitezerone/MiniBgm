@@ -1,5 +1,8 @@
 package com.infinitezerone.minibgm.core.model
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -72,11 +75,12 @@ class CommunitySubscriptionTest {
                 name = "CSP扩展源",
                 type = 3,
                 api = "csp_Age",
-                ext = "https://example.com/age.js",
+                ext = JsonPrimitive("https://example.com/age.js"),
             )
         val cspSource = assertSupported(cspSite)
         assertEquals(RuleParserType.SPIDER, cspSource.parserType)
         assertEquals("https://example.com/age.js", cspSource.urlTemplate)
+        kotlin.test.assertNull(cspSource.ext)
 
         // jar 仍然不支持
         val jarSite =
@@ -89,6 +93,29 @@ class CommunitySubscriptionTest {
 
         val cspSchemeWithoutScript = TvBoxSite(name = "私有爬虫协议无扩展", api = "csp_Custom")
         assertIs<TvBoxSiteConversion.Malformed>(cspSchemeWithoutScript.convert())
+    }
+
+    @Test
+    fun convert_preservesSpiderExtAcrossRuleConversion() {
+        val ext = Json.parseToJsonElement("""{"token":"abc","base":"https://api.example.com"}""")
+        val site =
+            TvBoxSite(
+                name = "带扩展参数的爬虫",
+                type = 3,
+                api = "https://example.com/spider.js",
+                ext = ext,
+            )
+
+        val source = assertSupported(site)
+        assertEquals(ext, source.ext)
+        assertEquals(ext, source.toPlaybackSourceRule("rule_ext").ext)
+
+        val parsed =
+            Json.decodeFromString<TvBoxConfig>(
+                """{"sites":[{"name":"对象扩展","type":3,"api":"https://example.com/spider.js","ext":{"token":"abc"}}]}""",
+            )
+        val parsedExt = assertSupported(parsed.sites.single()).ext as JsonObject
+        assertEquals(JsonPrimitive("abc"), parsedExt["token"])
     }
 
     @Test

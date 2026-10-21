@@ -16,6 +16,7 @@
      * `ArchitectureRulesTest#subscription_sources_must_never_be_discarded_by_probe_status` 静态闭锁 `SettingsRepository` 禁按 `isAlive` 过滤，并校验探测存活判据。
   5. **JS 爬虫沙盒隔离与执行配额保护**：
      * TVBox `type: 3` (Spider) JS 脚本必须经由具备内存配额（<= 16MB）与执行超时看门狗（<= 15s）的沙盒执行，所有网络请求必须经由 `PageFetchService` 宿主注入，严禁直接使用底层 Socket。
+     * 站点 `ext` 必须按原始 JSON 从 `TvBoxSite` 透传到 Spider `init(ext)`；`req` 保持同步返回值以兼容 `req(...).content`；`pdfh` / `pdfa` / `pd` 只由宿主 Jsoup 解析已取回正文，禁止把 HTML/CSS 选择器引擎或第二套 DOM 实现搬进 QuickJS。
   6. **TVBox 聚合解析链 (parses) 与嗅探提速规范**：
      * `TvBoxParseResolver` 必须声明超时看门狗保护（<= 8000ms），按顺序依次尝试 `type: 1` (JSON 接口)、`type: 0/2` (网页/嗅探) 与 `type: 3` (JS 脚本)，单解析失败时优雅回退下一项；
      * 静态 HTML 播放器配置提取器（DPlayer / MacCMS `player_aaaa` / Base64 / Iframe `?url=`）优先于无头 WebView 执行，实现静态毫秒级秒提；

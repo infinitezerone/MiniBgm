@@ -75,12 +75,17 @@ class TvBoxParseResolverImpl(
 
         // 依次遍历候选解析器（通常默认第一条为主力解析）
         for (parse in candidateParses) {
+            // TODO(tvbox): parse.ext 里的 flag/header 尚未参与匹配与请求；入口统一在 requestHeadersFor。
             val result =
                 withTimeoutOrNull(PARSE_TIMEOUT_MS) {
                     when (parse.type) {
                         TYPE_JSON -> resolveJsonParse(trimmed, epNumber, siteName, parse)
                         TYPE_WEB, TYPE_SNIFF -> resolveWebSniffParse(trimmed, epNumber, siteName, parse)
                         TYPE_SPIDER -> resolveScriptParse(trimmed, epNumber, siteName, parse)
+                        TYPE_AGGREGATE -> {
+                            // TODO(tvbox): type=4 应并发组合匹配的 JSON/Web 解析器；当前先跳过，交给后续候选与 sniff。
+                            emptyList()
+                        }
                         else -> resolveJsonParse(trimmed, epNumber, siteName, parse)
                     }
                 }
@@ -101,7 +106,8 @@ class TvBoxParseResolverImpl(
     ): List<PlayableSource> {
         val reqUrl = buildParseRequestUrl(parse.url, targetUrl)
         return runCatching {
-            val fetched = pageFetchService.fetchHtml(reqUrl, parse.header) ?: return@runCatching emptyList()
+            val requestHeaders = requestHeadersFor(parse)
+            val fetched = pageFetchService.fetchHtml(reqUrl, requestHeaders) ?: return@runCatching emptyList()
             val text = fetched.html.trim()
             if (!text.startsWith("{")) return@runCatching emptyList()
 
@@ -127,7 +133,7 @@ class TvBoxParseResolverImpl(
                     episodeSort = epNumber,
                     siteName = siteName.ifBlank { parse.name },
                     pageUrl = targetUrl,
-                    headers = headerMap + parse.header,
+                    headers = headerMap + requestHeaders,
                 ),
             )
         }.getOrDefault(emptyList())
@@ -140,8 +146,9 @@ class TvBoxParseResolverImpl(
         parse: TvBoxParse,
     ): List<PlayableSource> {
         val reqUrl = buildParseRequestUrl(parse.url, targetUrl)
+        val requestHeaders = requestHeadersFor(parse)
         // 1. 尝试静态秒提
-        val staticFetched = pageFetchService.fetchHtml(reqUrl, parse.header)
+        val staticFetched = pageFetchService.fetchHtml(reqUrl, requestHeaders)
         if (staticFetched != null) {
             val direct =
                 extractPlayableSources(staticFetched.html, reqUrl, epNumber, siteName)
@@ -170,7 +177,8 @@ class TvBoxParseResolverImpl(
         parse: TvBoxParse,
     ): List<PlayableSource> {
         val sandbox = jsSpiderSandbox ?: return emptyList()
-        val script = pageFetchService.fetchHtml(parse.url)?.html ?: return emptyList()
+        val requestHeaders = requestHeadersFor(parse)
+        val script = pageFetchService.fetchHtml(parse.url, requestHeaders)?.html ?: return emptyList()
         return runCatching {
             sandbox.runInSandbox(script) { qjs: QuickJs ->
                 val res = qjs.evaluate<Any?>("__bgm_call('play', '', '$targetUrl');")
@@ -186,7 +194,7 @@ class TvBoxParseResolverImpl(
                                 episodeSort = epNumber,
                                 siteName = siteName.ifBlank { parse.name },
                                 pageUrl = targetUrl,
-                                headers = parse.header,
+                                headers = requestHeaders,
                             ),
                         )
                     } else {
@@ -218,6 +226,11 @@ class TvBoxParseResolverImpl(
         return emptyList()
     }
 
+    private fun requestHeadersFor(parse: TvBoxParse): Map<String, String> {
+        // TODO(tvbox): 合并 parse.ext.header，并按 parse.ext.flag 过滤适用解析器。
+        return parse.header
+    }
+
     private fun buildParseRequestUrl(
         parseUrl: String,
         targetUrl: String,
@@ -237,5 +250,6 @@ class TvBoxParseResolverImpl(
         private const val TYPE_JSON = 1
         private const val TYPE_SNIFF = 2
         private const val TYPE_SPIDER = 3
+        private const val TYPE_AGGREGATE = 4
     }
 }

@@ -30,6 +30,7 @@ import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.Subject
+import com.infinitezerone.minibgm.core.model.TvBoxParse
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
@@ -282,6 +283,7 @@ sealed interface PlayerUiEvent {
  */
 private data class PlayerRepoSnapshot(
     val rules: List<PlaybackSourceRule> = emptyList(),
+    val playbackParses: List<TvBoxParse> = emptyList(),
     val failureCounts: Map<String, Int> = emptyMap(),
     val subject: Subject? = null,
     val rawEpisodes: List<Episode> = emptyList(),
@@ -400,6 +402,9 @@ private class PlaybackSession(
 
     /** 条目日文原名 */
     var subjectOriginalName: String = ""
+
+    /** TVBox 聚合解析链，用于解析无直接直链的页面或加密流 */
+    var playbackParses: List<TvBoxParse> = emptyList()
 
     /** 已落盘的“上次可用源”标识，避免每次 READY 都重复写 DataStore */
     var lastSavedSourceId: String = ""
@@ -657,7 +662,10 @@ class PlayerViewModel(
      */
     private val repoSnapshots: Flow<PlayerRepoSnapshot> =
         combine(
-            settingsRepository.playbackRules,
+            combine(
+                settingsRepository.playbackRules,
+                settingsRepository.playbackParses,
+            ) { rules, parses -> rules to parses },
             combine(
                 failureStore?.sourceHealth ?: flowOf(emptyMap()),
                 playViewPreferencesFlow,
@@ -673,9 +681,10 @@ class PlayerViewModel(
             ) { subject, episodes, collection, totalEpisodes, hasMoreEpisodes ->
                 RepoSubjectData(subject, episodes, collection, totalEpisodes, hasMoreEpisodes)
             },
-        ) { rules, (failureCounts, playView), subjectData ->
+        ) { (rules, parses), (failureCounts, playView), subjectData ->
             PlayerRepoSnapshot(
                 rules = rules,
+                playbackParses = parses,
                 failureCounts = failureCounts,
                 subject = subjectData.subject,
                 rawEpisodes = subjectData.episodes,
@@ -779,6 +788,7 @@ class PlayerViewModel(
             session.subjectOriginalName = subject.name
             session.subjectAliases = subject.titleAliases
         }
+        session.playbackParses = snapshot.playbackParses
         // 吐槽排序（长期偏好，与分集详情页共用同一条设置）：真值在设置仓库，这里只投影，
         // 并驱动评论区按新规则重整（仅在真的变化时调用，避免每次快照重放都重排一遍列表）。
         // 放在 _uiState.update 之外：它是另一个状态容器的副作用，不该塞进快照写入的 CAS 重试里。
@@ -1750,6 +1760,7 @@ class PlayerViewModel(
                             epSort = epSort,
                             subjectId = _uiState.value.subjectId,
                             episodeId = _uiState.value.episodeId,
+                            candidateParses = session.playbackParses,
                             timeoutMs = RESOLVE_TOTAL_TIMEOUT_MS,
                         ) { attempted, attemptTotal ->
                             lastAttempted = attempted

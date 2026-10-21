@@ -345,6 +345,9 @@ class PlaybackRulesViewModel(
         if (rules.isEmpty()) return
         viewModelScope.launch {
             settingsRepository.importPlaybackRules(rules)
+            if (report.parses.isNotEmpty()) {
+                settingsRepository.setPlaybackParses(report.parses)
+            }
             if (report.subscriptionUrl.startsWith("http://", ignoreCase = true) ||
                 report.subscriptionUrl.startsWith("https://", ignoreCase = true)
             ) {

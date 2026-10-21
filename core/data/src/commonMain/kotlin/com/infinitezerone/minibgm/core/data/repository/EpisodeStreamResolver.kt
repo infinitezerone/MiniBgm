@@ -4,6 +4,7 @@ import com.infinitezerone.minibgm.core.model.PlayableSource
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
+import com.infinitezerone.minibgm.core.model.TvBoxParse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -59,6 +60,7 @@ class EpisodeStreamResolver(
         epSort: Float,
         subjectId: Long,
         episodeId: Long = 0L,
+        candidateParses: List<TvBoxParse> = emptyList(),
         timeoutMs: Long = DEFAULT_PROBE_TIMEOUT_MS,
         onProgress: (attempted: Int, attemptTotal: Int) -> Unit = { _, _ -> },
     ): ProbeOutcome? =
@@ -102,12 +104,33 @@ class EpisodeStreamResolver(
 
             suspend fun findPlayableCandidate(candidates: List<PlayableSource>): PlayableSource? {
                 val direct = candidates.filter { it.kind == PlaylistEntryKind.DIRECT && it.url.isNotBlank() }
-                if (direct.isEmpty()) return null
-                return if (verifier != null) {
-                    direct.firstOrNull { verifier.verify(it) !is StreamVerification.NotPlayable }
-                } else {
-                    direct.first()
+                if (direct.isNotEmpty()) {
+                    val verifiedDirect =
+                        if (verifier != null) {
+                            direct.firstOrNull { verifier.verify(it) !is StreamVerification.NotPlayable }
+                        } else {
+                            direct.first()
+                        }
+                    if (verifiedDirect != null) {
+                        return verifiedDirect
+                    }
                 }
+                // 若无直接可播直链但存在 PAGE 候选（如 Spider 返回 parse: 1 或常规页面），
+                // 且已配置 TVBox parses 解析链，自动通过聚合解析链提取直链
+                val pages = candidates.filter { it.kind == PlaylistEntryKind.PAGE && it.url.isNotBlank() }
+                if (pages.isNotEmpty() && candidateParses.isNotEmpty()) {
+                    for (page in pages) {
+                        val parsed = resolver.resolveParse(page.url, epSort, page.siteName, candidateParses)
+                        val validParsed = parsed.firstOrNull { it.kind == PlaylistEntryKind.DIRECT && it.url.isNotBlank() }
+                        if (validParsed != null) {
+                            if (verifier != null && verifier.verify(validParsed) is StreamVerification.NotPlayable) {
+                                continue
+                            }
+                            return validParsed
+                        }
+                    }
+                }
+                return null
             }
 
             // 1. 前 2 个高优先级候选进行受控并发竞速

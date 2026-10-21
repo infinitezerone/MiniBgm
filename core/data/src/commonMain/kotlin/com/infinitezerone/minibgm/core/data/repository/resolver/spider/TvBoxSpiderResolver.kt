@@ -11,7 +11,9 @@ import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.network.PageFetchService
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
@@ -48,7 +50,7 @@ class TvBoxSpiderResolver(
             sandbox.runInSandbox(scriptContent) { qjs ->
                 // 1. 初始化爬虫
                 try {
-                    qjs.evaluate<Any?>("await __bgm_call('init', ''); void 0;")
+                    qjs.evaluate<Any?>("await __bgm_call('init', ${encodeExtArgument(rule.ext)}); void 0;")
                 } catch (_: Throwable) {
                     // 部分爬虫无 init 或不需要初始化
                 }
@@ -254,13 +256,7 @@ class TvBoxSpiderResolver(
                 val url = element["url"]?.jsonPrimitive?.contentOrNull.orEmpty()
                 if (url.isBlank()) return null
                 val parseFlag = element["parse"]?.jsonPrimitive?.intOrNull ?: 0
-                val headersMap = mutableMapOf<String, String>()
-                val headerObj = element["header"] ?: element["headers"]
-                if (headerObj is JsonObject) {
-                    headerObj.forEach { (k, v) ->
-                        v.jsonPrimitive.contentOrNull?.let { headersMap[k] = it }
-                    }
-                }
+                val headersMap = parseHeader(element)
                 ResolvedStream(
                     url = url,
                     kind = if (parseFlag == 1) PlaylistEntryKind.PAGE else PlaylistEntryKind.DIRECT,
@@ -283,4 +279,27 @@ class TvBoxSpiderResolver(
         val kind: PlaylistEntryKind,
         val headers: Map<String, String> = emptyMap(),
     )
+
+    private fun encodeExtArgument(ext: JsonElement?): String = ext?.let { Json.encodeToString(JsonElement.serializer(), it) } ?: "''"
+
+    private fun parseHeader(element: JsonObject): Map<String, String> {
+        val headerObj = element["header"] ?: element["headers"] ?: return emptyMap()
+        if (headerObj is JsonObject) {
+            return headerObj
+                .mapNotNull { (k, v) ->
+                    (v as? JsonPrimitive)?.contentOrNull?.let { k to it }
+                }.toMap()
+        }
+        if (headerObj !is JsonPrimitive) return emptyMap()
+        val raw = headerObj.contentOrNull.orEmpty()
+        return raw
+            .split('\n', '&')
+            .mapNotNull { line ->
+                val trimmed = line.trim()
+                val separator = listOf(trimmed.indexOf('='), trimmed.indexOf(':')).filter { it > 0 }.minOrNull() ?: return@mapNotNull null
+                val key = trimmed.substring(0, separator).trim()
+                val value = trimmed.substring(separator + 1).trim()
+                if (key.isNotBlank() && value.isNotBlank()) key to value else null
+            }.toMap()
+    }
 }

@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.model
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 /** 规则用途：PAGE = 生成给用户跳转的页面；SOURCE = 请求后从响应里取可播放地址；TORRENT = 从种子/磁力发布源取媒体资源 */
 enum class PlaybackRuleKind {
@@ -89,6 +90,8 @@ data class PipelineStep(
  * - [RuleParserType.MACCMS]: 按 MacCMS V10 标准接口提取
  * - [RuleParserType.STREMIO]: 按 Stremio 流清单提取
  * - [RuleParserType.AUTO]: 自动识别清单、MacCMS 及智能嗅探
+ *
+ * [ext] 是 TVBox 站点的原始扩展参数；[RuleParserType.SPIDER] 会在初始化时原样传给 `init(ext)`。
  */
 @Serializable
 data class PlaybackSourceRule(
@@ -101,6 +104,7 @@ data class PlaybackSourceRule(
     val headers: Map<String, String> = emptyMap(),
     val parserType: RuleParserType = RuleParserType.AUTO,
     val pipeline: List<PipelineStep> = emptyList(),
+    val ext: JsonElement? = null,
     /** 写入时的规则 schema 语义版本，见 [PlaybackRuleApi.WRITER_RULE_VERSION] */
     val ruleVersion: Int = PlaybackRuleApi.WRITER_RULE_VERSION,
     /** 规则要求的客户端最低能力版本；0 = 无要求。超出客户端支持时拒绝导入与执行 */
