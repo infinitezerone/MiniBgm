@@ -12,7 +12,12 @@ import com.infinitezerone.minibgm.core.model.PlaylistEntryKind
 import com.infinitezerone.minibgm.core.model.TvBoxParse
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import com.infinitezerone.minibgm.core.network.PageFetchService
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -73,19 +78,34 @@ class TvBoxParseResolverImpl(
             return fallbackSniff(trimmed, epNumber, siteName)
         }
 
+        // 1. 过滤并优先排序适用解析器：
+        //    - 声明 flag 且匹配目标地址/站点名的解析器排在最前；
+        //    - 未声明 flag 的通用解析器紧随其后；
+        //    - 声明 flag 但与目标完全不匹配的解析器予以剔除。
+        val (flaggedMatching, others) =
+            candidateParses.partition { parse ->
+                val flags = extractFlags(parse.ext)
+                flags.isNotEmpty() &&
+                    flags.any { flag ->
+                        trimmed.contains(flag, ignoreCase = true) || siteName.contains(flag, ignoreCase = true)
+                    }
+            }
+        val universal = others.filter { extractFlags(it.ext).isEmpty() }
+        val parsesToTry = flaggedMatching + universal
+        if (parsesToTry.isEmpty()) {
+            // 如果所有候选均声明了 flag 且无一命中，直接转入兜底嗅探，避免无效网络请求与超时等待
+            return fallbackSniff(trimmed, epNumber, siteName)
+        }
+
         // 依次遍历候选解析器（通常默认第一条为主力解析）
-        for (parse in candidateParses) {
-            // TODO(tvbox): parse.ext 里的 flag/header 尚未参与匹配与请求；入口统一在 requestHeadersFor。
+        for (parse in parsesToTry) {
             val result =
                 withTimeoutOrNull(PARSE_TIMEOUT_MS) {
                     when (parse.type) {
                         TYPE_JSON -> resolveJsonParse(trimmed, epNumber, siteName, parse)
                         TYPE_WEB, TYPE_SNIFF -> resolveWebSniffParse(trimmed, epNumber, siteName, parse)
                         TYPE_SPIDER -> resolveScriptParse(trimmed, epNumber, siteName, parse)
-                        TYPE_AGGREGATE -> {
-                            // TODO(tvbox): type=4 应并发组合匹配的 JSON/Web 解析器；当前先跳过，交给后续候选与 sniff。
-                            emptyList()
-                        }
+                        TYPE_AGGREGATE -> resolveAggregateParse(trimmed, epNumber, siteName, parse, candidateParses)
                         else -> resolveJsonParse(trimmed, epNumber, siteName, parse)
                     }
                 }
@@ -133,7 +153,7 @@ class TvBoxParseResolverImpl(
                     episodeSort = epNumber,
                     siteName = siteName.ifBlank { parse.name },
                     pageUrl = targetUrl,
-                    headers = headerMap + requestHeaders,
+                    headers = requestHeaders + headerMap,
                 ),
             )
         }.getOrDefault(emptyList())
@@ -226,10 +246,167 @@ class TvBoxParseResolverImpl(
         return emptyList()
     }
 
-    private fun requestHeadersFor(parse: TvBoxParse): Map<String, String> {
-        // TODO(tvbox): 合并 parse.ext.header，并按 parse.ext.flag 过滤适用解析器。
-        return parse.header
+    private suspend fun resolveAggregateParse(
+        targetUrl: String,
+        epNumber: Float,
+        siteName: String,
+        parse: TvBoxParse,
+        allCandidates: List<TvBoxParse>,
+    ): List<PlayableSource> =
+        coroutineScope {
+            val applicableSubParses =
+                allCandidates.filter {
+                    it.type != TYPE_AGGREGATE && it != parse && isApplicable(it, targetUrl, siteName)
+                }
+
+            val additionalParses =
+                if (parse.url.contains(",")) {
+                    parse.url.split(",").map { it.trim() }.filter { isHttpUrl(it) }.map {
+                        TvBoxParse(name = parse.name, type = TYPE_JSON, url = it, header = parse.header, ext = parse.ext)
+                    }
+                } else {
+                    emptyList()
+                }
+
+            val subParses = (applicableSubParses + additionalParses).distinctBy { it.url }
+
+            if (subParses.isEmpty()) {
+                if (isHttpUrl(parse.url)) {
+                    val jsonRes = resolveJsonParse(targetUrl, epNumber, siteName, parse)
+                    if (jsonRes.isNotEmpty()) return@coroutineScope jsonRes
+                    return@coroutineScope resolveWebSniffParse(targetUrl, epNumber, siteName, parse)
+                }
+                return@coroutineScope emptyList()
+            }
+
+            // 并发竞速各个子解析器，返回最快成功的首个结果
+            val channel = Channel<List<PlayableSource>>(subParses.size)
+            val jobs = mutableListOf<kotlinx.coroutines.Job>()
+            for (subParse in subParses) {
+                jobs +=
+                    launch {
+                        try {
+                            val res =
+                                when (subParse.type) {
+                                    TYPE_JSON -> resolveJsonParse(targetUrl, epNumber, siteName, subParse)
+                                    TYPE_WEB, TYPE_SNIFF -> resolveWebSniffParse(targetUrl, epNumber, siteName, subParse)
+                                    TYPE_SPIDER -> resolveScriptParse(targetUrl, epNumber, siteName, subParse)
+                                    else -> resolveJsonParse(targetUrl, epNumber, siteName, subParse)
+                                }
+                            if (res.isNotEmpty()) {
+                                channel.send(res)
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Throwable) {
+                            // 隔离单个子解析器网络或解析异常
+                        }
+                    }
+            }
+
+            var result: List<PlayableSource> = emptyList()
+            val supervisor =
+                launch {
+                    jobs.forEach { it.join() }
+                    channel.close()
+                }
+
+            for (res in channel) {
+                result = res
+                jobs.forEach { it.cancel() }
+                supervisor.cancel()
+                break
+            }
+            result
+        }
+
+    internal fun requestHeadersFor(parse: TvBoxParse): Map<String, String> {
+        val headers = mutableMapOf<String, String>()
+        headers.putAll(parse.header)
+        val extObj =
+            when (val ext = parse.ext) {
+                is JsonObject -> ext
+                is JsonPrimitive ->
+                    if (ext.isString) {
+                        val content = ext.contentOrNull?.trim().orEmpty()
+                        if (content.startsWith("{") && content.endsWith("}")) {
+                            runCatching { BgmHttpClient.jsonConfig.parseToJsonElement(content) as? JsonObject }.getOrNull()
+                        } else {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                else -> null
+            }
+        val extHeader = extObj?.get("header") as? JsonObject ?: extObj?.get("headers") as? JsonObject
+        extHeader?.forEach { (k, v) ->
+            (v as? JsonPrimitive)?.contentOrNull?.let { headers[k] = it }
+        }
+        return headers
     }
+
+    internal fun extractFlags(ext: kotlinx.serialization.json.JsonElement?): List<String> {
+        if (ext == null) return emptyList()
+        val obj =
+            when (ext) {
+                is JsonObject -> ext
+                is JsonPrimitive ->
+                    if (ext.isString) {
+                        val content = ext.contentOrNull?.trim().orEmpty()
+                        if (content.startsWith("{") && content.endsWith("}")) {
+                            runCatching { BgmHttpClient.jsonConfig.parseToJsonElement(content) as? JsonObject }.getOrNull()
+                        } else {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                else -> null
+            }
+        val flagElement = obj?.get("flag") ?: obj?.get("flags")
+        if (flagElement != null) {
+            return when (flagElement) {
+                is JsonArray ->
+                    flagElement
+                        .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim() }
+                        .filter { it.isNotBlank() }
+                is JsonPrimitive -> {
+                    val content = flagElement.contentOrNull?.trim().orEmpty()
+                    if (content.contains(",")) {
+                        content.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                    } else if (content.isNotBlank()) {
+                        listOf(content)
+                    } else {
+                        emptyList()
+                    }
+                }
+                else -> emptyList()
+            }
+        }
+        if (ext is JsonPrimitive && ext.isString) {
+            val content = ext.contentOrNull?.trim().orEmpty()
+            if (content.isNotBlank() && !isHttpUrl(content) && !content.startsWith("{")) {
+                return content.split(",").map { it.trim() }.filter { it.isNotBlank() }
+            }
+        }
+        return emptyList()
+    }
+
+    internal fun isApplicable(
+        parse: TvBoxParse,
+        targetUrl: String,
+        siteName: String,
+    ): Boolean {
+        val flags = extractFlags(parse.ext)
+        if (flags.isEmpty()) return true
+        return flags.any { flag ->
+            targetUrl.contains(flag, ignoreCase = true) || siteName.contains(flag, ignoreCase = true)
+        }
+    }
+
+    private fun isHttpUrl(url: String): Boolean =
+        url.startsWith("http://", ignoreCase = true) || url.startsWith("https://", ignoreCase = true)
 
     private fun buildParseRequestUrl(
         parseUrl: String,

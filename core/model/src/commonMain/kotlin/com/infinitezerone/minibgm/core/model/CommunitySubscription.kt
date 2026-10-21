@@ -171,11 +171,7 @@ data class TvBoxSite(
         val hasCustomPlaceholder = targetUrl.contains("{title}", ignoreCase = true) || targetUrl.contains("{wd}", ignoreCase = true)
         val parserType =
             when {
-                type == TYPE_MACCMS -> RuleParserType.MACCMS
-                type == TYPE_MACCMS_COMPAT -> {
-                    // TODO(tvbox): type=2 是 JSON API 兼容类型，补 ac=detail 与筛选参数差异后再落专用模板。
-                    RuleParserType.AUTO
-                }
+                type == TYPE_MACCMS || type == TYPE_MACCMS_COMPAT -> RuleParserType.MACCMS
                 type == TYPE_XML && !hasCustomPlaceholder -> RuleParserType.MACCMS
                 else -> RuleParserType.AUTO
             }
@@ -245,10 +241,14 @@ data class TvBoxSite(
         when {
             targetUrl.contains("{wd}", ignoreCase = true) -> targetUrl.replace("{wd}", "{title}", ignoreCase = true)
             targetUrl.contains("{title}", ignoreCase = true) -> targetUrl
-            type == TYPE_MACCMS -> if (targetUrl.contains("?")) "$targetUrl&ac=detail&wd={title}" else "$targetUrl?ac=detail&wd={title}"
-            type == TYPE_MACCMS_COMPAT -> {
-                // TODO(tvbox): 当前沿用普通模板；确认 type=2 的兼容路径后与 type=1 对齐 ac=detail。
-                if (targetUrl.contains("?")) "$targetUrl&wd={title}" else "$targetUrl?wd={title}"
+            type == TYPE_MACCMS || type == TYPE_MACCMS_COMPAT -> {
+                when {
+                    targetUrl.contains("ac=", ignoreCase = true) -> {
+                        if (targetUrl.contains("?")) "$targetUrl&wd={title}" else "$targetUrl?wd={title}"
+                    }
+                    targetUrl.contains("?") -> "$targetUrl&ac=detail&wd={title}"
+                    else -> "$targetUrl?ac=detail&wd={title}"
+                }
             }
             type == TYPE_XML -> if (targetUrl.contains("?")) "$targetUrl&ac=videolist&wd={title}" else "$targetUrl?ac=videolist&wd={title}"
             targetUrl.contains("?") -> "$targetUrl&wd={title}"
@@ -258,7 +258,7 @@ data class TvBoxSite(
     private fun resolveDescription(hasCustomPlaceholder: Boolean = false): String =
         when {
             type == TYPE_XML && !hasCustomPlaceholder -> "TVBox XML 采集源"
-            type == TYPE_MACCMS -> "TVBox MacCMS 采集源"
+            type == TYPE_MACCMS || type == TYPE_MACCMS_COMPAT -> "TVBox MacCMS 采集源"
             type == TYPE_SPIDER -> "TVBox 爬虫/扩展源"
             else -> "TVBox 动漫源"
         }

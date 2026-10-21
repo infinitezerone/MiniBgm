@@ -3374,6 +3374,10 @@ class ArchitectureRulesTest {
             resolverContent.contains("PageFetchService"),
             "TvBoxParseResolver 必须通过 PageFetchService 发起网络请求",
         )
+        assertTrue(
+            resolverContent.contains("coroutineScope") && resolverContent.contains("Channel"),
+            "TvBoxParseResolver 聚合解析 (type=4) 必须并发调度子解析器竞速",
+        )
 
         val judgeFile =
             File(

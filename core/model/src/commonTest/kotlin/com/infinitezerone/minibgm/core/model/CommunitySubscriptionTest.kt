@@ -33,6 +33,31 @@ class CommunitySubscriptionTest {
     }
 
     @Test
+    fun convert_declaresMacCmsCompatSiteAsSourceRuleWithMacCmsParser() {
+        val site =
+            TvBoxSite(
+                name = "兼容采集站",
+                type = 2,
+                api = "https://example.com/api.php/provide/vod",
+            )
+        val source = assertSupported(site)
+        assertEquals("兼容采集站", source.name)
+        assertEquals("https://example.com/api.php/provide/vod?ac=detail&wd={title}", source.urlTemplate)
+        assertEquals("TVBox MacCMS 采集源", source.description)
+        assertEquals(PlaybackRuleKind.SOURCE, source.kind)
+        assertEquals(RuleParserType.MACCMS, source.parserType)
+
+        val siteWithAc =
+            TvBoxSite(
+                name = "带ac兼容站",
+                type = 2,
+                api = "https://example.com/api.php/provide/vod?ac=detail",
+            )
+        val sourceWithAc = assertSupported(siteWithAc)
+        assertEquals("https://example.com/api.php/provide/vod?ac=detail&wd={title}", sourceWithAc.urlTemplate)
+    }
+
+    @Test
     fun convert_keepsUnknownSiteOnAutoParserButStillSource() {
         val site =
             TvBoxSite(
