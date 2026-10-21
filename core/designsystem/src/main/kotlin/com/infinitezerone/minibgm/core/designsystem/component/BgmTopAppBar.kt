@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -34,11 +35,39 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalAppUiStyle
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalLuminousTokens
 
+object BgmTopAppBarDefaults {
+    /** 沉浸模式默认颜色：透明容器，高对比前景。 */
+    @Composable
+    fun immersiveColors(): TopAppBarColors =
+        TopAppBarDefaults.topAppBarColors(
+            containerColor = Color.Transparent,
+            scrolledContainerColor = Color.Transparent,
+            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+    /** 实体结构模式默认颜色：坚实不透明容器。 */
+    @Composable
+    fun solidColors(containerColor: Color = MaterialTheme.colorScheme.surface): TopAppBarColors =
+        TopAppBarDefaults.topAppBarColors(
+            containerColor = containerColor,
+            scrolledContainerColor = containerColor,
+            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
+            actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+}
+
 /**
  * MiniBgm 紧凑型现代顶栏：
  * 相比 Material 3 默认笨重庞大的 64dp 顶栏，采用 48dp 紧凑高度设计，
  * 大幅减少上下留白，完美居中 48dp 标准点击区域的图标按钮与精致加粗标题，
  * 最大程度释放手机纵向首屏的黄金浏览空间。
+ *
+ * 支持双模式：
+ * - [BgmTopBarMode.Immersive]：顶栏全透明，无底边分隔线，内容可自由穿入上方的渐隐天幕；
+ * - [BgmTopBarMode.Solid]：顶栏填充坚实底色并覆盖状态栏，底边绘制微光 hairline 分割线。
  *
  * 传入 [scrollBehavior] 时支持滚动收合（如 enterAlways）：内容区高度随滚动从 [height]
  * 收合至 0（仅保留状态栏内边距），调用方需自行挂接 `scrollBehavior.nestedScrollConnection`。
@@ -48,6 +77,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.LocalLuminousTokens
 fun BgmTopAppBar(
     title: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    mode: BgmTopBarMode = BgmTopBarMode.Immersive,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
     windowInsets: WindowInsets = TopAppBarDefaults.windowInsets,
@@ -59,18 +89,19 @@ fun BgmTopAppBar(
     val contentHeightPx = with(density) { height.toPx() }
     val uiStyle = LocalAppUiStyle.current
     val tokens = LocalLuminousTokens.current
-    val useLuminousMaterial = uiStyle == AppUiStyle.Luminous && colors == null
+
     val resolvedColors =
-        colors ?: if (useLuminousMaterial) {
-            TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-                scrolledContainerColor = Color.Transparent,
-                navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-                titleContentColor = MaterialTheme.colorScheme.onSurface,
-                actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            TopAppBarDefaults.topAppBarColors()
+        colors ?: when (mode) {
+            BgmTopBarMode.Immersive -> BgmTopAppBarDefaults.immersiveColors()
+            BgmTopBarMode.Solid -> {
+                val solidBg =
+                    if (uiStyle == AppUiStyle.Luminous) {
+                        tokens.sheetContainer
+                    } else {
+                        MaterialTheme.colorScheme.surface
+                    }
+                BgmTopAppBarDefaults.solidColors(containerColor = solidBg)
+            }
         }
 
     // 收合上限以自身实际高度为准（覆盖 M3 默认的 56dp 假设）
@@ -90,14 +121,6 @@ fun BgmTopAppBar(
         modifier = modifier.fillMaxWidth().clipToBounds(),
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            if (useLuminousMaterial) {
-                Box(
-                    modifier =
-                        Modifier
-                            .matchParentSize()
-                            .background(tokens.topBarBrush()),
-                )
-            }
             Row(
                 modifier =
                     Modifier
@@ -138,23 +161,29 @@ fun BgmTopAppBar(
                     )
                 }
             }
-            if (useLuminousMaterial) {
+
+            // 实体模式下在底边绘制精致的 hairline 分割线
+            if (mode == BgmTopBarMode.Solid) {
+                val hairlineBrush =
+                    if (uiStyle == AppUiStyle.Luminous) {
+                        Brush.horizontalGradient(
+                            colors =
+                                listOf(
+                                    Color.Transparent,
+                                    tokens.topBarHairline,
+                                    Color.Transparent,
+                                ),
+                        )
+                    } else {
+                        SolidColor(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    }
                 Box(
                     modifier =
                         Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .height(BgmSpacing.TopBar.hairline)
-                            .background(
-                                Brush.horizontalGradient(
-                                    colors =
-                                        listOf(
-                                            Color.Transparent,
-                                            tokens.topBarHairline,
-                                            Color.Transparent,
-                                        ),
-                                ),
-                            ),
+                            .background(hairlineBrush),
                 )
             }
         }

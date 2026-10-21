@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
@@ -172,6 +173,7 @@ private fun HistoryContent(
     Scaffold(
         topBar = {
             BgmTopAppBar(
+                mode = BgmTopBarMode.Solid,
                 title = { Text(text = stringResource(R.string.feature_user_history_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {

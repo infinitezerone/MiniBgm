@@ -17,13 +17,11 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
  *
  * 对应 HyperOS 4 / ColorOS 17 系统应用共同采用的“内容全幅铺满、chrome 悬浮在内容之上”：
  * - 背景由 [BgmBackdrop] 铺满整页，内容可自然延伸到状态栏与导航栏下方；
+ * - [topBarMode] 控制顶栏是沉浸天幕模式还是实体稳固结构模式；
  * - [topBar] 是唯一的结构性顶栏槽位，默认由调用方传入 [BgmTopAppBar]；
  * - [content] 铺满整页并绘制在 chrome 之下，滚动内容可以自然穿行到顶栏与状态栏后方；
- *   页面需要自行用 `WindowInsets.statusBars` + [BgmSpacing.TopBar.height] 留出首屏起始位置；
+ *   沉浸模式下，首项通过 contentPadding 避让 [BgmFloatingPageScaffoldDefaults.ContentTopClearance]；
  * - [floatingBottomBar] 独立悬浮在内容层上方，并负责导航栏安全区与下沉呼吸距离。
- *
- * 这是布局原语，不包含任何业务页面、路由或状态。页面接入时必须单独评审，
- * 不得因为组件存在就批量替换现有 `Scaffold`。
  */
 object BgmFloatingPageScaffoldDefaults {
     /** 悬浮 chrome 与内容底部之间的视觉呼吸距离。 */
@@ -31,11 +29,16 @@ object BgmFloatingPageScaffoldDefaults {
 
     /** 给滚动内容留出的底部避让，避免最后一项被悬浮底栏遮住。 */
     val ContentBottomClearance: Dp = BgmSpacing.Snackbar.floatingBarClearance
+
+    /** 沉浸模式下滚动内容首项距离顶栏的建议避让（48dp 紧凑顶栏标准高度）。 */
+    val ContentTopClearance: Dp = BgmSpacing.TopBar.height
 }
 
 @Composable
 fun BgmFloatingPageScaffold(
     modifier: Modifier = Modifier,
+    topBarMode: BgmTopBarMode = BgmTopBarMode.Immersive,
+    topScrimHeight: Dp? = null,
     topBar: @Composable () -> Unit = {},
     floatingBottomBar: (@Composable () -> Unit)? = null,
     floatingBottomBarSink: Dp = BgmFloatingPageScaffoldDefaults.FloatingChromeSink,
@@ -45,11 +48,15 @@ fun BgmFloatingPageScaffold(
         Box(modifier = Modifier.fillMaxSize()) {
             content()
 
-            // 顶部渐隐层：当内容向上滚动滑向状态栏时，慢慢被柔和天幕渐隐遮挡，与状态栏浑然一体
-            BgmTopChromeScrim(modifier = Modifier.align(Alignment.TopCenter))
+            // 顶部渐隐天幕：仅在沉浸模式下开启，当内容向上滚动滑向状态栏时，平滑消融于天幕
+            if (topBarMode == BgmTopBarMode.Immersive) {
+                BgmTopChromeScrim(
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    height = topScrimHeight,
+                )
+            }
 
-            // 顶栏只作为覆盖层存在，不参与内容排版；这是“内容全幅铺满”的关键，
-            // 否则滚动内容永远无法延伸到状态栏与顶栏下方。
+            // 顶栏覆盖层：沉浸模式下为透明穿透层，实体模式下填充底色并覆盖状态栏
             Box(
                 modifier =
                     Modifier

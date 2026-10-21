@@ -63,6 +63,7 @@ import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
@@ -186,6 +187,7 @@ fun AssistantScreenContent(
     Scaffold(
         topBar = {
             BgmTopAppBar(
+                mode = BgmTopBarMode.Solid,
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(

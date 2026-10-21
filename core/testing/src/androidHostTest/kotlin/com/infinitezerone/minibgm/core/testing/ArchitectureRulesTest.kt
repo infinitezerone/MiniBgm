@@ -895,6 +895,39 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 【顶栏双模式范式守卫】
+     * MiniBgm 顶栏采用沉浸天幕模式与实体稳固结构模式（BgmTopBarMode）。
+     * 特性页面严禁在 BgmTopAppBar 上硬编码 containerColor，破坏沉浸天幕穿透或实体底色；
+     * 实心顶栏统一声明 mode = BgmTopBarMode.Solid，沉浸顶栏统一声明 mode = BgmTopBarMode.Immersive。
+     */
+    @Test
+    fun feature_screens_must_not_hardcode_solid_top_app_bar_colors() {
+        val featureDir = File(projectRoot, "feature")
+        val violations = mutableListOf<String>()
+        featureDir
+            .walkTopDown()
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { sourceFile ->
+                val scanner = KotlinSourceScanner.fromFile(sourceFile)
+                scanner.containsToken("topAppBarColors").forEach { match ->
+                    if (match.lineContent.contains("containerColor = MaterialTheme.colorScheme.surface") ||
+                        match.lineContent.contains("containerColor = Color.Transparent")
+                    ) {
+                        violations.add(
+                            "${sourceFile.relativeTo(projectRoot).path}:${match.lineNumber} " +
+                                "使用了硬编码 topAppBarColors，应改用 BgmTopBarMode.Solid 或 BgmTopBarMode.Immersive -> ${match.lineContent.trim()}",
+                        )
+                    }
+                }
+            }
+        assertTrue(
+            violations.isEmpty(),
+            "发现页面硬编码 TopAppBar 容器颜色（应改用 BgmTopBarMode）：\n${violations.joinToString("\n")}",
+        )
+    }
+
     @Test
     fun feature_and_app_sources_never_import_raw_material_icons() {
         val violations = mutableListOf<String>()

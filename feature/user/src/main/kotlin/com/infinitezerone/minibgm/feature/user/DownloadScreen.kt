@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
@@ -138,6 +139,7 @@ internal fun DownloadScreenContent(
     Scaffold(
         topBar = {
             BgmTopAppBar(
+                mode = BgmTopBarMode.Solid,
                 title = { Text(text = stringResource(R.string.feature_user_downloads_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {

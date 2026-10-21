@@ -10,9 +10,18 @@ class BgmFloatingPageScaffoldDefaultsTest {
     fun floatingPageScaffold_keepsChromeSinkAndContentClearanceSeparate() {
         assertEquals(12.dp, BgmFloatingPageScaffoldDefaults.FloatingChromeSink)
         assertEquals(72.dp, BgmFloatingPageScaffoldDefaults.ContentBottomClearance)
+        assertEquals(48.dp, BgmFloatingPageScaffoldDefaults.ContentTopClearance)
         assertTrue(
             BgmFloatingPageScaffoldDefaults.ContentBottomClearance >
                 BgmFloatingPageScaffoldDefaults.FloatingChromeSink,
         )
+    }
+
+    @Test
+    fun topBarModes_haveExpectedVariants() {
+        val modes = BgmTopBarMode.entries
+        assertEquals(2, modes.size)
+        assertTrue(modes.contains(BgmTopBarMode.Immersive))
+        assertTrue(modes.contains(BgmTopBarMode.Solid))
     }
 }

@@ -60,6 +60,7 @@ import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.OverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.component.SingleChoiceDialogAction
@@ -786,6 +787,7 @@ fun SettingsScreenContent(
     Scaffold(
         topBar = {
             BgmTopAppBar(
+                mode = BgmTopBarMode.Solid,
                 title = { Text(text = stringResource(R.string.feature_user_title_settings)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {

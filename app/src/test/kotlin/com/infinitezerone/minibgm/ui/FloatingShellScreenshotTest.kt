@@ -31,15 +31,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingFrame
 import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingPageScaffold
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.AppUiStyle
-import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.ui.component.BgmFloatingNavigationBar
@@ -125,36 +126,43 @@ private val previewScheduleItems =
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun FloatingShellPreview() {
+    val totalTopChromeHeight = 48.dp + 56.dp
     BgmFloatingPageScaffold(
         modifier = Modifier.size(width = 411.dp, height = 891.dp),
+        topBarMode = BgmTopBarMode.Immersive,
+        topScrimHeight = totalTopChromeHeight + 36.dp,
         topBar = {
-            BgmTopAppBar(
-                title = {
-                    Text(
-                        text = "时间表",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-                actions = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 4.dp),
-                    ) {
-                        BgmCircleActionButton(
-                            onClick = {},
-                            icon = BgmIcons.Search,
-                            contentDescription = "搜索",
+            Column(modifier = Modifier.fillMaxWidth()) {
+                BgmTopAppBar(
+                    mode = BgmTopBarMode.Immersive,
+                    title = {
+                        Text(
+                            text = "时间表",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
                         )
-                        BgmCircleActionButton(
-                            onClick = {},
-                            icon = BgmIcons.Assistant,
-                            contentDescription = "助手",
-                        )
-                    }
-                },
-            )
+                    },
+                    actions = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(end = 4.dp),
+                        ) {
+                            BgmCircleActionButton(
+                                onClick = {},
+                                icon = BgmIcons.Search,
+                                contentDescription = "搜索",
+                            )
+                            BgmCircleActionButton(
+                                onClick = {},
+                                icon = BgmIcons.Assistant,
+                                contentDescription = "助手",
+                            )
+                        }
+                    },
+                )
+                PreviewDateStrip()
+            }
         },
         floatingBottomBar = {
             BgmFloatingNavigationBar(
@@ -165,17 +173,7 @@ private fun FloatingShellPreview() {
         },
         floatingBottomBarSink = 12.dp,
     ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(top = BgmSpacing.TopBar.height),
-        ) {
-            PreviewDateStrip()
-            PreviewFilterRow()
-            PreviewSectionHeader()
-            PreviewTimeline()
-        }
+        PreviewTimeline(topPadding = totalTopChromeHeight + 4.dp)
     }
 }
 
@@ -288,7 +286,7 @@ private fun PreviewSectionHeader() {
 }
 
 @Composable
-private fun PreviewTimeline() {
+private fun PreviewTimeline(topPadding: Dp = 108.dp) {
     val posterBrushes =
         listOf(
             MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.tertiaryContainer,
@@ -298,9 +296,15 @@ private fun PreviewTimeline() {
         )
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 4.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topPadding, bottom = 80.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        item(key = "filter_row") {
+            PreviewFilterRow()
+        }
+        item(key = "section_header") {
+            PreviewSectionHeader()
+        }
         item(key = "now") {
             PreviewNowLine(time = "20:14")
         }
