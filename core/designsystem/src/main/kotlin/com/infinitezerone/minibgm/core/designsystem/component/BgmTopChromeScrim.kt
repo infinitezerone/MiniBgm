@@ -14,10 +14,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.infinitezerone.minibgm.core.designsystem.theme.AppUiStyle
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
-import com.infinitezerone.minibgm.core.designsystem.theme.LocalAppUiStyle
-import com.infinitezerone.minibgm.core.designsystem.theme.LocalLuminousTokens
 
 /**
  * 顶部导航与状态栏背后的渐隐遮罩层。
@@ -35,36 +32,32 @@ fun BgmTopChromeScrim(
     height: Dp? = null,
     solidHeight: Dp? = null,
 ) {
-    val uiStyle = LocalAppUiStyle.current
-    val tokens = LocalLuminousTokens.current
     val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val topBarHeight = BgmSpacing.TopBar.height
 
-    val defaultSolidHeight = statusBarHeight + topBarHeight
-    val resolvedSolidHeight = solidHeight ?: defaultSolidHeight
-    val transitionThickness = 28.dp
-    val resolvedTotalHeight = height ?: (resolvedSolidHeight + transitionThickness)
+    // 默认高度：刚好是正常 TopBar 区域高度（状态栏 + TopBar 高度），在 TopBar 底部边缘完全淡出
+    val defaultTotalHeight = statusBarHeight + topBarHeight
+    val resolvedTotalHeight = height ?: defaultTotalHeight
 
-    val topColor =
-        if (uiStyle == AppUiStyle.Luminous) {
-            tokens.backdropTop
-        } else {
-            MaterialTheme.colorScheme.background
-        }
+    // 默认实色高度：仅状态栏高度（确保时钟与电量等状态栏元素具有清晰对比度），
+    // 状态栏以下自然平滑向下滑动淡出，在 resolvedTotalHeight 处完全淡出为透明
+    val resolvedSolidHeight = solidHeight ?: statusBarHeight
+
+    val topColor = MaterialTheme.colorScheme.background
 
     val solidRatio =
         if (resolvedTotalHeight > 0.dp) {
             (resolvedSolidHeight / resolvedTotalHeight).coerceIn(0f, 0.95f)
         } else {
-            0.7f
+            0.4f
         }
 
     val colorStops =
         arrayOf(
             0.0f to topColor,
             solidRatio to topColor,
-            solidRatio + (1f - solidRatio) * 0.35f to topColor.copy(alpha = 0.72f),
-            solidRatio + (1f - solidRatio) * 0.70f to topColor.copy(alpha = 0.28f),
+            solidRatio + (1f - solidRatio) * 0.35f to topColor.copy(alpha = 0.70f),
+            solidRatio + (1f - solidRatio) * 0.70f to topColor.copy(alpha = 0.25f),
             1.0f to Color.Transparent,
         )
 

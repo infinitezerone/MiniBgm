@@ -140,7 +140,7 @@ fun buildLuminousTokens(
                     topBarHairline = Color.White.copy(alpha = 0.16f),
                     sheetContainer = Color(0xFF0A0A0C),
                     sheetScrim = Color.Black.copy(alpha = 0.76f),
-                    backdropTop = Color(0xFF0A0A0C),
+                    backdropTop = Color.Black,
                     backdropMiddle = Color.Black,
                     backdropBottom = Color.Black,
                 )
@@ -162,9 +162,9 @@ fun buildLuminousTokens(
                     topBarHairline = Color.White.copy(alpha = 0.12f),
                     sheetContainer = Color(0xFF15181E).copy(alpha = 0.96f),
                     sheetScrim = Color.Black.copy(alpha = 0.62f),
-                    backdropTop = Color(0xFF231B2A),
-                    backdropMiddle = Color(0xFF13151B),
-                    backdropBottom = Color(0xFF0C1418),
+                    backdropTop = colorScheme.background,
+                    backdropMiddle = colorScheme.background,
+                    backdropBottom = colorScheme.background,
                 )
             else ->
                 base.copy(
@@ -184,9 +184,9 @@ fun buildLuminousTokens(
                     topBarHairline = Color.Black.copy(alpha = 0.08f),
                     sheetContainer = Color.White.copy(alpha = 0.96f),
                     sheetScrim = Color.Black.copy(alpha = 0.30f),
-                    backdropTop = Color(0xFFFDE8F0),
-                    backdropMiddle = Color(0xFFF0F3F8),
-                    backdropBottom = Color(0xFFE8F2FA),
+                    backdropTop = colorScheme.background,
+                    backdropMiddle = colorScheme.background,
+                    backdropBottom = colorScheme.background,
                 )
         }
 

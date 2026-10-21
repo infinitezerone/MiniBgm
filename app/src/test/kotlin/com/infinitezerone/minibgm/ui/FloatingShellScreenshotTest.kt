@@ -130,7 +130,8 @@ private fun FloatingShellPreview() {
     BgmFloatingPageScaffold(
         modifier = Modifier.size(width = 411.dp, height = 891.dp),
         topBarMode = BgmTopBarMode.Immersive,
-        topScrimHeight = totalTopChromeHeight + 36.dp,
+        topScrimHeight = totalTopChromeHeight,
+        topScrimSolidHeight = 48.dp,
         topBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 BgmTopAppBar(

@@ -40,7 +40,7 @@
 | 封面比例 | `theme/Dimens.kt` | 海报 `0.7`，人物 `0.72` | `PROJECT` | 海报当前使用约 5:7，而非标准 2:3（0.667）；人物立绘略瘦于海报。两者都是全站唯一来源。 |
 | 玻璃材质 | `theme/LuminousTokens.kt` | Subtle `0.68/0.46`、Regular `0.78/0.58`、Prominent `0.86/0.70`；glow `0.16/0.22/0.20` | `OS` + `PROJECT` | 视觉方向参考当前 Apple / HyperOS / ColorOS 的玻璃与光效，但没有公开 token 规范可逐值复制；三层 alpha、描边、内高光和 backdrop 均为项目校准。省电模式或低内存设备降级为实体材质。 |
 | 实体大圆盘按钮 | `component/BgmCircleActionButton.kt` | 40dp 纯净实体圆盘、无边框、0dp 阴影（纯平实色）、surfaceContainerHighest 底色 | `OS` + `PROJECT` | 对齐现代旗舰系统应用与 ChatGPT 等无边框纯净实体大圆盘基座交互；零描边，彻底摒弃粗糙的 Material 投影，依靠纯净填充明度差自然浮起。 |
-| 双向天幕渐隐遮罩 | `component/BgmTopChromeScrim.kt`、`BgmFloatingChromeScrim.kt` | 顶部 108dp、底部 136dp 垂直多段平滑衰减渐变 | `OS` + `PROJECT` | 向上滚动时卡片与文本慢慢沉入顶端天幕消融，与状态栏完全融为一体；向下滚动时柔和掩映内容并平滑托起无边框实体 Dock 药丸。 |
+| 双向天幕渐隐遮罩 | `component/BgmTopChromeScrim.kt`、`BgmFloatingChromeScrim.kt` | 顶部状态栏至TopBar边缘完全淡出、底部 136dp 垂直平滑衰减渐变 | `OS` + `PROJECT` | 顶部天幕采用与内容背景同源的纯净底色（灰白/炭黑/纯黑），在 TopBar 底部边缘完全淡出为透明，彻底消除色差与硬切断层；向下滚动时柔和掩映内容并平滑托起无边框实体 Dock 药丸。 |
 | 顶栏双模式 | `component/BgmTopBarMode.kt`、`component/BgmTopAppBar.kt` | `Immersive`（全透明+天幕遮罩穿透）与 `Solid`（实体表面底色+状态栏覆盖+hairline底边） | `OS` + `M3` + `PROJECT` | 对齐现代旗舰系统多场景诉求：内容浏览流（日历、发现、详情）走沉浸天幕穿透；管理与配置（设置、规则、下载）走实体稳固结构。 |
 
 ## 已知偏离与保留决定

@@ -303,8 +303,8 @@ class TvBoxParseResolverTest {
                     override suspend fun fetchHtml(
                         url: String,
                         requestHeaders: Map<String, String>,
-                    ): FetchedPage? {
-                        return when (url) {
+                    ): FetchedPage? =
+                        when (url) {
                             slowUrl -> {
                                 delay(200)
                                 FetchedPage(url, """{"url": "https://stream.slow.com/video.m3u8"}""")
@@ -314,7 +314,6 @@ class TvBoxParseResolverTest {
                             }
                             else -> null
                         }
-                    }
 
                     override suspend fun postForm(
                         url: String,

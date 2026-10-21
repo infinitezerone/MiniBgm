@@ -129,7 +129,8 @@ fun ScheduleScreen(
 
     BgmFloatingPageScaffold(
         topBarMode = BgmTopBarMode.Immersive,
-        topScrimHeight = totalTopChromeHeight + 36.dp,
+        topScrimHeight = totalTopChromeHeight,
+        topScrimSolidHeight = statusBarTop,
         topBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 BgmTopAppBar(
