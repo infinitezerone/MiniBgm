@@ -10,9 +10,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +28,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -40,25 +41,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
-import com.infinitezerone.minibgm.core.designsystem.theme.AppUiStyle
+import com.infinitezerone.minibgm.core.designsystem.component.aquamorphicShadow
+import com.infinitezerone.minibgm.core.designsystem.component.expressivePress
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
-import com.infinitezerone.minibgm.core.designsystem.theme.LocalAppUiStyle
-import com.infinitezerone.minibgm.core.designsystem.theme.LocalLuminousTokens
 import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
 
 /**
  * 手机端居中悬浮胶囊底栏（Floating Navigation Island）：
- * 1. 水平居中悬浮胶囊形态（CircleShape），内容在悬浮岛下方自然穿行下潜；
- * 2. 纵向垂直排版（上方图标 + 下方文字常驻显示），避免横向伸缩位移，切换稳定流畅；
- * 3. 选中项采用 Material 3 规范胶囊指示器：胶囊弹性展开，图标在两个形态间弹性形变（M3 Expressive），
- *    配合 SegmentTick 触感反馈。
+ * 1. 与顶栏 [com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton] 动作按钮同源对齐：
+ *    - 浅色采用纯白实色表面 [MaterialTheme.colorScheme.surface]，深色采用曜石黑 [MaterialTheme.colorScheme.surfaceContainerHigh]；
+ *    - 搭载双层复合高斯弥散光晕 [aquamorphicShadow]，淘汰粗糙生硬的黑圈阴影；
+ *    - 深色模式辅以 0.5dp 微光极细轮廓发丝线，维持深色天幕上的立体悬浮感；
+ * 2. 微交互与纯净物理反馈：
+ *    - 各导航项集成 [expressivePress] 弹性物理缩放；
+ *    - 零强制触觉震动，遵循系统纯净交互立场；
+ * 3. 选中项采用灵动指示器与品牌主色形变切换。
  */
 @Composable
 fun BgmFloatingNavigationBar(
@@ -67,18 +69,37 @@ fun BgmFloatingNavigationBar(
     modifier: Modifier = Modifier,
     isVertical: Boolean = false,
 ) {
+    val isDark = isSystemInDarkTheme()
+    val containerColor =
+        if (isDark) {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        } else {
+            MaterialTheme.colorScheme.surface
+        }
+
+    val effectiveBorder =
+        if (isDark) {
+            BorderStroke(0.5.dp, Color.White.copy(alpha = 0.08f))
+        } else {
+            null
+        }
+
     val navModifier =
         modifier
             .wrapContentWidth()
             .widthIn(min = BgmSpacing.FloatingNav.minWidth, max = BgmSpacing.FloatingNav.maxWidth)
+            .aquamorphicShadow(
+                shape = CircleShape,
+                isDark = isDark,
+            )
 
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        color = containerColor,
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
-        shadowElevation = 10.dp,
-        border = null,
+        shadowElevation = 0.dp,
+        border = effectiveBorder,
         modifier = navModifier,
     ) {
         BgmFloatingNavigationRow(
@@ -120,14 +141,17 @@ private fun BgmFloatingNavItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val haptic = LocalHapticFeedback.current
-    val isLuminous = LocalAppUiStyle.current == AppUiStyle.Luminous
-    val tokens = LocalLuminousTokens.current
+    val isDark = isSystemInDarkTheme()
+    val interactionSource = remember { MutableInteractionSource() }
 
     val indicatorColor by animateColorAsState(
         targetValue =
             if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
+                if (isDark) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                } else {
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
+                }
             } else {
                 Color.Transparent
             },
@@ -138,7 +162,7 @@ private fun BgmFloatingNavItem(
     val iconColor by animateColorAsState(
         targetValue =
             if (isSelected) {
-                MaterialTheme.colorScheme.onPrimaryContainer
+                MaterialTheme.colorScheme.primary
             } else {
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
@@ -162,21 +186,24 @@ private fun BgmFloatingNavItem(
         verticalArrangement = Arrangement.Center,
         modifier =
             modifier
-                .clip(RoundedCornerShape(16.dp))
+                .expressivePress(
+                    interactionSource = interactionSource,
+                    pressedScale = 0.94f,
+                ).clip(CircleShape)
                 .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
+                    interactionSource = interactionSource,
                     indication = ripple(bounded = true, radius = 28.dp),
                     role = Role.Tab,
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                        onClick()
-                    },
+                    onClick = onClick,
                 ).defaultMinSize(minWidth = BgmSpacing.FloatingNav.itemMinWidth)
                 .padding(BgmSpacing.FloatingNav.itemPadding),
     ) {
         val label = stringResource(destination.labelRes)
-        Box(contentAlignment = Alignment.Center) {
-            // 指示器胶囊：绘制在图标层之下，选中时弹性展开、取消时收缩消失（M3 Expressive spring）
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(width = 44.dp, height = 26.dp),
+        ) {
+            // 指示器胶囊：绘制在图标层之下，选中时弹性展开、取消时收缩消失
             val indicatorScale by animateFloatAsState(
                 targetValue = if (isSelected) 1f else 0f,
                 animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium),
@@ -185,15 +212,14 @@ private fun BgmFloatingNavItem(
             Box(
                 modifier =
                     Modifier
-                        .matchParentSize()
+                        .fillMaxSize()
                         .graphicsLayer {
                             scaleX = indicatorScale
                             scaleY = indicatorScale
                         }.clip(CircleShape)
                         .background(indicatorColor),
             )
-            // 图标形变：选中/未选中两个形态之间做弹性缩放交替——
-            // 新形态以 0.55 倍轻微回弹切入，旧形态放大淡出，读作连续的"变形"而非跳变
+            // 图标形变：选中/未选中两个形态之间做弹性缩放交替
             AnimatedContent(
                 targetState = isSelected,
                 transitionSpec = {
@@ -216,12 +242,7 @@ private fun BgmFloatingNavItem(
                     )
                 },
                 label = "nav_icon_morph",
-                modifier =
-                    Modifier
-                        .padding(
-                            horizontal = BgmSpacing.FloatingNav.iconHorizontalPadding,
-                            vertical = BgmSpacing.FloatingNav.iconVerticalPadding,
-                        ).size(BgmSpacing.FloatingNav.iconSize),
+                modifier = Modifier.size(BgmSpacing.FloatingNav.iconSize),
             ) { selected ->
                 Icon(
                     imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
