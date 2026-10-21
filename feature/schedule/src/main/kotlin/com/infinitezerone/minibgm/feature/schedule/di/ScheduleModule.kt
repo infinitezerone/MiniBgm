@@ -12,6 +12,7 @@ val scheduleModule =
                 collectionRepository = get(),
                 settingsRepository = get(),
                 authRepository = get(),
+                playbackHistoryRepository = get(),
             )
         }
     }

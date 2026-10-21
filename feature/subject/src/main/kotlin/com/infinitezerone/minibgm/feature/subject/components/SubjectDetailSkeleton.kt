@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
@@ -33,11 +34,12 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 @Composable
 fun SubjectDetailFullSkeleton(
     modifier: Modifier = Modifier,
+    topPadding: Dp = 12.dp,
     skeletonState: SkeletonState = rememberSkeletonState(),
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topPadding, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         userScrollEnabled = false,
     ) {

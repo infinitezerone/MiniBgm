@@ -39,9 +39,11 @@ fun BgmFloatingPageScaffold(
     modifier: Modifier = Modifier,
     topBarMode: BgmTopBarMode = BgmTopBarMode.Immersive,
     topScrimHeight: Dp? = null,
+    topScrimSolidHeight: Dp? = null,
     topBar: @Composable () -> Unit = {},
     floatingBottomBar: (@Composable () -> Unit)? = null,
     floatingBottomBarSink: Dp = BgmFloatingPageScaffoldDefaults.FloatingChromeSink,
+    snackbarHost: @Composable () -> Unit = {},
     content: @Composable BoxScope.() -> Unit,
 ) {
     BgmBackdrop(modifier = modifier.fillMaxSize()) {
@@ -53,6 +55,7 @@ fun BgmFloatingPageScaffold(
                 BgmTopChromeScrim(
                     modifier = Modifier.align(Alignment.TopCenter),
                     height = topScrimHeight,
+                    solidHeight = topScrimSolidHeight,
                 )
             }
 
@@ -77,6 +80,15 @@ fun BgmFloatingPageScaffold(
                 ) {
                     floatingBottomBar()
                 }
+            }
+
+            Box(
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth(),
+            ) {
+                snackbarHost()
             }
         }
     }

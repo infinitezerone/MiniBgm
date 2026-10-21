@@ -47,5 +47,12 @@
     <string name="feature_schedule_load_failed_title">放送表加载失败</string>
     <string name="feature_schedule_error_network">网络连接异常</string>
 
+    <!-- 顶部 Hero 接着看 -->
+    <string name="feature_schedule_hero_next_up">接着看</string>
+    <string name="feature_schedule_hero_completed">已看完</string>
+    <string name="feature_schedule_hero_resume_cta">继续观看</string>
+    <string name="feature_schedule_hero_episode_format">第 %1$d 话 · %2$s</string>
+    <string name="feature_schedule_hero_episode_only">第 %1$d 话</string>
+
     <string name="feature_schedule_login_prompt_desc">追番与打卡需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。</string>
 </resources>

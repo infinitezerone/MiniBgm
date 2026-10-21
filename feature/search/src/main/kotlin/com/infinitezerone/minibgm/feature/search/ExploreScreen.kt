@@ -1,12 +1,16 @@
 package com.infinitezerone.minibgm.feature.search
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
@@ -14,11 +18,8 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -31,12 +32,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingPageScaffold
 import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
@@ -44,6 +48,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.search.components.ActiveCustomFilterBar
 import com.infinitezerone.minibgm.feature.search.components.ExploreEmptyState
@@ -123,7 +128,11 @@ fun ExploreScreen(
         exploreViewModel.resetToRows()
     }
 
-    Scaffold(
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val topChromeHeight = statusBarTop + BgmSpacing.TopBar.height
+
+    BgmFloatingPageScaffold(
+        topBarMode = BgmTopBarMode.Immersive,
         topBar = {
             BgmTopAppBar(
                 title = {
@@ -134,17 +143,20 @@ fun ExploreScreen(
                 },
                 navigationIcon = {
                     if (exploreUiState.browseMode == ExploreBrowseMode.FULL_LIST) {
-                        IconButton(onClick = exploreViewModel::resetToRows) {
-                            Icon(
-                                imageVector = BgmIcons.ArrowBack,
-                                contentDescription = stringResource(R.string.feature_search_cd_back_to_featured),
-                            )
-                        }
+                        BgmCircleActionButton(
+                            onClick = exploreViewModel::resetToRows,
+                            icon = BgmIcons.ArrowBack,
+                            contentDescription = stringResource(R.string.feature_search_cd_back_to_featured),
+                        )
                     }
                 },
                 actions = {
-                    if (exploreUiState.browseMode == ExploreBrowseMode.FULL_LIST) {
-                        IconButton(onClick = { showFilterBottomSheet = true }) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 4.dp),
+                    ) {
+                        if (exploreUiState.browseMode == ExploreBrowseMode.FULL_LIST) {
                             BadgedBox(
                                 badge = {
                                     if (isFilterActive) {
@@ -152,10 +164,11 @@ fun ExploreScreen(
                                     }
                                 },
                             ) {
-                                Icon(
-                                    imageVector = BgmIcons.FilterList,
+                                BgmCircleActionButton(
+                                    onClick = { showFilterBottomSheet = true },
+                                    icon = BgmIcons.FilterList,
                                     contentDescription = stringResource(R.string.feature_search_cd_advanced_filter),
-                                    tint =
+                                    contentColor =
                                         if (isFilterActive) {
                                             MaterialTheme.colorScheme.primary
                                         } else {
@@ -164,12 +177,11 @@ fun ExploreScreen(
                                 )
                             }
                         }
-                    }
 
-                    // 进入全域深度检索
-                    IconButton(onClick = onSearchClick) {
-                        Icon(
-                            imageVector = BgmIcons.SearchBorder,
+                        // 进入全域深度检索
+                        BgmCircleActionButton(
+                            onClick = onSearchClick,
+                            icon = BgmIcons.SearchBorder,
                             contentDescription = stringResource(R.string.feature_search_action_search),
                         )
                     }
@@ -185,26 +197,52 @@ fun ExploreScreen(
             )
         },
         modifier = modifier.fillMaxSize().nestedScroll(topBarScrollBehavior.nestedScrollConnection),
-    ) { innerPadding ->
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
+    ) {
+        PullToRefreshBox(
+            isRefreshing = exploreUiState.isRefreshing,
+            onRefresh = exploreViewModel::refresh,
+            modifier = Modifier.fillMaxSize(),
         ) {
-            PullToRefreshBox(
-                isRefreshing = exploreUiState.isRefreshing,
-                onRefresh = exploreViewModel::refresh,
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                if (exploreUiState.browseMode == ExploreBrowseMode.ROWS) {
-                    // ════ 精选模式：榜单行区块 ════
-                    LazyColumn(
-                        state = rowsListState,
-                        contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        item(key = "seasonal_row") {
+            if (exploreUiState.browseMode == ExploreBrowseMode.ROWS) {
+                // ════ 精选模式：榜单行区块 ════
+                LazyColumn(
+                    state = rowsListState,
+                    contentPadding = PaddingValues(top = topChromeHeight + 4.dp, bottom = 96.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    item(key = "seasonal_row") {
+                        ExploreSubjectRow(
+                            title =
+                                stringResource(
+                                    R.string.feature_search_seasonal_row_title,
+                                    seasonalUiState.selectedYear,
+                                    stringResource(seasonalUiState.selectedQuarter.displayLabelRes),
+                                ),
+                            subjects = seasonalUiState.subjects,
+                            isLoading = seasonalUiState.isLoading,
+                            onSubjectClick = onSubjectClick,
+                            onOpenMore = onOpenSeasonalGuide,
+                        )
+                    }
+
+                    ExploreRow.entries.forEach { row ->
+                        val rowState = exploreUiState.rowStates[row] ?: ExploreRowState()
+                        item(key = "explore_row_${row.name}") {
+                            ExploreSubjectRow(
+                                title = stringResource(row.labelRes),
+                                subjects = rowState.subjects,
+                                isLoading = rowState.isLoading,
+                                onSubjectClick = onSubjectClick,
+                                onOpenMore = { exploreViewModel.openFullListFromRow(row) },
+                            )
+                        }
+                    }
+                }
+            } else {
+                when {
+                    // 全量模式首屏骨架：分区结构与成片一致
+                    exploreUiState.isLoading && exploreUiState.subjects.isEmpty() -> {
+                        Column(modifier = Modifier.fillMaxSize().padding(top = topChromeHeight)) {
                             ExploreSubjectRow(
                                 title =
                                     stringResource(
@@ -217,106 +255,74 @@ fun ExploreScreen(
                                 onSubjectClick = onSubjectClick,
                                 onOpenMore = onOpenSeasonalGuide,
                             )
-                        }
-
-                        ExploreRow.entries.forEach { row ->
-                            val rowState = exploreUiState.rowStates[row] ?: ExploreRowState()
-                            item(key = "explore_row_${row.name}") {
-                                ExploreSubjectRow(
-                                    title = stringResource(row.labelRes),
-                                    subjects = rowState.subjects,
-                                    isLoading = rowState.isLoading,
-                                    onSubjectClick = onSubjectClick,
-                                    onOpenMore = { exploreViewModel.openFullListFromRow(row) },
-                                )
-                            }
+                            MoodFilterRow(
+                                selectedMood = exploreUiState.selectedMood,
+                                onMoodSelect = exploreViewModel::onMoodSelect,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            ExploreSkeletonLoading(modifier = Modifier.fillMaxSize())
                         }
                     }
-                } else {
-                    when {
-                        // 全量模式首屏骨架：分区结构与成片一致
-                        exploreUiState.isLoading && exploreUiState.subjects.isEmpty() -> {
-                            Column(modifier = Modifier.fillMaxSize()) {
-                                ExploreSubjectRow(
-                                    title =
-                                        stringResource(
-                                            R.string.feature_search_seasonal_row_title,
-                                            seasonalUiState.selectedYear,
-                                            stringResource(seasonalUiState.selectedQuarter.displayLabelRes),
-                                        ),
-                                    subjects = seasonalUiState.subjects,
-                                    isLoading = seasonalUiState.isLoading,
-                                    onSubjectClick = onSubjectClick,
-                                    onOpenMore = onOpenSeasonalGuide,
-                                )
-                                MoodFilterRow(
-                                    selectedMood = exploreUiState.selectedMood,
-                                    onMoodSelect = exploreViewModel::onMoodSelect,
+
+                    // 错误重试态
+                    exploreUiState.error != null && exploreUiState.subjects.isEmpty() -> {
+                        ExploreErrorState(
+                            errorMessage = exploreUiState.error ?: stringResource(R.string.feature_search_unknown_error),
+                            onRetry = exploreViewModel::refresh,
+                            modifier = Modifier.fillMaxSize().padding(top = topChromeHeight),
+                        )
+                    }
+
+                    // 全量模式：心境/筛选条 + 焦点大卡 + 瀑布流
+                    else -> {
+                        WaterfallGridList(
+                            subjects = exploreUiState.subjects,
+                            wishedSubjectIds = exploreUiState.wishedSubjectIds,
+                            hasMore = exploreUiState.hasMore,
+                            isLoadingMore = exploreUiState.isLoadingMore,
+                            onLoadMore = exploreViewModel::loadMore,
+                            onSubjectClick = onSubjectClick,
+                            onToggleWish = exploreViewModel::toggleWish,
+                            gridState = exploreGridState,
+                            topPadding = topChromeHeight + 4.dp,
+                            modifier = Modifier.fillMaxSize(),
+                            emptyContent = {
+                                ExploreEmptyState(
+                                    onReset = { exploreViewModel.onMoodSelect(ExploreMood.MASTERPIECE) },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
-                                ExploreSkeletonLoading(modifier = Modifier.fillMaxSize())
-                            }
-                        }
+                            },
+                            headerContent = {
+                                item(span = StaggeredGridItemSpan.FullLine) {
+                                    if (isFilterActive) {
+                                        ActiveCustomFilterBar(
+                                            uiState = exploreUiState,
+                                            expanded = customFilterExpanded,
+                                            onToggleExpanded = { customFilterExpanded = !customFilterExpanded },
+                                            onClearSeason = { exploreViewModel.onSeasonSelect(ALL_TIME_SEASON) },
+                                            onClearCategory = { exploreViewModel.onCategorySelect(ExploreCategory.ANIME) },
+                                            onTagToggle = exploreViewModel::onTagToggle,
+                                            onClearSort = { exploreViewModel.onSortSelect(ExploreSort.RANK) },
+                                            onResetAll = exploreViewModel::resetToRows,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    } else {
+                                        MoodFilterRow(
+                                            selectedMood = exploreUiState.selectedMood,
+                                            onMoodSelect = exploreViewModel::onMoodSelect,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    }
+                                }
 
-                        // 错误重试态
-                        exploreUiState.error != null && exploreUiState.subjects.isEmpty() -> {
-                            ExploreErrorState(
-                                errorMessage = exploreUiState.error ?: stringResource(R.string.feature_search_unknown_error),
-                                onRetry = exploreViewModel::refresh,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-
-                        // 全量模式：心境/筛选条 + 焦点大卡 + 瀑布流
-                        else -> {
-                            WaterfallGridList(
-                                subjects = exploreUiState.subjects,
-                                wishedSubjectIds = exploreUiState.wishedSubjectIds,
-                                hasMore = exploreUiState.hasMore,
-                                isLoadingMore = exploreUiState.isLoadingMore,
-                                onLoadMore = exploreViewModel::loadMore,
-                                onSubjectClick = onSubjectClick,
-                                onToggleWish = exploreViewModel::toggleWish,
-                                gridState = exploreGridState,
-                                modifier = Modifier.fillMaxSize(),
-                                emptyContent = {
-                                    ExploreEmptyState(
-                                        onReset = { exploreViewModel.onMoodSelect(ExploreMood.MASTERPIECE) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                },
-                                headerContent = {
+                                // 静默换挡加载进度条（追加翻页由底部指示器表达）
+                                if (exploreUiState.isLoading && exploreUiState.subjects.isNotEmpty()) {
                                     item(span = StaggeredGridItemSpan.FullLine) {
-                                        if (isFilterActive) {
-                                            ActiveCustomFilterBar(
-                                                uiState = exploreUiState,
-                                                expanded = customFilterExpanded,
-                                                onToggleExpanded = { customFilterExpanded = !customFilterExpanded },
-                                                onClearSeason = { exploreViewModel.onSeasonSelect(ALL_TIME_SEASON) },
-                                                onClearCategory = { exploreViewModel.onCategorySelect(ExploreCategory.ANIME) },
-                                                onTagToggle = exploreViewModel::onTagToggle,
-                                                onClearSort = { exploreViewModel.onSortSelect(ExploreSort.RANK) },
-                                                onResetAll = exploreViewModel::resetToRows,
-                                                modifier = Modifier.fillMaxWidth(),
-                                            )
-                                        } else {
-                                            MoodFilterRow(
-                                                selectedMood = exploreUiState.selectedMood,
-                                                onMoodSelect = exploreViewModel::onMoodSelect,
-                                                modifier = Modifier.fillMaxWidth(),
-                                            )
-                                        }
+                                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                                     }
-
-                                    // 静默换挡加载进度条（追加翻页由底部指示器表达）
-                                    if (exploreUiState.isLoading && exploreUiState.subjects.isNotEmpty()) {
-                                        item(span = StaggeredGridItemSpan.FullLine) {
-                                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                                        }
-                                    }
-                                },
-                            )
-                        }
+                                }
+                            },
+                        )
                     }
                 }
             }

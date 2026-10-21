@@ -24,6 +24,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
@@ -45,6 +46,7 @@ fun WaterfallGridList(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onToggleWish: (Long) -> Unit,
     gridState: LazyStaggeredGridState = rememberLazyStaggeredGridState(),
+    topPadding: Dp = 4.dp,
     modifier: Modifier = Modifier,
     headerContent: LazyStaggeredGridScope.() -> Unit = {},
     emptyContent: (@Composable () -> Unit)? = null,
@@ -72,7 +74,7 @@ fun WaterfallGridList(
     LazyVerticalStaggeredGrid(
         columns = columns,
         state = gridState,
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = topPadding, bottom = 96.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalItemSpacing = 10.dp,
         modifier = modifier,

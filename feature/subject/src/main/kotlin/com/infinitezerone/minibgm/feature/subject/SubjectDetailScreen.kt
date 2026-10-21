@@ -4,29 +4,29 @@ import android.content.ClipData
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -39,7 +39,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -54,14 +53,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.ambient.AmbientBlurBackdrop
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingPageScaffold
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.TagActionBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeGroup
@@ -399,67 +402,54 @@ fun SubjectDetailScreen(
     var activeTagForAction by rememberSaveable { mutableStateOf<String?>(null) }
     val tagActionSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    Box(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface),
-    ) {
-        if (hasEnteredTransitionFinished || !isEntering) {
-            AmbientBlurBackdrop(
-                imageUrl = displaySubject?.images?.bestImage,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(420.dp),
-            )
-        }
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val topChromeHeight = statusBarTop + BgmSpacing.TopBar.height
 
-        Scaffold(
-            topBar = {
-                BgmTopAppBar(
-                    title = {
-                        Text(
-                            text = displaySubject?.displayName ?: defaultTitle,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBackClick) {
-                            Icon(
-                                imageVector = BgmIcons.ArrowBack,
-                                contentDescription = stringResource(R.string.feature_subject_cd_back),
-                            )
-                        }
-                    },
-                    actions = {
-                        val isEpisodeLike = subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL
+    BgmFloatingPageScaffold(
+        topBarMode = BgmTopBarMode.Immersive,
+        topBar = {
+            BgmTopAppBar(
+                mode = BgmTopBarMode.Immersive,
+                title = {
+                    Text(
+                        text = displaySubject?.displayName ?: defaultTitle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                navigationIcon = {
+                    BgmCircleActionButton(
+                        onClick = onBackClick,
+                        icon = BgmIcons.ArrowBack,
+                        contentDescription = stringResource(R.string.feature_subject_cd_back),
+                    )
+                },
+                actions = {
+                    val isEpisodeLike = subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(end = 4.dp),
+                    ) {
                         if (isEpisodeLike) {
-                            IconButton(
+                            BgmCircleActionButton(
                                 onClick = {
                                     // 顶部栏 TV 入口属于条目全局级别，展示全剧规则、合集种子与多源配置
                                     selectedEpisodeForSources = null
                                     showSourcesBottomSheet = true
                                 },
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Tv,
-                                    contentDescription = stringResource(R.string.feature_subject_ep_sources),
-                                )
-                            }
+                                icon = BgmIcons.Tv,
+                                contentDescription = stringResource(R.string.feature_subject_ep_sources),
+                            )
                         }
-                        IconButton(
+                        BgmCircleActionButton(
                             onClick = {
                                 context.launchWebUrl("https://bgm.tv/subject/$subjectId")
                             },
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.OpenInBrowser,
-                                contentDescription = stringResource(R.string.feature_subject_open_in_browser),
-                            )
-                        }
-                        IconButton(
+                            icon = BgmIcons.OpenInBrowser,
+                            contentDescription = stringResource(R.string.feature_subject_open_in_browser),
+                        )
+                        BgmCircleActionButton(
                             onClick = {
                                 val shareTitle = displaySubject?.displayName ?: defaultTitle
                                 val shareText = "$shareTitle https://bgm.tv/subject/$subjectId"
@@ -471,207 +461,208 @@ fun SubjectDetailScreen(
                                     }
                                 context.startActivity(android.content.Intent.createChooser(sendIntent, shareChooserTitle))
                             },
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.Share,
-                                contentDescription = stringResource(R.string.feature_subject_share_title),
-                            )
-                        }
-                    },
-                    colors =
-                        TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent,
-                        ),
-                )
-            },
-            snackbarHost = { BgmSnackbarHost(snackbarHostState) },
-            containerColor = Color.Transparent,
-            modifier = Modifier.fillMaxSize(),
-        ) { innerPadding ->
-            PullToRefreshBox(
-                isRefreshing = uiState.isRefreshing,
-                onRefresh = {
-                    viewModel.refresh(isUserPullToRefresh = true)
-                    when (uiState.selectedTab) {
-                        SubjectDetailTab.OVERVIEW -> viewModel.loadDetailsTabIfNeeded(force = true)
-                        SubjectDetailTab.EPISODES -> Unit
-                        SubjectDetailTab.COMMUNITY -> viewModel.loadCommunityTabIfNeeded(force = true)
+                            icon = BgmIcons.Share,
+                            contentDescription = stringResource(R.string.feature_subject_share_title),
+                        )
                     }
                 },
+            )
+        },
+        snackbarHost = { BgmSnackbarHost(snackbarHostState) },
+        modifier = modifier.fillMaxSize(),
+    ) {
+        if (hasEnteredTransitionFinished || !isEntering) {
+            AmbientBlurBackdrop(
+                imageUrl = displaySubject?.images?.bestImage,
                 modifier =
                     Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    when {
-                        displaySubject == null && uiState.isLoading -> {
-                            SubjectDetailFullSkeleton()
-                        }
+                        .fillMaxWidth()
+                        .height(420.dp),
+            )
+        }
 
-                        displaySubject == null && uiState.error != null -> {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .fillMaxSize()
-                                        .padding(24.dp),
-                                contentAlignment = Alignment.Center,
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = {
+                viewModel.refresh(isUserPullToRefresh = true)
+                when (uiState.selectedTab) {
+                    SubjectDetailTab.OVERVIEW -> viewModel.loadDetailsTabIfNeeded(force = true)
+                    SubjectDetailTab.EPISODES -> Unit
+                    SubjectDetailTab.COMMUNITY -> viewModel.loadCommunityTabIfNeeded(force = true)
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                when {
+                    displaySubject == null && uiState.isLoading -> {
+                        SubjectDetailFullSkeleton(topPadding = topChromeHeight + 8.dp)
+                    }
+
+                    displaySubject == null && uiState.error != null -> {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .padding(top = topChromeHeight)
+                                    .padding(24.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Card(
+                                colors =
+                                    CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    ),
+                                modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Card(
-                                    colors =
-                                        CardDefaults.cardColors(
-                                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                                        ),
-                                    modifier = Modifier.fillMaxWidth(),
+                                Column(
+                                    modifier = Modifier.padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
-                                    Column(
-                                        modifier = Modifier.padding(24.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    Icon(
+                                        imageVector = BgmIcons.ErrorOutline,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(48.dp),
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.feature_subject_load_failed),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                    )
+                                    Text(
+                                        text = uiState.error.orEmpty(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                    )
+                                    Button(
+                                        onClick = viewModel::refresh,
+                                        modifier = Modifier.padding(top = 8.dp),
                                     ) {
-                                        Icon(
-                                            imageVector = BgmIcons.ErrorOutline,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(48.dp),
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.feature_subject_load_failed),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onErrorContainer,
-                                        )
-                                        Text(
-                                            text = uiState.error.orEmpty(),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onErrorContainer,
-                                        )
-                                        Button(
-                                            onClick = viewModel::refresh,
-                                            modifier = Modifier.padding(top = 8.dp),
-                                        ) {
-                                            Text(text = stringResource(R.string.feature_subject_reload))
-                                        }
+                                        Text(text = stringResource(R.string.feature_subject_reload))
                                     }
                                 }
                             }
                         }
+                    }
 
-                        displaySubject != null -> {
-                            val totalEpisodes =
-                                maxOf(uiState.totalEpisodes, displaySubject.eps, displaySubject.totalEpisodes)
-                            val fullSubject = if (isTransitionStabilizing) null else uiState.subject
+                    displaySubject != null -> {
+                        val totalEpisodes =
+                            maxOf(uiState.totalEpisodes, displaySubject.eps, displaySubject.totalEpisodes)
+                        val fullSubject = if (isTransitionStabilizing) null else uiState.subject
 
-                            val onToggleEpisodeWatched: (Episode, Boolean) -> Unit = { episode, isWatched ->
-                                if (uiState.isLoggedIn) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                                }
-                                val epNumber = episode.episodeInt
-                                viewModel.toggleEpisodeWatched(
-                                    episodeId = episode.id,
-                                    isWatched = isWatched,
-                                    epNumber = epNumber,
-                                    episodeType = episode.type,
-                                )
+                        val onToggleEpisodeWatched: (Episode, Boolean) -> Unit = { episode, isWatched ->
+                            if (uiState.isLoggedIn) {
+                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                             }
+                            val epNumber = episode.episodeInt
+                            viewModel.toggleEpisodeWatched(
+                                episodeId = episode.id,
+                                isWatched = isWatched,
+                                epNumber = epNumber,
+                                episodeType = episode.type,
+                            )
+                        }
 
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.TopCenter,
-                            ) {
-                                SubjectDetailContent(
-                                    displaySubject = displaySubject,
-                                    fullSubject = fullSubject,
-                                    subjectType = subjectType,
-                                    uiState = uiState,
-                                    source = source,
-                                    totalEpisodes = totalEpisodes,
-                                    selectedTab = uiState.selectedTab,
-                                    onSelectTab = viewModel::selectTab,
-                                    currentEpisodes = currentEpisodes,
-                                    availableGroups = availableGroups,
-                                    groupedEpisodes = groupedEpisodes,
-                                    activeGroup = activeGroup,
-                                    onSelectGroup = { selectedGroup = it },
-                                    isGridView = uiState.isEpisodeGridView,
-                                    onToggleGridView = { viewModel.setEpisodeGridView(!uiState.isEpisodeGridView) },
-                                    episodeSortDescending = uiState.episodeSortDescending,
-                                    hasMoreEpisodes = uiState.hasMoreEpisodes,
-                                    isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
-                                    onToggleEpisodeSort = {
-                                        viewModel.setEpisodeSortDescending(!uiState.episodeSortDescending)
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.TopCenter,
+                        ) {
+                            SubjectDetailContent(
+                                displaySubject = displaySubject,
+                                fullSubject = fullSubject,
+                                subjectType = subjectType,
+                                uiState = uiState,
+                                source = source,
+                                totalEpisodes = totalEpisodes,
+                                selectedTab = uiState.selectedTab,
+                                onSelectTab = viewModel::selectTab,
+                                currentEpisodes = currentEpisodes,
+                                availableGroups = availableGroups,
+                                groupedEpisodes = groupedEpisodes,
+                                activeGroup = activeGroup,
+                                onSelectGroup = { selectedGroup = it },
+                                isGridView = uiState.isEpisodeGridView,
+                                onToggleGridView = { viewModel.setEpisodeGridView(!uiState.isEpisodeGridView) },
+                                episodeSortDescending = uiState.episodeSortDescending,
+                                hasMoreEpisodes = uiState.hasMoreEpisodes,
+                                isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
+                                onToggleEpisodeSort = {
+                                    viewModel.setEpisodeSortDescending(!uiState.episodeSortDescending)
+                                },
+                                onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
+                                onOpenCollectionSheet = { viewModel.setCollectionSheetVisible(true) },
+                                onIncrementWatched = viewModel::incrementWatchedEpisode,
+                                onEpisodeClickForQuickAction = { episode ->
+                                    selectedEpisodeForSources = episode
+                                    showSourcesBottomSheet = true
+                                },
+                                onToggleWatching = {
+                                    val wasWatching = uiState.collection?.type == CollectionType.DOING.value
+                                    viewModel.toggleWatching()
+                                    if (!wasWatching && uiState.isLoggedIn) {
+                                        val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+                                        if (!systemAllowed && !hasDismissedAiringReminderPrompt) {
+                                            showAiringReminderPrompt = true
+                                        }
+                                    }
+                                },
+                                onUpdateCollectionStatus = { type ->
+                                    viewModel.updateCollectionStatus(type)
+                                    if (type == CollectionType.DOING && uiState.isLoggedIn) {
+                                        val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+                                        if (!systemAllowed && !hasDismissedAiringReminderPrompt) {
+                                            showAiringReminderPrompt = true
+                                        }
+                                    }
+                                },
+                                onToggleEpisodeWatched = onToggleEpisodeWatched,
+                                onSelectEpisodeForDetail = onSelectEpisodeForDetail,
+                                onSubjectClick = onSubjectClick,
+                                onTagClick = { tag -> activeTagForAction = tag },
+                                onCharacterClick = handleCharacterClick,
+                                onPersonClick = handlePersonClick,
+                                onPreviewCharacter = { previewCharacter = it },
+                                onLinkClick = handleLinkClick,
+                                onTopicClick = onTopicClick,
+                                onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
+                                isTransitionStabilizing = isTransitionStabilizing,
+                                onBatchMarkEpisode = handleBatchMark,
+                                onCopyComment = handleCopyComment,
+                                onPlayEpisode =
+                                    if (onPlayClick != null) {
+                                        { episode -> onPlayClick(viewModel.buildPlayerRoute(episode)) }
+                                    } else {
+                                        null
                                     },
-                                    onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
-                                    onOpenCollectionSheet = { viewModel.setCollectionSheetVisible(true) },
-                                    onIncrementWatched = viewModel::incrementWatchedEpisode,
-                                    onEpisodeClickForQuickAction = { episode ->
-                                        selectedEpisodeForSources = episode
-                                        showSourcesBottomSheet = true
-                                    },
-                                    onToggleWatching = {
-                                        val wasWatching = uiState.collection?.type == CollectionType.DOING.value
-                                        viewModel.toggleWatching()
-                                        if (!wasWatching && uiState.isLoggedIn) {
-                                            val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
-                                            if (!systemAllowed && !hasDismissedAiringReminderPrompt) {
-                                                showAiringReminderPrompt = true
+                                onPlayNextEpisode =
+                                    if (onPlayClick != null) {
+                                        {
+                                            viewModel.nextEpisodeToWatch()?.let { nextEp ->
+                                                onPlayClick(viewModel.buildPlayerRoute(nextEp))
                                             }
                                         }
+                                    } else {
+                                        null
                                     },
-                                    onUpdateCollectionStatus = { type ->
-                                        viewModel.updateCollectionStatus(type)
-                                        if (type == CollectionType.DOING && uiState.isLoggedIn) {
-                                            val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
-                                            if (!systemAllowed && !hasDismissedAiringReminderPrompt) {
-                                                showAiringReminderPrompt = true
-                                            }
-                                        }
-                                    },
-                                    onToggleEpisodeWatched = onToggleEpisodeWatched,
-                                    onSelectEpisodeForDetail = onSelectEpisodeForDetail,
-                                    onSubjectClick = onSubjectClick,
-                                    onTagClick = { tag -> activeTagForAction = tag },
-                                    onCharacterClick = handleCharacterClick,
-                                    onPersonClick = handlePersonClick,
-                                    onPreviewCharacter = { previewCharacter = it },
-                                    onLinkClick = handleLinkClick,
-                                    onTopicClick = onTopicClick,
-                                    onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
-                                    isTransitionStabilizing = isTransitionStabilizing,
-                                    onBatchMarkEpisode = handleBatchMark,
-                                    onCopyComment = handleCopyComment,
-                                    onPlayEpisode =
-                                        if (onPlayClick != null) {
-                                            { episode -> onPlayClick(viewModel.buildPlayerRoute(episode)) }
-                                        } else {
-                                            null
-                                        },
-                                    onPlayNextEpisode =
-                                        if (onPlayClick != null) {
-                                            {
-                                                viewModel.nextEpisodeToWatch()?.let { nextEp ->
-                                                    onPlayClick(viewModel.buildPlayerRoute(nextEp))
-                                                }
-                                            }
-                                        } else {
-                                            null
-                                        },
-                                    onOpenSources = {
-                                        selectedEpisodeForSources = viewModel.nextEpisodeToWatch()
-                                        showSourcesBottomSheet = true
-                                    },
-                                    onOpenEpisodeSources = { episode ->
-                                        selectedEpisodeForSources = episode
-                                        showSourcesBottomSheet = true
-                                    },
-                                    onDecrementWatched = viewModel::decrementWatchedEpisode,
-                                    onPromptLogin = viewModel::promptLogin,
-                                    onRetryEpisodes = viewModel::retryLoadEpisodes,
-                                    modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
-                                )
-                            }
+                                onOpenSources = {
+                                    selectedEpisodeForSources = viewModel.nextEpisodeToWatch()
+                                    showSourcesBottomSheet = true
+                                },
+                                onOpenEpisodeSources = { episode ->
+                                    selectedEpisodeForSources = episode
+                                    showSourcesBottomSheet = true
+                                },
+                                onDecrementWatched = viewModel::decrementWatchedEpisode,
+                                onPromptLogin = viewModel::promptLogin,
+                                onRetryEpisodes = viewModel::retryLoadEpisodes,
+                                topPadding = topChromeHeight + 8.dp,
+                                modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
+                            )
                         }
                     }
                 }

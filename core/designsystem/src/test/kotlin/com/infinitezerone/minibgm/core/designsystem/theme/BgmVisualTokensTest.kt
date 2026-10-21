@@ -62,6 +62,22 @@ class BgmVisualTokensTest {
     }
 
     @Test
+    fun aquamorphicSpringTokens_matchColorOsPhysics() {
+        assertEquals(0.85f, BgmMotion.Springs.Aquamorphic.defaultSpatialDampingRatio)
+        assertEquals(420f, BgmMotion.Springs.Aquamorphic.defaultSpatialStiffness)
+        assertEquals(0.78f, BgmMotion.Springs.Aquamorphic.fastSpatialDampingRatio)
+        assertEquals(850f, BgmMotion.Springs.Aquamorphic.fastSpatialStiffness)
+        assertEquals(0.88f, BgmMotion.Springs.Aquamorphic.slowSpatialDampingRatio)
+        assertEquals(220f, BgmMotion.Springs.Aquamorphic.slowSpatialStiffness)
+        assertEquals(1.0f, BgmMotion.Springs.Aquamorphic.defaultEffectsDampingRatio)
+        assertEquals(1600f, BgmMotion.Springs.Aquamorphic.defaultEffectsStiffness)
+        assertEquals(1.0f, BgmMotion.Springs.Aquamorphic.fastEffectsDampingRatio)
+        assertEquals(3800f, BgmMotion.Springs.Aquamorphic.fastEffectsStiffness)
+        assertEquals(1.0f, BgmMotion.Springs.Aquamorphic.slowEffectsDampingRatio)
+        assertEquals(800f, BgmMotion.Springs.Aquamorphic.slowEffectsStiffness)
+    }
+
+    @Test
     fun standardSpringTokens_matchOfficialPhysics() {
         assertEquals(0.9f, BgmMotion.Springs.Standard.defaultSpatialDampingRatio)
         assertEquals(700f, BgmMotion.Springs.Standard.defaultSpatialStiffness)

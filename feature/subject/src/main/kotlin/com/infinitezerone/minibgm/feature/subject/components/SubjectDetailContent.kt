@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -128,6 +129,7 @@ internal fun SubjectDetailContent(
     onPromptLogin: (() -> Unit)? = null,
     onEpisodeClickForQuickAction: ((Episode) -> Unit)? = null,
     onRetryEpisodes: () -> Unit = {},
+    topPadding: Dp = 12.dp,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -191,7 +193,7 @@ internal fun SubjectDetailContent(
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(top = topPadding, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (uiState.error != null) {

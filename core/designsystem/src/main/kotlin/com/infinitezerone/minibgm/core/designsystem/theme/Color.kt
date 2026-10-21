@@ -131,3 +131,11 @@ val SurfaceDimAmoledDark = Color(0xFF000000)
 val SurfaceBrightAmoledDark = Color(0xFF24262B)
 
 val InverseOnSurfaceAmoledDark = Color(0xFF000000)
+
+// ==========================================
+// Layer 4: ChatGPT 风格高反差实体操作胶囊角色 (Solid High-Contrast Pill Roles)
+// ==========================================
+val SolidPillContainerDark = Color(0xFFFFFFFF)
+val OnSolidPillContainerDark = Color(0xFF111111)
+val SolidPillContainerLight = Color(0xFF111111)
+val OnSolidPillContainerLight = Color(0xFFFFFFFF)

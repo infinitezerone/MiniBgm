@@ -3,10 +3,12 @@ package com.infinitezerone.minibgm.feature.schedule
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.testing.data.sampleAirScheduleList
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
+import com.infinitezerone.minibgm.core.testing.repository.FakePlaybackHistoryRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
@@ -53,12 +55,14 @@ class ScheduleViewModelTest {
         collectionRepository: FakeCollectionRepository = FakeCollectionRepository(),
         settingsRepository: FakeSettingsRepository = FakeSettingsRepository(),
         authRepository: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
+        playbackHistoryRepository: FakePlaybackHistoryRepository = FakePlaybackHistoryRepository(),
     ): ScheduleViewModel =
         ScheduleViewModel(
             scheduleRepository = repository,
             collectionRepository = collectionRepository,
             settingsRepository = settingsRepository,
             authRepository = authRepository,
+            playbackHistoryRepository = playbackHistoryRepository,
             clock = { fixedNow.toEpochMilli() },
         )
 
@@ -622,5 +626,34 @@ class ScheduleViewModelTest {
             assertEquals("20:00", state.schedules[0].timeCst)
             assertEquals(2, state.schedules[1].nextEpisodeNumber)
             assertEquals("20:30", state.schedules[1].timeCst)
+        }
+
+    @Test
+    fun latestPlaybackHistoryReflectsRepositoryUpdates() =
+        runTest {
+            val historyRepo = FakePlaybackHistoryRepository()
+            val viewModel = createViewModel(playbackHistoryRepository = historyRepo)
+
+            val initialState = viewModel.uiState.first()
+            assertNull(initialState.latestPlaybackHistory)
+
+            val history =
+                PlaybackHistory(
+                    episodeId = 101L,
+                    subjectId = 2001L,
+                    subjectName = "葬送的芙莉莲",
+                    episodeName = "第12话",
+                    episodeSort = 12f,
+                    coverUrl = "https://example.com/cover.jpg",
+                    positionMs = 120_000L,
+                    durationMs = 1440_000L,
+                    updatedAt = 1000L,
+                )
+            historyRepo.saveHistory(history)
+
+            val stateWithHistory = viewModel.uiState.first { it.latestPlaybackHistory != null }
+            assertNotNull(stateWithHistory.latestPlaybackHistory)
+            assertEquals(101L, stateWithHistory.latestPlaybackHistory?.episodeId)
+            assertEquals("葬送的芙莉莲", stateWithHistory.latestPlaybackHistory?.subjectName)
         }
 }

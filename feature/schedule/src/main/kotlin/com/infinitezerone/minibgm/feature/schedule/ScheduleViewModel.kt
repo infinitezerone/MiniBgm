@@ -8,10 +8,12 @@ import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
+import com.infinitezerone.minibgm.core.data.repository.PlaybackHistoryRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -59,6 +61,7 @@ data class ScheduleUiState(
     val onlyWatching: Boolean = false,
     val showLoginPromptDialog: Boolean = false,
     val isLoggedIn: Boolean = false,
+    val latestPlaybackHistory: PlaybackHistory? = null,
 ) {
     /** 兼容旧接口：当前所选星期的原始番剧列表 */
     val schedules: List<AirSchedule>
@@ -205,6 +208,7 @@ class ScheduleViewModel(
     private val collectionRepository: CollectionRepository,
     private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
+    private val playbackHistoryRepository: PlaybackHistoryRepository,
     /**
      * 时钟注入点，默认取系统时间。
      *
@@ -357,17 +361,25 @@ class ScheduleViewModel(
             pageIndex to onlyWatch
         }
 
+    private val latestHistoryFlow: Flow<PlaybackHistory?> =
+        playbackHistoryRepository
+            .observeRecentHistory(limit = 1)
+            .map { it.firstOrNull() }
+            .distinctUntilChanged()
+
     private data class ExtraScheduleState(
         val showLogin: Boolean,
         val loggedIn: Boolean,
+        val latestHistory: PlaybackHistory?,
     )
 
     private val extraStateFlow =
         combine(
             showLoginPromptDialog,
             isLoggedIn,
-        ) { showLogin, loggedIn ->
-            ExtraScheduleState(showLogin, loggedIn)
+            latestHistoryFlow,
+        ) { showLogin, loggedIn, latestHistory ->
+            ExtraScheduleState(showLogin, loggedIn, latestHistory)
         }
 
     private val baseUiState: StateFlow<ScheduleUiState> =
@@ -384,7 +396,7 @@ class ScheduleViewModel(
             (refreshing, syncing, error),
             extra,
             ->
-            val (showLogin, loggedIn) = extra
+            val (showLogin, loggedIn, latestHistory) = extra
             val currentToday = today()
             val currentWeekday = currentToday.dayOfWeek.value
             val currentDateItems = calculateDateItems(currentToday)
@@ -406,6 +418,7 @@ class ScheduleViewModel(
                 onlyWatching = onlyWatch,
                 showLoginPromptDialog = showLogin,
                 isLoggedIn = loggedIn,
+                latestPlaybackHistory = latestHistory,
             )
         }.stateIn(
             scope = viewModelScope,

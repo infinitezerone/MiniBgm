@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,8 +19,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -36,12 +35,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingPageScaffold
+import com.infinitezerone.minibgm.core.designsystem.component.BgmFocusCard
 import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
+import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -126,7 +129,7 @@ fun ScheduleScreen(
 
     BgmFloatingPageScaffold(
         topBarMode = BgmTopBarMode.Immersive,
-        topScrimHeight = totalTopChromeHeight + 32.dp,
+        topScrimHeight = totalTopChromeHeight + 36.dp,
         topBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 BgmTopAppBar(
@@ -137,18 +140,22 @@ fun ScheduleScreen(
                         )
                     },
                     actions = {
-                        FeatureGate(capability = { it.isAiAssistantEnabled && onAssistantClick != null }) {
-                            IconButton(onClick = onAssistantClick ?: {}) {
-                                Icon(
-                                    imageVector = BgmIcons.Assistant,
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(end = 4.dp),
+                        ) {
+                            FeatureGate(capability = { it.isAiAssistantEnabled && onAssistantClick != null }) {
+                                BgmCircleActionButton(
+                                    onClick = onAssistantClick ?: {},
+                                    icon = BgmIcons.Assistant,
                                     contentDescription = stringResource(R.string.feature_schedule_cd_ai_assistant),
                                 )
                             }
-                        }
 
-                        IconButton(onClick = onSearchClick) {
-                            Icon(
-                                imageVector = BgmIcons.Search,
+                            BgmCircleActionButton(
+                                onClick = onSearchClick,
+                                icon = BgmIcons.Search,
                                 contentDescription = stringResource(R.string.feature_schedule_cd_search),
                             )
                         }
@@ -188,6 +195,12 @@ fun ScheduleScreen(
                     )
                 }
             }
+        },
+        snackbarHost = {
+            BgmSnackbarHost(
+                hostState = snackbarHostState,
+                isTopLevel = true,
+            )
         },
         modifier = modifier,
     ) {
@@ -245,6 +258,7 @@ fun ScheduleScreen(
                             allDaySchedules = allDaySchedules,
                             uiState = uiState,
                             onSubjectClick = onSubjectClick,
+                            onPlayClick = onPlayClick,
                             onSwitchToAll = viewModel::toggleOnlyWatching,
                             listState = listState,
                             topPadding = totalTopChromeHeight + 6.dp,
@@ -254,12 +268,6 @@ fun ScheduleScreen(
                 }
             }
         }
-
-        BgmSnackbarHost(
-            hostState = snackbarHostState,
-            isTopLevel = true,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
     }
 
     BgmOverlayHost(hostState = overlayHostState) {
@@ -286,6 +294,7 @@ private fun DayScheduleList(
     allDaySchedules: List<AirSchedule>,
     uiState: ScheduleUiState,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
+    onPlayClick: ((PlayerRoute) -> Unit)?,
     onSwitchToAll: () -> Unit,
     listState: LazyListState,
     topPadding: Dp,
@@ -306,14 +315,22 @@ private fun DayScheduleList(
             -1
         }
 
-    // 首次进入今天页时直接定位到「现在」附近，而不是永远停在第 0 个时段
+    // 首次进入今天页时定位：有「接着看」Hero 时保留在首屏，无 Hero 时自动滑向当前时段
     val hasAnchoredToNow = remember { mutableStateOf(false) }
-    LaunchedEffect(isTodayPage, timeGrouped) {
-        if (!isTodayPage || hasAnchoredToNow.value || timeGrouped.isEmpty()) return@LaunchedEffect
-        // 避让顶部离线条与筛选统计条
-        val headerItemCount = (if (uiState.isOfflineCache) 1 else 0) + 1
-        listState.scrollToItem(headerItemCount + nowSlotIndex)
-        hasAnchoredToNow.value = true
+    LaunchedEffect(isTodayPage, timeGrouped, uiState.latestPlaybackHistory) {
+        if (!isTodayPage || timeGrouped.isEmpty()) return@LaunchedEffect
+        if (uiState.latestPlaybackHistory != null) {
+            if (!hasAnchoredToNow.value) {
+                listState.scrollToItem(0)
+                hasAnchoredToNow.value = true
+            }
+            return@LaunchedEffect
+        }
+        if (!hasAnchoredToNow.value && nowSlotIndex > 2) {
+            val headerItemCount = (if (uiState.isOfflineCache) 1 else 0) + 1
+            listState.scrollToItem(headerItemCount + nowSlotIndex)
+            hasAnchoredToNow.value = true
+        }
     }
 
     Box(
@@ -326,6 +343,97 @@ private fun DayScheduleList(
             verticalArrangement = Arrangement.spacedBy(TIMELINE_SLOT_SPACING),
             modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
         ) {
+            if (isTodayPage && uiState.latestPlaybackHistory != null) {
+                val history = uiState.latestPlaybackHistory
+                item(key = "schedule_hero_next_up") {
+                    val subtitleText =
+                        if (history.episodeName.isNotBlank()) {
+                            stringResource(
+                                R.string.feature_schedule_hero_episode_format,
+                                history.episodeSort.toInt().coerceAtLeast(1),
+                                history.episodeName,
+                            )
+                        } else {
+                            stringResource(
+                                R.string.feature_schedule_hero_episode_only,
+                                history.episodeSort.toInt().coerceAtLeast(1),
+                            )
+                        }
+                    val statusText =
+                        if (history.isCompleted) {
+                            stringResource(R.string.feature_schedule_hero_completed)
+                        } else {
+                            stringResource(R.string.feature_schedule_hero_next_up)
+                        }
+                    val progressLabel =
+                        if (history.durationMs > 0L) {
+                            "${formatHistoryDuration(history.positionMs)} / ${formatHistoryDuration(history.durationMs)}"
+                        } else {
+                            null
+                        }
+
+                    BgmFocusCard(
+                        title = history.subjectName,
+                        subtitle = subtitleText,
+                        onClick = {
+                            onSubjectClick(
+                                SubjectDetailRoute(
+                                    subjectId = history.subjectId,
+                                    initialName = history.subjectName,
+                                    initialCoverUrl = history.coverUrl,
+                                    source = "schedule_hero",
+                                ),
+                            )
+                        },
+                        cover = {
+                            CoverImage(
+                                url = history.coverUrl,
+                                contentDescription = history.subjectName,
+                                cornerRadius = 0.dp,
+                                aspectRatio = 16f / 9.5f,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        },
+                        statusLabel = statusText,
+                        progress = history.progress.takeIf { history.durationMs > 0L },
+                        progressLabel = progressLabel,
+                        action = {
+                            BgmPillButton(
+                                text = stringResource(R.string.feature_schedule_hero_resume_cta),
+                                icon = BgmIcons.PlayArrow,
+                                onClick = {
+                                    val route =
+                                        PlayerRoute(
+                                            subjectId = history.subjectId,
+                                            episodeId = history.episodeId,
+                                            streamUrl = history.streamUrl,
+                                            episodeName = history.episodeName,
+                                            subjectName = history.subjectName,
+                                            episodeSort = history.episodeSort,
+                                            initialRuleId = history.sourceId,
+                                            initialSourceName = history.sourceName,
+                                            coverUrl = history.coverUrl,
+                                        )
+                                    if (onPlayClick != null) {
+                                        onPlayClick(route)
+                                    } else {
+                                        onSubjectClick(
+                                            SubjectDetailRoute(
+                                                subjectId = history.subjectId,
+                                                initialName = history.subjectName,
+                                                initialCoverUrl = history.coverUrl,
+                                                source = "schedule_hero",
+                                            ),
+                                        )
+                                    }
+                                },
+                            )
+                        },
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+            }
+
             item(key = "filter_bar_$pageIndex") {
                 FilterAndMetaBar(
                     totalCount = uiState.getTotalCountForPage(pageIndex),
@@ -391,5 +499,17 @@ private fun DayScheduleList(
                 }
             }
         }
+    }
+}
+
+private fun formatHistoryDuration(durationMs: Long): String {
+    val totalSeconds = (durationMs / 1000).coerceAtLeast(0)
+    val seconds = totalSeconds % 60
+    val minutes = (totalSeconds / 60) % 60
+    val hours = totalSeconds / 3600
+    return if (hours > 0) {
+        "%d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%02d:%02d".format(minutes, seconds)
     }
 }

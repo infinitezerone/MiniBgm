@@ -97,6 +97,27 @@ object BgmMotion {
             val slowEffectsStiffness: Float = 800f
         }
 
+        /** ColorOS 15 水生流体动效物理参数（Aquamorphic Spring Physics）。 */
+        object Aquamorphic {
+            /** 微交互快速按压回弹：趋近临界阻尼，微弹即止，杜绝多余来回晃荡 */
+            val fastSpatialDampingRatio: Float = 0.78f
+            val fastSpatialStiffness: Float = 850f
+
+            /** 容器/浮层展开：温润水生顺滑过渡 */
+            val defaultSpatialDampingRatio: Float = 0.85f
+            val defaultSpatialStiffness: Float = 420f
+
+            val slowSpatialDampingRatio: Float = 0.88f
+            val slowSpatialStiffness: Float = 220f
+
+            val defaultEffectsDampingRatio: Float = 1.0f
+            val defaultEffectsStiffness: Float = 1600f
+            val fastEffectsDampingRatio: Float = 1.0f
+            val fastEffectsStiffness: Float = 3800f
+            val slowEffectsDampingRatio: Float = 1.0f
+            val slowEffectsStiffness: Float = 800f
+        }
+
         /** 兼容别名：Expressive default spatial。 */
         val ExpressiveSpatialDampingRatio: Float = Expressive.defaultSpatialDampingRatio
         val ExpressiveSpatialStiffness: Float = Expressive.defaultSpatialStiffness
@@ -106,7 +127,7 @@ object BgmMotion {
         val ExpressiveEffectsStiffness: Float = Expressive.defaultEffectsStiffness
     }
 
-    enum class Scheme { Standard, Expressive }
+    enum class Scheme { Standard, Expressive, Aquamorphic }
 
     enum class Speed { Fast, Default, Slow }
 
@@ -200,6 +221,13 @@ object BgmMotion {
                     Speed.Default -> Springs.Expressive.defaultSpatialDampingRatio to Springs.Expressive.defaultSpatialStiffness
                     Speed.Slow -> Springs.Expressive.slowSpatialDampingRatio to Springs.Expressive.slowSpatialStiffness
                 }
+
+            Scheme.Aquamorphic ->
+                when (speed) {
+                    Speed.Fast -> Springs.Aquamorphic.fastSpatialDampingRatio to Springs.Aquamorphic.fastSpatialStiffness
+                    Speed.Default -> Springs.Aquamorphic.defaultSpatialDampingRatio to Springs.Aquamorphic.defaultSpatialStiffness
+                    Speed.Slow -> Springs.Aquamorphic.slowSpatialDampingRatio to Springs.Aquamorphic.slowSpatialStiffness
+                }
         }
 
     private fun effectsSpringToken(
@@ -219,6 +247,13 @@ object BgmMotion {
                     Speed.Fast -> Springs.Expressive.fastEffectsDampingRatio to Springs.Expressive.fastEffectsStiffness
                     Speed.Default -> Springs.Expressive.defaultEffectsDampingRatio to Springs.Expressive.defaultEffectsStiffness
                     Speed.Slow -> Springs.Expressive.slowEffectsDampingRatio to Springs.Expressive.slowEffectsStiffness
+                }
+
+            Scheme.Aquamorphic ->
+                when (speed) {
+                    Speed.Fast -> Springs.Aquamorphic.fastEffectsDampingRatio to Springs.Aquamorphic.fastEffectsStiffness
+                    Speed.Default -> Springs.Aquamorphic.defaultEffectsDampingRatio to Springs.Aquamorphic.defaultEffectsStiffness
+                    Speed.Slow -> Springs.Aquamorphic.slowEffectsDampingRatio to Springs.Aquamorphic.slowEffectsStiffness
                 }
         }
 
