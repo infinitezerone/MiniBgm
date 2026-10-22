@@ -39,6 +39,8 @@
     <string name="feature_schedule_countdown_minutes">%1$d分后</string>
     <string name="feature_schedule_anime_count">%1$d部</string>
     <string name="feature_schedule_watching_badge">在追</string>
+    <string name="feature_schedule_action_watch">追番</string>
+    <string name="feature_schedule_action_watching">在追</string>
     <string name="feature_schedule_first_episode">首播 · 第 1 话</string>
     <string name="feature_schedule_episode_format">第 %1$d 话</string>
     <string name="feature_schedule_episodes_list_format">第 %1$s 话</string>

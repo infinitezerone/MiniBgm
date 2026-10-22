@@ -291,6 +291,7 @@ fun ScheduleScreen(
                             onSubjectClick = onSubjectClick,
                             onPlayClick = onPlayClick,
                             onSwitchToAll = viewModel::toggleOnlyWatching,
+                            onToggleWatching = viewModel::toggleWatching,
                             listState = listState,
                             topPadding = totalTopChromeHeight + 12.dp,
                         )
@@ -326,6 +327,7 @@ private fun DayScheduleList(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     onPlayClick: ((PlayerRoute) -> Unit)?,
     onSwitchToAll: () -> Unit,
+    onToggleWatching: (Long) -> Unit,
     listState: LazyListState,
     topPadding: Dp,
     modifier: Modifier = Modifier,
@@ -396,6 +398,7 @@ private fun DayScheduleList(
                                     isToday = isTodayPage,
                                     watchingSubjectIds = uiState.watchingSubjectIds,
                                     onSubjectClick = onSubjectClick,
+                                    onToggleWatching = onToggleWatching,
                                     currentMinutesCst = nowMinutes,
                                 )
                             }
@@ -409,6 +412,7 @@ private fun DayScheduleList(
                                 isToday = isTodayPage,
                                 watchingSubjectIds = uiState.watchingSubjectIds,
                                 onSubjectClick = onSubjectClick,
+                                onToggleWatching = onToggleWatching,
                                 currentMinutesCst = nowMinutes,
                             )
                         }
@@ -428,6 +432,7 @@ private fun DayScheduleList(
                             schedules = allDaySchedules,
                             watchingSubjectIds = uiState.watchingSubjectIds,
                             onSubjectClick = onSubjectClick,
+                            onToggleWatching = onToggleWatching,
                         )
                     }
                 }

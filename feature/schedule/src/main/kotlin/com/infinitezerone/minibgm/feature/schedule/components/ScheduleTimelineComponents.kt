@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -155,6 +156,7 @@ fun TimelineSlotRow(
     watchingSubjectIds: Set<Long>,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
+    onToggleWatching: (Long) -> Unit = {},
     currentMinutesCst: Int = getCurrentMinutesCst(),
 ) {
     val airStatus = getAirStatus(time, isToday = isToday, currentMinutesCst = currentMinutesCst)
@@ -186,6 +188,7 @@ fun TimelineSlotRow(
                 episodes = group.episodes,
                 isWatching = watchingSubjectIds.contains(group.primarySchedule.bgmId),
                 onSubjectClick = onSubjectClick,
+                onToggleWatching = { onToggleWatching(group.primarySchedule.bgmId) },
             )
         }
     }
@@ -270,12 +273,12 @@ fun TimelineSlotHeader(
 }
 
 /**
- * 时间线番剧卡片：
- * 遵循 Timeless Obsidian / M3 Expressive 内容层设计标准：
- * - 纯实色自然明度差浮起（surfaceContainer / surfaceContainerLow），淘汰 1px 塑料描边；
+ * 时间线番剧项：
+ * 采用扁平通透、无多余厚重卡片背景的现代排印列表样式：
+ * - 去除冗余的灰色 Card 外框与多层嵌套边距，释放屏幕垂直呼吸空间；
+ * - 封面、标题、分集信息与右侧「追番」快捷操作按钮一目了然；
  * - 挂载 [expressivePress] 弹性微交互与沉浸水生触感反馈；
- * - 阶梯圆角（外框 16dp、海报 8dp、分集/标签胶囊 4dp）；
- * - 原生支持多集同时放出（如 Netflix 全集上线、首播多集连播）的紧凑折叠与分集直达胶囊导轨。
+ * - 原生支持多集同时放出的紧凑折叠与分集直达胶囊导轨。
  */
 @Composable
 fun ScheduleTimelineCard(
@@ -283,64 +286,76 @@ fun ScheduleTimelineCard(
     isWatching: Boolean,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
+    onToggleWatching: (() -> Unit)? = null,
     episodes: List<Int> = if (schedule.nextEpisodeNumber > 0) listOf(schedule.nextEpisodeNumber) else emptyList(),
 ) {
     val displayName = schedule.displayName
     val score = schedule.ratingScore
     val isMultiEpisode = episodes.size > 1
     val isFirstEp = episodes.firstOrNull() == 1
+    val rowInteractionSource = remember { MutableInteractionSource() }
 
-    BgmMediaCard(
-        onClick = {
-            onSubjectClick(
-                SubjectDetailRoute(
-                    subjectId = schedule.bgmId,
-                    initialName = displayName,
-                    initialCoverUrl = schedule.coverUrl,
-                    initialScore = score,
-                    source = "schedule",
-                ),
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(
+                    interactionSource = rowInteractionSource,
+                    indication = null,
+                    onClick = {
+                        onSubjectClick(
+                            SubjectDetailRoute(
+                                subjectId = schedule.bgmId,
+                                initialName = displayName,
+                                initialCoverUrl = schedule.coverUrl,
+                                initialScore = score,
+                                source = "schedule",
+                            ),
+                        )
+                    },
+                )
+                .expressivePress(interactionSource = rowInteractionSource, pressedScale = 0.985f)
+                .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // 1. 封面海报 (带评分徽章)
+        Box(
+            modifier =
+                Modifier
+                    .height(84.dp)
+                    .aspectRatio(BGM_POSTER_ASPECT_RATIO)
+                    .clip(RoundedCornerShape(8.dp))
+                    .bgmSharedElement(
+                        key = BgmSharedElementKeys.subjectCover(schedule.bgmId, "schedule"),
+                        clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
+                    ),
+        ) {
+            CoverImage(
+                url = schedule.coverUrl,
+                contentDescription = displayName,
+                cornerRadius = 8.dp,
+                aspectRatio = BGM_POSTER_ASPECT_RATIO,
+                modifier = Modifier.fillMaxSize(),
             )
-        },
-        containerColor =
-            if (isWatching) {
-                MaterialTheme.colorScheme.surfaceContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            },
-        modifier = modifier,
-        leading = {
-            Box(
-                modifier =
-                    Modifier
-                        .height(96.dp)
-                        .aspectRatio(BGM_POSTER_ASPECT_RATIO)
-                        .clip(RoundedCornerShape(8.dp))
-                        .bgmSharedElement(
-                            key = BgmSharedElementKeys.subjectCover(schedule.bgmId, "schedule"),
-                            clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
-                        ),
-            ) {
-                CoverImage(
-                    url = schedule.coverUrl,
-                    contentDescription = displayName,
-                    cornerRadius = 8.dp,
-                    aspectRatio = BGM_POSTER_ASPECT_RATIO,
-                    modifier = Modifier.fillMaxSize(),
-                )
 
-                // 封面左下角：评分徽章
-                ScoreBadge(
-                    score = score,
-                    modifier = Modifier.align(Alignment.BottomStart),
-                    shape = RoundedCornerShape(topEnd = 8.dp, bottomStart = 8.dp),
-                    starSize = 9.dp,
-                    textStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold),
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 1.5.dp),
-                )
-            }
-        },
-        title = {
+            // 封面左下角：评分徽章
+            ScoreBadge(
+                score = score,
+                modifier = Modifier.align(Alignment.BottomStart),
+                shape = RoundedCornerShape(topEnd = 8.dp, bottomStart = 8.dp),
+                starSize = 9.dp,
+                textStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 1.5.dp),
+            )
+        }
+
+        // 2. 中间信息列
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             Text(
                 text = displayName,
                 style =
@@ -353,35 +368,7 @@ fun ScheduleTimelineCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-        },
-        badge = {
-            if (isWatching) {
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.Bookmark,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(11.dp),
-                        )
-                        Text(
-                            text = stringResource(R.string.feature_schedule_watching_badge),
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-        },
-        subtitle = {
+
             if (schedule.title.isNotBlank() && schedule.title != displayName) {
                 Text(
                     text = schedule.title,
@@ -391,8 +378,7 @@ fun ScheduleTimelineCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-        },
-        meta = {
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -455,8 +441,7 @@ fun ScheduleTimelineCard(
                     }
                 }
             }
-        },
-        footer = {
+
             if (isMultiEpisode) {
                 Row(
                     modifier =
@@ -501,8 +486,63 @@ fun ScheduleTimelineCard(
                     }
                 }
             }
-        },
-    )
+        }
+
+        // 3. 右侧追番按钮
+        if (onToggleWatching != null) {
+            val watchInteraction = remember { MutableInteractionSource() }
+            Surface(
+                shape = CircleShape,
+                color =
+                    if (isWatching) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    },
+                modifier =
+                    Modifier
+                        .expressivePress(interactionSource = watchInteraction, pressedScale = 0.94f)
+                        .clickable(
+                            interactionSource = watchInteraction,
+                            indication = null,
+                            onClick = onToggleWatching,
+                        ),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Icon(
+                        imageVector = if (isWatching) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
+                        contentDescription = null,
+                        tint =
+                            if (isWatching) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Text(
+                        text =
+                            if (isWatching) {
+                                stringResource(R.string.feature_schedule_action_watching)
+                            } else {
+                                stringResource(R.string.feature_schedule_action_watch)
+                            },
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
+                        color =
+                            if (isWatching) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                    )
+                }
+            }
+        }
+    }
 }
 
 /** 兼容旧调用的单番时间线卡片入口 */
@@ -512,12 +552,14 @@ fun ScheduleTimelineSingleCard(
     isWatching: Boolean,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
+    onToggleWatching: (() -> Unit)? = null,
 ) {
     ScheduleTimelineCard(
         schedule = schedule,
         isWatching = isWatching,
         onSubjectClick = onSubjectClick,
         modifier = modifier,
+        onToggleWatching = onToggleWatching,
         episodes = if (schedule.nextEpisodeNumber > 0) listOf(schedule.nextEpisodeNumber) else emptyList(),
     )
 }
@@ -588,6 +630,7 @@ fun ScheduleUntimedSection(
     watchingSubjectIds: Set<Long>,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
+    onToggleWatching: (Long) -> Unit = {},
 ) {
     var isExpanded by remember { mutableStateOf(true) }
     val groupedSchedules = remember(schedules) {
@@ -667,6 +710,7 @@ fun ScheduleUntimedSection(
                         episodes = group.episodes,
                         isWatching = watchingSubjectIds.contains(group.primarySchedule.bgmId),
                         onSubjectClick = onSubjectClick,
+                        onToggleWatching = { onToggleWatching(group.primarySchedule.bgmId) },
                     )
                 }
             }
