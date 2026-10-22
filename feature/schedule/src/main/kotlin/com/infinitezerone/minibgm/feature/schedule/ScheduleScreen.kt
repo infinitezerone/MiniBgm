@@ -90,7 +90,7 @@ fun ScheduleScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val weekStripHeight = 58.dp
+    val weekStripHeight = 48.dp
     val totalTopChromeHeight = statusBarTop + BgmSpacing.TopBar.height + weekStripHeight
 
     // 13天平滑滑动的 Pager，初始定位到今天（索引 6）
@@ -129,8 +129,8 @@ fun ScheduleScreen(
 
     BgmFloatingPageScaffold(
         topBarMode = BgmTopBarMode.Immersive,
-        topScrimHeight = totalTopChromeHeight,
-        topScrimSolidHeight = statusBarTop,
+        topScrimHeight = totalTopChromeHeight + 24.dp,
+        topScrimSolidHeight = totalTopChromeHeight,
         topBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 BgmTopAppBar(
@@ -286,7 +286,7 @@ fun ScheduleScreen(
                             onPlayClick = onPlayClick,
                             onSwitchToAll = viewModel::toggleOnlyWatching,
                             listState = listState,
-                            topPadding = totalTopChromeHeight + 14.dp,
+                            topPadding = totalTopChromeHeight + 12.dp,
                         )
                     }
                 }

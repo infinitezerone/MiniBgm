@@ -59,7 +59,7 @@ fun ModernDateCapsuleStrip(
     var containerWidthPx by remember { mutableIntStateOf(0) }
 
     val itemWidthDp = 44.dp
-    val spacingDp = 8.dp
+    val spacingDp = 6.dp
     val horizontalPaddingDp = 12.dp
     val stridePx = with(density) { (itemWidthDp + spacingDp).toPx() }
     val itemWidthPx = with(density) { itemWidthDp.toPx() }
@@ -147,23 +147,14 @@ fun DateCapsule(
             }
         }
 
-    val dayNumber = item.dateLabel.substringAfter('/', item.dateLabel)
-
-    val weekdayTextColor =
-        when {
-            isSelected -> MaterialTheme.colorScheme.primary
-            item.isToday -> MaterialTheme.colorScheme.primary
-            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-        }
-
     val circleColor =
         when {
             isSelected -> MaterialTheme.colorScheme.primary
-            item.isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-            else -> Color.Transparent
+            item.isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+            else -> MaterialTheme.colorScheme.surfaceContainerLow
         }
 
-    val dateTextColor =
+    val contentColor =
         when {
             isSelected -> MaterialTheme.colorScheme.onPrimary
             item.isToday -> MaterialTheme.colorScheme.primary
@@ -173,7 +164,7 @@ fun DateCapsule(
     val circleBorder =
         when {
             isSelected -> null
-            item.isToday -> BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
+            item.isToday -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.65f))
             else -> null
         }
 
@@ -181,45 +172,38 @@ fun DateCapsule(
         modifier =
             modifier
                 .width(44.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(CircleShape)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = onClick,
                 )
-                .padding(vertical = 2.dp),
+                .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Text(
-            text = weekdayText,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (isSelected || item.isToday) FontWeight.Bold else FontWeight.Medium,
-            color = weekdayTextColor,
-        )
-
         Surface(
             shape = CircleShape,
             color = circleColor,
             border = circleBorder,
-            modifier = Modifier.size(32.dp),
+            modifier = Modifier.size(36.dp),
         ) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Text(
-                    text = dayNumber,
-                    style = MaterialTheme.typography.labelLarge,
+                    text = weekdayText,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = if (isSelected || item.isToday) FontWeight.Bold else FontWeight.Medium,
-                    color = dateTextColor,
+                    color = contentColor,
                 )
             }
         }
 
         // 追番小指示器（小圆点）
         Box(
-            modifier = Modifier.height(5.dp),
+            modifier = Modifier.height(4.dp),
             contentAlignment = Alignment.Center,
         ) {
             if (watchingCount > 0) {
