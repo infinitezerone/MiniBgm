@@ -49,16 +49,16 @@
 
 * **水生触控动效标准规范（Aquamorphic Physical Motion）**：
 在实现点击收缩、卡片按压等物理反馈修饰符时，对齐系统级物理质感：
-1. **轻点冲量保持保护（Impulse Hold）**：
-   * 采用 `MIN_IMPULSE_MS = 90L` 的最小冲量窗口。
-   * 当用户短按且抬起耗时 `elapsed < MIN_IMPULSE_MS` 时，挂起等待剩余时长 `delay(MIN_IMPULSE_MS - elapsed)`，确保按下收缩姿态充分展开后再执行回弹。
+1. **即时释放与防阻塞（Zero-lag Release）**：
+   * 严禁在 Release / Cancel 事件中重复启动并挂起等待 `animateTo(pressedScale)`，这会导致抬手后强制阻塞执行完整下沉弹簧，且与页面切换重组叠加时产生严重的停顿卡滞和“二次触发”错觉；
+   * 抬手（Release / Cancel）发生时立即取消下沉任务，无延迟启动 `animateTo(1f, ReleaseReboundSpring)`。
 2. **非对称物理弹簧与二次微弹（Asymmetric Spring & Secondary Micro-bounce）**：
-   * **按下（Press Down）**：紧致沉稳、迅速到位、无过冲（Damping 1.0f 临界阻尼）。
-     `spring(dampingRatio = 1.0f, stiffness = 700f, visibilityThreshold = 0.0001f)`
-   * **抬手（Release Up）**：水生流体弹性势能释放与二次微弹（Damping 0.35f，Stiffness 450f，Threshold 0.0001f）。
-     * **主过冲（Primary Overshoot）**：在 ~150ms 处膨胀至 ~1.016x（+1.6% 弹性拉伸）；
-     * **二次微弹（Secondary Micro-bounce）**：在 ~310ms 处回落微凹至 ~0.995x（-0.5% 水滴张力收缩）；
-     * **平滑收敛**：在 ~420ms 处自然静止于 1.000x。
+   * **按下（Press Down）**：紧致沉稳、迅速到位、无过冲（Damping 1.0f 临界阻尼，Stiffness 1000f）。
+     `spring(dampingRatio = 1.0f, stiffness = 1000f, visibilityThreshold = 0.0001f)`
+   * **抬手（Release Up）**：水生流体弹性势能释放与二次微弹（Damping 0.38f，Stiffness 800f，Threshold 0.0001f）。
+     * **主过冲（Primary Overshoot）**：在 ~110ms 处膨胀至 ~1.014x（+1.4% 弹性拉伸）；
+     * **二次微弹（Secondary Micro-bounce）**：在 ~220ms 处回落微凹至 ~0.997x（-0.3% 水滴张力收缩）；
+     * **快速收敛**：在 ~280ms 处自然静止于 1.000x，清脆干脆无拖泥带水感。
    * **⚠️ 核心暗礁（Compose 阈值抹杀陷阱）**：
      * Compose 的 `Animatable<Float>` 默认 `visibilityThreshold = 0.01f`（1%）。若不显式指定，当振荡幅度落入 1% 以内时，Compose 动画系统会直接判断达到稳态并强制 snap 到 1.0f，导致过冲和二次微弹在第一帧跨越目标时被瞬间掐灭！
      * 自定义物理微动效必须显式配置 `visibilityThreshold = 0.0001f`。

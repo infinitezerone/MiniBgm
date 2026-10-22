@@ -15,7 +15,6 @@ import androidx.compose.ui.node.invalidatePlacement
 import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.unit.Constraints
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
@@ -34,20 +33,19 @@ class CombinedInteractionSource(
 }
 
 object AquamorphicMotionDefaults {
-    const val MIN_IMPULSE_MS = 90L
     const val PHYSICAL_VISIBILITY_THRESHOLD = 0.0001f
 
     val PressDownSpring =
         spring<Float>(
             dampingRatio = 1.0f,
-            stiffness = 700f,
+            stiffness = 1000f,
             visibilityThreshold = PHYSICAL_VISIBILITY_THRESHOLD,
         )
 
     val ReleaseReboundSpring =
         spring<Float>(
-            dampingRatio = 0.35f,
-            stiffness = 450f,
+            dampingRatio = 0.38f,
+            stiffness = 800f,
             visibilityThreshold = PHYSICAL_VISIBILITY_THRESHOLD,
         )
 }
@@ -143,12 +141,9 @@ internal class AquamorphicPressNode(
     private fun startObserving() {
         collectJob?.cancel()
         collectJob = coroutineScope.launch {
-            var pressStartTime = 0L
-
             interactionSource.interactions.collect { interaction ->
                 when (interaction) {
                     is PressInteraction.Press -> {
-                        pressStartTime = System.currentTimeMillis()
                         animJob?.cancel()
                         animJob = launch {
                             scaleAnimatable.animateTo(
@@ -161,23 +156,8 @@ internal class AquamorphicPressNode(
                     }
 
                     is PressInteraction.Release, is PressInteraction.Cancel -> {
-                        val elapsed = System.currentTimeMillis() - pressStartTime
-                        val remainingImpulse = (AquamorphicMotionDefaults.MIN_IMPULSE_MS - elapsed).coerceAtLeast(0L)
                         animJob?.cancel()
                         animJob = launch {
-                            if (remainingImpulse > 0L) {
-                                scaleAnimatable.animateTo(
-                                    targetValue = pressedScale,
-                                    animationSpec = AquamorphicMotionDefaults.PressDownSpring,
-                                ) {
-                                    invalidatePlacement()
-                                }
-                                val postElapsed = System.currentTimeMillis() - pressStartTime
-                                val remainingPost = (AquamorphicMotionDefaults.MIN_IMPULSE_MS - postElapsed).coerceAtLeast(0L)
-                                if (remainingPost > 0L) {
-                                    delay(remainingPost)
-                                }
-                            }
                             scaleAnimatable.animateTo(
                                 targetValue = 1f,
                                 animationSpec = AquamorphicMotionDefaults.ReleaseReboundSpring,
