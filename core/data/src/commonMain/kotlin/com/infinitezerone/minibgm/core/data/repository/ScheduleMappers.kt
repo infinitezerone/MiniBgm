@@ -186,6 +186,7 @@ internal fun AirScheduleEntity.toModel(json: Json): AirSchedule {
         timeJst = timeJst,
         siteLinks = links,
         nextEpisodeNumber = calculatedEp,
+        totalEpisodes = totalEpisodes,
         nextEpisodeAtUtc = nextEpisodeAtUtc,
         nextEpisodeKind = nextEpisodeKind,
         isAdult = parseIsAdult(broadcastRule),

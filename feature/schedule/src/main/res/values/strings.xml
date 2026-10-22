@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- 顶部栏与导航 -->
-    <string name="feature_schedule_title">放送时刻表</string>
+    <string name="feature_schedule_title">放送时刻</string>
     <string name="feature_schedule_cd_ai_assistant">AI 追番助手</string>
     <string name="feature_schedule_cd_search">搜索条目</string>
 
@@ -42,12 +42,25 @@
     <string name="feature_schedule_action_watch">追番</string>
     <string name="feature_schedule_action_watching">在追</string>
     <string name="feature_schedule_first_episode">首播 · 第 1 话</string>
+    <string name="feature_schedule_first_episode_with_total">首播 · 01 / %1$d</string>
     <string name="feature_schedule_episode_format">第 %1$d 话</string>
+    <string name="feature_schedule_episode_with_total_format">第 %1$d / %2$d 话</string>
     <string name="feature_schedule_episodes_list_format">第 %1$s 话</string>
     <string name="feature_schedule_batch_episodes_format">第 %1$d - %2$d 话 · 全集上线</string>
     <string name="feature_schedule_multi_episodes_format">第 %1$d - %2$d 话 · 连播 %3$d 集</string>
     <string name="feature_schedule_quick_jump_label">直达:</string>
     <string name="feature_schedule_ep_pill_format">%1$02d</string>
+    <string name="feature_schedule_tag_long_running">长篇连载</string>
+    <string name="feature_schedule_tag_format_tv">TV</string>
+    <string name="feature_schedule_tag_format_tv_short">泡面番</string>
+    <string name="feature_schedule_tag_format_web">Web</string>
+    <string name="feature_schedule_tag_format_ova">OVA</string>
+    <string name="feature_schedule_tag_format_movie">剧场版</string>
+    <string name="feature_schedule_tag_format_special">特别篇</string>
+    <string name="feature_schedule_tag_adult">R18</string>
+    <string name="feature_schedule_season_format">%1$d月番</string>
+    <string name="feature_schedule_season_year_format">%1$d年</string>
+    <string name="feature_schedule_season_year_month_format">%1$d年%2$d月</string>
     <string name="feature_schedule_now_indicator">现在 %1$s</string>
 
     <!-- 未定番剧区 -->
