@@ -169,7 +169,6 @@ private fun FloatingShellPreview() {
             BgmFloatingNavigationBar(
                 currentDestination = ScheduleRoute,
                 onDestinationSelected = {},
-                isVertical = false,
             )
         },
         floatingBottomBarSink = 12.dp,

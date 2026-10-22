@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.search.R
@@ -55,6 +56,7 @@ fun ExploreSubjectRow(
     horizontalPadding: Dp = 16.dp,
 ) {
     if (!isLoading && subjects.isEmpty()) return
+    val cardWidth = if (LocalWindowAdaptiveInfo.current.isExpandedOrWider) 132.dp else 108.dp
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -86,12 +88,13 @@ fun ExploreSubjectRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (isLoading && subjects.isEmpty()) {
-                items(4) { RowSkeletonCard() }
+                items(4) { RowSkeletonCard(width = cardWidth) }
             } else {
                 items(subjects.take(ROW_LIMIT), key = { it.id }) { subject ->
                     RowSubjectCard(
                         subject = subject,
                         onSubjectClick = onSubjectClick,
+                        width = cardWidth,
                     )
                 }
             }
@@ -103,6 +106,7 @@ fun ExploreSubjectRow(
 private fun RowSubjectCard(
     subject: Subject,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
+    width: Dp,
     modifier: Modifier = Modifier,
 ) {
     val score = subject.rating?.score ?: 0.0
@@ -110,7 +114,7 @@ private fun RowSubjectCard(
     Column(
         modifier =
             modifier
-                .width(108.dp)
+                .width(width)
                 .clip(RoundedCornerShape(8.dp))
                 .clickable {
                     onSubjectClick(
@@ -158,8 +162,11 @@ private fun RowSubjectCard(
 }
 
 @Composable
-private fun RowSkeletonCard(modifier: Modifier = Modifier) {
-    Column(modifier = modifier.width(108.dp)) {
+private fun RowSkeletonCard(
+    width: Dp,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.width(width)) {
         Box(
             modifier =
                 Modifier

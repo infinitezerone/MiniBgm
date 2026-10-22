@@ -272,7 +272,6 @@ fun BgmApp(
                             BgmFloatingNavigationBar(
                                 currentDestination = navState.currentTopLevelKey,
                                 onDestinationSelected = { route -> navState.navigateTo(route) },
-                                isVertical = false,
                             )
                         }
 

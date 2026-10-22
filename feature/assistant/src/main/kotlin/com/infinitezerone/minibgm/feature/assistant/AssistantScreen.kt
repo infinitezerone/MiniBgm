@@ -333,102 +333,102 @@ fun AssistantScreenContent(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 TextField(
-                                value = uiState.inputText,
-                                onValueChange = onInputChanged,
-                                placeholder = {
-                                    Text(
-                                        text = stringResource(R.string.feature_assistant_input_placeholder),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                },
-                                singleLine = false,
-                                maxLines = 4,
-                                keyboardOptions =
-                                    KeyboardOptions(
-                                        imeAction = ImeAction.Send,
-                                        capitalization = KeyboardCapitalization.Sentences,
-                                    ),
-                                keyboardActions =
-                                    KeyboardActions(
-                                        onSend = {
-                                            val canSend = uiState.inputText.isNotBlank() && !uiState.isLoading
-                                            if (canSend) {
-                                                focusManager.clearFocus()
-                                                keyboardController?.hide()
-                                                onSendMessage()
-                                            }
-                                        },
-                                    ),
-                                colors =
-                                    TextFieldDefaults.colors(
-                                        focusedContainerColor = Color.Transparent,
-                                        unfocusedContainerColor = Color.Transparent,
-                                        disabledContainerColor = Color.Transparent,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent,
-                                        disabledIndicatorColor = Color.Transparent,
-                                    ),
-                                modifier =
-                                    Modifier
-                                        .weight(1f)
-                                        .focusRequester(focusRequester),
-                            )
+                                    value = uiState.inputText,
+                                    onValueChange = onInputChanged,
+                                    placeholder = {
+                                        Text(
+                                            text = stringResource(R.string.feature_assistant_input_placeholder),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    },
+                                    singleLine = false,
+                                    maxLines = 4,
+                                    keyboardOptions =
+                                        KeyboardOptions(
+                                            imeAction = ImeAction.Send,
+                                            capitalization = KeyboardCapitalization.Sentences,
+                                        ),
+                                    keyboardActions =
+                                        KeyboardActions(
+                                            onSend = {
+                                                val canSend = uiState.inputText.isNotBlank() && !uiState.isLoading
+                                                if (canSend) {
+                                                    focusManager.clearFocus()
+                                                    keyboardController?.hide()
+                                                    onSendMessage()
+                                                }
+                                            },
+                                        ),
+                                    colors =
+                                        TextFieldDefaults.colors(
+                                            focusedContainerColor = Color.Transparent,
+                                            unfocusedContainerColor = Color.Transparent,
+                                            disabledContainerColor = Color.Transparent,
+                                            focusedIndicatorColor = Color.Transparent,
+                                            unfocusedIndicatorColor = Color.Transparent,
+                                            disabledIndicatorColor = Color.Transparent,
+                                        ),
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .focusRequester(focusRequester),
+                                )
 
                                 if (uiState.isLoading) {
-                                // 运行中：发送位变成停止按钮——端点挂住时用户不必干等超时
-                                IconButton(
-                                    onClick = {
-                                        focusManager.clearFocus()
-                                        keyboardController?.hide()
-                                        onStopGeneration()
-                                    },
-                                    modifier =
-                                        Modifier
-                                            .size(38.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.errorContainer),
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.Stop,
-                                        contentDescription = stringResource(R.string.feature_assistant_cd_stop_generation),
-                                        tint = MaterialTheme.colorScheme.onErrorContainer,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
+                                    // 运行中：发送位变成停止按钮——端点挂住时用户不必干等超时
+                                    IconButton(
+                                        onClick = {
+                                            focusManager.clearFocus()
+                                            keyboardController?.hide()
+                                            onStopGeneration()
+                                        },
+                                        modifier =
+                                            Modifier
+                                                .size(38.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.errorContainer),
+                                    ) {
+                                        Icon(
+                                            imageVector = BgmIcons.Stop,
+                                            contentDescription = stringResource(R.string.feature_assistant_cd_stop_generation),
+                                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
                                 } else {
-                                val canSend = uiState.inputText.isNotBlank()
-                                IconButton(
-                                    onClick = {
-                                        focusManager.clearFocus()
-                                        keyboardController?.hide()
-                                        onSendMessage()
-                                    },
-                                    enabled = canSend,
-                                    modifier =
-                                        Modifier
-                                            .size(38.dp)
-                                            .clip(CircleShape)
-                                            .background(
+                                    val canSend = uiState.inputText.isNotBlank()
+                                    IconButton(
+                                        onClick = {
+                                            focusManager.clearFocus()
+                                            keyboardController?.hide()
+                                            onSendMessage()
+                                        },
+                                        enabled = canSend,
+                                        modifier =
+                                            Modifier
+                                                .size(38.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    if (canSend) {
+                                                        MaterialTheme.colorScheme.primary
+                                                    } else {
+                                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                                    },
+                                                ),
+                                    ) {
+                                        Icon(
+                                            imageVector = BgmIcons.Send,
+                                            contentDescription = stringResource(R.string.feature_assistant_cd_send),
+                                            tint =
                                                 if (canSend) {
-                                                    MaterialTheme.colorScheme.primary
+                                                    MaterialTheme.colorScheme.onPrimary
                                                 } else {
-                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                                 },
-                                            ),
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.Send,
-                                        contentDescription = stringResource(R.string.feature_assistant_cd_send),
-                                        tint =
-                                            if (canSend) {
-                                                MaterialTheme.colorScheme.onPrimary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                            },
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
                                 }
                             }
                         }

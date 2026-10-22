@@ -28,6 +28,12 @@ fun rememberBgmPaneDirective(): PaneScaffoldDirective {
     return remember(windowAdaptiveInfo) {
         calculatePaneScaffoldDirective(windowAdaptiveInfo).let { directive ->
             directive.copy(
+                maxHorizontalPartitions =
+                    if (shouldUseSplitPane(windowAdaptiveInfo.windowSizeClass.minWidthDp)) {
+                        directive.maxHorizontalPartitions
+                    } else {
+                        1
+                    },
                 horizontalPartitionSpacerSize = 0.dp,
                 defaultPanePreferredWidth =
                     preferredPaneWidthFor(
@@ -38,6 +44,12 @@ fun rememberBgmPaneDirective(): PaneScaffoldDirective {
         }
     }
 }
+
+/**
+ * 分栏必须给列表和详情都留下可用宽度。80dp 导航轨道之后，840dp 窗口只剩 760dp，
+ * 再拆成左右两栏只会得到两个窄条；1200dp 起才是这张应用里真正成立的分栏下限。
+ */
+internal fun shouldUseSplitPane(minWidthDp: Int): Boolean = minWidthDp >= 1200
 
 internal fun preferredPaneWidthFor(
     minWidthDp: Int,

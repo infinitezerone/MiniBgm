@@ -375,80 +375,80 @@ fun UserScreenContent(
                     }
 
                     else -> {
-                    // 筛选只在"有列表可筛"时有意义：错误态与空态下摆着 5 个胶囊，点了什么都不会发生。
-                    // 加载中仍然显示，是为了避开"加载完才冒出来"的跳版。
-                    val filterType = collectionsState.selectedType
-                    val filterIsLoading =
-                        collectionsState.loadingTypes.contains(filterType) ||
-                            (
-                                collectionsState.isLoading &&
-                                    !collectionsState.collectionsByType.containsKey(filterType)
-                            )
-                    val hasFilterableList =
-                        collectionsState.collectionsByType[filterType].orEmpty().isNotEmpty()
+                        // 筛选只在"有列表可筛"时有意义：错误态与空态下摆着 5 个胶囊，点了什么都不会发生。
+                        // 加载中仍然显示，是为了避开"加载完才冒出来"的跳版。
+                        val filterType = collectionsState.selectedType
+                        val filterIsLoading =
+                            collectionsState.loadingTypes.contains(filterType) ||
+                                (
+                                    collectionsState.isLoading &&
+                                        !collectionsState.collectionsByType.containsKey(filterType)
+                                )
+                        val hasFilterableList =
+                            collectionsState.collectionsByType[filterType].orEmpty().isNotEmpty()
 
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.widthIn(max = 1200.dp).fillMaxSize(),
-                        contentPadding = PaddingValues(top = topChromeHeight + 4.dp, bottom = 96.dp),
-                    ) {
-                        // 1. 沉浸式身份头部
-                        item(key = "profile_hero") {
-                            UserProfileHero(
-                                profile = uiState.activeProfile,
-                                savedAccountsCount = uiState.savedAccounts.size,
-                                onManageAccountsClick = { showAccountSheet = true },
-                            )
-                        }
-
-                        // 2. 通栏数字带：在看集数 / 本月打卡（本地聚合，Tab 计数之外的第二视角）
-                        item(key = "tracking_stats_band") {
-                            TrackingStatsBand(footprint = uiState.trackingFootprint)
-                        }
-
-                        // 3. 吸顶分类 Tab（带数字标签，一触即达且吸顶）：在看 / 想看 / 看过 / 搁置 / 抛弃
-                        stickyHeader(key = "collection_type_tabs") {
-                            CollectionTypeTabs(
-                                selectedType = collectionsState.selectedType,
-                                counts = uiState.collectionCounts,
-                                onSelectType = onSelectCollectionType,
-                            )
-                        }
-
-                        // 4. 条目类别与连载/囤番多维状态筛选
-                        if (filterIsLoading || hasFilterableList) {
-                            item(key = "subject_filter") {
-                                SubjectFilterRow(
-                                    selectedFilter = collectionsState.selectedSubjectFilter,
-                                    onSelectFilter = onSelectSubjectFilter,
+                            contentPadding = PaddingValues(top = topChromeHeight + 4.dp, bottom = 96.dp),
+                        ) {
+                            // 1. 沉浸式身份头部
+                            item(key = "profile_hero") {
+                                UserProfileHero(
+                                    profile = uiState.activeProfile,
+                                    savedAccountsCount = uiState.savedAccounts.size,
+                                    onManageAccountsClick = { showAccountSheet = true },
                                 )
                             }
 
-                            if (collectionsState.selectedSubjectFilter == CollectionSubjectFilter.ALL ||
-                                collectionsState.selectedSubjectFilter == CollectionSubjectFilter.ANIME
-                            ) {
-                                item(key = "air_filter") {
-                                    AirFilterRow(
-                                        selectedFilter = collectionsState.selectedAirFilter,
-                                        onSelectFilter = onSelectAirFilter,
+                            // 2. 通栏数字带：在看集数 / 本月打卡（本地聚合，Tab 计数之外的第二视角）
+                            item(key = "tracking_stats_band") {
+                                TrackingStatsBand(footprint = uiState.trackingFootprint)
+                            }
+
+                            // 3. 吸顶分类 Tab（带数字标签，一触即达且吸顶）：在看 / 想看 / 看过 / 搁置 / 抛弃
+                            stickyHeader(key = "collection_type_tabs") {
+                                CollectionTypeTabs(
+                                    selectedType = collectionsState.selectedType,
+                                    counts = uiState.collectionCounts,
+                                    onSelectType = onSelectCollectionType,
+                                )
+                            }
+
+                            // 4. 条目类别与连载/囤番多维状态筛选
+                            if (filterIsLoading || hasFilterableList) {
+                                item(key = "subject_filter") {
+                                    SubjectFilterRow(
+                                        selectedFilter = collectionsState.selectedSubjectFilter,
+                                        onSelectFilter = onSelectSubjectFilter,
                                     )
                                 }
-                            }
-                        }
 
-                        // 5. 追番收藏列表（直接呈现，首屏即可见）
+                                if (collectionsState.selectedSubjectFilter == CollectionSubjectFilter.ALL ||
+                                    collectionsState.selectedSubjectFilter == CollectionSubjectFilter.ANIME
+                                ) {
+                                    item(key = "air_filter") {
+                                        AirFilterRow(
+                                            selectedFilter = collectionsState.selectedAirFilter,
+                                            onSelectFilter = onSelectAirFilter,
+                                        )
+                                    }
+                                }
+                            }
+
+                            // 5. 追番收藏列表（直接呈现，首屏即可见）
                             collectionSection(
-                            state = collectionsState,
-                            onSubjectClick = onSubjectClick,
-                            onIncrementProgress = onIncrementProgress,
-                            onEditCollection = { collectionToEdit = it },
-                            onPlayClick = { selectedCollectionForSources = it },
-                            onToggleBinge = onToggleBinge,
-                            onRefresh = onRefresh,
-                            onRetry = onRetryCollections,
-                            onLoadMore = onLoadMore,
-                        )
-                    }
+                                state = collectionsState,
+                                onSubjectClick = onSubjectClick,
+                                onIncrementProgress = onIncrementProgress,
+                                onEditCollection = { collectionToEdit = it },
+                                onPlayClick = { selectedCollectionForSources = it },
+                                onToggleBinge = onToggleBinge,
+                                onRefresh = onRefresh,
+                                onRetry = onRetryCollections,
+                                onLoadMore = onLoadMore,
+                            )
+                        }
                     }
                 }
             }

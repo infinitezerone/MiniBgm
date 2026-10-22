@@ -31,4 +31,12 @@ class BgmAdaptivePolicyTest {
         assertFalse(bgmTopLevelPaneMetadata(SearchRoute(), placeholder).isNotEmpty())
         assertFalse(bgmTopLevelPaneMetadata(UserRoute, placeholder).isNotEmpty())
     }
+
+    @Test
+    fun splitPaneStartsOnlyWhenBothPanesCanBreathe() {
+        assertFalse(shouldUseSplitPane(minWidthDp = 840))
+        assertFalse(shouldUseSplitPane(minWidthDp = 1199))
+        assertTrue(shouldUseSplitPane(minWidthDp = 1200))
+        assertTrue(shouldUseSplitPane(minWidthDp = 1280))
+    }
 }

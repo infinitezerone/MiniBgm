@@ -96,83 +96,83 @@ fun SearchScreen(
                         .padding(innerPadding)
                         .consumeWindowInsets(innerPadding),
             ) {
-            SearchCategoryTabs(
-                selectedType = uiState.selectedType,
-                onTypeSelect = viewModel::onTypeSelect,
-                modifier = Modifier.fillMaxWidth(),
-            )
+                SearchCategoryTabs(
+                    selectedType = uiState.selectedType,
+                    onTypeSelect = viewModel::onTypeSelect,
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
-            if (uiState.isLoading && uiState.results.isNotEmpty()) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            }
-
-            when {
-                uiState.isLoading && uiState.results.isEmpty() -> {
-                    SearchSkeletonLoading(modifier = Modifier.fillMaxSize())
+                if (uiState.isLoading && uiState.results.isNotEmpty()) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
 
-                uiState.error != null && uiState.results.isEmpty() -> {
-                    SearchErrorState(
-                        errorMessage = uiState.error ?: stringResource(R.string.feature_search_search_error),
-                        onRetry = viewModel::search,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+                when {
+                    uiState.isLoading && uiState.results.isEmpty() -> {
+                        SearchSkeletonLoading(modifier = Modifier.fillMaxSize())
+                    }
 
-                !uiState.hasSearched -> {
-                    SearchIdleView(
-                        searchHistory = uiState.searchHistory,
-                        onKeywordClick = { keyword ->
-                            viewModel.onQueryChange(keyword)
-                            viewModel.search(keyword)
-                        },
-                        onDeleteHistoryItem = viewModel::deleteHistoryItem,
-                        onClearAllHistory = viewModel::clearAllHistory,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+                    uiState.error != null && uiState.results.isEmpty() -> {
+                        SearchErrorState(
+                            errorMessage = uiState.error ?: stringResource(R.string.feature_search_search_error),
+                            onRetry = viewModel::search,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
 
-                uiState.results.isEmpty() -> {
-                    SearchNoResultsState(
-                        query = uiState.query,
-                        selectedType = uiState.selectedType,
-                        onResetCategory = { viewModel.onTypeSelect(0) },
-                        onClearQuery = viewModel::clearQuery,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+                    !uiState.hasSearched -> {
+                        SearchIdleView(
+                            searchHistory = uiState.searchHistory,
+                            onKeywordClick = { keyword ->
+                                viewModel.onQueryChange(keyword)
+                                viewModel.search(keyword)
+                            },
+                            onDeleteHistoryItem = viewModel::deleteHistoryItem,
+                            onClearAllHistory = viewModel::clearAllHistory,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
 
-                else -> {
-                    SearchResultsList(
-                        results = uiState.results,
-                        userCollections = uiState.userCollections,
-                        selectedType = uiState.selectedType,
-                        selectedSort = uiState.selectedSort,
-                        viewMode = uiState.viewMode,
-                        query = uiState.query,
-                        totalCount = uiState.totalCount,
-                        hasMore = uiState.hasMore,
-                        isLoading = uiState.isLoading,
-                        isLoadingMore = uiState.isLoadingMore,
-                        onSortChange = viewModel::onSortChange,
-                        onViewModeToggle = viewModel::onViewModeToggle,
-                        onToggleCollection = viewModel::toggleCollection,
-                        onLoadMore = viewModel::loadMore,
-                        onSubjectClick = onSubjectClick,
-                        localMatches = uiState.localMatches,
-                        offlineNotice = uiState.offlineNotice,
-                        initialListScrollIndex = viewModel.listScrollIndex,
-                        initialListScrollOffset = viewModel.listScrollOffset,
-                        initialGridScrollIndex = viewModel.gridScrollIndex,
-                        initialGridScrollOffset = viewModel.gridScrollOffset,
-                        searchGeneration = viewModel.searchGeneration,
-                        onListScrollPositionChange = viewModel::onListScrollPositionChanged,
-                        onGridScrollPositionChange = viewModel::onGridScrollPositionChanged,
-                        onRetrySearch = { viewModel.search() },
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    uiState.results.isEmpty() -> {
+                        SearchNoResultsState(
+                            query = uiState.query,
+                            selectedType = uiState.selectedType,
+                            onResetCategory = { viewModel.onTypeSelect(0) },
+                            onClearQuery = viewModel::clearQuery,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+
+                    else -> {
+                        SearchResultsList(
+                            results = uiState.results,
+                            userCollections = uiState.userCollections,
+                            selectedType = uiState.selectedType,
+                            selectedSort = uiState.selectedSort,
+                            viewMode = uiState.viewMode,
+                            query = uiState.query,
+                            totalCount = uiState.totalCount,
+                            hasMore = uiState.hasMore,
+                            isLoading = uiState.isLoading,
+                            isLoadingMore = uiState.isLoadingMore,
+                            onSortChange = viewModel::onSortChange,
+                            onViewModeToggle = viewModel::onViewModeToggle,
+                            onToggleCollection = viewModel::toggleCollection,
+                            onLoadMore = viewModel::loadMore,
+                            onSubjectClick = onSubjectClick,
+                            localMatches = uiState.localMatches,
+                            offlineNotice = uiState.offlineNotice,
+                            initialListScrollIndex = viewModel.listScrollIndex,
+                            initialListScrollOffset = viewModel.listScrollOffset,
+                            initialGridScrollIndex = viewModel.gridScrollIndex,
+                            initialGridScrollOffset = viewModel.gridScrollOffset,
+                            searchGeneration = viewModel.searchGeneration,
+                            onListScrollPositionChange = viewModel::onListScrollPositionChanged,
+                            onGridScrollPositionChange = viewModel::onGridScrollPositionChanged,
+                            onRetrySearch = { viewModel.search() },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
-            }
             }
         }
     }

@@ -40,7 +40,6 @@ object BgmSpacing {
     /** 宽屏侧边导航。只有三个顶层目的地时保持紧凑轨道，不制造空侧栏。 */
     object SideNavigation {
         val railWidth: Dp = 80.dp
-        val verticalCapsuleWidth: Dp = 64.dp
     }
 
     /**

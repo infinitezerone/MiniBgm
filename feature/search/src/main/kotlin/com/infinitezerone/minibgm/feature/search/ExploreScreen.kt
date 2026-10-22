@@ -207,46 +207,14 @@ fun ExploreScreen(
                 onRefresh = exploreViewModel::refresh,
                 modifier = Modifier.widthIn(max = 1280.dp).fillMaxSize(),
             ) {
-            if (exploreUiState.browseMode == ExploreBrowseMode.ROWS) {
-                // ════ 精选模式：榜单行区块 ════
-                LazyColumn(
-                    state = rowsListState,
-                    contentPadding = PaddingValues(top = topChromeHeight + 4.dp, bottom = 96.dp),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    item(key = "seasonal_row") {
-                        ExploreSubjectRow(
-                            title =
-                                stringResource(
-                                    R.string.feature_search_seasonal_row_title,
-                                    seasonalUiState.selectedYear,
-                                    stringResource(seasonalUiState.selectedQuarter.displayLabelRes),
-                                ),
-                            subjects = seasonalUiState.subjects,
-                            isLoading = seasonalUiState.isLoading,
-                            onSubjectClick = onSubjectClick,
-                            onOpenMore = onOpenSeasonalGuide,
-                        )
-                    }
-
-                    ExploreRow.entries.forEach { row ->
-                        val rowState = exploreUiState.rowStates[row] ?: ExploreRowState()
-                        item(key = "explore_row_${row.name}") {
-                            ExploreSubjectRow(
-                                title = stringResource(row.labelRes),
-                                subjects = rowState.subjects,
-                                isLoading = rowState.isLoading,
-                                onSubjectClick = onSubjectClick,
-                                onOpenMore = { exploreViewModel.openFullListFromRow(row) },
-                            )
-                        }
-                    }
-                }
-            } else {
-                when {
-                    // 全量模式首屏骨架：分区结构与成片一致
-                    exploreUiState.isLoading && exploreUiState.subjects.isEmpty() -> {
-                        Column(modifier = Modifier.fillMaxSize().padding(top = topChromeHeight)) {
+                if (exploreUiState.browseMode == ExploreBrowseMode.ROWS) {
+                    // ════ 精选模式：榜单行区块 ════
+                    LazyColumn(
+                        state = rowsListState,
+                        contentPadding = PaddingValues(top = topChromeHeight + 4.dp, bottom = 96.dp),
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        item(key = "seasonal_row") {
                             ExploreSubjectRow(
                                 title =
                                     stringResource(
@@ -259,77 +227,109 @@ fun ExploreScreen(
                                 onSubjectClick = onSubjectClick,
                                 onOpenMore = onOpenSeasonalGuide,
                             )
-                            MoodFilterRow(
-                                selectedMood = exploreUiState.selectedMood,
-                                onMoodSelect = exploreViewModel::onMoodSelect,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            ExploreSkeletonLoading(modifier = Modifier.fillMaxSize())
+                        }
+
+                        ExploreRow.entries.forEach { row ->
+                            val rowState = exploreUiState.rowStates[row] ?: ExploreRowState()
+                            item(key = "explore_row_${row.name}") {
+                                ExploreSubjectRow(
+                                    title = stringResource(row.labelRes),
+                                    subjects = rowState.subjects,
+                                    isLoading = rowState.isLoading,
+                                    onSubjectClick = onSubjectClick,
+                                    onOpenMore = { exploreViewModel.openFullListFromRow(row) },
+                                )
+                            }
                         }
                     }
-
-                    // 错误重试态
-                    exploreUiState.error != null && exploreUiState.subjects.isEmpty() -> {
-                        ExploreErrorState(
-                            errorMessage = exploreUiState.error ?: stringResource(R.string.feature_search_unknown_error),
-                            onRetry = exploreViewModel::refresh,
-                            modifier = Modifier.fillMaxSize().padding(top = topChromeHeight),
-                        )
-                    }
-
-                    // 全量模式：心境/筛选条 + 焦点大卡 + 瀑布流
-                    else -> {
-                        WaterfallGridList(
-                            subjects = exploreUiState.subjects,
-                            wishedSubjectIds = exploreUiState.wishedSubjectIds,
-                            hasMore = exploreUiState.hasMore,
-                            isLoadingMore = exploreUiState.isLoadingMore,
-                            onLoadMore = exploreViewModel::loadMore,
-                            onSubjectClick = onSubjectClick,
-                            onToggleWish = exploreViewModel::toggleWish,
-                            gridState = exploreGridState,
-                            topPadding = topChromeHeight + 4.dp,
-                            modifier = Modifier.fillMaxSize(),
-                            emptyContent = {
-                                ExploreEmptyState(
-                                    onReset = { exploreViewModel.onMoodSelect(ExploreMood.MASTERPIECE) },
+                } else {
+                    when {
+                        // 全量模式首屏骨架：分区结构与成片一致
+                        exploreUiState.isLoading && exploreUiState.subjects.isEmpty() -> {
+                            Column(modifier = Modifier.fillMaxSize().padding(top = topChromeHeight)) {
+                                ExploreSubjectRow(
+                                    title =
+                                        stringResource(
+                                            R.string.feature_search_seasonal_row_title,
+                                            seasonalUiState.selectedYear,
+                                            stringResource(seasonalUiState.selectedQuarter.displayLabelRes),
+                                        ),
+                                    subjects = seasonalUiState.subjects,
+                                    isLoading = seasonalUiState.isLoading,
+                                    onSubjectClick = onSubjectClick,
+                                    onOpenMore = onOpenSeasonalGuide,
+                                )
+                                MoodFilterRow(
+                                    selectedMood = exploreUiState.selectedMood,
+                                    onMoodSelect = exploreViewModel::onMoodSelect,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
-                            },
-                            headerContent = {
-                                item(span = StaggeredGridItemSpan.FullLine) {
-                                    if (isFilterActive) {
-                                        ActiveCustomFilterBar(
-                                            uiState = exploreUiState,
-                                            expanded = customFilterExpanded,
-                                            onToggleExpanded = { customFilterExpanded = !customFilterExpanded },
-                                            onClearSeason = { exploreViewModel.onSeasonSelect(ALL_TIME_SEASON) },
-                                            onClearCategory = { exploreViewModel.onCategorySelect(ExploreCategory.ANIME) },
-                                            onTagToggle = exploreViewModel::onTagToggle,
-                                            onClearSort = { exploreViewModel.onSortSelect(ExploreSort.RANK) },
-                                            onResetAll = exploreViewModel::resetToRows,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                    } else {
-                                        MoodFilterRow(
-                                            selectedMood = exploreUiState.selectedMood,
-                                            onMoodSelect = exploreViewModel::onMoodSelect,
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                    }
-                                }
+                                ExploreSkeletonLoading(modifier = Modifier.fillMaxSize())
+                            }
+                        }
 
-                                // 静默换挡加载进度条（追加翻页由底部指示器表达）
-                                if (exploreUiState.isLoading && exploreUiState.subjects.isNotEmpty()) {
+                        // 错误重试态
+                        exploreUiState.error != null && exploreUiState.subjects.isEmpty() -> {
+                            ExploreErrorState(
+                                errorMessage = exploreUiState.error ?: stringResource(R.string.feature_search_unknown_error),
+                                onRetry = exploreViewModel::refresh,
+                                modifier = Modifier.fillMaxSize().padding(top = topChromeHeight),
+                            )
+                        }
+
+                        // 全量模式：心境/筛选条 + 焦点大卡 + 瀑布流
+                        else -> {
+                            WaterfallGridList(
+                                subjects = exploreUiState.subjects,
+                                wishedSubjectIds = exploreUiState.wishedSubjectIds,
+                                hasMore = exploreUiState.hasMore,
+                                isLoadingMore = exploreUiState.isLoadingMore,
+                                onLoadMore = exploreViewModel::loadMore,
+                                onSubjectClick = onSubjectClick,
+                                onToggleWish = exploreViewModel::toggleWish,
+                                gridState = exploreGridState,
+                                topPadding = topChromeHeight + 4.dp,
+                                modifier = Modifier.fillMaxSize(),
+                                emptyContent = {
+                                    ExploreEmptyState(
+                                        onReset = { exploreViewModel.onMoodSelect(ExploreMood.MASTERPIECE) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                },
+                                headerContent = {
                                     item(span = StaggeredGridItemSpan.FullLine) {
-                                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                        if (isFilterActive) {
+                                            ActiveCustomFilterBar(
+                                                uiState = exploreUiState,
+                                                expanded = customFilterExpanded,
+                                                onToggleExpanded = { customFilterExpanded = !customFilterExpanded },
+                                                onClearSeason = { exploreViewModel.onSeasonSelect(ALL_TIME_SEASON) },
+                                                onClearCategory = { exploreViewModel.onCategorySelect(ExploreCategory.ANIME) },
+                                                onTagToggle = exploreViewModel::onTagToggle,
+                                                onClearSort = { exploreViewModel.onSortSelect(ExploreSort.RANK) },
+                                                onResetAll = exploreViewModel::resetToRows,
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
+                                        } else {
+                                            MoodFilterRow(
+                                                selectedMood = exploreUiState.selectedMood,
+                                                onMoodSelect = exploreViewModel::onMoodSelect,
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
+                                        }
                                     }
-                                }
-                            },
-                        )
+
+                                    // 静默换挡加载进度条（追加翻页由底部指示器表达）
+                                    if (exploreUiState.isLoading && exploreUiState.subjects.isNotEmpty()) {
+                                        item(span = StaggeredGridItemSpan.FullLine) {
+                                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                        }
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
-            }
             }
         }
     }

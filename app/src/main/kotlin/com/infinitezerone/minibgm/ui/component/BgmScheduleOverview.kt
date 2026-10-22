@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -32,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,6 +64,7 @@ fun BgmScheduleOverview(
     modifier: Modifier = Modifier,
 ) {
     val today = remember { LocalDate.now(ZoneId.of("Asia/Shanghai")) }
+    val gradientEndY = with(LocalDensity.current) { 460.dp.toPx() }
     val dateLabel =
         remember(today) {
             today.format(DateTimeFormatter.ofPattern("M月d日", Locale.CHINA)) +
@@ -83,7 +84,7 @@ fun BgmScheduleOverview(
                                 MaterialTheme.colorScheme.surfaceContainerLowest,
                                 MaterialTheme.colorScheme.surfaceContainerLowest,
                             ),
-                        endY = 460f,
+                        endY = gradientEndY,
                     ),
                 ),
     ) {
@@ -116,7 +117,6 @@ fun BgmScheduleOverview(
             }
 
             if (recentHistory.isNotEmpty()) {
-                SectionTitle(stringResource(R.string.app_overview_continue_watching))
                 ContinueWatchingCard(
                     history = recentHistory.first(),
                     onPlayHistory = onPlayHistory,
