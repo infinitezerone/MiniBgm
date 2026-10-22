@@ -10,8 +10,6 @@ import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.navigation3.runtime.NavKey
@@ -20,6 +18,7 @@ import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
 /**
  * 平板与折叠屏大屏下的侧边导航栏（NavigationRail）。
  * 占据独立的水平物理空间（非悬浮遮挡），确保右侧所有内容区和返回操作无遮挡。
+ * 遵循系统纯净交互立场，零强制触觉震动。
  */
 @Composable
 fun BgmNavigationRail(
@@ -27,8 +26,6 @@ fun BgmNavigationRail(
     onDestinationSelected: (NavKey) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val haptic = LocalHapticFeedback.current
-
     NavigationRail(
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -40,10 +37,7 @@ fun BgmNavigationRail(
             val label = stringResource(destination.labelRes)
             NavigationRailItem(
                 selected = isSelected,
-                onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onDestinationSelected(destination.route)
-                },
+                onClick = { onDestinationSelected(destination.route) },
                 icon = {
                     Icon(
                         imageVector = if (isSelected) destination.selectedIcon else destination.unselectedIcon,
