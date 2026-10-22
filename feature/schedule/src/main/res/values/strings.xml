@@ -16,6 +16,8 @@
     <string name="feature_schedule_weekday_sun">周日</string>
 
     <!-- 筛选栏 -->
+    <string name="feature_schedule_filter_my_watchlist">我的追番</string>
+    <string name="feature_schedule_filter_all_broadcast">全网开播</string>
     <string name="feature_schedule_filter_my_watchlist_not_logged_in">我的追番 (未登录)</string>
     <string name="feature_schedule_filter_my_watchlist_count">我的追番 (%1$d)</string>
     <string name="feature_schedule_filter_all_broadcast_count">全网开播 (%1$d)</string>

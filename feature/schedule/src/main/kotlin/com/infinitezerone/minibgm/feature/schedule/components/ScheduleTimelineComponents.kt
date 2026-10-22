@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingFrame
 import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingFrameDefaults
+import com.infinitezerone.minibgm.core.designsystem.component.BgmMediaCard
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.ScoreBadge
 import com.infinitezerone.minibgm.core.designsystem.component.expressivePress
@@ -70,8 +71,8 @@ enum class AirStatus {
     AIRED,
 }
 
-/** 相邻时间线插槽行之间的纵向间距，轨道连线向下的延伸量必须与它一致才能视觉连续 */
-val TIMELINE_SLOT_SPACING = 10.dp
+/** 相邻时间线插槽行之间的纵向间距，呼吸感充沛，区分不同时段 */
+val TIMELINE_SLOT_SPACING = 18.dp
 
 /** 当前时刻（按东八区）折算的当日分钟数 */
 fun getCurrentMinutesCst(): Int {
@@ -286,11 +287,10 @@ fun ScheduleTimelineCard(
 ) {
     val displayName = schedule.displayName
     val score = schedule.ratingScore
-    val interactionSource = remember { MutableInteractionSource() }
     val isMultiEpisode = episodes.size > 1
     val isFirstEp = episodes.firstOrNull() == 1
 
-    Card(
+    BgmMediaCard(
         onClick = {
             onSubjectClick(
                 SubjectDetailRoute(
@@ -302,194 +302,161 @@ fun ScheduleTimelineCard(
                 ),
             )
         },
-        shape = RoundedCornerShape(16.dp),
-        colors =
-            CardDefaults.cardColors(
-                containerColor =
-                    if (isWatching) {
-                        MaterialTheme.colorScheme.surfaceContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerLow
-                    },
-            ),
-        border = null,
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .expressivePress(interactionSource = interactionSource, pressedScale = 0.985f),
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
+        containerColor =
+            if (isWatching) {
+                MaterialTheme.colorScheme.surfaceContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            },
+        modifier = modifier,
+        leading = {
+            Box(
+                modifier =
+                    Modifier
+                        .height(96.dp)
+                        .aspectRatio(BGM_POSTER_ASPECT_RATIO)
+                        .clip(RoundedCornerShape(8.dp))
+                        .bgmSharedElement(
+                            key = BgmSharedElementKeys.subjectCover(schedule.bgmId, "schedule"),
+                            clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
+                        ),
             ) {
-                // 1. 舒展封面海报（高度充实至 92dp，宽约 64dp）
-                Box(
-                    modifier =
-                        Modifier
-                            .height(92.dp)
-                            .aspectRatio(BGM_POSTER_ASPECT_RATIO)
-                            .clip(RoundedCornerShape(8.dp))
-                            .bgmSharedElement(
-                                key = BgmSharedElementKeys.subjectCover(schedule.bgmId, "schedule"),
-                                clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
-                            ),
+                CoverImage(
+                    url = schedule.coverUrl,
+                    contentDescription = displayName,
+                    cornerRadius = 8.dp,
+                    aspectRatio = BGM_POSTER_ASPECT_RATIO,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                // 封面左下角：评分徽章
+                ScoreBadge(
+                    score = score,
+                    modifier = Modifier.align(Alignment.BottomStart),
+                    shape = RoundedCornerShape(topEnd = 8.dp, bottomStart = 8.dp),
+                    starSize = 9.dp,
+                    textStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 1.5.dp),
+                )
+            }
+        },
+        title = {
+            Text(
+                text = displayName,
+                style =
+                    MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 15.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        badge = {
+            if (isWatching) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                 ) {
-                    CoverImage(
-                        url = schedule.coverUrl,
-                        contentDescription = displayName,
-                        cornerRadius = 8.dp,
-                        aspectRatio = BGM_POSTER_ASPECT_RATIO,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-
-                    // 封面左下角：评分徽章
-                    ScoreBadge(
-                        score = score,
-                        modifier = Modifier.align(Alignment.BottomStart),
-                        shape = RoundedCornerShape(topEnd = 8.dp, bottomStart = 8.dp),
-                        starSize = 9.dp,
-                        textStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp, fontWeight = FontWeight.Bold),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 1.5.dp),
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // 2. 信息列：纯白大标题 + 优雅副标 + 底部状态与操作
-                Column(
-                    modifier = Modifier.weight(1f).height(92.dp),
-                    verticalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(
-                                text = displayName,
-                                style =
-                                    MaterialTheme.typography.titleMedium.copy(
-                                        fontSize = 15.sp,
-                                        lineHeight = 19.sp,
-                                        fontWeight = FontWeight.Bold,
-                                    ),
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-
-                            if (isWatching) {
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                    modifier = Modifier.padding(start = 6.dp),
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.Bookmark,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(11.dp),
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.feature_schedule_watching_badge),
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        if (schedule.title.isNotBlank() && schedule.title != displayName) {
-                            Text(
-                                text = schedule.title,
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-
-                    // 底行：集数徽章（支持多集/全集/连播格式化）+ 首选播映平台
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
                     ) {
-                        if (episodes.isNotEmpty()) {
-                            val epText =
-                                when {
-                                    isMultiEpisode -> {
-                                        val minEp = episodes.first()
-                                        val maxEp = episodes.last()
-                                        val isConsecutive = maxEp - minEp == episodes.size - 1
-                                        if (isConsecutive && minEp == 1 && episodes.size >= 6) {
-                                            stringResource(R.string.feature_schedule_batch_episodes_format, minEp, maxEp)
-                                        } else if (isConsecutive) {
-                                            stringResource(R.string.feature_schedule_multi_episodes_format, minEp, maxEp, episodes.size)
-                                        } else {
-                                            stringResource(R.string.feature_schedule_episodes_list_format, episodes.joinToString(","))
-                                        }
-                                    }
-                                    isFirstEp -> stringResource(R.string.feature_schedule_first_episode)
-                                    else -> stringResource(R.string.feature_schedule_episode_format, episodes.first())
-                                }
-
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color =
-                                    when {
-                                        isMultiEpisode -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.85f)
-                                        isFirstEp -> MaterialTheme.colorScheme.tertiaryContainer
-                                        else -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f)
-                                    },
-                            ) {
-                                Text(
-                                    text = epText,
-                                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color =
-                                        when {
-                                            isMultiEpisode -> MaterialTheme.colorScheme.onTertiaryContainer
-                                            isFirstEp -> MaterialTheme.colorScheme.onTertiaryContainer
-                                            else -> MaterialTheme.colorScheme.primary
-                                        },
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                )
-                            }
-                        }
-
-                        val primarySite = schedule.siteLinks.firstOrNull()
-                        if (primarySite != null) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.75f),
-                                modifier = Modifier.padding(start = 6.dp),
-                            ) {
-                                Text(
-                                    text = primarySite.displayName.ifBlank { primarySite.siteName },
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
-                                )
-                            }
-                        }
+                        Icon(
+                            imageVector = BgmIcons.Bookmark,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(11.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.feature_schedule_watching_badge),
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
             }
+        },
+        subtitle = {
+            if (schedule.title.isNotBlank() && schedule.title != displayName) {
+                Text(
+                    text = schedule.title,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        meta = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (episodes.isNotEmpty()) {
+                    val epText =
+                        when {
+                            isMultiEpisode -> {
+                                val minEp = episodes.first()
+                                val maxEp = episodes.last()
+                                val isConsecutive = maxEp - minEp == episodes.size - 1
+                                if (isConsecutive && minEp == 1 && episodes.size >= 6) {
+                                    stringResource(R.string.feature_schedule_batch_episodes_format, minEp, maxEp)
+                                } else if (isConsecutive) {
+                                    stringResource(R.string.feature_schedule_multi_episodes_format, minEp, maxEp, episodes.size)
+                                } else {
+                                    stringResource(R.string.feature_schedule_episodes_list_format, episodes.joinToString(","))
+                                }
+                            }
+                            isFirstEp -> stringResource(R.string.feature_schedule_first_episode)
+                            else -> stringResource(R.string.feature_schedule_episode_format, episodes.first())
+                        }
 
-            // 3. 多集场景独有的分集直达微导轨 (Episode Pills Strip)
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color =
+                            when {
+                                isMultiEpisode -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.85f)
+                                isFirstEp -> MaterialTheme.colorScheme.tertiaryContainer
+                                else -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f)
+                            },
+                    ) {
+                        Text(
+                            text = epText,
+                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
+                            fontWeight = FontWeight.ExtraBold,
+                            color =
+                                when {
+                                    isMultiEpisode -> MaterialTheme.colorScheme.onTertiaryContainer
+                                    isFirstEp -> MaterialTheme.colorScheme.onTertiaryContainer
+                                    else -> MaterialTheme.colorScheme.primary
+                                },
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+
+                val primarySite = schedule.siteLinks.firstOrNull()
+                if (primarySite != null) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.75f),
+                    ) {
+                        Text(
+                            text = primarySite.displayName.ifBlank { primarySite.siteName },
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
+                        )
+                    }
+                }
+            }
+        },
+        footer = {
             if (isMultiEpisode) {
                 Row(
                     modifier =
@@ -534,8 +501,8 @@ fun ScheduleTimelineCard(
                     }
                 }
             }
-        }
-    }
+        },
+    )
 }
 
 /** 兼容旧调用的单番时间线卡片入口 */

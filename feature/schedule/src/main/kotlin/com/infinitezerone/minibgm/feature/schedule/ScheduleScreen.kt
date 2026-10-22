@@ -18,7 +18,10 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -31,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -46,12 +50,10 @@ import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
-import com.infinitezerone.minibgm.core.designsystem.theme.FeatureGate
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.feature.schedule.R
-import com.infinitezerone.minibgm.feature.schedule.components.FilterAndMetaBar
 import com.infinitezerone.minibgm.feature.schedule.components.ModernDateCapsuleStrip
 import com.infinitezerone.minibgm.feature.schedule.components.OfflineCacheBanner
 import com.infinitezerone.minibgm.feature.schedule.components.ScheduleDayEmptyNote
@@ -138,23 +140,47 @@ fun ScheduleScreen(
                         )
                     },
                     actions = {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(end = 4.dp),
-                        ) {
-                            FeatureGate(capability = { it.isAiAssistantEnabled && onAssistantClick != null }) {
-                                BgmCircleActionButton(
-                                    onClick = onAssistantClick ?: {},
-                                    icon = BgmIcons.Assistant,
-                                    contentDescription = stringResource(R.string.feature_schedule_cd_ai_assistant),
-                                )
-                            }
+                        val currentWatchingCount = uiState.getWatchingCountForPage(pagerState.currentPage)
+                        val isOnlyWatching = uiState.onlyWatching
 
+                        BadgedBox(
+                            badge = {
+                                if (uiState.isLoggedIn && currentWatchingCount > 0) {
+                                    Badge(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                                    ) {
+                                        Text(
+                                            text = currentWatchingCount.toString(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    }
+                                }
+                            },
+                        ) {
                             BgmCircleActionButton(
-                                onClick = onSearchClick,
-                                icon = BgmIcons.Search,
-                                contentDescription = stringResource(R.string.feature_schedule_cd_search),
+                                onClick = viewModel::toggleOnlyWatching,
+                                icon = if (isOnlyWatching) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
+                                contentDescription =
+                                    if (isOnlyWatching) {
+                                        stringResource(R.string.feature_schedule_filter_all_broadcast)
+                                    } else {
+                                        stringResource(R.string.feature_schedule_filter_my_watchlist)
+                                    },
+                                containerColor =
+                                    if (isOnlyWatching) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+                                        MaterialTheme.colorScheme.surfaceContainerLow
+                                    } else {
+                                        MaterialTheme.colorScheme.surface
+                                    },
+                                contentColor =
+                                    if (isOnlyWatching) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
                             )
                         }
                     },
@@ -260,7 +286,6 @@ fun ScheduleScreen(
                             onSwitchToAll = viewModel::toggleOnlyWatching,
                             listState = listState,
                             topPadding = totalTopChromeHeight + 6.dp,
-                            onPromptLogin = viewModel::promptLogin,
                         )
                     }
                 }
@@ -297,7 +322,6 @@ private fun DayScheduleList(
     listState: LazyListState,
     topPadding: Dp,
     modifier: Modifier = Modifier,
-    onPromptLogin: () -> Unit = {},
 ) {
     // 当前时刻（按东八区），每 30 秒心跳一次，驱动「现在」指示与待播倒计时保持实时
     val nowMinutes by produceState(initialValue = getCurrentMinutesCst()) {
@@ -318,7 +342,7 @@ private fun DayScheduleList(
     LaunchedEffect(isTodayPage, timeGrouped) {
         if (!isTodayPage || timeGrouped.isEmpty()) return@LaunchedEffect
         if (!hasAnchoredToNow.value && nowSlotIndex > 2) {
-            val headerItemCount = (if (uiState.isOfflineCache) 1 else 0) + 1
+            val headerItemCount = if (uiState.isOfflineCache) 1 else 0
             listState.scrollToItem(headerItemCount + nowSlotIndex)
             hasAnchoredToNow.value = true
         }
@@ -334,17 +358,6 @@ private fun DayScheduleList(
             verticalArrangement = Arrangement.spacedBy(TIMELINE_SLOT_SPACING),
             modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
         ) {
-            item(key = "filter_bar_$pageIndex") {
-                FilterAndMetaBar(
-                    totalCount = uiState.getTotalCountForPage(pageIndex),
-                    watchingCount = uiState.getWatchingCountForPage(pageIndex),
-                    onlyWatching = uiState.onlyWatching,
-                    onToggleOnlyWatching = onSwitchToAll,
-                    isLoggedIn = uiState.isLoggedIn,
-                    onPromptLogin = onPromptLogin,
-                )
-            }
-
             if (uiState.isOfflineCache) {
                 item(key = "offline_cache_banner") {
                     OfflineCacheBanner(onRetry = {})
