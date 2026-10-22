@@ -26,7 +26,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -173,7 +172,7 @@ private fun BgmFloatingNavItem(
             .clip(CircleShape)
             .clickable(
                 interactionSource = interactionSource,
-                indication = ripple(bounded = true, radius = 28.dp),
+                indication = null,
                 role = Role.Tab,
                 onClick = onClick,
             )
