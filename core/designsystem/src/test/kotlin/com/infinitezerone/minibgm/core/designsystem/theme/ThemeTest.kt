@@ -14,21 +14,21 @@ class ThemeTest {
         val dark = MiniBgmDarkColors
 
         // Layer 2: Streamer / ACG Dark Immersion surfaces
-        assertEquals(Color(0xFF0E1015), dark.background)
-        assertEquals(Color(0xFF12141B), dark.surface)
-        assertEquals(Color(0xFF232732), dark.surfaceVariant)
-        assertEquals(Color(0xFF0E1015), dark.surfaceDim)
-        assertEquals(Color(0xFF2A2F3C), dark.surfaceBright)
-        assertEquals(Color(0xFF0E1015), dark.surfaceContainerLowest)
-        assertEquals(Color(0xFF15181E), dark.surfaceContainerLow)
-        assertEquals(Color(0xFF1C2028), dark.surfaceContainer)
-        assertEquals(Color(0xFF232732), dark.surfaceContainerHigh)
-        assertEquals(Color(0xFF2A2F3C), dark.surfaceContainerHighest)
+        assertEquals(Color(0xFF101012), dark.background)
+        assertEquals(Color(0xFF101012), dark.surface)
+        assertEquals(Color(0xFF38383F), dark.surfaceVariant)
+        assertEquals(Color(0xFF101012), dark.surfaceDim)
+        assertEquals(Color(0xFF44444C), dark.surfaceBright)
+        assertEquals(Color(0xFF0A0A0C), dark.surfaceContainerLowest)
+        assertEquals(Color(0xFF26262B), dark.surfaceContainerLow)
+        assertEquals(Color(0xFF2E2E33), dark.surfaceContainer)
+        assertEquals(Color(0xFF38383F), dark.surfaceContainerHigh)
+        assertEquals(Color(0xFF44444C), dark.surfaceContainerHighest)
 
         // Text & Outlines
         assertEquals(Color(0xFFF1F3F5), dark.onBackground)
         assertEquals(Color(0xFFF1F3F5), dark.onSurface)
-        assertEquals(Color(0xFF94A3B8), dark.onSurfaceVariant)
+        assertEquals(Color(0xFF9E9EA8), dark.onSurfaceVariant)
         assertEquals(Color(0x14FFFFFF), dark.outlineVariant)
 
         // Primary Brand (Sakura Pink Tone 80)

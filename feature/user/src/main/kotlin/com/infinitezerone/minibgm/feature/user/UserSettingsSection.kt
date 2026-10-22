@@ -43,6 +43,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSegmentedControl
 import com.infinitezerone.minibgm.core.designsystem.component.expressivePress
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmContentTokens
@@ -202,66 +203,31 @@ internal fun AppearanceSettingsCard(
         SettingsSectionHeader(text = stringResource(R.string.feature_user_section_appearance))
         SettingsCardContainer {
             // 主题模式三选：跟随系统 / 亮色 / 深色
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            BgmSegmentedControl(
+                items = ThemeMode.entries,
+                selectedItem = themeMode,
+                onItemSelected = onSelectThemeMode,
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-            ) {
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(3.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    ThemeMode.entries.forEach { mode ->
-                        val isSelected = themeMode == mode
-                        val interactionSource = remember { MutableInteractionSource() }
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color =
-                                if (isSelected) {
-                                    MaterialTheme.colorScheme.surfaceContainerHighest
-                                } else {
-                                    Color.Transparent
-                                },
-                            modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .height(34.dp)
-                                    .expressivePress(
-                                        interactionSource = interactionSource,
-                                        pressedScale = 0.96f,
-                                    )
-                                    .clickable(
-                                        interactionSource = interactionSource,
-                                        indication = null,
-                                        onClick = { onSelectThemeMode(mode) },
-                                    ),
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.fillMaxSize(),
-                            ) {
-                                Text(
-                                    text = mode.displayName,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                    color =
-                                        if (isSelected) {
-                                            MaterialTheme.colorScheme.onSurface
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                selectedItemColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                height = 34.dp,
+                itemContent = { mode, isSelected ->
+                    Text(
+                        text = mode.displayName,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        color =
+                            if (isSelected) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                    )
+                },
+            )
 
             SettingsDivider()
 

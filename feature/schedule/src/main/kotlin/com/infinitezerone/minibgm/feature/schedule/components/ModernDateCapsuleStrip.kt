@@ -17,9 +17,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +35,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSegmentedControl
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGoldBright
 import com.infinitezerone.minibgm.core.designsystem.theme.WishOrange
 import com.infinitezerone.minibgm.feature.schedule.R
@@ -211,6 +209,11 @@ fun DateCapsule(
     }
 }
 
+enum class ScheduleFilterType {
+    WATCHING,
+    ALL,
+}
+
 @Composable
 fun FilterAndMetaBar(
     totalCount: Int,
@@ -221,48 +224,57 @@ fun FilterAndMetaBar(
     isLoggedIn: Boolean = true,
     onPromptLogin: () -> Unit = {},
 ) {
-    SingleChoiceSegmentedButtonRow(
+    val currentTab = if (onlyWatching) ScheduleFilterType.WATCHING else ScheduleFilterType.ALL
+
+    BgmSegmentedControl(
+        items = listOf(ScheduleFilterType.WATCHING, ScheduleFilterType.ALL),
+        selectedItem = currentTab,
+        onItemSelected = { tab ->
+            when (tab) {
+                ScheduleFilterType.WATCHING -> {
+                    if (!isLoggedIn) {
+                        onPromptLogin()
+                    } else if (!onlyWatching) {
+                        onToggleOnlyWatching()
+                    }
+                }
+                ScheduleFilterType.ALL -> {
+                    if (onlyWatching) {
+                        onToggleOnlyWatching()
+                    }
+                }
+            }
+        },
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 2.dp),
-    ) {
-        SegmentedButton(
-            selected = onlyWatching,
-            onClick = {
-                if (!isLoggedIn) {
-                    onPromptLogin()
-                } else if (!onlyWatching) {
-                    onToggleOnlyWatching()
-                }
-            },
-            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-            label = {
-                val labelText =
-                    if (!isLoggedIn) {
-                        stringResource(R.string.feature_schedule_filter_my_watchlist_not_logged_in)
-                    } else {
-                        stringResource(R.string.feature_schedule_filter_my_watchlist_count, watchingCount)
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+        height = 36.dp,
+        itemContent = { tab, isSelected ->
+            val labelText =
+                when (tab) {
+                    ScheduleFilterType.WATCHING -> {
+                        if (!isLoggedIn) {
+                            stringResource(R.string.feature_schedule_filter_my_watchlist_not_logged_in)
+                        } else {
+                            stringResource(R.string.feature_schedule_filter_my_watchlist_count, watchingCount)
+                        }
                     }
-                Text(
-                    text = labelText,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = if (onlyWatching) FontWeight.Bold else FontWeight.Normal,
-                )
-            },
-        )
-
-        SegmentedButton(
-            selected = !onlyWatching,
-            onClick = { if (onlyWatching) onToggleOnlyWatching() },
-            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-            label = {
-                Text(
-                    text = stringResource(R.string.feature_schedule_filter_all_broadcast_count, totalCount),
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = if (!onlyWatching) FontWeight.Bold else FontWeight.Normal,
-                )
-            },
-        )
-    }
+                    ScheduleFilterType.ALL -> {
+                        stringResource(R.string.feature_schedule_filter_all_broadcast_count, totalCount)
+                    }
+                }
+            Text(
+                text = labelText,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                color =
+                    if (isSelected) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+            )
+        },
+    )
 }
