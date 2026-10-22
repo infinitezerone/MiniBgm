@@ -211,6 +211,7 @@
     <string name="feature_subject_player_episodes_pill">选集</string>
     <string name="feature_subject_player_speed_label">播放速度</string>
     <string name="feature_subject_source_online_routes">在线播放线路</string>
+    <string name="feature_subject_player_source_ready">就绪</string>
     <string name="feature_subject_source_no_online_routes">暂无已启用的在线线路，可在播放源管理中配置</string>
     <string name="feature_subject_source_torrent_fansub_section">P2P 原画与字幕组资源</string>
     <string name="feature_subject_source_torrent_copy_magnet">复制磁力</string>

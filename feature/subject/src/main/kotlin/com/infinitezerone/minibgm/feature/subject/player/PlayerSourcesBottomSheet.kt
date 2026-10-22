@@ -1,7 +1,10 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -12,21 +15,28 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourceActionCard
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourcesBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourcesSheetHeader
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.statusDoingContainerColor
+import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.components.SourceEmptyStateCard
 
@@ -255,6 +265,14 @@ private fun PlayerSourceActionRow(
 ) {
     val rawName = source.nameRes?.let { stringResource(it) } ?: source.name
     val displayLabel = formatSourceDisplayName(rawName, index, source.isDirect)
+    val categoryTag =
+        when (source.rule?.parserType) {
+            RuleParserType.SPIDER -> "TVBox"
+            RuleParserType.MACCMS -> "采集"
+            RuleParserType.PIPELINE -> "聚合"
+            RuleParserType.STREMIO -> "Stremio"
+            else -> if (source.isDirect) "直链" else null
+        }
     val status =
         when {
             isSelected && isResolvingSource ->
@@ -276,6 +294,7 @@ private fun PlayerSourceActionRow(
         }
     val subtitle =
         listOfNotNull(
+            categoryTag,
             status,
             if (failureCount > 0) {
                 stringResource(R.string.feature_subject_player_failures_count, failureCount)
@@ -295,17 +314,91 @@ private fun PlayerSourceActionRow(
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
             },
         trailingContent = {
-            Icon(
-                imageVector = if (isSelected) BgmIcons.Check else BgmIcons.KeyboardArrowRight,
-                contentDescription = null,
-                tint =
-                    if (isSelected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    },
-                modifier = Modifier.size(18.dp),
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                when {
+                    isPlaying -> {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(statusDoingContainerColor()),
+                                )
+                                Text(
+                                    text = stringResource(R.string.feature_subject_player_source_in_use),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                    isSelected && isResolvingSource -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 1.5.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    failureCount > 0 -> {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                        ) {
+                            Text(
+                                text = "${failureCount}x",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                            )
+                        }
+                    }
+                    else -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(statusDoingContainerColor()),
+                            )
+                            Text(
+                                text = stringResource(R.string.feature_subject_player_source_ready),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            )
+                        }
+                    }
+                }
+
+                Icon(
+                    imageVector = if (isSelected) BgmIcons.Check else BgmIcons.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint =
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        },
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         },
         onClick = onClick,
     )
