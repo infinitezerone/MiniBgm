@@ -131,7 +131,7 @@ data class ScheduleUiState(
                 val weekday = dateItems.getOrNull(pageIndex)?.weekday ?: 1
                 weeklySchedules[weekday].orEmpty()
             }
-        return list.count { watchingSubjectIds.contains(it.bgmId) }
+        return list.distinctBy { it.bgmId }.count { watchingSubjectIds.contains(it.bgmId) }
     }
 
     fun getTotalCountForPage(pageIndex: Int): Int {
@@ -140,7 +140,7 @@ data class ScheduleUiState(
                 val weekday = dateItems.getOrNull(pageIndex)?.weekday ?: 1
                 weeklySchedules[weekday].orEmpty()
             }
-        return list.size
+        return list.distinctBy { it.bgmId }.size
     }
 
     /** 兼容旧接口：获取指定星期过滤并排序后的条目 */

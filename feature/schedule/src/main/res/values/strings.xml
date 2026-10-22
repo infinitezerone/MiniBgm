@@ -31,6 +31,11 @@
     <string name="feature_schedule_watching_badge">在追</string>
     <string name="feature_schedule_first_episode">首播 · 第 1 话</string>
     <string name="feature_schedule_episode_format">第 %1$d 话</string>
+    <string name="feature_schedule_episodes_list_format">第 %1$s 话</string>
+    <string name="feature_schedule_batch_episodes_format">第 %1$d - %2$d 话 · 全集上线</string>
+    <string name="feature_schedule_multi_episodes_format">第 %1$d - %2$d 话 · 连播 %3$d 集</string>
+    <string name="feature_schedule_quick_jump_label">直达:</string>
+    <string name="feature_schedule_ep_pill_format">%1$02d</string>
     <string name="feature_schedule_now_indicator">现在 %1$s</string>
 
     <!-- 未定番剧区 -->
