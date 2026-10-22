@@ -62,23 +62,23 @@ class AquamorphicPressTest {
                 trajectory.add(value)
             }
 
-            // 1. 验证主过冲（首次回弹冲破 1.0f，膨胀拉伸）
+            // 1. 验证主过冲
             val maxOvershoot = trajectory.maxOrNull() ?: 1f
             assertTrue(
-                "释放回弹必须产生显著主过冲 (需 >= 1.01f), 实际最大值: $maxOvershoot",
+                "释放回弹需产生主过冲 (>= 1.01f), 实际: $maxOvershoot",
                 maxOvershoot >= 1.01f,
             )
 
-            // 2. 验证二次微弹（过冲波峰后出现水滴表面张力回落并微凹，随后才收敛）
+            // 2. 验证二次微弹
             val maxIndex = trajectory.indexOf(maxOvershoot)
             val subsequentValues = trajectory.subList(maxIndex, trajectory.size)
             val minSecondary = subsequentValues.minOrNull() ?: 1f
             assertTrue(
-                "释放回弹必须产生二次微弹回落 (需 < 0.998f), 实际二次回落最小值: $minSecondary",
+                "释放回弹需产生二次微弹 (< 0.998f), 实际: $minSecondary",
                 minSecondary < 0.998f,
             )
 
-            // 3. 验证终态严格稳定在 1.0f
+            // 3. 验证终态稳定在 1.0f
             assertEquals(1f, animatable.value, 0.001f)
         }
     }
@@ -100,10 +100,10 @@ class AquamorphicPressTest {
                 trajectory.add(value)
             }
 
-            // 按下阶段为临界阻尼 (Damping 1.0f)，绝不过冲跌破目标缩放比
+            // 按下阶段无过冲
             val minScale = trajectory.minOrNull() ?: 1f
             assertTrue(
-                "按下下沉阶段严禁过冲跌破目标缩放比 (不得低于 0.9499f), 实际最小值: $minScale",
+                "按下阶段无过冲 (>= 0.9499f), 实际: $minScale",
                 minScale >= 0.9499f,
             )
             assertEquals(0.95f, animatable.value, 0.001f)

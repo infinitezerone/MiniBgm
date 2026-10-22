@@ -47,7 +47,7 @@
 
 ---
 
-* **水生触控动效标准规范（ColorOS Aquamorphic Physical Motion）**：
+* **水生触控动效标准规范（Aquamorphic Physical Motion）**：
 在实现点击收缩、卡片按压等物理反馈修饰符时，对齐系统级物理质感：
 1. **轻点冲量保持保护（Impulse Hold）**：
    * 采用 `MIN_IMPULSE_MS = 90L` 的最小冲量窗口。

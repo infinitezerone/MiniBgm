@@ -48,13 +48,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
 
 /**
- * 手机端居中悬浮胶囊底栏（Floating Navigation Island）：
- * 1. 标准 56dp 轻巧浮岛（8dp 工业栅格），去底色指示器，纯净图文排布；
- * 2. 24dp 饱满大图标 + 11.5sp 紧凑标签，淡入淡出直接平滑过渡；
- * 3. 基于现代 [Modifier.Node] 架构的 [aquamorphicPress]：
- *    - 搭载 90ms 物理下沉冲量保护，轻点不截断；
- *    - 对齐 ColorOS 15/17 非对称水生弹簧（按下 Damping 1.0f 坚实触底，释放 Damping 0.66f 水滴微过冲回弹）；
- * 4. 搭载双层复合高斯弥散光晕 [aquamorphicShadow]。
+ * 居中悬浮胶囊导航栏。
  */
 @Composable
 fun BgmFloatingNavigationBar(
