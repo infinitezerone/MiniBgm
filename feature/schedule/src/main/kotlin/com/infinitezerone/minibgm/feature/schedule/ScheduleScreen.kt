@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.schedule
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -129,10 +130,15 @@ fun ScheduleScreen(
 
     BgmFloatingPageScaffold(
         topBarMode = BgmTopBarMode.Immersive,
-        topScrimHeight = totalTopChromeHeight + 24.dp,
-        topScrimSolidHeight = totalTopChromeHeight,
+        topScrimHeight = 0.dp,
+        topScrimSolidHeight = 0.dp,
         topBar = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.background),
+            ) {
                 BgmTopAppBar(
                     mode = BgmTopBarMode.Immersive,
                     title = {
