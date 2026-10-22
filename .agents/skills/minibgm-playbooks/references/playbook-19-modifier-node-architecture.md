@@ -52,10 +52,15 @@
 1. **轻点冲量保持保护（Impulse Hold）**：
    * 采用 `MIN_IMPULSE_MS = 90L` 的最小冲量窗口。
    * 当用户短按且抬起耗时 `elapsed < MIN_IMPULSE_MS` 时，挂起等待剩余时长 `delay(MIN_IMPULSE_MS - elapsed)`，确保按下收缩姿态充分展开后再执行回弹。
-2. **非对称物理弹簧（Asymmetric Spring Physics）**：
-   * **按下（Press Down）**：紧致沉稳、迅速到位、无过冲。
-     `spring(dampingRatio = 1.0f, stiffness = 700f)`
-   * **抬手（Release Up）**：灵动回弹、带有微量水滴张力过冲（~1.025x）。
-     `spring(dampingRatio = 0.66f, stiffness = 400f)`
+2. **非对称物理弹簧与二次微弹（Asymmetric Spring & Secondary Micro-bounce）**：
+   * **按下（Press Down）**：紧致沉稳、迅速到位、无过冲（Damping 1.0f 临界阻尼）。
+     `spring(dampingRatio = 1.0f, stiffness = 700f, visibilityThreshold = 0.0001f)`
+   * **抬手（Release Up）**：水生流体弹性势能释放与二次微弹（Damping 0.35f，Stiffness 450f，Threshold 0.0001f）。
+     * **主过冲（Primary Overshoot）**：在 ~150ms 处膨胀至 ~1.016x（+1.6% 弹性拉伸）；
+     * **二次微弹（Secondary Micro-bounce）**：在 ~310ms 处回落微凹至 ~0.995x（-0.5% 水滴张力收缩）；
+     * **平滑收敛**：在 ~420ms 处自然静止于 1.000x。
+   * **⚠️ 核心暗礁（Compose 阈值抹杀陷阱）**：
+     * Compose 的 `Animatable<Float>` 默认 `visibilityThreshold = 0.01f`（1%）。若不显式指定，当振荡幅度落入 1% 以内时，Compose 动画系统会直接判断达到稳态并强制 snap 到 1.0f，导致过冲和二次微弹在第一帧跨越目标时被瞬间掐灭！
+     * 自定义物理微动效必须显式配置 `visibilityThreshold = 0.0001f`。
 3. **直接操作渲染层（Zero Recomposition）**：
    * 继承 `LayoutModifierNode`，在 `placeWithLayer` 中直接更新 `scaleX` 与 `scaleY`，彻底避免重组开销。

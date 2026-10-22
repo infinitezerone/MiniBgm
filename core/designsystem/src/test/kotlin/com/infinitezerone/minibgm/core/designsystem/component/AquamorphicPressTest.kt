@@ -1,19 +1,114 @@
 package com.infinitezerone.minibgm.core.designsystem.component
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.interaction.Interaction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AquamorphicPressTest {
+
+    private class ManualFrameClock(private val stepNanos: Long = 16_000_000L) : MonotonicFrameClock {
+        private var time = 0L
+
+        override suspend fun <R> withFrameNanos(onFrame: (frameTimeNanos: Long) -> R): R {
+            time += stepNanos
+            return onFrame(time)
+        }
+    }
+
+    @Test
+    fun aquamorphicPressNodeElement_implementsValueEquality() {
+        val source1 = MutableInteractionSource()
+        val source2 = MutableInteractionSource()
+
+        val elem1 = AquamorphicPressNodeElement(source1, 0.95f)
+        val elem2 = AquamorphicPressNodeElement(source1, 0.95f)
+        val elemDifferentScale = AquamorphicPressNodeElement(source1, 0.92f)
+        val elemDifferentSource = AquamorphicPressNodeElement(source2, 0.95f)
+
+        assertEquals(elem1, elem2)
+        assertEquals(elem1.hashCode(), elem2.hashCode())
+        assertNotEquals(elem1, elemDifferentScale)
+        assertNotEquals(elem1, elemDifferentSource)
+    }
+
+    @Test
+    fun aquamorphicPress_releaseSpring_producesSecondaryMicroBounce() = runTest {
+        withContext(ManualFrameClock()) {
+            val animatable =
+                Animatable(
+                    initialValue = 0.95f,
+                    visibilityThreshold = AquamorphicMotionDefaults.PHYSICAL_VISIBILITY_THRESHOLD,
+                )
+            val trajectory = mutableListOf<Float>()
+
+            animatable.animateTo(
+                targetValue = 1f,
+                animationSpec = AquamorphicMotionDefaults.ReleaseReboundSpring,
+            ) {
+                trajectory.add(value)
+            }
+
+            // 1. 验证主过冲（首次回弹冲破 1.0f，膨胀拉伸）
+            val maxOvershoot = trajectory.maxOrNull() ?: 1f
+            assertTrue(
+                "释放回弹必须产生显著主过冲 (需 >= 1.01f), 实际最大值: $maxOvershoot",
+                maxOvershoot >= 1.01f,
+            )
+
+            // 2. 验证二次微弹（过冲波峰后出现水滴表面张力回落并微凹，随后才收敛）
+            val maxIndex = trajectory.indexOf(maxOvershoot)
+            val subsequentValues = trajectory.subList(maxIndex, trajectory.size)
+            val minSecondary = subsequentValues.minOrNull() ?: 1f
+            assertTrue(
+                "释放回弹必须产生二次微弹回落 (需 < 0.998f), 实际二次回落最小值: $minSecondary",
+                minSecondary < 0.998f,
+            )
+
+            // 3. 验证终态严格稳定在 1.0f
+            assertEquals(1f, animatable.value, 0.001f)
+        }
+    }
+
+    @Test
+    fun aquamorphicPress_pressDownSpring_isCriticallyDampedWithoutOvershoot() = runTest {
+        withContext(ManualFrameClock()) {
+            val animatable =
+                Animatable(
+                    initialValue = 1f,
+                    visibilityThreshold = AquamorphicMotionDefaults.PHYSICAL_VISIBILITY_THRESHOLD,
+                )
+            val trajectory = mutableListOf<Float>()
+
+            animatable.animateTo(
+                targetValue = 0.95f,
+                animationSpec = AquamorphicMotionDefaults.PressDownSpring,
+            ) {
+                trajectory.add(value)
+            }
+
+            // 按下阶段为临界阻尼 (Damping 1.0f)，绝不过冲跌破目标缩放比
+            val minScale = trajectory.minOrNull() ?: 1f
+            assertTrue(
+                "按下下沉阶段严禁过冲跌破目标缩放比 (不得低于 0.9499f), 实际最小值: $minScale",
+                minScale >= 0.9499f,
+            )
+            assertEquals(0.95f, animatable.value, 0.001f)
+        }
+    }
 
     @Test
     fun combinedInteractionSource_mergesEventsFromMultipleSources() = runTest {
