@@ -90,7 +90,8 @@ fun ScheduleScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val totalTopChromeHeight = statusBarTop + BgmSpacing.TopBar.height + 56.dp
+    val weekStripHeight = 58.dp
+    val totalTopChromeHeight = statusBarTop + BgmSpacing.TopBar.height + weekStripHeight
 
     // 13天平滑滑动的 Pager，初始定位到今天（索引 6）
     val pagerState =
@@ -195,7 +196,7 @@ fun ScheduleScreen(
 
                 // 顶部星期胶囊导航（指示器 + 快速点击锚点）
                 Box(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 4.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     ModernDateCapsuleStrip(
@@ -285,7 +286,7 @@ fun ScheduleScreen(
                             onPlayClick = onPlayClick,
                             onSwitchToAll = viewModel::toggleOnlyWatching,
                             listState = listState,
-                            topPadding = totalTopChromeHeight + 6.dp,
+                            topPadding = totalTopChromeHeight + 14.dp,
                         )
                     }
                 }

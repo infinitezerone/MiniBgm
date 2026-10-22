@@ -2,11 +2,14 @@ package com.infinitezerone.minibgm.feature.schedule.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -55,11 +58,11 @@ fun ModernDateCapsuleStrip(
     val density = LocalDensity.current
     var containerWidthPx by remember { mutableIntStateOf(0) }
 
-    val capsuleWidthDp = 58.dp
+    val itemWidthDp = 44.dp
     val spacingDp = 8.dp
-    val horizontalPaddingDp = 14.dp
-    val stridePx = with(density) { (capsuleWidthDp + spacingDp).toPx() }
-    val capsuleWidthPx = with(density) { capsuleWidthDp.toPx() }
+    val horizontalPaddingDp = 12.dp
+    val stridePx = with(density) { (itemWidthDp + spacingDp).toPx() }
+    val itemWidthPx = with(density) { itemWidthDp.toPx() }
     val paddingPx = with(density) { horizontalPaddingDp.toPx() }
 
     // 仅当下方的番剧列表 (Pager) 正在被手势滑动时，才像素级同步顶部的星期胶囊条
@@ -73,7 +76,7 @@ fun ModernDateCapsuleStrip(
             }
         }.collect { pageFraction ->
             if (pageFraction != null && scrollState.maxValue > 0 && !scrollState.isScrollInProgress) {
-                val centerPx = paddingPx + pageFraction * stridePx + capsuleWidthPx / 2f
+                val centerPx = paddingPx + pageFraction * stridePx + itemWidthPx / 2f
                 val targetScrollPx =
                     (centerPx - containerWidthPx / 2f)
                         .coerceIn(0f, scrollState.maxValue.toFloat())
@@ -87,7 +90,7 @@ fun ModernDateCapsuleStrip(
     LaunchedEffect(pagerState.currentPage, containerWidthPx) {
         if (containerWidthPx <= 0 || scrollState.maxValue <= 0) return@LaunchedEffect
         if (scrollState.isScrollInProgress) return@LaunchedEffect
-        val centerPx = paddingPx + pagerState.currentPage * stridePx + capsuleWidthPx / 2f
+        val centerPx = paddingPx + pagerState.currentPage * stridePx + itemWidthPx / 2f
         val targetScrollPx =
             (centerPx - containerWidthPx / 2f)
                 .coerceIn(0f, scrollState.maxValue.toFloat())
@@ -102,7 +105,7 @@ fun ModernDateCapsuleStrip(
                 .onGloballyPositioned { coordinates ->
                     containerWidthPx = coordinates.size.width
                 }.horizontalScroll(scrollState)
-                .padding(horizontal = horizontalPaddingDp, vertical = 3.dp),
+                .padding(horizontal = horizontalPaddingDp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(spacingDp),
     ) {
         val activePage = pagerState.currentPage
@@ -128,82 +131,105 @@ fun DateCapsule(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val containerColor =
+    val weekdayText =
+        if (item.isToday) {
+            stringResource(R.string.feature_schedule_weekday_short_today)
+        } else {
+            when (item.weekday) {
+                1 -> stringResource(R.string.feature_schedule_weekday_short_mon)
+                2 -> stringResource(R.string.feature_schedule_weekday_short_tue)
+                3 -> stringResource(R.string.feature_schedule_weekday_short_wed)
+                4 -> stringResource(R.string.feature_schedule_weekday_short_thu)
+                5 -> stringResource(R.string.feature_schedule_weekday_short_fri)
+                6 -> stringResource(R.string.feature_schedule_weekday_short_sat)
+                7 -> stringResource(R.string.feature_schedule_weekday_short_sun)
+                else -> item.weekdayLabel.takeLast(1)
+            }
+        }
+
+    val dayNumber = item.dateLabel.substringAfter('/', item.dateLabel)
+
+    val weekdayTextColor =
+        when {
+            isSelected -> MaterialTheme.colorScheme.primary
+            item.isToday -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+        }
+
+    val circleColor =
         when {
             isSelected -> MaterialTheme.colorScheme.primary
             item.isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-            else -> MaterialTheme.colorScheme.surfaceContainerLow
+            else -> Color.Transparent
         }
 
-    val contentColor =
+    val dateTextColor =
         when {
             isSelected -> MaterialTheme.colorScheme.onPrimary
             item.isToday -> MaterialTheme.colorScheme.primary
             else -> MaterialTheme.colorScheme.onSurface
         }
 
-    val borderColor =
+    val circleBorder =
         when {
-            isSelected -> MaterialTheme.colorScheme.primary
-            item.isToday -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-            else -> Color.Transparent
+            isSelected -> null
+            item.isToday -> BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f))
+            else -> null
         }
 
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = containerColor,
-        border = if (borderColor != Color.Transparent) BorderStroke(1.dp, borderColor) else null,
-        modifier = modifier.width(58.dp),
+    Column(
+        modifier =
+            modifier
+                .width(44.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onClick,
+                )
+                .padding(vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(vertical = 7.dp, horizontal = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+        Text(
+            text = weekdayText,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (isSelected || item.isToday) FontWeight.Bold else FontWeight.Medium,
+            color = weekdayTextColor,
+        )
+
+        Surface(
+            shape = CircleShape,
+            color = circleColor,
+            border = circleBorder,
+            modifier = Modifier.size(32.dp),
         ) {
-            val weekdayText =
-                if (item.isToday) {
-                    stringResource(R.string.feature_schedule_today)
-                } else {
-                    when (item.weekday) {
-                        1 -> stringResource(R.string.feature_schedule_weekday_mon)
-                        2 -> stringResource(R.string.feature_schedule_weekday_tue)
-                        3 -> stringResource(R.string.feature_schedule_weekday_wed)
-                        4 -> stringResource(R.string.feature_schedule_weekday_thu)
-                        5 -> stringResource(R.string.feature_schedule_weekday_fri)
-                        6 -> stringResource(R.string.feature_schedule_weekday_sat)
-                        7 -> stringResource(R.string.feature_schedule_weekday_sun)
-                        else -> item.weekdayLabel
-                    }
-                }
-
-            Text(
-                text = weekdayText,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (isSelected || item.isToday) FontWeight.Bold else FontWeight.Medium,
-                color = contentColor,
-            )
-
-            Text(
-                text = item.dateLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = contentColor.copy(alpha = 0.75f),
-            )
-
-            // 追番小指示器（居中沉底，不挤占文字中心轴）
             Box(
-                modifier = Modifier.height(6.dp),
                 contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxSize(),
             ) {
-                if (watchingCount > 0) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(5.dp)
-                                .clip(CircleShape)
-                                .background(if (isSelected) RatingGoldBright else WishOrange),
-                    )
-                }
+                Text(
+                    text = dayNumber,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (isSelected || item.isToday) FontWeight.Bold else FontWeight.Medium,
+                    color = dateTextColor,
+                )
+            }
+        }
+
+        // 追番小指示器（小圆点）
+        Box(
+            modifier = Modifier.height(5.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (watchingCount > 0) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(4.dp)
+                            .clip(CircleShape)
+                            .background(if (isSelected) RatingGoldBright else WishOrange),
+                )
             }
         }
     }

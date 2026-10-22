@@ -14,6 +14,14 @@
     <string name="feature_schedule_weekday_fri">周五</string>
     <string name="feature_schedule_weekday_sat">周六</string>
     <string name="feature_schedule_weekday_sun">周日</string>
+    <string name="feature_schedule_weekday_short_today">今</string>
+    <string name="feature_schedule_weekday_short_mon">一</string>
+    <string name="feature_schedule_weekday_short_tue">二</string>
+    <string name="feature_schedule_weekday_short_wed">三</string>
+    <string name="feature_schedule_weekday_short_thu">四</string>
+    <string name="feature_schedule_weekday_short_fri">五</string>
+    <string name="feature_schedule_weekday_short_sat">六</string>
+    <string name="feature_schedule_weekday_short_sun">日</string>
 
     <!-- 筛选栏 -->
     <string name="feature_schedule_filter_my_watchlist">我的追番</string>
