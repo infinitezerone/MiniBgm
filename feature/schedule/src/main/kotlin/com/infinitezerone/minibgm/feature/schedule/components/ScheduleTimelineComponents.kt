@@ -534,7 +534,7 @@ fun ScheduleNowIndicator(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(vertical = 4.dp),
+                .padding(top = 2.dp, bottom = 0.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {

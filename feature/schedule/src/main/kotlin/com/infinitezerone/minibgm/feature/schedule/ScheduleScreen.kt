@@ -378,20 +378,34 @@ private fun DayScheduleList(
                 var emittedNowLine = false
                 timeGrouped.entries.forEachIndexed { slotIndex, entry ->
                     if (slotIndex == nowSlotIndex) {
-                        item(key = "now_line_$pageIndex") {
-                            ScheduleNowIndicator(nowMinutesCst = nowMinutes)
+                        item(key = "timeslot_with_now_${pageIndex}_${entry.key}") {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                ScheduleNowIndicator(nowMinutesCst = nowMinutes)
+                                TimelineSlotRow(
+                                    time = entry.key,
+                                    schedules = entry.value,
+                                    isToday = isTodayPage,
+                                    watchingSubjectIds = uiState.watchingSubjectIds,
+                                    onSubjectClick = onSubjectClick,
+                                    currentMinutesCst = nowMinutes,
+                                )
+                            }
                         }
                         emittedNowLine = true
-                    }
-                    item(key = "timeslot_${pageIndex}_${entry.key}") {
-                        TimelineSlotRow(
-                            time = entry.key,
-                            schedules = entry.value,
-                            isToday = isTodayPage,
-                            watchingSubjectIds = uiState.watchingSubjectIds,
-                            onSubjectClick = onSubjectClick,
-                            currentMinutesCst = nowMinutes,
-                        )
+                    } else {
+                        item(key = "timeslot_${pageIndex}_${entry.key}") {
+                            TimelineSlotRow(
+                                time = entry.key,
+                                schedules = entry.value,
+                                isToday = isTodayPage,
+                                watchingSubjectIds = uiState.watchingSubjectIds,
+                                onSubjectClick = onSubjectClick,
+                                currentMinutesCst = nowMinutes,
+                            )
+                        }
                     }
                 }
                 // 已过全天所有时段时，指示线自然收尾到最后一个时段之后
