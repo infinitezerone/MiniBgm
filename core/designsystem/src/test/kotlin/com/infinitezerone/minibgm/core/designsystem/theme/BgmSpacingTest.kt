@@ -37,7 +37,7 @@ class BgmSpacingTest {
     @Test
     fun topBar_keepsCompactHeightAndTouchSafeInsets() {
         assertEquals(48.dp, BgmSpacing.TopBar.height)
-        assertEquals(4.dp, BgmSpacing.TopBar.horizontal)
+        assertEquals(16.dp, BgmSpacing.TopBar.horizontal)
         assertEquals(8.dp, BgmSpacing.TopBar.titleHorizontal)
         assertEquals(1.dp, BgmSpacing.TopBar.hairline)
     }

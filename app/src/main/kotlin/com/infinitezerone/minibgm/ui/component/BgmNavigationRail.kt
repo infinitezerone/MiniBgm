@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -41,19 +42,14 @@ fun BgmNavigationRail(
     onDestinationSelected: (NavKey) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isDark = isSystemInDarkTheme()
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val containerColor =
         if (isDark) {
-            MaterialTheme.colorScheme.surfaceContainerHigh
+            MaterialTheme.colorScheme.surfaceContainerLow
         } else {
             MaterialTheme.colorScheme.surface
         }
-    val effectiveBorder =
-        if (isDark) {
-            BorderStroke(0.5.dp, Color.White.copy(alpha = 0.08f))
-        } else {
-            null
-        }
+    val effectiveBorder = null
     val shape = RoundedCornerShape(24.dp)
 
     Box(

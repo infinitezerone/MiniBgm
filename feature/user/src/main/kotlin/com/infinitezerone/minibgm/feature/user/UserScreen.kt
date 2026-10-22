@@ -267,7 +267,6 @@ fun UserScreenContent(
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 4.dp),
                     ) {
                         FeatureGate(capability = { it.isInternalPlayerEnabled }) {
                             BgmCircleActionButton(

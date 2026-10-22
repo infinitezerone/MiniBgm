@@ -27,12 +27,12 @@ object BgmSpacing {
     val xxxl: Dp = 32.dp
 
     /**
-     * 紧凑顶栏：48dp 高度保证图标按钮仍有 48dp 触控区域，
-     * 左右 4dp 外缩 + 标题 8dp 内缩用于抵消 IconButton 自带内边距。
+     * 现代顶栏：48dp 高度，左右 16dp（BgmSpacing.lg）标准内边距，
+     * 保证实体大圆盘操作键（BgmCircleActionButton）与下方内容卡片网格完美左对齐，远离屏幕边框。
      */
     object TopBar {
         val height: Dp = 48.dp
-        val horizontal: Dp = BgmSpacing.xs
+        val horizontal: Dp = BgmSpacing.lg
         val titleHorizontal: Dp = BgmSpacing.sm
         val hairline: Dp = BgmSpacing.hairline
     }
