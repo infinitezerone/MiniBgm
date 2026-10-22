@@ -59,6 +59,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
@@ -789,12 +790,11 @@ fun SettingsScreenContent(
                 contentMaxWidth = 840.dp,
                 title = { Text(text = stringResource(R.string.feature_user_title_settings)) },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = BgmIcons.ArrowBack,
-                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
-                        )
-                    }
+                    BgmCircleActionButton(
+                        onClick = onBackClick,
+                        icon = BgmIcons.ArrowBack,
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
+                    )
                 },
             )
         },

@@ -6,20 +6,24 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,7 +42,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.infinitezerone.minibgm.core.designsystem.component.expressivePress
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmContentTokens
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.AiConfig
@@ -111,7 +118,7 @@ internal fun SettingsSection(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         AppearanceSettingsCard(
             themeMode = themeMode,
@@ -191,43 +198,75 @@ internal fun AppearanceSettingsCard(
     onToggleDynamicColor: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        Column(modifier = Modifier.padding(vertical = 10.dp)) {
-            Text(
-                text = stringResource(R.string.feature_user_section_appearance),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-            )
-
+    Column(modifier = modifier.fillMaxWidth()) {
+        SettingsSectionHeader(text = stringResource(R.string.feature_user_section_appearance))
+        SettingsCardContainer {
             // 主题模式三选：跟随系统 / 亮色 / 深色
-            Row(
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
-                ThemeMode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = themeMode == mode,
-                        onClick = { onSelectThemeMode(mode) },
-                        label = { Text(mode.displayName) },
-                    )
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    ThemeMode.entries.forEach { mode ->
+                        val isSelected = themeMode == mode
+                        val interactionSource = remember { MutableInteractionSource() }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color =
+                                if (isSelected) {
+                                    MaterialTheme.colorScheme.surfaceContainerHighest
+                                } else {
+                                    Color.Transparent
+                                },
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .height(34.dp)
+                                    .expressivePress(
+                                        interactionSource = interactionSource,
+                                        pressedScale = 0.96f,
+                                    )
+                                    .clickable(
+                                        interactionSource = interactionSource,
+                                        indication = null,
+                                        onClick = { onSelectThemeMode(mode) },
+                                    ),
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxSize(),
+                            ) {
+                                Text(
+                                    text = mode.displayName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    color =
+                                        if (isSelected) {
+                                            MaterialTheme.colorScheme.onSurface
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
+            SettingsDivider()
+
             SettingsItemRow(
                 icon = BgmIcons.Palette,
-                iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(R.string.feature_user_settings_dynamic_color_title),
                 subtitle = null,
                 onClick = { onToggleDynamicColor(!dynamicColor) },
@@ -255,69 +294,40 @@ internal fun PlaybackAndContentSettingsCard(
     danmakuSummary: String? = null,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        Column(modifier = Modifier.padding(vertical = 10.dp)) {
-            Text(
-                text = stringResource(R.string.feature_user_section_playback_content),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-            )
-
+    Column(modifier = modifier.fillMaxWidth()) {
+        SettingsSectionHeader(text = stringResource(R.string.feature_user_section_playback_content))
+        SettingsCardContainer {
             if (onOpenPlaybackRules != null) {
                 SettingsItemRow(
                     icon = BgmIcons.PlayCircle,
-                    iconTint = MaterialTheme.colorScheme.tertiary,
                     title = stringResource(R.string.feature_user_title_playback_rules),
                     subtitle = null,
                     onClick = onOpenPlaybackRules,
                 )
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
+                SettingsDivider()
             }
 
             SettingsItemRow(
                 icon = BgmIcons.Sync,
-                iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(R.string.feature_user_settings_auto_sync_title),
                 subtitle = syncInterval.displayName,
                 onClick = onOpenSyncDialog,
             )
 
             if (onOpenDanmakuSettings != null) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
-
+                SettingsDivider()
                 SettingsItemRow(
                     icon = BgmIcons.ChatBubble,
-                    iconTint = MaterialTheme.colorScheme.secondary,
                     title = stringResource(R.string.feature_user_settings_danmaku_title),
                     subtitle = danmakuSummary,
                     onClick = onOpenDanmakuSettings,
                 )
             }
 
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 18.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-            )
+            SettingsDivider()
 
             SettingsItemRow(
                 icon = BgmIcons.PictureInPicture,
-                iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(R.string.feature_user_settings_pip_title),
                 subtitle = null,
                 onClick = { onTogglePipEnabled(!pipEnabled) },
@@ -329,14 +339,10 @@ internal fun PlaybackAndContentSettingsCard(
                 },
             )
 
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 18.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-            )
+            SettingsDivider()
 
             SettingsItemRow(
                 icon = BgmIcons.VisibilityOff,
-                iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(R.string.feature_user_settings_restricted_content_title),
                 subtitle = null,
                 onClick = { onToggleShowRestrictedContent(!showRestrictedContent) },
@@ -371,33 +377,31 @@ internal fun ReminderSettingsCard(
     onOpenKeepAliveSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        Column(modifier = Modifier.padding(vertical = 10.dp)) {
-            Text(
-                text = stringResource(R.string.feature_user_section_sync_reminder),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-            )
+    val isReminderActive = airingReminderEnabled && hasNotificationPermission
+    val reminderSubtitle =
+        if (!hasNotificationPermission) {
+            stringResource(R.string.feature_user_settings_reminder_perm_subtitle)
+        } else {
+            null
+        }
 
-            val isReminderActive = airingReminderEnabled && hasNotificationPermission
-            val reminderSubtitle =
-                if (!hasNotificationPermission) {
-                    stringResource(R.string.feature_user_settings_reminder_perm_subtitle)
-                } else {
-                    null
-                }
+    Column(modifier = modifier.fillMaxWidth()) {
+        SettingsSectionHeader(text = stringResource(R.string.feature_user_section_sync_reminder))
+        SettingsCardContainer {
             SettingsItemRow(
                 icon = BgmIcons.NotificationsActive,
-                iconTint = if (hasNotificationPermission) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                iconTint =
+                    if (hasNotificationPermission) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                iconContainerColor =
+                    if (hasNotificationPermission) {
+                        MaterialTheme.colorScheme.surfaceContainerHigh
+                    } else {
+                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+                    },
                 title = stringResource(R.string.feature_user_settings_airing_reminder_title),
                 subtitle = reminderSubtitle,
                 onClick = {
@@ -417,15 +421,11 @@ internal fun ReminderSettingsCard(
                 exit = shrinkVertically() + fadeOut(),
             ) {
                 Column {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 18.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                    )
+                    SettingsDivider()
 
                     // 1. 每日更新汇总
                     SettingsItemRow(
                         icon = BgmIcons.Schedule,
-                        iconTint = MaterialTheme.colorScheme.secondary,
                         title = stringResource(R.string.feature_user_settings_daily_summary_title),
                         subtitle = if (airingDailySummaryEnabled) "%02d:00".format(airingReminderHour) else null,
                         onClick = if (airingDailySummaryEnabled) onOpenReminderHourDialog else null,
@@ -437,10 +437,7 @@ internal fun ReminderSettingsCard(
                         },
                     )
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 18.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                    )
+                    SettingsDivider()
 
                     // 2. 新集开播提醒
                     val timingSubtitle =
@@ -460,7 +457,6 @@ internal fun ReminderSettingsCard(
 
                     SettingsItemRow(
                         icon = BgmIcons.PlayCircle,
-                        iconTint = MaterialTheme.colorScheme.tertiary,
                         title = stringResource(R.string.feature_user_settings_pre_air_title),
                         subtitle = null,
                         onClick = null,
@@ -475,22 +471,17 @@ internal fun ReminderSettingsCard(
                     if (airingPreAirEnabled) {
                         SettingsItemRow(
                             icon = BgmIcons.Schedule,
-                            iconTint = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f),
                             title = stringResource(R.string.feature_user_settings_reminder_time_title),
                             subtitle = timingSubtitle,
                             onClick = onOpenTimingBottomSheet,
                         )
                     }
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 18.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                    )
+                    SettingsDivider()
 
                     // 3. 囤番完结提醒
                     SettingsItemRow(
                         icon = BgmIcons.Inventory,
-                        iconTint = MaterialTheme.colorScheme.tertiary,
                         title = stringResource(R.string.feature_user_settings_binge_finale_title),
                         subtitle = null,
                         onClick = null,
@@ -502,34 +493,21 @@ internal fun ReminderSettingsCard(
                         },
                     )
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 18.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                    )
+                    SettingsDivider()
 
                     // 4. 系统通知
                     SettingsItemRow(
                         icon = BgmIcons.OpenInNew,
-                        iconTint = MaterialTheme.colorScheme.primary,
                         title = stringResource(R.string.feature_user_settings_system_notification_title),
                         subtitle = null,
                         onClick = onOpenSystemNotificationSettings,
                     )
 
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 18.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                    )
+                    SettingsDivider()
 
                     // 5. 后台保活
                     SettingsItemRow(
                         icon = BgmIcons.Bolt,
-                        iconTint =
-                            if (isIgnoringBatteryOptimizations) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.tertiary
-                            },
                         title = stringResource(R.string.feature_user_settings_keep_alive_title),
                         subtitle =
                             if (isIgnoringBatteryOptimizations) {
@@ -554,71 +532,46 @@ internal fun DataAndStorageSettingsCard(
     onOpenDownloads: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        Column(modifier = Modifier.padding(vertical = 10.dp)) {
-            Text(
-                text = stringResource(R.string.feature_user_section_data_storage),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-            )
+    val providerDisplay =
+        when (aiConfig.provider) {
+            AiConfig.PROVIDER_OLLAMA -> "Local"
+            AiConfig.PROVIDER_GEMINI -> "Gemini"
+            else -> "Custom"
+        }
+    val modelDisplay =
+        aiConfig.model.ifBlank {
+            when (aiConfig.provider) {
+                AiConfig.PROVIDER_OLLAMA -> "qwen2.5:7b"
+                AiConfig.PROVIDER_GEMINI -> "gemini-2.5-flash"
+                else -> "gpt-4o-mini"
+            }
+        }
 
+    Column(modifier = modifier.fillMaxWidth()) {
+        SettingsSectionHeader(text = stringResource(R.string.feature_user_section_data_storage))
+        SettingsCardContainer {
             if (onOpenDownloads != null) {
                 SettingsItemRow(
                     icon = BgmIcons.Download,
-                    iconTint = MaterialTheme.colorScheme.primary,
                     title = stringResource(R.string.feature_user_downloads_title),
                     subtitle = null,
                     onClick = onOpenDownloads,
                 )
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
+                SettingsDivider()
             }
-
-            val providerDisplay =
-                when (aiConfig.provider) {
-                    AiConfig.PROVIDER_OLLAMA -> "Local"
-                    AiConfig.PROVIDER_GEMINI -> "Gemini"
-                    else -> "Custom"
-                }
-            val modelDisplay =
-                aiConfig.model.ifBlank {
-                    when (aiConfig.provider) {
-                        AiConfig.PROVIDER_OLLAMA -> "qwen2.5:7b"
-                        AiConfig.PROVIDER_GEMINI -> "gemini-2.5-flash"
-                        else -> "gpt-4o-mini"
-                    }
-                }
 
             if (onOpenAiSettingsDialog != null) {
                 SettingsItemRow(
                     icon = BgmIcons.Assistant,
-                    iconTint = MaterialTheme.colorScheme.primary,
                     title = stringResource(R.string.feature_user_settings_ai_config_title),
                     subtitle = "$providerDisplay · $modelDisplay",
                     onClick = onOpenAiSettingsDialog,
                 )
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
+                SettingsDivider()
             }
 
             SettingsItemRow(
                 icon = BgmIcons.CleaningServices,
-                iconTint = MaterialTheme.colorScheme.secondary,
                 title = stringResource(R.string.feature_user_settings_clear_cache_title),
                 subtitle =
                     if (isClearingCache) {
@@ -640,36 +593,13 @@ internal fun DeveloperEntrySettingsCard(
     onOpenDeveloperOptions: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        Column(modifier = Modifier.padding(vertical = 10.dp)) {
-            Text(
-                text = stringResource(R.string.feature_user_section_developer),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-            )
-
+    Column(modifier = modifier.fillMaxWidth()) {
+        SettingsSectionHeader(text = stringResource(R.string.feature_user_section_developer))
+        SettingsCardContainer {
             SettingsItemRow(
                 icon = BgmIcons.BugReport,
-                iconTint = MaterialTheme.colorScheme.tertiary,
                 title = stringResource(R.string.feature_user_dev_options_title),
                 subtitle = null,
-                trailing = {
-                    Icon(
-                        imageVector = BgmIcons.KeyboardArrowRight,
-                        contentDescription = stringResource(R.string.feature_user_dev_options_title),
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                },
                 onClick = onOpenDeveloperOptions,
             )
         }
@@ -692,26 +622,11 @@ internal fun AboutSettingsCard(
                 .orEmpty()
         }
 
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        Column(modifier = Modifier.padding(vertical = 10.dp)) {
-            Text(
-                text = stringResource(R.string.feature_user_section_about),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-            )
-
+    Column(modifier = modifier.fillMaxWidth()) {
+        SettingsSectionHeader(text = stringResource(R.string.feature_user_section_about))
+        SettingsCardContainer {
             SettingsItemRow(
                 icon = BgmIcons.BookmarkBorder,
-                iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(R.string.feature_user_settings_client_title),
                 subtitle = stringResource(R.string.feature_user_settings_client_subtitle, clientVersion),
                 trailing = {
@@ -719,20 +634,16 @@ internal fun AboutSettingsCard(
                         imageVector = BgmIcons.OpenInNew,
                         contentDescription = stringResource(R.string.feature_user_settings_cd_open_github),
                         modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     )
                 },
                 onClick = onVersionClick,
             )
 
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 18.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-            )
+            SettingsDivider()
 
             SettingsItemRow(
                 icon = BgmIcons.SystemUpdate,
-                iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(R.string.feature_user_settings_check_update_title),
                 subtitle =
                     if (isCheckingUpdate) {
@@ -751,21 +662,17 @@ internal fun AboutSettingsCard(
                             imageVector = BgmIcons.KeyboardArrowRight,
                             contentDescription = stringResource(R.string.feature_user_settings_check_update_title),
                             modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         )
                     }
                 },
                 onClick = if (isCheckingUpdate) null else onCheckForUpdate,
             )
 
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 18.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-            )
+            SettingsDivider()
 
             SettingsItemRow(
                 icon = BgmIcons.Language,
-                iconTint = MaterialTheme.colorScheme.secondary,
                 title = stringResource(R.string.feature_user_settings_bgm_site_title),
                 subtitle = null,
                 trailing = {
@@ -773,20 +680,16 @@ internal fun AboutSettingsCard(
                         imageVector = BgmIcons.OpenInNew,
                         contentDescription = stringResource(R.string.feature_user_settings_cd_open_web),
                         modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     )
                 },
                 onClick = { onOpenWebUrl(BGM_HOME_URL) },
             )
 
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 18.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-            )
+            SettingsDivider()
 
             SettingsItemRow(
                 icon = BgmIcons.Info,
-                iconTint = MaterialTheme.colorScheme.tertiary,
                 title = stringResource(R.string.feature_user_settings_wiki_title),
                 subtitle = null,
                 trailing = {
@@ -794,7 +697,7 @@ internal fun AboutSettingsCard(
                         imageVector = BgmIcons.OpenInNew,
                         contentDescription = stringResource(R.string.feature_user_settings_cd_open_web),
                         modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                     )
                 },
                 onClick = { onOpenWebUrl(BGM_WIKI_URL) },
@@ -811,41 +714,27 @@ internal fun AccountSettingsCard(
     onLogoutAllClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
-    ) {
-        Column(modifier = Modifier.padding(vertical = 10.dp)) {
-            Text(
-                text = stringResource(R.string.feature_user_section_account),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-            )
+    val usernameText = activeProfile?.username.orEmpty().ifBlank { activeProfile?.id?.toString().orEmpty() }
 
-            val usernameText = activeProfile?.username.orEmpty().ifBlank { activeProfile?.id?.toString().orEmpty() }
+    Column(modifier = modifier.fillMaxWidth()) {
+        SettingsSectionHeader(text = stringResource(R.string.feature_user_section_account))
+        SettingsCardContainer {
             SettingsItemRow(
                 icon = BgmIcons.Logout,
                 iconTint = MaterialTheme.colorScheme.error,
+                iconContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
                 title = stringResource(R.string.feature_user_logout_current_title),
                 subtitle = if (usernameText.isNotBlank()) "@$usernameText" else null,
                 onClick = onLogoutCurrentClick,
             )
 
             if (savedAccountsCount > 1) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
+                SettingsDivider()
 
                 SettingsItemRow(
                     icon = BgmIcons.Delete,
                     iconTint = MaterialTheme.colorScheme.error,
+                    iconContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
                     title = stringResource(R.string.feature_user_settings_logout_all_title),
                     subtitle = null,
                     onClick = onLogoutAllClick,
@@ -856,52 +745,117 @@ internal fun AccountSettingsCard(
 }
 
 @Composable
+internal fun SettingsSectionHeader(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(start = 12.dp, bottom = 6.dp, top = 4.dp),
+    )
+}
+
+@Composable
+internal fun SettingsCardContainer(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 4.dp),
+            content = content,
+        )
+    }
+}
+
+@Composable
+internal fun SettingsDivider(
+    modifier: Modifier = Modifier,
+) {
+    HorizontalDivider(
+        modifier = modifier.padding(start = 64.dp, end = 16.dp),
+        thickness = 0.5.dp,
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f),
+    )
+}
+
+@Composable
 private fun SettingsItemRow(
     icon: ImageVector,
-    iconTint: androidx.compose.ui.graphics.Color,
     title: String,
-    subtitle: String? = null,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    iconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    iconContainerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
                 .then(
-                    if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier,
-                ).padding(horizontal = 18.dp, vertical = 12.dp),
+                    if (onClick != null) {
+                        Modifier
+                            .expressivePress(
+                                interactionSource = interactionSource,
+                                pressedScale = 0.985f,
+                            )
+                            .clickable(
+                                interactionSource = interactionSource,
+                                indication = null,
+                                onClick = onClick,
+                            )
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(
             shape = RoundedCornerShape(8.dp),
-            color = iconTint.copy(alpha = 0.12f),
-            modifier = Modifier.size(38.dp),
+            color = iconContainerColor,
+            modifier = Modifier.size(36.dp),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = iconTint,
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(19.dp),
                 )
             }
         }
 
-        Spacer(modifier = Modifier.width(14.dp))
+        Spacer(modifier = Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
+                style =
+                    MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
                 color = MaterialTheme.colorScheme.onSurface,
             )
             if (!subtitle.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    style =
+                        MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 12.5.sp,
+                        ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -911,10 +865,10 @@ private fun SettingsItemRow(
             trailing()
         } else if (onClick != null) {
             Icon(
-                imageVector = BgmIcons.ArrowForwardIos,
+                imageVector = BgmIcons.KeyboardArrowRight,
                 contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
         }
     }
