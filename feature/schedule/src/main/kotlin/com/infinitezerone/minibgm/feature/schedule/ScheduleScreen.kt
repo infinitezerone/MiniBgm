@@ -340,7 +340,7 @@ private fun DayScheduleList(
     ) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(start = 12.dp, end = 16.dp, top = topPadding, bottom = 96.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topPadding, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(TIMELINE_SLOT_SPACING),
             modifier = Modifier.fillMaxSize().widthIn(max = 840.dp),
         ) {

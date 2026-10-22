@@ -45,65 +45,49 @@ fun ScheduleTimelineSkeleton(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         userScrollEnabled = false,
     ) {
-        items(6) { index ->
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .drawBehind {
-                            val trackCenterX = 50.dp.toPx()
-                            val dotCenterY = 18.dp.toPx()
-
-                            if (index < 5) {
-                                drawLine(
-                                    color = outlineVariant,
-                                    start = Offset(trackCenterX, dotCenterY),
-                                    end = Offset(trackCenterX, size.height + 16.dp.toPx()),
-                                    strokeWidth = 2.dp.toPx(),
-                                )
-                            }
-                            drawCircle(
-                                color = dotColor,
-                                radius = 4.dp.toPx(),
-                                center = Offset(trackCenterX, dotCenterY),
-                            )
-                        },
-                verticalAlignment = Alignment.Top,
+        items(5) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // 左侧时间占位
-                Column(
-                    modifier = Modifier.width(44.dp).padding(top = 10.dp),
-                    horizontalAlignment = Alignment.End,
+                // 时间标头占位
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     SkeletonBox(
-                        modifier = Modifier.width(36.dp).height(14.dp),
+                        modifier = Modifier.width(48.dp).height(16.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        state = skeletonState,
+                    )
+                    SkeletonBox(
+                        modifier = Modifier.width(42.dp).height(14.dp),
                         shape = RoundedCornerShape(4.dp),
                         state = skeletonState,
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // 右侧卡片占位
+                // 全幅通透卡片占位
                 Card(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().height(112.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors =
                         CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                         ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(10.dp),
+                        modifier = Modifier.fillMaxSize().padding(10.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // 海报占位（保持 0.7f 比例与实际海报一致）
+                        // 海报占位
                         SkeletonBox(
                             modifier =
                                 Modifier
-                                    .width(58.dp)
+                                    .fillMaxHeight()
                                     .aspectRatio(0.7f),
                             shape = RoundedCornerShape(8.dp),
                             state = skeletonState,
@@ -111,28 +95,34 @@ fun ScheduleTimelineSkeleton(
 
                         // 文本信息占位
                         Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            verticalArrangement = Arrangement.SpaceBetween,
                         ) {
-                            SkeletonBox(
-                                modifier = Modifier.fillMaxWidth(0.78f).height(16.dp),
-                                shape = RoundedCornerShape(4.dp),
-                                state = skeletonState,
-                            )
-                            SkeletonBox(
-                                modifier = Modifier.fillMaxWidth(0.48f).height(12.dp),
-                                shape = RoundedCornerShape(4.dp),
-                                state = skeletonState,
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 SkeletonBox(
-                                    modifier = Modifier.size(width = 54.dp, height = 20.dp),
-                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth(0.7f).height(16.dp),
+                                    shape = RoundedCornerShape(4.dp),
                                     state = skeletonState,
                                 )
                                 SkeletonBox(
-                                    modifier = Modifier.size(width = 42.dp, height = 20.dp),
-                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.fillMaxWidth(0.45f).height(12.dp),
+                                    shape = RoundedCornerShape(4.dp),
+                                    state = skeletonState,
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                SkeletonBox(
+                                    modifier = Modifier.width(48.dp).height(16.dp),
+                                    shape = RoundedCornerShape(4.dp),
+                                    state = skeletonState,
+                                )
+                                SkeletonBox(
+                                    modifier = Modifier.width(40.dp).height(16.dp),
+                                    shape = RoundedCornerShape(4.dp),
                                     state = skeletonState,
                                 )
                             }

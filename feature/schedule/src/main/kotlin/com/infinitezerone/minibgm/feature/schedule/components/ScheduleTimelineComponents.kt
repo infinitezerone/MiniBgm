@@ -121,7 +121,7 @@ fun countdownLabel(
     }
 }
 
-/** 时间线单行插槽：左侧醒目时间轴轨道 + 右侧番剧卡片/聚合卡片 */
+/** 时间线单行插槽：顶部时间与状态标题 + 完整通透番剧卡片流（彻底告别狭窄挤占的左侧轨道） */
 @Composable
 fun TimelineSlotRow(
     time: String,
@@ -139,95 +139,31 @@ fun TimelineSlotRow(
         } else {
             null
         }
-    val outlineVariant = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-    val statusColor =
-        when (airStatus) {
-            AirStatus.AIRING -> StatusAiring
-            AirStatus.UPCOMING -> MaterialTheme.colorScheme.primary
-            AirStatus.AIRED -> MaterialTheme.colorScheme.outline
-            AirStatus.NORMAL -> MaterialTheme.colorScheme.onSurfaceVariant
-        }
 
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .drawBehind {
-                    // 左侧轨道轨线与节点绘制在 draw 阶段，消除 IntrinsicSize.Min 双重测量开销
-                    val trackCenterX = 50.dp.toPx()
-                    val dotCenterY = 12.dp.toPx()
-
-                    // 垂直轨道连线（向下延伸一个插槽间距，与相邻行首绘的线段拼成连续轨道）
-                    drawLine(
-                        color = outlineVariant,
-                        start = Offset(trackCenterX, 0f),
-                        end = Offset(trackCenterX, size.height + TIMELINE_SLOT_SPACING.toPx()),
-                        strokeWidth = 2.dp.toPx(),
-                    )
-
-                    // 状态节点
-                    when (airStatus) {
-                        AirStatus.AIRING -> {
-                            drawCircle(
-                                color = StatusAiring.copy(alpha = 0.25f),
-                                radius = 7.dp.toPx(),
-                                center = Offset(trackCenterX, dotCenterY),
-                            )
-                            drawCircle(
-                                color = StatusAiring,
-                                radius = 3.5.dp.toPx(),
-                                center = Offset(trackCenterX, dotCenterY),
-                            )
-                        }
-                        AirStatus.UPCOMING -> {
-                            drawCircle(
-                                color = statusColor.copy(alpha = 0.2f),
-                                radius = 6.dp.toPx(),
-                                center = Offset(trackCenterX, dotCenterY),
-                            )
-                            drawCircle(
-                                color = statusColor,
-                                radius = 3.dp.toPx(),
-                                center = Offset(trackCenterX, dotCenterY),
-                            )
-                        }
-                        else -> {
-                            drawCircle(
-                                color = outlineVariant,
-                                radius = 3.dp.toPx(),
-                                center = Offset(trackCenterX, dotCenterY),
-                            )
-                        }
-                    }
-                },
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        TimelineTrackRail(
+        TimelineSlotHeader(
             time = time,
             airStatus = airStatus,
             count = schedules.size,
             upcomingCountdown = upcomingCountdown,
-            modifier = Modifier.width(56.dp),
         )
 
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            schedules.forEach { singleSchedule ->
-                ScheduleTimelineSingleCard(
-                    schedule = singleSchedule,
-                    isWatching = watchingSubjectIds.contains(singleSchedule.bgmId),
-                    onSubjectClick = onSubjectClick,
-                )
-            }
+        schedules.forEach { singleSchedule ->
+            ScheduleTimelineSingleCard(
+                schedule = singleSchedule,
+                isWatching = watchingSubjectIds.contains(singleSchedule.bgmId),
+                onSubjectClick = onSubjectClick,
+            )
         }
     }
 }
 
-/** 垂直时间线轨道：醒目的时间数值、状态标识（待播时显示实时倒计时）、连接线与节点 */
+/** 时间时段标头：醒目时间数值、状态标识与数量，告别死线挤压，排印沉静清晰 */
 @Composable
-fun TimelineTrackRail(
+fun TimelineSlotHeader(
     time: String,
     airStatus: AirStatus,
     count: Int,
@@ -243,29 +179,24 @@ fun TimelineTrackRail(
         }
 
     Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.Top,
+        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 左列：时间数值与状态标签
-        Column(
-            horizontalAlignment = Alignment.End,
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .padding(top = 2.dp),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = time,
-                style = MaterialTheme.typography.titleSmall.copy(fontSize = 14.sp, fontWeight = FontWeight.ExtraBold),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
                 color =
                     when (airStatus) {
                         AirStatus.AIRING -> StatusAiring
                         AirStatus.UPCOMING -> MaterialTheme.colorScheme.primary
-                        AirStatus.AIRED -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        AirStatus.AIRED -> MaterialTheme.colorScheme.onSurfaceVariant
                         AirStatus.NORMAL -> MaterialTheme.colorScheme.onSurface
                     },
-                maxLines = 1,
             )
 
             if (airStatus != AirStatus.NORMAL) {
@@ -277,41 +208,40 @@ fun TimelineTrackRail(
                         AirStatus.NORMAL -> ""
                     }
                 if (statusText.isNotBlank()) {
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        fontWeight = FontWeight.Bold,
-                        color = statusColor,
-                        maxLines = 1,
-                    )
-                }
-            }
-
-            if (count > 1) {
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
-                    modifier = Modifier.padding(top = 2.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.feature_schedule_anime_count, count),
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.5.sp),
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = statusColor.copy(alpha = 0.12f),
+                    ) {
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                            color = statusColor,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
                 }
             }
         }
 
-        // 右列：占位 8.dp，轨道线与节点由父级 Row 的 drawBehind 统一绘制
-        Spacer(modifier = Modifier.width(8.dp))
+        if (count > 1) {
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.7f),
+            ) {
+                Text(
+                    text = stringResource(R.string.feature_schedule_anime_count, count),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.5.sp, fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+        }
     }
 }
 
 /**
- * 单番时间线卡片（紧凑行）：
- * 左侧海报只保留评分角标，首播/在追状态由集数徽章与右侧书签图标表达，播放入口收敛为圆形图标按钮。
+ * 单番现代时间线卡片：
+ * 采用全幅通透卡片、加上海报高度、强化排印对比、纯净实体色阶分层。
  */
 @Composable
 fun ScheduleTimelineSingleCard(
@@ -320,12 +250,11 @@ fun ScheduleTimelineSingleCard(
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val haptic = LocalHapticFeedback.current
     val displayName = schedule.displayName
     val score = schedule.ratingScore
     val isFirstEp = schedule.nextEpisodeNumber == 1
 
-    BgmFloatingFrame(
+    Card(
         onClick = {
             onSubjectClick(
                 SubjectDetailRoute(
@@ -337,34 +266,38 @@ fun ScheduleTimelineSingleCard(
                 ),
             )
         },
-        containerColor =
-            if (isWatching) {
-                MaterialTheme.colorScheme.surfaceContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
-            },
+        shape = RoundedCornerShape(16.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    if (isWatching) {
+                        MaterialTheme.colorScheme.surfaceContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerLow
+                    },
+            ),
         border =
             if (isWatching) {
-                BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
             } else {
                 BorderStroke(
                     width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = BgmFloatingFrameDefaults.BorderAlpha),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
                 )
             },
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-        modifier = modifier.fillMaxWidth().height(96.dp),
+        modifier = modifier.fillMaxWidth().height(112.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 1. 封面海报（内部 72dp 高，宽约 50dp）
+            // 1. 舒展封面海报（高度充实至 92dp，宽约 64dp）
             Box(
                 modifier =
                     Modifier
                         .fillMaxHeight()
-                        .aspectRatio(0.7f)
+                        .aspectRatio(BGM_POSTER_ASPECT_RATIO)
+                        .clip(RoundedCornerShape(8.dp))
                         .bgmSharedElement(
                             key = BgmSharedElementKeys.subjectCover(schedule.bgmId, "schedule"),
                             clipInOverlayDuringTransition = RoundedCornerShape(8.dp),
@@ -378,7 +311,7 @@ fun ScheduleTimelineSingleCard(
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                // 封面左下角：Bangumi 评分
+                // 封面左下角：评分徽章
                 ScoreBadge(
                     score = score,
                     modifier = Modifier.align(Alignment.BottomStart),
@@ -389,14 +322,14 @@ fun ScheduleTimelineSingleCard(
                 )
             }
 
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(12.dp))
 
-            // 2. 信息列：标题 + 原名/副标 + 状态与快捷操作
+            // 2. 信息列：纯白大标题 + 优雅副标 + 底部状态与操作
             Column(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth(),
@@ -404,9 +337,9 @@ fun ScheduleTimelineSingleCard(
                         Text(
                             text = displayName,
                             style =
-                                MaterialTheme.typography.titleSmall.copy(
-                                    fontSize = 14.sp,
-                                    lineHeight = 18.sp,
+                                MaterialTheme.typography.titleMedium.copy(
+                                    fontSize = 15.sp,
+                                    lineHeight = 19.sp,
                                     fontWeight = FontWeight.Bold,
                                 ),
                             color = MaterialTheme.colorScheme.onSurface,
@@ -424,7 +357,7 @@ fun ScheduleTimelineSingleCard(
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                    modifier = Modifier.padding(horizontal = 4.5.dp, vertical = 1.dp),
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
                                 ) {
                                     Icon(
                                         imageVector = BgmIcons.Bookmark,
@@ -446,16 +379,15 @@ fun ScheduleTimelineSingleCard(
                     if (schedule.title.isNotBlank() && schedule.title != displayName) {
                         Text(
                             text = schedule.title,
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth().padding(top = 1.dp),
                         )
                     }
                 }
 
-                // 底行：集数徽章 + 首选播映平台 + 播放/找源按钮
+                // 底行：集数徽章 + 首选播映平台
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth(),
@@ -486,7 +418,7 @@ fun ScheduleTimelineSingleCard(
                                     } else {
                                         MaterialTheme.colorScheme.primary
                                     },
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }
                     }
@@ -502,7 +434,7 @@ fun ScheduleTimelineSingleCard(
                                 text = primarySite.displayName.ifBlank { primarySite.siteName },
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 4.5.dp, vertical = 1.dp),
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
                             )
                         }
                     }
@@ -512,59 +444,29 @@ fun ScheduleTimelineSingleCard(
     }
 }
 
-/** 今日时间线上的「现在」指示：插在上一个已开播时段与下一个未开播时段之间，承担时间轴的当前时刻锚点 */
+/** 今日时间线上的「现在」指示：贯穿全宽的精细指示线与实心发光节点 */
 @Composable
 fun ScheduleNowIndicator(
     nowMinutesCst: Int,
     modifier: Modifier = Modifier,
 ) {
     val nowLabel = String.format(java.util.Locale.US, "%02d:%02d", nowMinutesCst / 60, nowMinutesCst % 60)
-    val outlineVariant = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
 
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
-                .height(24.dp)
-                .drawBehind {
-                    val trackCenterX = 50.dp.toPx()
-                    val dotCenterY = size.height / 2f
-
-                    // 1. 垂直主轨道线：贯穿全高并向下延伸 TIMELINE_SLOT_SPACING，与相邻行完全连通无断点
-                    drawLine(
-                        color = outlineVariant,
-                        start = Offset(trackCenterX, 0f),
-                        end = Offset(trackCenterX, size.height + TIMELINE_SLOT_SPACING.toPx()),
-                        strokeWidth = 2.dp.toPx(),
-                    )
-
-                    // 2. 状态节点（发光外环 + 实心圆点）
-                    drawCircle(
-                        color = StatusAiring.copy(alpha = 0.25f),
-                        radius = 6.dp.toPx(),
-                        center = Offset(trackCenterX, dotCenterY),
-                    )
-                    drawCircle(
-                        color = StatusAiring,
-                        radius = 3.5.dp.toPx(),
-                        center = Offset(trackCenterX, dotCenterY),
-                    )
-                },
+                .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // 占位正好到 trackCenterX（50.dp），横线直接从垂直节点圆心出发
-        Spacer(modifier = Modifier.width(50.dp))
-
-        // 紧贴垂直节点圆心横向拉出的指示线，与垂直轨道无缝相交
         Box(
             modifier =
                 Modifier
                     .weight(1f)
-                    .height(1.5.dp)
-                    .background(StatusAiring.copy(alpha = 0.6f)),
+                    .height(1.dp)
+                    .background(StatusAiring.copy(alpha = 0.45f)),
         )
-
-        Spacer(modifier = Modifier.width(6.dp))
 
         Surface(
             shape = RoundedCornerShape(8.dp),
@@ -590,7 +492,16 @@ fun ScheduleNowIndicator(
                 )
             }
         }
+
+        Box(
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .height(1.dp)
+                    .background(StatusAiring.copy(alpha = 0.45f)),
+        )
     }
+}
 }
 
 /** 全天 / 时间待定番剧自然收容折叠区 */
