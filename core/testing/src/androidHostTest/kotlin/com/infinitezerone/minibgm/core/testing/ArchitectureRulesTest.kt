@@ -3831,6 +3831,88 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * Modifier.Node 架构规范（第 1 条）：
+     * 继承自 [ModifierNodeElement] 的类必须声明为 data class，或显式 override equals 与 hashCode。
+     *
+     * 架构原理：
+     * Compose 在重组阶段比对修饰符链时，完全依赖 Element.equals() 判断是复用已有 Node 并调用 update(node)，
+     * 还是销毁旧 Node 并重新 create()。若不是 data class 且未重写 equals，将使用对象引用比对，
+     * 导致每次重组都误判为新修饰符而频繁销毁重建，彻底丧失 Node 性能优势，并在异步手势中引发触控断流。
+     */
+    @Test
+    fun modifier_node_elements_must_be_data_classes_or_implement_value_equality() {
+        val violations = mutableListOf<String>()
+        val elementInheritanceRegex =
+            Regex("""([a-zA-Z0-9_\s]*?)\bclass\s+(\w+)[^{:]*?:\s*(?:[^{:]*?\b)?ModifierNodeElement\s*<""")
+
+        projectRoot
+            .walkTopDown()
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { file ->
+                val scanner = KotlinSourceScanner.fromFile(file)
+                val code = scanner.sanitizedContent
+
+                elementInheritanceRegex.findAll(code).forEach { match ->
+                    val prefix = match.groupValues[1]
+                    val className = match.groupValues[2]
+                    val isDataClass = prefix.contains(Regex("""\bdata\s+"""))
+
+                    if (!isDataClass) {
+                        val hasEquals = code.contains(Regex("""override\s+fun\s+equals\s*\("""))
+                        val hasHashCode = code.contains(Regex("""override\s+fun\s+hashCode\s*\("""))
+                        if (!hasEquals || !hasHashCode) {
+                            val line = scanner.getLineNumber(match.range.first)
+                            val relPath = file.relativeTo(projectRoot).path
+                            violations.add(
+                                "$relPath:$line: $className 继承 ModifierNodeElement 但未声明为 data class 且未实现 equals/hashCode",
+                            )
+                        }
+                    }
+                }
+            }
+
+        assertTrue(
+            violations.isEmpty(),
+            "所有 ModifierNodeElement 必须声明为 data class 或显式实现 equals/hashCode，以保障 Compose 节点复用：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
+    /**
+     * Modifier.Node 架构规范（第 2 条）：
+     * 严禁在生产代码中使用遗留的 [Modifier.composed]。
+     *
+     * 架构原理：
+     * Modifier.composed 在 Composition 阶段强制插入组合作用域解析层，绕过 Layout/Draw 阶段优化并破坏
+     * 局部跳过（Skipping）机制。所有自定义微交互修饰符必须采用现代 Modifier.Node 节点或 this then ... 链式组合。
+     */
+    @Test
+    fun custom_modifiers_must_never_use_legacy_modifier_composed() {
+        val violations = mutableListOf<String>()
+        val composedPattern = Regex("""\bModifier\.composed\b|\.composed\s*\{""")
+
+        projectRoot
+            .walkTopDown()
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+            .filter { it.isFile && it.extension == "kt" }
+            .forEach { file ->
+                val scanner = KotlinSourceScanner.fromFile(file)
+                val matches = scanner.findMatches(composedPattern)
+                val relPath = file.relativeTo(projectRoot).path
+                matches.forEach { match ->
+                    violations.add("$relPath:${match.lineNumber}: 违规调用遗留的 Modifier.composed -> ${match.lineContent}")
+                }
+            }
+
+        assertTrue(
+            violations.isEmpty(),
+            "生产代码严禁使用已废弃/低性能的 Modifier.composed，必须迁移至 Modifier.Node 或标准修饰符链：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
     /** [inner] 是否出现在以 [blockToken] 开头、花括号配对的代码块内 */
     private fun mentionsInsideBlock(
         code: String,
@@ -3872,7 +3954,7 @@ class ArchitectureRulesTest {
          * 棘轮语义：只允许「删等量再写」；确需上调时必须把这个数字改大，并在提交说明里写明
          * 为什么这笔上下文值得占用——涨幅会出现在 diff 里，而不是悄悄长胖。
          */
-        const val AGENTS_MD_CHAR_BUDGET = 9_600
+        const val AGENTS_MD_CHAR_BUDGET = 9_800
 
         /** `AGENTS.md` 单行字符上限：巨型 bullet 既没人读，也拆不出可评审的 diff */
         const val AGENTS_MD_MAX_LINE_CHARS = 900

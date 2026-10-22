@@ -31,6 +31,7 @@ description: >-
 | 播放器手势 / 进度条 / HUD 稳定性 | `references/playbook-16-player-gestures.md` |
 | 播放源订阅与规则导入 | `references/playbook-15-subscription-integrity.md` |
 | 装饰性功能 fail-open / 硬件位图安全 | `references/playbook-05-fail-open-decoration.md` |
+| 现代 Modifier.Node / 自定义微交互修饰符 / 水生动效与触控反馈 | `references/playbook-19-modifier-node-architecture.md` |
 
 ## 跨剧本铁律
 
