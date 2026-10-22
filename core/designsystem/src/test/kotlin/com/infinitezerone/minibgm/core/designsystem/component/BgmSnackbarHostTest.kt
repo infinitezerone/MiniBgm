@@ -6,10 +6,10 @@ import kotlin.test.assertEquals
 
 class BgmSnackbarHostTest {
     @Test
-    fun floatingBarClearance_is72Dp() {
-        // 手机端居中悬浮胶囊底栏自身高度 52dp + 底部下沉外边距 12dp = 64dp。
-        // 加 8dp 安全呼吸间距，合计 72dp，确保顶层页面 Snackbar 无论在手势条还是三大金刚键下均不遮挡。
-        assertEquals(72.dp, BgmSnackbarDefaults.FloatingBarClearance)
+    fun floatingBarClearance_is76Dp() {
+        // 手机端居中悬浮胶囊底栏自身高度 56dp + 底部下沉外边距 12dp = 68dp。
+        // 加 8dp 安全呼吸间距，合计 76dp，确保顶层页面 Snackbar 无论在手势条还是三大金刚键下均不遮挡。
+        assertEquals(76.dp, BgmSnackbarDefaults.FloatingBarClearance)
     }
 
     @Test
@@ -25,7 +25,7 @@ class BgmSnackbarHostTest {
                 isTopLevel = true,
                 isWideScreen = false,
             )
-        assertEquals(72.dp, padding)
+        assertEquals(76.dp, padding)
     }
 
     @Test
@@ -36,7 +36,7 @@ class BgmSnackbarHostTest {
                 isWideScreen = false,
                 bottomOffset = 8.dp,
             )
-        assertEquals(80.dp, padding)
+        assertEquals(84.dp, padding)
     }
 
     @Test

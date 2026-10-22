@@ -53,7 +53,7 @@
 | `BgmShapes.extraLarge` | `24dp` | M3 `28dp` | 与悬浮导航、底部抽屉的现有轮廓一致。 |
 | `BgmElevation` | `2 / 10 / 12dp` | M3 elevation levels `0/1/3/6/8/12` | 用语义重量替代档位编号，避免所有浮层共用同一阴影。 |
 | `BgmMotion.standardEasing` | `FastOutSlowIn` | M3 standard `CubicBezier(0.2, 0, 0, 1)` | 保留现有过场观感；若切换到严格 M3 动效，需要单独做视觉验收。 |
-| 悬浮底栏紧凑几何 | `theme/Spacing.kt` | 52dp 紧凑微胶囊、18dp 图标、4dp 垂直呼吸、72dp Snackbar 避让 | `PROJECT` | 削减虚高 16dp，从 68dp 臃肿形态收敛为 52dp 灵动修长琴键，释放首屏浏览空间。 |
+| 悬浮底栏紧凑几何 | `theme/Spacing.kt` | 56dp 紧凑微浮岛、24dp 图标、零指示器纯净图文、76dp Snackbar 避让 | `PROJECT` | 采用标准 56dp 8dp栅格几何，24dp 饱满图标，移除指示器背景，释放首屏浏览空间。 |
 | 踏实内容 UI 规范 | 全站通用卡片与组件 | 纯净实体色阶、零死描边（`border = null` 或低透明度融合）、2dp 柔和环境微阴影 | `OS` + `PROJECT` | 内容层（卡片、Tag、分集项）同源遵守踏实、纯净实体风格：拒绝塑料半透与颗粒噪点，依靠纯色阶反差（`surfaceContainerLow`）建立层级，保障高密度排版与阅读沉浸感。 |
 | 玻璃材质 | 三层自定义 alpha 与形状 | 无公开 token 规范 | 属于品牌视觉层，不是可移植的规范 token。 |
 
