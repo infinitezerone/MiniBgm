@@ -44,27 +44,21 @@ class LuminousChromeScreenshotTest {
 
     @Test
     fun luminousChrome_light() {
-        capture(darkTheme = false, amoledDark = false, path = "luminous_chrome_light.png")
+        capture(darkTheme = false, path = "luminous_chrome_light.png")
     }
 
     @Test
     fun luminousChrome_dark() {
-        capture(darkTheme = true, amoledDark = false, path = "luminous_chrome_dark.png")
-    }
-
-    @Test
-    fun luminousChrome_amoled() {
-        capture(darkTheme = true, amoledDark = true, path = "luminous_chrome_amoled.png")
+        capture(darkTheme = true, path = "luminous_chrome_dark.png")
     }
 
     @Test
     fun luminousChrome_largeFont() {
-        capture(darkTheme = false, amoledDark = false, path = "luminous_chrome_large_font.png", fontScale = 1.4f)
+        capture(darkTheme = false, path = "luminous_chrome_large_font.png", fontScale = 1.4f)
     }
 
     private fun capture(
         darkTheme: Boolean,
-        amoledDark: Boolean,
         path: String,
         fontScale: Float = 1f,
     ) {
@@ -75,7 +69,6 @@ class LuminousChromeScreenshotTest {
             ) {
                 MiniBgmTheme(
                     darkTheme = darkTheme,
-                    amoledDark = amoledDark,
                     uiStyle = AppUiStyle.Luminous,
                 ) {
                     LuminousChromePreview()

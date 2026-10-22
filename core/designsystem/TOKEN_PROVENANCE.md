@@ -26,7 +26,6 @@
 | --- | --- | --- | --- | --- |
 | 品牌锚点 | `theme/Color.kt` | `BgmPink #F09199`、`#FEDFE1`、`#D05A3F` | `BRAND` | Bangumi 经典樱花粉，作为品牌种子色保留。 |
 | M3 颜色角色 | `theme/Color.kt`、`theme/Theme.kt` | primary / secondary / tertiary / error / surface / outline 等完整角色 | `M3` | 采用 M3 角色结构；十六进制值为手工维护，不依赖运行时生成。`dynamicColor=true` 时由系统 Material You 配色接管。 |
-| AMOLED 表面阶梯 | `theme/Color.kt`、`theme/Theme.kt` | `#000000`、`#0A0A0C`、`#101114`、`#16181C`、`#1D1F24` | `PROJECT` | M3 没有 AMOLED 纯黑档；仅替换表面与容器，品牌色和文本角色沿用深色档。 |
 | 收藏状态色 | `theme/SemanticColors.kt` | 主色 Tailwind 400；浅色容器 50/100；前景 700/800；暗色容器自定义 | `TW` + `PROJECT` | indigo / emerald / pink / amber 使用 400 + 50 + 800，slate 使用 400 + 100 + 700；暗色容器为项目校准。原注释写 Radix，已校正为 Tailwind。 |
 | 放送、评分、类型色 | `theme/SemanticColors.kt` | `#FF5722`、`#3F51B5`、`#F59E0B`、Material 50/700 阶梯等 | `M2` + `M3` + `BRAND` + `PROJECT` | 放送橙和经典徽章蓝接近 Material 色板；评分金接近 Tailwind amber；类型色以 Material 50/700 为底；平台色取 Bilibili / Mikan 品牌色。暗色容器为项目值。 |
 | 字体 | `theme/Type.kt` | display 57/45/36，headline 32/28/24，title 20/16/14，body 16/14/12，label 14/12/11 | `M3` + `PROJECT` | 15 级 type scale 来自 M3；`titleLarge` 使用 20/26（M3 默认 22/28），行高、字重和字距按中日文条目密度微调；字体族使用系统默认。 |

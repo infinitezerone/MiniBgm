@@ -68,22 +68,16 @@ class FloatingShellScreenshotTest {
 
     @Test
     fun floatingShell_light() {
-        capture(darkTheme = false, amoledDark = false, path = "floating_shell_light.png")
+        capture(darkTheme = false, path = "floating_shell_light.png")
     }
 
     @Test
     fun floatingShell_dark() {
-        capture(darkTheme = true, amoledDark = false, path = "floating_shell_dark.png")
-    }
-
-    @Test
-    fun floatingShell_amoled() {
-        capture(darkTheme = true, amoledDark = true, path = "floating_shell_amoled.png")
+        capture(darkTheme = true, path = "floating_shell_dark.png")
     }
 
     private fun capture(
         darkTheme: Boolean,
-        amoledDark: Boolean,
         path: String,
     ) {
         System.setProperty("roborazzi.test.record", "true")
@@ -94,7 +88,6 @@ class FloatingShellScreenshotTest {
         composeTestRule.setContent {
             MiniBgmTheme(
                 darkTheme = darkTheme,
-                amoledDark = amoledDark,
                 uiStyle = AppUiStyle.Luminous,
             ) {
                 FloatingShellPreview()

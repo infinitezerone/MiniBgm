@@ -71,7 +71,6 @@
     <!-- 5. 设置页：外观与播放 -->
     <string name="feature_user_section_appearance">外观显示</string>
     <string name="feature_user_settings_dynamic_color_title">动态取色</string>
-    <string name="feature_user_settings_amoled_title">AMOLED 纯黑</string>
     <string name="feature_user_section_playback_content">播放与内容</string>
     <string name="feature_user_settings_pip_title">自动画中画</string>
     <string name="feature_user_settings_restricted_content_title">受限内容</string>

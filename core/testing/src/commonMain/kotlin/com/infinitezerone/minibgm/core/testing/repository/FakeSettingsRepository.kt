@@ -30,8 +30,6 @@ class FakeSettingsRepository(
         private set
     var setDanmakuConfigCallCount: Int = 0
         private set
-    var setAmoledDarkModeCallCount: Int = 0
-        private set
     var setThemeModeCallCount: Int = 0
         private set
     var setDynamicColorCallCount: Int = 0
@@ -107,11 +105,6 @@ class FakeSettingsRepository(
                 notifyBeforeAirMinutes = if (clamped < 0) -clamped else 0,
                 airDelayOffsetMinutes = if (clamped > 0) clamped else 0,
             )
-    }
-
-    override suspend fun setAmoledDarkMode(enabled: Boolean) {
-        setAmoledDarkModeCallCount++
-        settingsState.value = settingsState.value.copy(amoledDarkMode = enabled)
     }
 
     override suspend fun setThemeMode(mode: ThemeMode) {

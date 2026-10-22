@@ -68,13 +68,6 @@ class UserPreferencesDataSource(
         }
     }
 
-    /** AMOLED 纯黑模式开关（仅在深色模式下生效） */
-    suspend fun setAmoledDarkMode(enabled: Boolean) {
-        dataStore.updateData { current ->
-            current.copy(amoledDarkMode = enabled)
-        }
-    }
-
     /** 画中画模式开关（开启后播放中划回桌面自动进入小窗） */
     suspend fun setPipEnabled(enabled: Boolean) {
         dataStore.updateData { current ->

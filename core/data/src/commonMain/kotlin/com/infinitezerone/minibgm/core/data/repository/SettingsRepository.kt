@@ -45,8 +45,6 @@ data class UserSettings(
     val airingNotificationOffsetMinutes: Int = -15,
     val aiConfig: AiConfig = AiConfig(),
     val danmakuConfig: DanmakuConfig = DanmakuConfig(),
-    /** AMOLED 纯黑模式（仅在深色模式下生效：表面/容器阶梯取纯黑或近纯黑） */
-    val amoledDarkMode: Boolean = false,
     /** 主题模式：跟随系统 / 强制亮色 / 强制深色 */
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** Material You 动态取色（minSdk 31 恒可用） */
@@ -108,9 +106,6 @@ interface SettingsRepository {
 
     /** 单集提醒时机相对开播时刻的偏移量（分钟，负数提前，0准时，正数延后） */
     suspend fun setAiringNotificationOffsetMinutes(offsetMinutes: Int)
-
-    /** AMOLED 纯黑模式开关（仅在深色模式下生效） */
-    suspend fun setAmoledDarkMode(enabled: Boolean)
 
     /** 主题模式：跟随系统 / 强制亮色 / 强制深色 */
     suspend fun setThemeMode(mode: ThemeMode)
@@ -309,7 +304,6 @@ internal class SettingsRepositoryImpl(
                         appId = prefs.danmakuAppId,
                         appSecret = secrets[DANDANPLAY_SECRET_KEY].orEmpty(),
                     ),
-                amoledDarkMode = prefs.amoledDarkMode,
                 themeMode = prefs.themeMode,
                 dynamicColor = prefs.dynamicColor,
                 pipEnabled = prefs.pipEnabled,
@@ -441,10 +435,6 @@ internal class SettingsRepositoryImpl(
 
     override suspend fun setAiringNotificationOffsetMinutes(offsetMinutes: Int) {
         userPreferences.setAiringNotificationOffsetMinutes(offsetMinutes)
-    }
-
-    override suspend fun setAmoledDarkMode(enabled: Boolean) {
-        userPreferences.setAmoledDarkMode(enabled)
     }
 
     override suspend fun setThemeMode(mode: ThemeMode) {

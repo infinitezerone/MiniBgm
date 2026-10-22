@@ -153,20 +153,6 @@ class UserPreferencesDataSourceTest {
         }
 
     @Test
-    fun `setAmoledDarkMode toggles flag without touching other preferences`() =
-        runTest {
-            val (dataSource, dataStore) = createDataSource()
-            dataSource.setDarkMode(true)
-
-            dataSource.setAmoledDarkMode(true)
-            assertTrue(dataStore.data.first().amoledDarkMode)
-            assertTrue(dataStore.data.first().isDarkMode, "dark mode must be preserved")
-
-            dataSource.setAmoledDarkMode(false)
-            assertFalse(dataStore.data.first().amoledDarkMode)
-        }
-
-    @Test
     fun `setPipEnabled toggles flag without touching other preferences`() =
         runTest {
             val (dataSource, dataStore) = createDataSource()

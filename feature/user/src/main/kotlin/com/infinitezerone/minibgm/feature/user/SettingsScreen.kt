@@ -389,8 +389,6 @@ fun SettingsScreen(
                 }
             }
         },
-        amoledDarkMode = uiState.amoledDarkMode,
-        onToggleAmoledDarkMode = viewModel::setAmoledDarkMode,
         themeMode = uiState.themeMode,
         onSelectThemeMode = viewModel::setThemeMode,
         dynamicColor = uiState.dynamicColor,
@@ -751,8 +749,6 @@ fun SettingsScreenContent(
     onOpenSystemNotificationSettings: () -> Unit = {},
     isIgnoringBatteryOptimizations: Boolean = false,
     onOpenKeepAliveSettings: () -> Unit = {},
-    amoledDarkMode: Boolean = false,
-    onToggleAmoledDarkMode: (Boolean) -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onSelectThemeMode: (ThemeMode) -> Unit = {},
     dynamicColor: Boolean = false,
@@ -820,8 +816,6 @@ fun SettingsScreenContent(
                         onSelectThemeMode = onSelectThemeMode,
                         dynamicColor = dynamicColor,
                         onToggleDynamicColor = onToggleDynamicColor,
-                        amoledDarkMode = amoledDarkMode,
-                        onToggleAmoledDarkMode = onToggleAmoledDarkMode,
                     )
                 }
 
@@ -1043,8 +1037,6 @@ private fun SettingsScreenPreview() {
             onSelectReminderHour = {},
             airingNotificationOffsetMinutes = -15,
             onSelectAiringNotificationOffsetMinutes = {},
-            amoledDarkMode = false,
-            onToggleAmoledDarkMode = {},
             pipEnabled = true,
             onTogglePipEnabled = {},
             onPlaybackRulesClick = {},

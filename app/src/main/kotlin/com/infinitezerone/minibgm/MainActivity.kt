@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
         window.isNavigationBarContrastEnforced = false
         handleIntent(intent)
         setContent {
-            // 主题模式 / 动态取色 / AMOLED 偏好由 :app 宿主读取并传给主题（设置页落库后在此生效）
+            // 主题模式 / 动态取色 偏好由 :app 宿主读取并传给主题（设置页落库后在此生效）
             val settings by settingsRepository.settings
                 .collectAsStateWithLifecycle(initialValue = UserSettings())
             val darkTheme =
@@ -61,7 +61,6 @@ class MainActivity : ComponentActivity() {
                 }
             MiniBgmTheme(
                 darkTheme = darkTheme,
-                amoledDark = settings.amoledDarkMode,
                 dynamicColor = settings.dynamicColor,
                 uiStyle = AppUiStyle.Luminous,
             ) {

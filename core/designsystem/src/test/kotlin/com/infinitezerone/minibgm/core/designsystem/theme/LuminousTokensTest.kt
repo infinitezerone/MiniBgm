@@ -14,7 +14,6 @@ class LuminousTokensTest {
         val tokens =
             buildLuminousTokens(
                 darkTheme = false,
-                amoledDark = false,
                 colorScheme = MiniBgmLightColors,
             )
 
@@ -35,10 +34,8 @@ class LuminousTokensTest {
         val tokens =
             buildLuminousTokens(
                 darkTheme = true,
-                amoledDark = false,
                 colorScheme = MiniBgmDarkColors,
             )
-
         assertTrue(tokens.glassEnabled)
         assertTrue(tokens.glassTint.alpha == 1f)
         assertTrue(tokens.sheetScrim.alpha >= 0.6f)
@@ -50,28 +47,10 @@ class LuminousTokensTest {
     }
 
     @Test
-    fun amoledTokens_disableTransparencyAndFallBackToSolidPanels() {
-        val tokens =
-            buildLuminousTokens(
-                darkTheme = true,
-                amoledDark = true,
-                colorScheme = MiniBgmAmoledDarkColors,
-            )
-
-        assertFalse(tokens.glassEnabled)
-        assertEquals(1f, tokens.glassTint.alpha)
-        assertEquals(1f, tokens.sheetContainer.alpha)
-        assertEquals(1f, tokens.topBarTop.alpha)
-        assertEquals(1f, tokens.topBarBottom.alpha)
-        assertEquals(0f, tokens.glassGrainAlpha)
-    }
-
-    @Test
     fun reducedTransparency_fallsBackToSolidChromeWithoutGrain() {
         val tokens =
             buildLuminousTokens(
                 darkTheme = false,
-                amoledDark = false,
                 colorScheme = MiniBgmLightColors,
                 reducedTransparency = true,
             )

@@ -90,7 +90,6 @@ private val LuminousInnerShape = RoundedCornerShape(20.dp)
 
 fun buildLuminousTokens(
     darkTheme: Boolean,
-    amoledDark: Boolean,
     colorScheme: ColorScheme,
     reducedTransparency: Boolean = false,
 ): LuminousTokens {
@@ -122,28 +121,6 @@ fun buildLuminousTokens(
 
     val resolved =
         when {
-            amoledDark ->
-                base.copy(
-                    glassEnabled = false,
-                    glassTint = Color(0xFF16181C),
-                    glassBorderStart = Color.White.copy(alpha = 0.32f),
-                    glassBorderEnd = Color.White.copy(alpha = 0.06f),
-                    glassInnerHighlight = Color.White.copy(alpha = 0.20f),
-                    glassInnerShade = Color.Black.copy(alpha = 0.55f),
-                    glassGrain = Color.White,
-                    glassGrainAlpha = 0f,
-                    glassAlphaScale = 1f,
-                    glow = colorScheme.primary.copy(alpha = 0.20f),
-                    navSelection = colorScheme.primary.copy(alpha = 0.24f),
-                    topBarTop = Color(0xFF0D0D10),
-                    topBarBottom = Color.Black,
-                    topBarHairline = Color.White.copy(alpha = 0.16f),
-                    sheetContainer = Color(0xFF0A0A0C),
-                    sheetScrim = Color.Black.copy(alpha = 0.76f),
-                    backdropTop = Color.Black,
-                    backdropMiddle = Color.Black,
-                    backdropBottom = Color.Black,
-                )
             darkTheme ->
                 base.copy(
                     glassEnabled = true,
@@ -210,7 +187,6 @@ val LocalLuminousTokens =
     staticCompositionLocalOf {
         buildLuminousTokens(
             darkTheme = false,
-            amoledDark = false,
             colorScheme = MiniBgmLightColors,
         )
     }

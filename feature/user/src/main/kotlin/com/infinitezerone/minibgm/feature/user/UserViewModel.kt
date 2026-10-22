@@ -59,7 +59,6 @@ data class UserUiState(
     val aiConfig: AiConfig = AiConfig(),
     val danmakuConfig: DanmakuConfig = DanmakuConfig(),
     val airDelayOffsetMinutes: Int = 0,
-    val amoledDarkMode: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val dynamicColor: Boolean = false,
     val pipEnabled: Boolean = true,
@@ -230,7 +229,6 @@ class UserViewModel(
                 aiConfig = sync.settings.aiConfig,
                 danmakuConfig = sync.settings.danmakuConfig,
                 airDelayOffsetMinutes = sync.airDelayOffsetMinutes,
-                amoledDarkMode = sync.settings.amoledDarkMode,
                 themeMode = sync.settings.themeMode,
                 dynamicColor = sync.settings.dynamicColor,
                 pipEnabled = sync.settings.pipEnabled,
@@ -388,13 +386,6 @@ class UserViewModel(
     fun setAirDelayOffsetMinutes(minutes: Int) {
         viewModelScope.launch {
             settingsRepository.setAirDelayOffsetMinutes(minutes)
-        }
-    }
-
-    /** AMOLED 纯黑模式开关（仅在深色模式下生效，由 :app 宿主读取并传给 MiniBgmTheme） */
-    fun setAmoledDarkMode(enabled: Boolean) {
-        viewModelScope.launch {
-            settingsRepository.setAmoledDarkMode(enabled)
         }
     }
 

@@ -87,8 +87,6 @@ internal fun SettingsSection(
     onOpenPlaybackRules: (() -> Unit)? = null,
     danmakuConfig: DanmakuConfig = DanmakuConfig(),
     onOpenDanmakuSettings: (() -> Unit)? = null,
-    amoledDarkMode: Boolean = false,
-    onToggleAmoledDarkMode: (Boolean) -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onSelectThemeMode: (ThemeMode) -> Unit = {},
     dynamicColor: Boolean = false,
@@ -120,8 +118,6 @@ internal fun SettingsSection(
             onSelectThemeMode = onSelectThemeMode,
             dynamicColor = dynamicColor,
             onToggleDynamicColor = onToggleDynamicColor,
-            amoledDarkMode = amoledDarkMode,
-            onToggleAmoledDarkMode = onToggleAmoledDarkMode,
         )
 
         PlaybackAndContentSettingsCard(
@@ -193,8 +189,6 @@ internal fun AppearanceSettingsCard(
     onSelectThemeMode: (ThemeMode) -> Unit,
     dynamicColor: Boolean,
     onToggleDynamicColor: (Boolean) -> Unit,
-    amoledDarkMode: Boolean,
-    onToggleAmoledDarkMode: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -241,20 +235,6 @@ internal fun AppearanceSettingsCard(
                     Switch(
                         checked = dynamicColor,
                         onCheckedChange = onToggleDynamicColor,
-                    )
-                },
-            )
-
-            SettingsItemRow(
-                icon = BgmIcons.DarkMode,
-                iconTint = MaterialTheme.colorScheme.primary,
-                title = stringResource(R.string.feature_user_settings_amoled_title),
-                subtitle = null,
-                onClick = { onToggleAmoledDarkMode(!amoledDarkMode) },
-                trailing = {
-                    Switch(
-                        checked = amoledDarkMode,
-                        onCheckedChange = onToggleAmoledDarkMode,
                     )
                 },
             )
@@ -960,8 +940,6 @@ private fun SettingsSectionPreview() {
             onClearCache = {},
             onLogoutCurrentClick = {},
             onLogoutAllClick = {},
-            amoledDarkMode = true,
-            onToggleAmoledDarkMode = {},
             pipEnabled = true,
             onTogglePipEnabled = {},
         )

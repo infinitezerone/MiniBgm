@@ -110,30 +110,7 @@ val InverseOnSurfaceDark = Color(0xFF12141B)
 val ScrimDark = Color(0xFF000000)
 
 // ==========================================
-// Layer 3: AMOLED 纯黑双档角色 (AMOLED Pure-Black Roles)
-// ==========================================
-// 仅替换表面/容器阶梯：品牌色、文本色与深灰档一致（OnSurface F1F3F5 / OnSurfaceVariant
-// 94A3B8 在纯黑上对比度更高），真黑省电且与系统导航栏无边界融合。
-
-val BackgroundAmoledDark = Color(0xFF000000)
-val SurfaceAmoledDark = Color(0xFF000000)
-val SurfaceVariantAmoledDark = Color(0xFF1A1C22)
-
-val SurfaceContainerLowestAmoledDark = Color(0xFF000000)
-
-// 近纯黑阶梯：容器间保留可辨的层级梯度，避免卡片与画布完全融成一团
-val SurfaceContainerLowAmoledDark = Color(0xFF0A0A0C)
-val SurfaceContainerAmoledDark = Color(0xFF101114)
-val SurfaceContainerHighAmoledDark = Color(0xFF16181C)
-val SurfaceContainerHighestAmoledDark = Color(0xFF1D1F24)
-
-val SurfaceDimAmoledDark = Color(0xFF000000)
-val SurfaceBrightAmoledDark = Color(0xFF24262B)
-
-val InverseOnSurfaceAmoledDark = Color(0xFF000000)
-
-// ==========================================
-// Layer 4: ChatGPT 风格高反差实体操作胶囊角色 (Solid High-Contrast Pill Roles)
+// Layer 3: ChatGPT 风格高反差实体操作胶囊角色 (Solid High-Contrast Pill Roles)
 // ==========================================
 val SolidPillContainerDark = Color(0xFFFFFFFF)
 val OnSolidPillContainerDark = Color(0xFF111111)

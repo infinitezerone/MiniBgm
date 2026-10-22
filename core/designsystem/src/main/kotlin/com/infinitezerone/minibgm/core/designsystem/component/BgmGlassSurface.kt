@@ -60,7 +60,7 @@ private val GlassNoiseShader: Shader by lazy {
  * 统一玻璃材质容器。
  *
  * 材质由四层组成：半透明渐变、顶部内高光、底部内阴影、细噪点，不调用真实背景模糊；
- * AMOLED 或低端设备可无感降级为实体面板。
+ * 省电模式或低内存设备可无感降级为实体面板。
  *
  * 这对应 2026 年主流厂商的共同取舍：Apple Liquid Glass 的镜面高光、Microsoft Acrylic 的噪点、
  * ColorOS 17 Liquid Acrylic 的预烘焙半透明层，都在避免实时折射的 GPU 成本。
