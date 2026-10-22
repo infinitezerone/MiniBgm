@@ -2,14 +2,12 @@ package com.infinitezerone.minibgm.ui.component
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -36,13 +34,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation3.runtime.NavKey
+import com.infinitezerone.minibgm.core.designsystem.component.CombinedInteractionSource
+import com.infinitezerone.minibgm.core.designsystem.component.aquamorphicPress
 import com.infinitezerone.minibgm.core.designsystem.component.aquamorphicShadow
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmMotion
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
@@ -52,7 +51,9 @@ import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
  * 手机端居中悬浮胶囊底栏（Floating Navigation Island）：
  * 1. 标准 56dp 轻巧浮岛（8dp 工业栅格），去底色指示器，纯净图文排布；
  * 2. 24dp 饱满大图标 + 11.5sp 紧凑标签，淡入淡出直接平滑过渡；
- * 3. 搭载 Action Button 同款水生按压回弹微收缩（[BgmMotion.spatialSpring]，Damping 0.78f, Stiffness 850f）；
+ * 3. 基于现代 [Modifier.Node] 架构的 [aquamorphicPress]：
+ *    - 搭载 90ms 物理下沉冲量保护，轻点不截断；
+ *    - 对齐 ColorOS 15/17 非对称水生弹簧（按下 Damping 1.0f 坚实触底，释放 Damping 0.66f 水滴微过冲回弹）；
  * 4. 搭载双层复合高斯弥散光晕 [aquamorphicShadow]。
  */
 @Composable
@@ -77,35 +78,24 @@ fun BgmFloatingNavigationBar(
             null
         }
 
-    // 独立 InteractionSource 收集各项触控态，点击时整栏触发 Action Button 同款水生弹性微收缩
+    // 独立收集各项交互，汇聚为复合源供底栏 Node 零重组驱动 RenderNode 物理缩放
     val scheduleInteraction = remember { MutableInteractionSource() }
     val exploreInteraction = remember { MutableInteractionSource() }
     val userInteraction = remember { MutableInteractionSource() }
-
-    val isSchedulePressed by scheduleInteraction.collectIsPressedAsState()
-    val isExplorePressed by exploreInteraction.collectIsPressedAsState()
-    val isUserPressed by userInteraction.collectIsPressedAsState()
-    val isAnyPressed = isSchedulePressed || isExplorePressed || isUserPressed
-
-    val dockScale by animateFloatAsState(
-        targetValue = if (isAnyPressed) 0.95f else 1f,
-        animationSpec =
-            BgmMotion.spatialSpring<Float>(
-                scheme = BgmMotion.Scheme.Aquamorphic,
-                speed = BgmMotion.Speed.Fast,
-            ),
-        label = "floating_nav_dock_scale",
-    )
+    val dockInteraction =
+        remember(scheduleInteraction, exploreInteraction, userInteraction) {
+            CombinedInteractionSource(scheduleInteraction, exploreInteraction, userInteraction)
+        }
 
     val navModifier =
         modifier
             .wrapContentWidth()
             .height(BgmSpacing.FloatingNav.height)
             .widthIn(min = BgmSpacing.FloatingNav.minWidth, max = BgmSpacing.FloatingNav.maxWidth)
-            .graphicsLayer {
-                scaleX = dockScale
-                scaleY = dockScale
-            }.aquamorphicShadow(
+            .aquamorphicPress(
+                interactionSource = dockInteraction,
+                pressedScale = 0.95f,
+            ).aquamorphicShadow(
                 shape = CircleShape,
                 isDark = isDark,
             )
