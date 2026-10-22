@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -17,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
@@ -41,8 +41,8 @@ fun BgmCircleActionButton(
     size: Dp = 40.dp,
     iconSize: Dp = 20.dp,
     containerColor: Color =
-        if (isSystemInDarkTheme()) {
-            MaterialTheme.colorScheme.surfaceContainerHigh
+        if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+            MaterialTheme.colorScheme.surfaceContainerLow
         } else {
             MaterialTheme.colorScheme.surface
         },
@@ -50,16 +50,11 @@ fun BgmCircleActionButton(
     border: BorderStroke? = null,
     hasDiffuseShadow: Boolean = true,
 ) {
-    val isDark = isSystemInDarkTheme()
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val interactionSource = remember { MutableInteractionSource() }
 
-    // 暗色模式默认 0.5dp 弱光发丝描边，亮色模式下无边框纯靠弥散光晕浮起
-    val effectiveBorder =
-        border ?: if (isDark) {
-            BorderStroke(0.5.dp, Color.White.copy(alpha = 0.08f))
-        } else {
-            null
-        }
+    // 暗色模式默认与卡片一致零描边，依靠 surface 与 surfaceContainerLow 的明度阶梯自然浮起
+    val effectiveBorder = border
 
     val shadowModifier =
         if (hasDiffuseShadow && enabled) {

@@ -86,23 +86,23 @@ val ErrorContainerDark = Color(0xFF93000A)
 val OnErrorContainerDark = Color(0xFFFFDAD6)
 
 // Layer 2: 媒体沉浸暗夜表面 (Content-First & Frame Retreat)
-val BackgroundDark = Color(0xFF0E1015) // Deep Charcoal
+val BackgroundDark = Color(0xFF101012) // 沉浸暗夜纯净黑曜底
 val OnBackgroundDark = Color(0xFFF1F3F5) // High-contrast soft white
-val SurfaceDark = Color(0xFF12141B)
+val SurfaceDark = Color(0xFF101012)
 val OnSurfaceDark = Color(0xFFF1F3F5)
-val SurfaceVariantDark = Color(0xFF232732)
-val OnSurfaceVariantDark = Color(0xFF94A3B8) // High-contrast soft grey
+val SurfaceVariantDark = Color(0xFF38383F)
+val OnSurfaceVariantDark = Color(0xFF9E9EA8) // High-contrast soft neutral grey
 
-val SurfaceContainerLowestDark = Color(0xFF0E1015)
-val SurfaceContainerLowDark = Color(0xFF15181E) // Standard anime card container
-val SurfaceContainerDark = Color(0xFF1C2028)
-val SurfaceContainerHighDark = Color(0xFF232732)
-val SurfaceContainerHighestDark = Color(0xFF2A2F3C)
+val SurfaceContainerLowestDark = Color(0xFF0A0A0C)
+val SurfaceContainerLowDark = Color(0xFF26262B) // 现代纯正中性质感浅灰卡片容器 (iOS/Apple/ChatGPT 风格)
+val SurfaceContainerDark = Color(0xFF2E2E33)
+val SurfaceContainerHighDark = Color(0xFF38383F)
+val SurfaceContainerHighestDark = Color(0xFF44444C)
 
-val SurfaceDimDark = Color(0xFF0E1015)
-val SurfaceBrightDark = Color(0xFF2A2F3C)
+val SurfaceDimDark = Color(0xFF101012)
+val SurfaceBrightDark = Color(0xFF44444C)
 
-val OutlineDark = Color(0xFF64748B)
+val OutlineDark = Color(0xFF6E6E78)
 val OutlineVariantDark = Color(0x14FFFFFF) // Color.White.copy(alpha = 0.08f)
 
 val InverseSurfaceDark = Color(0xFFF1F3F5)
