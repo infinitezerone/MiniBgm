@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -34,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavKey
+import com.infinitezerone.minibgm.BuildConfig
 import com.infinitezerone.minibgm.R
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
@@ -43,6 +45,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbar
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarDefaults
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.designsystem.theme.ProvideWindowAdaptiveInfo
+import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.InAppLoginRoute
 import com.infinitezerone.minibgm.core.navigation.InAppWebRoute
 import com.infinitezerone.minibgm.core.navigation.PlayerRoute
@@ -52,6 +55,7 @@ import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
 import com.infinitezerone.minibgm.core.navigation.UserRoute
 import com.infinitezerone.minibgm.core.navigation.rememberBgmNavState
 import com.infinitezerone.minibgm.navigation.BgmNavHost
+import com.infinitezerone.minibgm.ui.component.BgmAiActionButton
 import com.infinitezerone.minibgm.ui.component.BgmFloatingNavigationBar
 import com.infinitezerone.minibgm.ui.component.BgmNavigationRail
 
@@ -269,10 +273,22 @@ fun BgmApp(
                                     .navigationBarsPadding()
                                     .padding(bottom = 12.dp),
                         ) {
-                            BgmFloatingNavigationBar(
-                                currentDestination = navState.currentTopLevelKey,
-                                onDestinationSelected = { route -> navState.navigateTo(route) },
-                            )
+                            val isAiAssistantEnabled = BuildConfig.ENABLE_AI_ASSISTANT
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                BgmFloatingNavigationBar(
+                                    currentDestination = navState.currentTopLevelKey,
+                                    onDestinationSelected = { route -> navState.navigateTo(route) },
+                                )
+
+                                if (isAiAssistantEnabled) {
+                                    BgmAiActionButton(
+                                        onClick = { navState.navigateTo(AssistantRoute()) },
+                                    )
+                                }
+                            }
                         }
 
                         if (isAuthenticating && activity?.isInPictureInPictureMode != true) {

@@ -83,8 +83,7 @@ fun <T> BgmSegmentedControl(
                             .expressivePress(
                                 interactionSource = interactionSource,
                                 pressedScale = 0.97f,
-                            )
-                            .clickable(
+                            ).clickable(
                                 interactionSource = interactionSource,
                                 indication = null,
                                 onClick = { onItemSelected(item) },

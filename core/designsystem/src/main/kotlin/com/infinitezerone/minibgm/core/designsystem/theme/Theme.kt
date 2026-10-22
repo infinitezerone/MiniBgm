@@ -10,8 +10,6 @@ import android.os.PowerManager
 import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.InteractionSource
-import androidx.compose.ui.Modifier
-
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
@@ -23,12 +21,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 
 private object NoIndication : IndicationNodeFactory {
-    override fun create(interactionSource: InteractionSource): Modifier.Node =
-        object : Modifier.Node() {}
+    override fun create(interactionSource: InteractionSource): Modifier.Node = object : Modifier.Node() {}
+
     override fun hashCode(): Int = -1
+
     override fun equals(other: Any?): Boolean = other === this
 }
 

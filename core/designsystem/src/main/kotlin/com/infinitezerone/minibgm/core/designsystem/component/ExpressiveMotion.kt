@@ -65,10 +65,11 @@ fun Modifier.aquamorphicPress(
     if (!enabled) {
         this
     } else {
-        this then AquamorphicPressNodeElement(
-            interactionSource = interactionSource,
-            pressedScale = pressedScale,
-        )
+        this then
+            AquamorphicPressNodeElement(
+                interactionSource = interactionSource,
+                pressedScale = pressedScale,
+            )
     }
 
 /**
@@ -106,7 +107,6 @@ internal class AquamorphicPressNode(
     private var pressedScale: Float,
 ) : Modifier.Node(),
     LayoutModifierNode {
-
     val scaleAnimatable =
         Animatable(
             initialValue = 1f,
@@ -140,35 +140,38 @@ internal class AquamorphicPressNode(
 
     private fun startObserving() {
         collectJob?.cancel()
-        collectJob = coroutineScope.launch {
-            interactionSource.interactions.collect { interaction ->
-                when (interaction) {
-                    is PressInteraction.Press -> {
-                        animJob?.cancel()
-                        animJob = launch {
-                            scaleAnimatable.animateTo(
-                                targetValue = pressedScale,
-                                animationSpec = AquamorphicMotionDefaults.PressDownSpring,
-                            ) {
-                                invalidatePlacement()
-                            }
+        collectJob =
+            coroutineScope.launch {
+                interactionSource.interactions.collect { interaction ->
+                    when (interaction) {
+                        is PressInteraction.Press -> {
+                            animJob?.cancel()
+                            animJob =
+                                launch {
+                                    scaleAnimatable.animateTo(
+                                        targetValue = pressedScale,
+                                        animationSpec = AquamorphicMotionDefaults.PressDownSpring,
+                                    ) {
+                                        invalidatePlacement()
+                                    }
+                                }
                         }
-                    }
 
-                    is PressInteraction.Release, is PressInteraction.Cancel -> {
-                        animJob?.cancel()
-                        animJob = launch {
-                            scaleAnimatable.animateTo(
-                                targetValue = 1f,
-                                animationSpec = AquamorphicMotionDefaults.ReleaseReboundSpring,
-                            ) {
-                                invalidatePlacement()
-                            }
+                        is PressInteraction.Release, is PressInteraction.Cancel -> {
+                            animJob?.cancel()
+                            animJob =
+                                launch {
+                                    scaleAnimatable.animateTo(
+                                        targetValue = 1f,
+                                        animationSpec = AquamorphicMotionDefaults.ReleaseReboundSpring,
+                                    ) {
+                                        invalidatePlacement()
+                                    }
+                                }
                         }
                     }
                 }
             }
-        }
     }
 
     override fun MeasureScope.measure(

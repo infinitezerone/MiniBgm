@@ -265,3 +265,22 @@ val OnBrandBilibili = Color(0xFFE0567E)
 /** 蜜柑计划品牌青绿色 */
 val BrandMikan = Color(0xFF009688)
 val OnBrandMikan = Color(0xFF00796B)
+
+// ==========================================
+// AI 独立入口彩色光晕色板 (Prismatic AI Glow Palette)
+// ==========================================
+val AiGlowBlue = Color(0xFF388BFD)
+val AiGlowPurple = Color(0xFF8A2BE2)
+val AiGlowPink = Color(0xFFFF3366)
+val AiGlowAmber = Color(0xFFFF9900)
+val AiGlowCyan = Color(0xFF00E5FF)
+
+val AiGlowSweepColors: List<Color> =
+    listOf(
+        AiGlowBlue,
+        AiGlowPurple,
+        AiGlowPink,
+        AiGlowAmber,
+        AiGlowCyan,
+        AiGlowBlue,
+    )

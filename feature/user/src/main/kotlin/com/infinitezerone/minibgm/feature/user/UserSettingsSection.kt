@@ -13,16 +13,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,7 +42,6 @@ import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSegmentedControl
 import com.infinitezerone.minibgm.core.designsystem.component.expressivePress
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
-import com.infinitezerone.minibgm.core.designsystem.theme.BgmContentTokens
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.AiConfig
@@ -742,9 +737,7 @@ internal fun SettingsCardContainer(
 }
 
 @Composable
-internal fun SettingsDivider(
-    modifier: Modifier = Modifier,
-) {
+internal fun SettingsDivider(modifier: Modifier = Modifier) {
     HorizontalDivider(
         modifier = modifier.padding(start = 64.dp, end = 16.dp),
         thickness = 0.5.dp,
@@ -774,8 +767,7 @@ private fun SettingsItemRow(
                             .expressivePress(
                                 interactionSource = interactionSource,
                                 pressedScale = 0.985f,
-                            )
-                            .clickable(
+                            ).clickable(
                                 interactionSource = interactionSource,
                                 indication = null,
                                 onClick = onClick,
@@ -783,8 +775,7 @@ private fun SettingsItemRow(
                     } else {
                         Modifier
                     },
-                )
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                ).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(

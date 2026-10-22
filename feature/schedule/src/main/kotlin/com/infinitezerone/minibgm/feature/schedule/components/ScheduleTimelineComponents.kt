@@ -15,20 +15,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -41,8 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
@@ -51,8 +44,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingFrame
-import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingFrameDefaults
-import com.infinitezerone.minibgm.core.designsystem.component.BgmMediaCard
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.ScoreBadge
 import com.infinitezerone.minibgm.core.designsystem.component.expressivePress
@@ -138,12 +129,18 @@ data class TimelineSubjectGroup(
 fun List<AirSchedule>.groupTimelineSchedules(): List<TimelineSubjectGroup> =
     groupBy { it.bgmId }.values.map { list ->
         val primary = list.first()
-        val eps = list.map { it.nextEpisodeNumber }.filter { it > 0 }.distinct().sorted()
+        val eps =
+            list
+                .map { it.nextEpisodeNumber }
+                .filter { it > 0 }
+                .distinct()
+                .sorted()
         TimelineSubjectGroup(
             primarySchedule = primary,
-            episodes = eps.ifEmpty {
-                if (primary.nextEpisodeNumber > 0) listOf(primary.nextEpisodeNumber) else emptyList()
-            },
+            episodes =
+                eps.ifEmpty {
+                    if (primary.nextEpisodeNumber > 0) listOf(primary.nextEpisodeNumber) else emptyList()
+                },
         )
     }
 
@@ -167,9 +164,10 @@ fun TimelineSlotRow(
             null
         }
 
-    val groupedSchedules = remember(schedules) {
-        schedules.groupTimelineSchedules()
-    }
+    val groupedSchedules =
+        remember(schedules) {
+            schedules.groupTimelineSchedules()
+        }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -286,7 +284,10 @@ internal fun extractScheduleKeywords(schedule: AirSchedule): List<String> {
     } else if (airDate.length >= 4) {
         val year = airDate.take(4).toIntOrNull()
         val month = if (airDate.length >= 7) airDate.substring(5, 7).toIntOrNull() else null
-        val currentYear = java.time.LocalDate.now().year
+        val currentYear =
+            java.time.LocalDate
+                .now()
+                .year
         if (year == currentYear && month != null) {
             when (month) {
                 in 1..3 -> keywords.add("1月新番")
@@ -396,8 +397,7 @@ fun ScheduleTimelineCard(
                             ),
                         )
                     },
-                )
-                .expressivePress(interactionSource = rowInteractionSource, pressedScale = 0.985f)
+                ).expressivePress(interactionSource = rowInteractionSource, pressedScale = 0.985f)
                 .padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -737,9 +737,10 @@ fun ScheduleUntimedSection(
     onToggleWatching: (Long) -> Unit = {},
 ) {
     var isExpanded by remember { mutableStateOf(true) }
-    val groupedSchedules = remember(schedules) {
-        schedules.groupTimelineSchedules()
-    }
+    val groupedSchedules =
+        remember(schedules) {
+            schedules.groupTimelineSchedules()
+        }
 
     BgmFloatingFrame(
         contentPadding = PaddingValues(12.dp),
