@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -501,7 +503,6 @@ fun ScheduleNowIndicator(
                     .background(StatusAiring.copy(alpha = 0.45f)),
         )
     }
-}
 }
 
 /** 全天 / 时间待定番剧自然收容折叠区 */
