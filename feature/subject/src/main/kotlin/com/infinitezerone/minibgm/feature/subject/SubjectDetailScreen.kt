@@ -292,6 +292,18 @@ fun SubjectDetailScreen(
     val subjectType = displaySubject?.type?.let { SubjectType.fromValue(it) } ?: SubjectType.ANIME
     var previewCharacter by remember { mutableStateOf<SubjectCharacter?>(null) }
 
+    val handleShare: () -> Unit = {
+        val shareTitle = displaySubject?.displayName ?: defaultTitle
+        val shareText = "$shareTitle https://bgm.tv/subject/$subjectId"
+        val sendIntent =
+            android.content.Intent().apply {
+                action = android.content.Intent.ACTION_SEND
+                putExtra(android.content.Intent.EXTRA_TEXT, shareText)
+                type = "text/plain"
+            }
+        context.startActivity(android.content.Intent.createChooser(sendIntent, shareChooserTitle))
+    }
+
     val handleStreamingUrl: (String) -> Unit = { url ->
         context.launchStreamingUrl(
             url = url,
@@ -450,17 +462,7 @@ fun SubjectDetailScreen(
                             contentDescription = stringResource(R.string.feature_subject_open_in_browser),
                         )
                         BgmCircleActionButton(
-                            onClick = {
-                                val shareTitle = displaySubject?.displayName ?: defaultTitle
-                                val shareText = "$shareTitle https://bgm.tv/subject/$subjectId"
-                                val sendIntent =
-                                    android.content.Intent().apply {
-                                        action = android.content.Intent.ACTION_SEND
-                                        putExtra(android.content.Intent.EXTRA_TEXT, shareText)
-                                        type = "text/plain"
-                                    }
-                                context.startActivity(android.content.Intent.createChooser(sendIntent, shareChooserTitle))
-                            },
+                            onClick = handleShare,
                             icon = BgmIcons.Share,
                             contentDescription = stringResource(R.string.feature_subject_share_title),
                         )
@@ -660,6 +662,7 @@ fun SubjectDetailScreen(
                                 onDecrementWatched = viewModel::decrementWatchedEpisode,
                                 onPromptLogin = viewModel::promptLogin,
                                 onRetryEpisodes = viewModel::retryLoadEpisodes,
+                                onShare = handleShare,
                                 topPadding = topChromeHeight + 8.dp,
                                 modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
                             )

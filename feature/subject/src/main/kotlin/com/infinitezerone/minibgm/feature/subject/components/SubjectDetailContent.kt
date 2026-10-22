@@ -129,6 +129,7 @@ internal fun SubjectDetailContent(
     onPromptLogin: (() -> Unit)? = null,
     onEpisodeClickForQuickAction: ((Episode) -> Unit)? = null,
     onRetryEpisodes: () -> Unit = {},
+    onShare: (() -> Unit)? = null,
     topPadding: Dp = 12.dp,
     modifier: Modifier = Modifier,
 ) {
@@ -215,6 +216,10 @@ internal fun SubjectDetailContent(
 
         // 1. 条目头部 Hero 卡片 (首帧在场，支撑即使是首次进入也能顺滑飞渡)
         item(key = "header") {
+            val watchStatus =
+                remember(uiState.episodes, uiState.collection) {
+                    computeSubjectWatchStatus(uiState.episodes, uiState.collection)
+                }
             SubjectHeaderCard(
                 subject = displaySubject,
                 subjectType = subjectType,
@@ -223,6 +228,12 @@ internal fun SubjectDetailContent(
                 totalEpisodes = totalEpisodes,
                 onOpenCollectionSheet = onOpenCollectionSheet,
                 onTagClick = onTagClick,
+                onPlayNext = onPlayNextEpisode,
+                onOpenSources = onOpenSources,
+                onIncrementWatched = onIncrementWatched,
+                nextEpSort = mainNextUpEpNumber ?: nextUpEpNumber,
+                watchStatus = watchStatus,
+                onShare = onShare,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }

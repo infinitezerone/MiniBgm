@@ -36,6 +36,9 @@
     <string name="feature_subject_expand_summary">展开完整简介</string>
 
     <!-- 3. 追番收藏与进度卡片 -->
+    <string name="feature_subject_action_collect">追番</string>
+    <string name="feature_subject_action_check_in">打卡</string>
+    <string name="feature_subject_action_share">分享</string>
     <string name="feature_subject_collection_card_title">追番与进度</string>
     <string name="feature_subject_rating_score_stars">★ %1$s分</string>
     <string name="feature_subject_btn_edit_rating">评价与短评</string>
@@ -65,6 +68,8 @@
     <string name="feature_subject_rating_distribution">评分分布</string>
     <string name="feature_subject_score_unit">分</string>
     <string name="feature_subject_rating_votes_parenthesis">(%1$d人评分)</string>
+    <string name="feature_subject_rating_mode_format">众数 %1$d 分 (%2$d%%)</string>
+    <string name="feature_subject_rating_positive_ratio_format">好评率 %1$d%%</string>
     <string name="feature_subject_all_collections_status">全站收藏状态</string>
     <string name="feature_subject_status_wish">想看</string>
     <string name="feature_subject_status_doing">在看</string>

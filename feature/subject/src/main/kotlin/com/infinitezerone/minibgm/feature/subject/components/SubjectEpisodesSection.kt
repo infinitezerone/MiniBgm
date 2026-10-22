@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -1077,24 +1078,18 @@ fun EpisodeQuickRail(
                         "$prefix${episode.sort.toInt()}"
                     }
 
-                val cellShape = BgmShapes.small
-                val cellBorder =
-                    when {
-                        isNextToWatch -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-                        isFuture -> BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                        else -> null
-                    }
+                val cellShape = RoundedCornerShape(8.dp)
                 val cellBackground =
                     when {
-                        isWatched -> MaterialTheme.colorScheme.primaryContainer
-                        isNextToWatch -> statusDoingContainerColor()
+                        isNextToWatch -> MaterialTheme.colorScheme.primary
+                        isWatched -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
                         isFuture -> MaterialTheme.colorScheme.surfaceContainerLowest
                         else -> MaterialTheme.colorScheme.surfaceContainerHigh
                     }
                 val cellContentColor =
                     when {
+                        isNextToWatch -> MaterialTheme.colorScheme.onPrimary
                         isWatched -> MaterialTheme.colorScheme.onPrimaryContainer
-                        isNextToWatch -> onStatusDoingContainerColor()
                         isFuture -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                         else -> MaterialTheme.colorScheme.onSurface
                     }
@@ -1102,11 +1097,10 @@ fun EpisodeQuickRail(
                 Box(
                     modifier =
                         Modifier
-                            .size(46.dp)
+                            .width(48.dp)
+                            .height(44.dp)
                             .clip(cellShape)
-                            .then(
-                                if (cellBorder != null) Modifier.border(cellBorder, cellShape) else Modifier,
-                            ).background(cellBackground)
+                            .background(cellBackground)
                             .clickable { onEpisodeClick(episode) },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -1124,7 +1118,7 @@ fun EpisodeQuickRail(
                             Icon(
                                 imageVector = BgmIcons.Check,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = cellContentColor.copy(alpha = 0.8f),
                                 modifier = Modifier.size(11.dp),
                             )
                         }
@@ -1135,13 +1129,13 @@ fun EpisodeQuickRail(
                             modifier =
                                 Modifier
                                     .align(Alignment.TopStart)
-                                    .padding(2.dp),
+                                    .padding(3.dp),
                         ) {
                             Icon(
                                 imageVector = BgmIcons.Play,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(10.dp),
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(9.dp),
                             )
                         }
                     }
