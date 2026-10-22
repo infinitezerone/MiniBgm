@@ -38,14 +38,14 @@ object AquamorphicMotionDefaults {
     val PressDownSpring =
         spring<Float>(
             dampingRatio = 1.0f,
-            stiffness = 1000f,
+            stiffness = 700f,
             visibilityThreshold = PHYSICAL_VISIBILITY_THRESHOLD,
         )
 
     val ReleaseReboundSpring =
         spring<Float>(
-            dampingRatio = 0.38f,
-            stiffness = 800f,
+            dampingRatio = 0.35f,
+            stiffness = 450f,
             visibilityThreshold = PHYSICAL_VISIBILITY_THRESHOLD,
         )
 }
