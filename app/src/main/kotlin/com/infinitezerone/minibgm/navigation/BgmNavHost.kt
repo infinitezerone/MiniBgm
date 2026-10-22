@@ -11,17 +11,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import coil3.ImageLoader
 import com.infinitezerone.minibgm.BuildConfig
 import com.infinitezerone.minibgm.R
+import com.infinitezerone.minibgm.core.data.repository.PlaybackHistoryRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
-import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalFeatureCapabilities
 import com.infinitezerone.minibgm.core.model.FeatureCapabilities
+import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import com.infinitezerone.minibgm.core.navigation.AssistantRoute
 import com.infinitezerone.minibgm.core.navigation.BgmNavState
 import com.infinitezerone.minibgm.core.navigation.DownloadRoute
@@ -33,6 +33,7 @@ import com.infinitezerone.minibgm.core.navigation.InAppWebRoute
 import com.infinitezerone.minibgm.core.navigation.LinkedSubjectRoute
 import com.infinitezerone.minibgm.core.navigation.LocalSharedTransitionScope
 import com.infinitezerone.minibgm.core.navigation.PlaybackRulesRoute
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SearchRoute
 import com.infinitezerone.minibgm.core.navigation.SeasonalGuideRoute
@@ -62,7 +63,7 @@ import com.infinitezerone.minibgm.feature.user.navigation.playbackRulesEntry
 import com.infinitezerone.minibgm.feature.user.navigation.settingsEntry
 import com.infinitezerone.minibgm.feature.user.navigation.subjectDownloadDetailEntry
 import com.infinitezerone.minibgm.feature.user.navigation.userEntry
-import com.infinitezerone.minibgm.ui.component.BgmDetailPlaceholder
+import com.infinitezerone.minibgm.ui.component.BgmScheduleOverview
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
@@ -83,6 +84,7 @@ fun BgmNavHost(
     val userScrollToTop = remember(navState) { navState.scrollToTopFor(UserRoute) }
     val imageLoader = koinInject<ImageLoader>()
     val settingsRepository = koinInject<SettingsRepository>()
+    val playbackHistoryRepository = koinInject<PlaybackHistoryRepository>()
     val featureCapabilities by settingsRepository.featureCapabilities.collectAsStateWithLifecycle(
         initialValue =
             FeatureCapabilities(
@@ -92,6 +94,10 @@ fun BgmNavHost(
     )
     val isAiAssistantEnabled = featureCapabilities.isAiAssistantEnabled
     val isInternalPlayerEnabled = featureCapabilities.isInternalPlayerEnabled
+    val recentHistory by
+        playbackHistoryRepository
+            .observeRecentHistory(limit = 3)
+            .collectAsStateWithLifecycle(initialValue = emptyList())
 
     val directive = rememberBgmPaneDirective()
     val isSplitMode = directive.isSplitLayout
@@ -108,18 +114,37 @@ fun BgmNavHost(
     val openLoginInBrowser: (String) -> Unit = { url -> context.launchWebUrl(url, isAuth = true) }
 
     val detailPlaceholder: @Composable ThreePaneScaffoldScope.() -> Unit = {
-        if (navState.currentKey is SearchRoute) {
-            BgmDetailPlaceholder(
-                icon = BgmIcons.SearchBorder,
-                title = stringResource(R.string.app_detail_placeholder_title_search),
-                subtitle = stringResource(R.string.app_detail_placeholder_subtitle_search),
-            )
-        } else {
-            BgmDetailPlaceholder(
-                icon = BgmIcons.TvBorder,
-                title = stringResource(R.string.app_detail_placeholder_title_default),
-                subtitle = stringResource(R.string.app_detail_placeholder_subtitle_default),
-            )
+        when (navState.currentKey) {
+            is ScheduleRoute ->
+                BgmScheduleOverview(
+                    recentHistory = recentHistory,
+                    onPlayHistory =
+                        if (isInternalPlayerEnabled) {
+                            { history -> navState.navigateTo(history.toPlayerRoute()) }
+                        } else {
+                            null
+                        },
+                    onOpenSubject = { history ->
+                        navState.navigateTo(
+                            SubjectDetailRoute(
+                                subjectId = history.subjectId,
+                                initialName = history.subjectName,
+                                initialCoverUrl = history.coverUrl,
+                                source = "schedule_overview",
+                            ),
+                        )
+                    },
+                    onOpenSeasonalGuide = { navState.navigateTo(SeasonalGuideRoute()) },
+                    onOpenSearch = { navState.navigateTo(SearchRoute()) },
+                    onOpenAssistant =
+                        if (isAiAssistantEnabled) {
+                            { navState.navigateTo(AssistantRoute()) }
+                        } else {
+                            null
+                        },
+                )
+
+            else -> Unit
         }
     }
 
@@ -157,7 +182,7 @@ fun BgmNavHost(
                                     },
                                 onLoginRequest = openLogin,
                                 scrollToTop = scheduleScrollToTop,
-                                metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
+                                metadata = bgmTopLevelPaneMetadata(ScheduleRoute, detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )
 
                             if (isAiAssistantEnabled) {
@@ -170,7 +195,6 @@ fun BgmNavHost(
                                             { _ -> }
                                         },
                                     onBackClick = { navState.goBack() },
-                                    metadata = bgmListPane(detailPlaceholder),
                                 )
                             }
 
@@ -180,21 +204,21 @@ fun BgmNavHost(
                                 onLoginRequest = openLogin,
                                 onOpenSeasonalGuide = { navState.navigateTo(SeasonalGuideRoute()) },
                                 scrollToTop = exploreScrollToTop,
-                                metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
+                                metadata = bgmTopLevelPaneMetadata(ExploreRoute, detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )
 
                             seasonalGuideEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onBackClick = { navState.goBack() },
                                 onLoginRequest = openLogin,
-                                metadata = bgmListPane(detailPlaceholder),
+                                metadata = emptyMap(),
                             )
 
                             searchEntry(
                                 onSubjectClick = { route -> navState.navigateTo(route) },
                                 onBackClick = { navState.goBack() },
                                 onLoginRequest = openLogin,
-                                metadata = bgmListPane(detailPlaceholder),
+                                metadata = emptyMap(),
                             )
 
                             userEntry(
@@ -205,7 +229,7 @@ fun BgmNavHost(
                                 onLoginRequest = openLogin,
                                 onOpenTokenPage = openTokenPage,
                                 scrollToTop = userScrollToTop,
-                                metadata = bgmListPane(detailPlaceholder) + bgmTopLevelTransitionMetadata,
+                                metadata = bgmTopLevelPaneMetadata(UserRoute, detailPlaceholder) + bgmTopLevelTransitionMetadata,
                             )
 
                             downloadEntry(
@@ -263,7 +287,6 @@ fun BgmNavHost(
                                         imageLoader.diskCache?.clear()
                                     }
                                 },
-                                metadata = bgmListPane(detailPlaceholder),
                             )
 
                             if (isInternalPlayerEnabled) {
@@ -275,7 +298,6 @@ fun BgmNavHost(
                                         } else {
                                             null
                                         },
-                                    metadata = bgmExtraPane(),
                                 )
                             }
 
@@ -429,7 +451,6 @@ fun BgmNavHost(
                                             null
                                         },
                                     onManageRules = { navState.navigateTo(PlaybackRulesRoute) },
-                                    metadata = bgmExtraPane(),
                                 )
                             }
                         },
@@ -444,3 +465,16 @@ fun BgmNavHost(
         }
     }
 }
+
+private fun PlaybackHistory.toPlayerRoute(): PlayerRoute =
+    PlayerRoute(
+        subjectId = subjectId,
+        episodeId = episodeId,
+        streamUrl = streamUrl,
+        episodeName = episodeName,
+        subjectName = subjectName,
+        episodeSort = episodeSort,
+        initialRuleId = sourceId,
+        initialSourceName = sourceName,
+        coverUrl = coverUrl,
+    )

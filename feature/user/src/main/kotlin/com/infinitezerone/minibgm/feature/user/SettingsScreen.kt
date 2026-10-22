@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -42,6 +43,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.ClipEntry
@@ -788,6 +790,7 @@ fun SettingsScreenContent(
         topBar = {
             BgmTopAppBar(
                 mode = BgmTopBarMode.Solid,
+                contentMaxWidth = 840.dp,
                 title = { Text(text = stringResource(R.string.feature_user_title_settings)) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
@@ -802,185 +805,186 @@ fun SettingsScreenContent(
         snackbarHost = { BgmSnackbarHost(hostState = snackbarHostState) },
         modifier = modifier,
     ) { innerPadding ->
-        LazyColumn(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+        Box(
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            contentAlignment = Alignment.TopCenter,
         ) {
-            item(key = "settings_appearance") {
-                AppearanceSettingsCard(
-                    themeMode = themeMode,
-                    onSelectThemeMode = onSelectThemeMode,
-                    dynamicColor = dynamicColor,
-                    onToggleDynamicColor = onToggleDynamicColor,
-                    amoledDarkMode = amoledDarkMode,
-                    onToggleAmoledDarkMode = onToggleAmoledDarkMode,
-                )
-            }
-
-            item(key = "settings_playback_content") {
-                PlaybackAndContentSettingsCard(
-                    pipEnabled = pipEnabled,
-                    onTogglePipEnabled = onTogglePipEnabled,
-                    showRestrictedContent = showRestrictedContent,
-                    onToggleShowRestrictedContent = onToggleShowRestrictedContent,
-                    syncInterval = uiState.syncInterval,
-                    onOpenSyncDialog = {
-                        coroutineScope.launch {
-                            val selected =
-                                overlayHostState.await(
-                                    SingleChoiceDialogAction(
-                                        title = context.getString(R.string.feature_user_sync_interval_title),
-                                        options = SyncInterval.entries,
-                                        selectedOption = uiState.syncInterval,
-                                        optionLabel = { it.displayName },
-                                    ),
-                                )
-                            if (selected != null) {
-                                onSelectSyncInterval(selected)
-                            }
-                        }
-                    },
-                    onOpenPlaybackRules = onPlaybackRulesClick,
-                    onOpenDanmakuSettings = { showDanmakuSettingsDialog = true },
-                    danmakuSummary =
-                        if (uiState.danmakuConfig.endpoint.isNotBlank()) {
-                            uiState.danmakuConfig.endpoint
-                        } else if (uiState.danmakuConfig.appId.isNotBlank()) {
-                            stringResource(R.string.feature_user_settings_danmaku_desc_configured)
-                        } else {
-                            null
-                        },
-                )
-            }
-
-            item(key = "settings_reminder") {
-                ReminderSettingsCard(
-                    airingReminderEnabled = uiState.airingReminderEnabled,
-                    onToggleAiringReminder = onToggleAiringReminder,
-                    hasNotificationPermission = hasNotificationPermission,
-                    airingDailySummaryEnabled = airingDailySummaryEnabled,
-                    onToggleAiringDailySummary = onToggleAiringDailySummary,
-                    airingReminderHour = airingReminderHour,
-                    onOpenReminderHourDialog = {
-                        coroutineScope.launch {
-                            val selected =
-                                overlayHostState.await(
-                                    SingleChoiceDialogAction(
-                                        title = context.getString(R.string.feature_user_reminder_hour_title),
-                                        options = listOf(7, 8, 12, 18, 21),
-                                        selectedOption = airingReminderHour,
-                                        optionLabel = { "%02d:00".format(it) },
-                                    ),
-                                )
-                            if (selected != null) {
-                                onSelectReminderHour(selected)
-                            }
-                        }
-                    },
-                    airingPreAirEnabled = airingPreAirEnabled,
-                    onToggleAiringPreAir = onToggleAiringPreAir,
-                    airingNotificationOffsetMinutes = airingNotificationOffsetMinutes,
-                    onOpenTimingBottomSheet = { showTimingBottomSheet = true },
-                    airingBingeFinaleEnabled = airingBingeFinaleEnabled,
-                    onToggleAiringBingeFinale = onToggleAiringBingeFinale,
-                    onOpenSystemNotificationSettings = onOpenSystemNotificationSettings,
-                    isIgnoringBatteryOptimizations = isIgnoringBatteryOptimizations,
-                    onOpenKeepAliveSettings = onOpenKeepAliveSettings,
-                )
-            }
-
-            item(key = "settings_data_storage") {
-                DataAndStorageSettingsCard(
-                    aiConfig = uiState.aiConfig,
-                    onOpenAiSettingsDialog =
-                        if (enableAiConfig) {
-                            { showAiSettingsDialog = true }
-                        } else {
-                            null
-                        },
-                    onClearCache = onClearCache,
-                    isClearingCache = isClearingCache,
-                    onOpenDownloads = onDownloadsClick,
-                )
-            }
-
-            if (isDeveloperModeActive) {
-                item(key = "settings_developer_entry") {
-                    DeveloperEntrySettingsCard(
-                        onOpenDeveloperOptions = onOpenDeveloperOptions,
+            LazyColumn(
+                modifier = Modifier.widthIn(max = 840.dp).fillMaxSize().padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 48.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                item(key = "settings_appearance") {
+                    AppearanceSettingsCard(
+                        themeMode = themeMode,
+                        onSelectThemeMode = onSelectThemeMode,
+                        dynamicColor = dynamicColor,
+                        onToggleDynamicColor = onToggleDynamicColor,
+                        amoledDarkMode = amoledDarkMode,
+                        onToggleAmoledDarkMode = onToggleAmoledDarkMode,
                     )
                 }
-            }
 
-            item(key = "settings_about") {
-                AboutSettingsCard(
-                    onOpenWebUrl = onOpenWebUrl,
-                    isCheckingUpdate = uiState.isCheckingUpdate,
-                    onCheckForUpdate = onCheckForUpdate,
-                    onVersionClick = onVersionClick,
-                )
-            }
-
-            if (uiState.isLoggedIn) {
-                item(key = "settings_account") {
-                    AccountSettingsCard(
-                        activeProfile = uiState.activeProfile,
-                        savedAccountsCount = uiState.savedAccounts.size,
-                        onLogoutCurrentClick = {
-                            val currentProfile = uiState.activeProfile
-                            val message =
-                                if (currentProfile != null) {
-                                    context.getString(
-                                        R.string.feature_user_logout_confirm_named,
-                                        currentProfile.displayName,
-                                        currentProfile.username,
-                                    )
-                                } else {
-                                    context.getString(R.string.feature_user_logout_current_confirm)
-                                }
+                item(key = "settings_playback_content") {
+                    PlaybackAndContentSettingsCard(
+                        pipEnabled = pipEnabled,
+                        onTogglePipEnabled = onTogglePipEnabled,
+                        showRestrictedContent = showRestrictedContent,
+                        onToggleShowRestrictedContent = onToggleShowRestrictedContent,
+                        syncInterval = uiState.syncInterval,
+                        onOpenSyncDialog = {
                             coroutineScope.launch {
-                                val confirmed =
+                                val selected =
                                     overlayHostState.await(
-                                        ConfirmDialogAction(
-                                            title = context.getString(R.string.feature_user_logout_current_title),
-                                            message = message,
-                                            confirmText = context.getString(R.string.feature_user_logout_action),
-                                            isDestructive = true,
-                                            icon = BgmIcons.Logout,
+                                        SingleChoiceDialogAction(
+                                            title = context.getString(R.string.feature_user_sync_interval_title),
+                                            options = SyncInterval.entries,
+                                            selectedOption = uiState.syncInterval,
+                                            optionLabel = { it.displayName },
                                         ),
                                     )
-                                if (confirmed) {
-                                    onLogoutCurrent()
+                                if (selected != null) {
+                                    onSelectSyncInterval(selected)
                                 }
                             }
                         },
-                        onLogoutAllClick = {
-                            coroutineScope.launch {
-                                val confirmed =
-                                    overlayHostState.await(
-                                        ConfirmDialogAction(
-                                            title = context.getString(R.string.feature_user_logout_all_title),
-                                            message =
-                                                context.getString(
-                                                    R.string.feature_user_logout_all_confirm,
-                                                    uiState.savedAccounts.size,
-                                                ),
-                                            confirmText = context.getString(R.string.feature_user_logout_all_action),
-                                            isDestructive = true,
-                                            icon = BgmIcons.Delete,
-                                        ),
-                                    )
-                                if (confirmed) {
-                                    onLogoutAll()
-                                }
-                            }
-                        },
+                        onOpenPlaybackRules = onPlaybackRulesClick,
+                        onOpenDanmakuSettings = { showDanmakuSettingsDialog = true },
+                        danmakuSummary =
+                            if (uiState.danmakuConfig.endpoint.isNotBlank()) {
+                                uiState.danmakuConfig.endpoint
+                            } else if (uiState.danmakuConfig.appId.isNotBlank()) {
+                                stringResource(R.string.feature_user_settings_danmaku_desc_configured)
+                            } else {
+                                null
+                            },
                     )
+                }
+
+                item(key = "settings_reminder") {
+                    ReminderSettingsCard(
+                        airingReminderEnabled = uiState.airingReminderEnabled,
+                        onToggleAiringReminder = onToggleAiringReminder,
+                        hasNotificationPermission = hasNotificationPermission,
+                        airingDailySummaryEnabled = airingDailySummaryEnabled,
+                        onToggleAiringDailySummary = onToggleAiringDailySummary,
+                        airingReminderHour = airingReminderHour,
+                        onOpenReminderHourDialog = {
+                            coroutineScope.launch {
+                                val selected =
+                                    overlayHostState.await(
+                                        SingleChoiceDialogAction(
+                                            title = context.getString(R.string.feature_user_reminder_hour_title),
+                                            options = listOf(7, 8, 12, 18, 21),
+                                            selectedOption = airingReminderHour,
+                                            optionLabel = { "%02d:00".format(it) },
+                                        ),
+                                    )
+                                if (selected != null) {
+                                    onSelectReminderHour(selected)
+                                }
+                            }
+                        },
+                        airingPreAirEnabled = airingPreAirEnabled,
+                        onToggleAiringPreAir = onToggleAiringPreAir,
+                        airingNotificationOffsetMinutes = airingNotificationOffsetMinutes,
+                        onOpenTimingBottomSheet = { showTimingBottomSheet = true },
+                        airingBingeFinaleEnabled = airingBingeFinaleEnabled,
+                        onToggleAiringBingeFinale = onToggleAiringBingeFinale,
+                        onOpenSystemNotificationSettings = onOpenSystemNotificationSettings,
+                        isIgnoringBatteryOptimizations = isIgnoringBatteryOptimizations,
+                        onOpenKeepAliveSettings = onOpenKeepAliveSettings,
+                    )
+                }
+
+                item(key = "settings_data_storage") {
+                    DataAndStorageSettingsCard(
+                        aiConfig = uiState.aiConfig,
+                        onOpenAiSettingsDialog =
+                            if (enableAiConfig) {
+                                { showAiSettingsDialog = true }
+                            } else {
+                                null
+                            },
+                        onClearCache = onClearCache,
+                        isClearingCache = isClearingCache,
+                        onOpenDownloads = onDownloadsClick,
+                    )
+                }
+
+                if (isDeveloperModeActive) {
+                    item(key = "settings_developer_entry") {
+                        DeveloperEntrySettingsCard(
+                            onOpenDeveloperOptions = onOpenDeveloperOptions,
+                        )
+                    }
+                }
+
+                item(key = "settings_about") {
+                    AboutSettingsCard(
+                        onOpenWebUrl = onOpenWebUrl,
+                        isCheckingUpdate = uiState.isCheckingUpdate,
+                        onCheckForUpdate = onCheckForUpdate,
+                        onVersionClick = onVersionClick,
+                    )
+                }
+
+                if (uiState.isLoggedIn) {
+                    item(key = "settings_account") {
+                        AccountSettingsCard(
+                            activeProfile = uiState.activeProfile,
+                            savedAccountsCount = uiState.savedAccounts.size,
+                            onLogoutCurrentClick = {
+                                val currentProfile = uiState.activeProfile
+                                val message =
+                                    if (currentProfile != null) {
+                                        context.getString(
+                                            R.string.feature_user_logout_confirm_named,
+                                            currentProfile.displayName,
+                                            currentProfile.username,
+                                        )
+                                    } else {
+                                        context.getString(R.string.feature_user_logout_current_confirm)
+                                    }
+                                coroutineScope.launch {
+                                    val confirmed =
+                                        overlayHostState.await(
+                                            ConfirmDialogAction(
+                                                title = context.getString(R.string.feature_user_logout_current_title),
+                                                message = message,
+                                                confirmText = context.getString(R.string.feature_user_logout_action),
+                                                isDestructive = true,
+                                                icon = BgmIcons.Logout,
+                                            ),
+                                        )
+                                    if (confirmed) {
+                                        onLogoutCurrent()
+                                    }
+                                }
+                            },
+                            onLogoutAllClick = {
+                                coroutineScope.launch {
+                                    val confirmed =
+                                        overlayHostState.await(
+                                            ConfirmDialogAction(
+                                                title = context.getString(R.string.feature_user_logout_all_title),
+                                                message =
+                                                    context.getString(
+                                                        R.string.feature_user_logout_all_confirm,
+                                                        uiState.savedAccounts.size,
+                                                    ),
+                                                confirmText = context.getString(R.string.feature_user_logout_all_action),
+                                                isDestructive = true,
+                                                icon = BgmIcons.Delete,
+                                            ),
+                                        )
+                                    if (confirmed) {
+                                        onLogoutAll()
+                                    }
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }

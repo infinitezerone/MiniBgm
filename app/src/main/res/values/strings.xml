@@ -20,6 +20,21 @@
     <string name="app_detail_placeholder_title_default">选择作品查看详情</string>
     <string name="app_detail_placeholder_subtitle_default">在左侧列表中轻点任意条目\n右侧将原地展示专属海报、进度与社区吐槽</string>
 
+    <!-- 宽屏默认详情总览 -->
+    <string name="app_overview_title">今日总览</string>
+    <string name="app_overview_subtitle">接着上次的进度，或从左侧时间线挑一部</string>
+    <string name="app_overview_continue_watching">接着看</string>
+    <string name="app_overview_recent_history">最近观看</string>
+    <string name="app_overview_quick_actions">快捷入口</string>
+    <string name="app_overview_seasonal_guide">季度片单</string>
+    <string name="app_overview_search">搜索作品</string>
+    <string name="app_overview_assistant">AI 助手</string>
+    <string name="app_overview_resume">继续播放</string>
+    <string name="app_overview_empty_title">还没有观看记录</string>
+    <string name="app_overview_empty_hint">从左侧选择作品，或去季度片单看看本季新番</string>
+    <string name="app_overview_episode_format">第 %1$d 话</string>
+    <string name="app_overview_progress_format">%1$s / %2$s</string>
+
     <!-- 应用内网页与助手入口 -->
     <string name="app_in_app_web_title_token">访问令牌</string>
     <string name="app_subject_fallback_title">当前条目</string>

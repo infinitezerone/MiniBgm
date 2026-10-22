@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalContentColor
@@ -83,6 +84,7 @@ fun BgmTopAppBar(
     colors: TopAppBarColors? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     height: Dp = BgmSpacing.TopBar.height,
+    contentMaxWidth: Dp? = null,
 ) {
     val density = LocalDensity.current
     val contentHeightPx = with(density) { height.toPx() }
@@ -124,44 +126,55 @@ fun BgmTopAppBar(
         propagateMinConstraints = true,
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .windowInsetsPadding(windowInsets)
-                        .height(contentHeight)
-                        .padding(horizontal = BgmSpacing.TopBar.horizontal),
-                verticalAlignment = Alignment.CenterVertically,
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.TopCenter,
             ) {
-                CompositionLocalProvider(
-                    LocalContentColor provides resolvedColors.navigationIconContentColor,
-                    content = navigationIcon,
-                )
-                Box(
+                Row(
                     modifier =
                         Modifier
-                            .weight(1f)
-                            .padding(horizontal = BgmSpacing.TopBar.titleHorizontal),
-                    contentAlignment = Alignment.CenterStart,
+                            .then(
+                                if (contentMaxWidth != null) {
+                                    Modifier.widthIn(max = contentMaxWidth)
+                                } else {
+                                    Modifier
+                                },
+                            ).fillMaxWidth()
+                            .windowInsetsPadding(windowInsets)
+                            .height(contentHeight)
+                            .padding(horizontal = BgmSpacing.TopBar.horizontal),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ProvideTextStyle(
-                        value =
-                            MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = resolvedColors.titleContentColor,
-                            ),
-                    ) {
-                        title()
-                    }
-                }
-                CompositionLocalProvider(
-                    LocalContentColor provides resolvedColors.actionIconContentColor,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.End,
-                        content = actions,
+                    CompositionLocalProvider(
+                        LocalContentColor provides resolvedColors.navigationIconContentColor,
+                        content = navigationIcon,
                     )
+                    Box(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .padding(horizontal = BgmSpacing.TopBar.titleHorizontal),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        ProvideTextStyle(
+                            value =
+                                MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = resolvedColors.titleContentColor,
+                                ),
+                        ) {
+                            title()
+                        }
+                    }
+                    CompositionLocalProvider(
+                        LocalContentColor provides resolvedColors.actionIconContentColor,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End,
+                            content = actions,
+                        )
+                    }
                 }
             }
 

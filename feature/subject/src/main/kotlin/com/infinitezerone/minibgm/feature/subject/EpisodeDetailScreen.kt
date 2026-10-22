@@ -209,6 +209,7 @@ fun EpisodeDetailScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             BgmTopAppBar(
+                contentMaxWidth = 840.dp,
                 title = {
                     val fullTitle =
                         when {

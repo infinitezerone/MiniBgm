@@ -9,7 +9,7 @@ import androidx.compose.ui.unit.dp
  * 来源与边界：
  * - 基础阶梯沿用项目既有的 4dp 基线（4/8/12/16/20/24/32），与 Material 3 的
  *   4dp baseline grid 一致，不引入 iOS 的 8pt 网格，也不重排现有页面边距。
- * - [TopBar] / [FloatingNav] / [Snackbar] 只固化跨页面复用的 chrome 尺寸；
+ * - [TopBar] / [SideNavigation] / [FloatingNav] / [Snackbar] 只固化跨页面复用的 chrome 尺寸；
  *   页面级 padding 仍由各 feature 持有，后续页面结构重构时可独立演进。
  * - 6dp、10dp、48dp、64dp、88dp 是实测后的固定交互尺寸（触控靶区、胶囊呼吸、
  *   底栏避让），不参与 4dp 阶梯推导，避免为了“整齐”牺牲可达性。
@@ -35,6 +35,12 @@ object BgmSpacing {
         val horizontal: Dp = BgmSpacing.xs
         val titleHorizontal: Dp = BgmSpacing.sm
         val hairline: Dp = BgmSpacing.hairline
+    }
+
+    /** 宽屏侧边导航。只有三个顶层目的地时保持紧凑轨道，不制造空侧栏。 */
+    object SideNavigation {
+        val railWidth: Dp = 80.dp
+        val verticalCapsuleWidth: Dp = 64.dp
     }
 
     /**

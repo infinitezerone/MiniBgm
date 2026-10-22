@@ -16,10 +16,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
@@ -82,17 +86,31 @@ fun BgmFloatingNavigationBar(
         }
 
     val navModifier =
-        modifier
-            .wrapContentWidth()
-            .height(BgmSpacing.FloatingNav.height)
-            .widthIn(min = BgmSpacing.FloatingNav.minWidth, max = BgmSpacing.FloatingNav.maxWidth)
-            .aquamorphicPress(
-                interactionSource = dockInteraction,
-                pressedScale = 0.95f,
-            ).aquamorphicShadow(
-                shape = CircleShape,
-                isDark = isDark,
-            )
+        if (isVertical) {
+            modifier
+                .wrapContentHeight()
+                .width(BgmSpacing.SideNavigation.verticalCapsuleWidth)
+                .heightIn(min = BgmSpacing.FloatingNav.minWidth, max = BgmSpacing.FloatingNav.maxWidth)
+                .aquamorphicPress(
+                    interactionSource = dockInteraction,
+                    pressedScale = 0.95f,
+                ).aquamorphicShadow(
+                    shape = CircleShape,
+                    isDark = isDark,
+                )
+        } else {
+            modifier
+                .wrapContentWidth()
+                .height(BgmSpacing.FloatingNav.height)
+                .widthIn(min = BgmSpacing.FloatingNav.minWidth, max = BgmSpacing.FloatingNav.maxWidth)
+                .aquamorphicPress(
+                    interactionSource = dockInteraction,
+                    pressedScale = 0.95f,
+                ).aquamorphicShadow(
+                    shape = CircleShape,
+                    isDark = isDark,
+                )
+        }
 
     Surface(
         shape = CircleShape,
@@ -103,27 +121,56 @@ fun BgmFloatingNavigationBar(
         border = effectiveBorder,
         modifier = navModifier,
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(BgmSpacing.FloatingNav.itemGap, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier =
-                Modifier
-                    .fillMaxHeight()
-                    .padding(horizontal = BgmSpacing.FloatingNav.horizontalPadding),
-        ) {
-            TopLevelDestination.entries.forEach { destination ->
-                val interactionSource =
-                    when (destination) {
-                        TopLevelDestination.SCHEDULE -> scheduleInteraction
-                        TopLevelDestination.EXPLORE -> exploreInteraction
-                        TopLevelDestination.USER -> userInteraction
-                    }
-                BgmFloatingNavItem(
-                    destination = destination,
-                    isSelected = destination.route == currentDestination,
-                    interactionSource = interactionSource,
-                    onClick = { onDestinationSelected(destination.route) },
-                )
+        if (isVertical) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(BgmSpacing.FloatingNav.itemGap, Alignment.CenterVertically),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier =
+                    Modifier
+                        .wrapContentHeight()
+                        .fillMaxWidth()
+                        .padding(vertical = BgmSpacing.FloatingNav.horizontalPadding),
+            ) {
+                TopLevelDestination.entries.forEach { destination ->
+                    val interactionSource =
+                        when (destination) {
+                            TopLevelDestination.SCHEDULE -> scheduleInteraction
+                            TopLevelDestination.EXPLORE -> exploreInteraction
+                            TopLevelDestination.USER -> userInteraction
+                        }
+                    BgmFloatingNavItem(
+                        destination = destination,
+                        isSelected = destination.route == currentDestination,
+                        interactionSource = interactionSource,
+                        onClick = { onDestinationSelected(destination.route) },
+                        isVertical = true,
+                    )
+                }
+            }
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(BgmSpacing.FloatingNav.itemGap, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier =
+                    Modifier
+                        .fillMaxHeight()
+                        .padding(horizontal = BgmSpacing.FloatingNav.horizontalPadding),
+            ) {
+                TopLevelDestination.entries.forEach { destination ->
+                    val interactionSource =
+                        when (destination) {
+                            TopLevelDestination.SCHEDULE -> scheduleInteraction
+                            TopLevelDestination.EXPLORE -> exploreInteraction
+                            TopLevelDestination.USER -> userInteraction
+                        }
+                    BgmFloatingNavItem(
+                        destination = destination,
+                        isSelected = destination.route == currentDestination,
+                        interactionSource = interactionSource,
+                        onClick = { onDestinationSelected(destination.route) },
+                        isVertical = false,
+                    )
+                }
             }
         }
     }
@@ -136,6 +183,7 @@ private fun BgmFloatingNavItem(
     interactionSource: MutableInteractionSource,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isVertical: Boolean = false,
 ) {
     val iconColor by animateColorAsState(
         targetValue =
@@ -167,20 +215,37 @@ private fun BgmFloatingNavItem(
         label = "pill_text_color",
     )
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier =
+    val itemModifier =
+        if (isVertical) {
             modifier
-                .fillMaxHeight()
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = BgmSpacing.FloatingNav.itemMinWidth)
                 .clip(CircleShape)
                 .clickable(
                     interactionSource = interactionSource,
                     indication = ripple(bounded = true, radius = 28.dp),
                     role = Role.Tab,
                     onClick = onClick,
-                ).defaultMinSize(minWidth = BgmSpacing.FloatingNav.itemMinWidth)
-                .padding(horizontal = 8.dp),
+                )
+                .padding(vertical = 8.dp)
+        } else {
+            modifier
+                .fillMaxHeight()
+                .defaultMinSize(minWidth = BgmSpacing.FloatingNav.itemMinWidth)
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = ripple(bounded = true, radius = 28.dp),
+                    role = Role.Tab,
+                    onClick = onClick,
+                )
+                .padding(horizontal = 8.dp)
+        }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = itemModifier,
     ) {
         val label = stringResource(destination.labelRes)
         AnimatedContent(

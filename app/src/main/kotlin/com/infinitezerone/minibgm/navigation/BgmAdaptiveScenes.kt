@@ -10,8 +10,11 @@ import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
 import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
+import androidx.window.core.layout.WindowSizeClass
+import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.ui.component.BgmDetailPlaceholder
 
 /**
@@ -23,11 +26,28 @@ import com.infinitezerone.minibgm.ui.component.BgmDetailPlaceholder
 fun rememberBgmPaneDirective(): PaneScaffoldDirective {
     val windowAdaptiveInfo = currentWindowAdaptiveInfoV2()
     return remember(windowAdaptiveInfo) {
-        calculatePaneScaffoldDirective(windowAdaptiveInfo).copy(
-            horizontalPartitionSpacerSize = 0.dp,
-        )
+        calculatePaneScaffoldDirective(windowAdaptiveInfo).let { directive ->
+            directive.copy(
+                horizontalPartitionSpacerSize = 0.dp,
+                defaultPanePreferredWidth =
+                    preferredPaneWidthFor(
+                        minWidthDp = windowAdaptiveInfo.windowSizeClass.minWidthDp,
+                        fallback = directive.defaultPanePreferredWidth,
+                    ),
+            )
+        }
     }
 }
+
+internal fun preferredPaneWidthFor(
+    minWidthDp: Int,
+    fallback: Dp,
+): Dp =
+    when {
+        minWidthDp >= WindowSizeClass.WIDTH_DP_EXTRA_LARGE_LOWER_BOUND -> 420.dp
+        minWidthDp >= WindowSizeClass.WIDTH_DP_EXPANDED_LOWER_BOUND -> 480.dp
+        else -> fallback
+    }
 
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 val PaneScaffoldDirective.isSplitLayout: Boolean
@@ -45,6 +65,21 @@ fun rememberBgmListDetailStrategy(directive: PaneScaffoldDirective = rememberBgm
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 fun bgmListPane(detailPlaceholder: @Composable ThreePaneScaffoldScope.() -> Unit = { BgmDetailPlaceholder() }): Map<String, Any> =
     ListDetailSceneStrategy.listPane(detailPlaceholder = detailPlaceholder)
+
+/**
+ * 只有放送时间表是天然的时间线 + 详情结构；探索、搜索、我的都是单栏信息流。
+ * 硬套 list-detail 会在右侧留下一个没有内容职责的空面板。
+ */
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
+internal fun bgmTopLevelPaneMetadata(
+    route: NavKey,
+    detailPlaceholder: @Composable ThreePaneScaffoldScope.() -> Unit,
+): Map<String, Any> =
+    if (route is ScheduleRoute) {
+        bgmListPane(detailPlaceholder)
+    } else {
+        emptyMap()
+    }
 
 /** 详情 Pane 元数据 */
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)

@@ -25,7 +25,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,6 +32,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.feature.search.R
 import com.infinitezerone.minibgm.feature.search.SeasonQuarter
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
@@ -102,7 +102,7 @@ fun SeasonalGuideSkeletonList(modifier: Modifier = Modifier) {
 @Composable
 fun SeasonalGuideSkeletonGrid(modifier: Modifier = Modifier) {
     val skeletonState = rememberSkeletonState()
-    val isWideScreen = LocalConfiguration.current.screenWidthDp >= 600
+    val isWideScreen = LocalWindowAdaptiveInfo.current.isWide
     val gridColumns =
         if (isWideScreen) {
             GridCells.Adaptive(minSize = 110.dp)

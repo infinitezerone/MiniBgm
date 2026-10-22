@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.user
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
@@ -257,6 +259,7 @@ fun UserScreenContent(
         topBar = {
             BgmTopAppBar(
                 mode = BgmTopBarMode.Immersive,
+                contentMaxWidth = 1200.dp,
                 title = {
                     Text(text = stringResource(R.string.feature_user_title_home))
                 },
@@ -343,26 +346,35 @@ fun UserScreenContent(
             onRefresh = onRefresh,
             modifier = Modifier.fillMaxSize(),
         ) {
-            when {
-                uiState.isLoading -> {
-                    // 首帧加载态：沉浸式骨架屏，平滑过渡，杜绝未决会话前抢先闪烁未登录引导卡片
-                    UserScreenSkeleton(
-                        modifier = Modifier.fillMaxSize().padding(top = topChromeHeight),
-                    )
-                }
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                when {
+                    uiState.isLoading -> {
+                        // 首帧加载态：沉浸式骨架屏，平滑过渡，杜绝未决会话前抢先闪烁未登录引导卡片
+                        UserScreenSkeleton(
+                            modifier =
+                                Modifier
+                                    .widthIn(max = 1200.dp)
+                                    .fillMaxSize()
+                                    .padding(top = topChromeHeight),
+                        )
+                    }
 
-                !uiState.isLoggedIn -> {
-                    // 未登录状态：全屏沉浸式登录引导区，干净聚焦无冗余
-                    UnauthenticatedLandingView(
-                        onLogin = onLogin,
-                        onLoginWithToken = onLoginWithToken,
-                        onOpenTokenPage = onOpenTokenPage,
-                        isAuthenticating = uiState.isAuthenticating,
-                        modifier = Modifier.fillMaxSize().padding(top = topChromeHeight),
-                    )
-                }
+                    !uiState.isLoggedIn -> {
+                        // 未登录状态：聚焦登录动作，宽屏下不再把按钮拉成通栏色带
+                        UnauthenticatedLandingView(
+                            onLogin = onLogin,
+                            onLoginWithToken = onLoginWithToken,
+                            onOpenTokenPage = onOpenTokenPage,
+                            isAuthenticating = uiState.isAuthenticating,
+                            modifier =
+                                Modifier
+                                    .widthIn(max = 560.dp)
+                                    .fillMaxSize()
+                                    .padding(top = topChromeHeight),
+                        )
+                    }
 
-                else -> {
+                    else -> {
                     // 筛选只在"有列表可筛"时有意义：错误态与空态下摆着 5 个胶囊，点了什么都不会发生。
                     // 加载中仍然显示，是为了避开"加载完才冒出来"的跳版。
                     val filterType = collectionsState.selectedType
@@ -375,9 +387,9 @@ fun UserScreenContent(
                     val hasFilterableList =
                         collectionsState.collectionsByType[filterType].orEmpty().isNotEmpty()
 
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.widthIn(max = 1200.dp).fillMaxSize(),
                         contentPadding = PaddingValues(top = topChromeHeight + 4.dp, bottom = 96.dp),
                     ) {
                         // 1. 沉浸式身份头部
@@ -425,7 +437,7 @@ fun UserScreenContent(
                         }
 
                         // 5. 追番收藏列表（直接呈现，首屏即可见）
-                        collectionSection(
+                            collectionSection(
                             state = collectionsState,
                             onSubjectClick = onSubjectClick,
                             onIncrementProgress = onIncrementProgress,
@@ -436,6 +448,7 @@ fun UserScreenContent(
                             onRetry = onRetryCollections,
                             onLoadMore = onLoadMore,
                         )
+                    }
                     }
                 }
             }

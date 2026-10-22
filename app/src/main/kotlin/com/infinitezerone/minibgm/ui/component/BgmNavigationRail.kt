@@ -1,24 +1,19 @@
 package com.infinitezerone.minibgm.ui.component
 
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.NavigationRailItemDefaults
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.navigation3.runtime.NavKey
-import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 
 /**
- * 平板与折叠屏大屏下的侧边导航栏（NavigationRail）。
- * 占据独立的水平物理空间（非悬浮遮挡），确保右侧所有内容区和返回操作无遮挡。
- * 遵循系统纯净交互立场，零强制触觉震动。
+ * 平板与折叠屏大屏下的侧边导航栏。
+ *
+ * 采用与悬浮胶囊底栏统一的水生悬浮胶囊设计，
+ * 垂直居中展示并独占水平物理占位，保障右侧内容与手势返回无遮挡。
  */
 @Composable
 fun BgmNavigationRail(
@@ -26,40 +21,17 @@ fun BgmNavigationRail(
     onDestinationSelected: (NavKey) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    NavigationRail(
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        modifier = modifier.fillMaxHeight(),
+    Box(
+        modifier =
+            modifier
+                .fillMaxHeight()
+                .width(BgmSpacing.SideNavigation.railWidth),
+        contentAlignment = Alignment.Center,
     ) {
-        Spacer(modifier = Modifier.weight(1f))
-        TopLevelDestination.entries.forEach { destination ->
-            val isSelected = destination.route == currentDestination
-            val label = stringResource(destination.labelRes)
-            NavigationRailItem(
-                selected = isSelected,
-                onClick = { onDestinationSelected(destination.route) },
-                icon = {
-                    Icon(
-                        imageVector = if (isSelected) destination.selectedIcon else destination.unselectedIcon,
-                        contentDescription = label,
-                    )
-                },
-                label = {
-                    Text(
-                        text = label,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                    )
-                },
-                colors =
-                    NavigationRailItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-            )
-        }
-        Spacer(modifier = Modifier.weight(1.5f))
+        BgmFloatingNavigationBar(
+            currentDestination = currentDestination,
+            onDestinationSelected = onDestinationSelected,
+            isVertical = true,
+        )
     }
 }

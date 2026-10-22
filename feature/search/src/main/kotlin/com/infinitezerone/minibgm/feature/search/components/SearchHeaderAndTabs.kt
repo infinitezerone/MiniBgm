@@ -56,6 +56,7 @@ fun SearchTopHeader(
     modifier: Modifier = Modifier,
 ) {
     BgmTopAppBar(
+        contentMaxWidth = 1080.dp,
         title = {
             // 胶囊搜索框
             Row(

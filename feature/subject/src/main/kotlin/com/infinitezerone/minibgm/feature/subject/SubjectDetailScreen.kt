@@ -422,6 +422,7 @@ fun SubjectDetailScreen(
         topBar = {
             BgmTopAppBar(
                 mode = BgmTopBarMode.Immersive,
+                contentMaxWidth = 840.dp,
                 title = {
                     Text(
                         text = displaySubject?.displayName ?: defaultTitle,

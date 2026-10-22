@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation3.runtime.NavKey
 import com.infinitezerone.minibgm.R
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
@@ -43,6 +44,8 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarDefault
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.designsystem.theme.ProvideWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.navigation.InAppLoginRoute
+import com.infinitezerone.minibgm.core.navigation.InAppWebRoute
+import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.core.navigation.SubjectDetailRoute
 import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
@@ -137,6 +140,7 @@ fun BgmApp(
         val adaptiveInfo = LocalWindowAdaptiveInfo.current
         val isWideScreen = adaptiveInfo.isWide
         val isTopLevel = navState.currentKey in navState.topLevelKeys
+        val showNavigationRail = shouldShowNavigationRail(isWideScreen, navState.currentKey)
         val targetPadding =
             BgmSnackbarDefaults.calculateBottomPadding(
                 isTopLevel = isTopLevel,
@@ -171,22 +175,13 @@ fun BgmApp(
                 modifier = Modifier.fillMaxSize(),
             ) { innerPadding ->
                 if (isWideScreen) {
-                    // 平板与折叠屏大屏：水平 Row 物理占位排版（NavigationRail 占独立宽度，完全不遮挡右侧内容与返回键）
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .padding(innerPadding),
-                    ) {
-                        BgmNavigationRail(
-                            currentDestination = navState.currentTopLevelKey,
-                            onDestinationSelected = { route -> navState.navigateTo(route) },
-                        )
+                    if (!showNavigationRail) {
+                        // 播放器 / 登录接管 / 内嵌网页：宽屏也必须全屏，不保留 NavigationRail
                         Box(
                             modifier =
                                 Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight(),
+                                    .fillMaxSize()
+                                    .padding(innerPadding),
                         ) {
                             BgmNavHost(
                                 navState = navState,
@@ -195,6 +190,34 @@ fun BgmApp(
 
                             if (isAuthenticating && activity?.isInPictureInPictureMode != true) {
                                 OAuthProcessingDialog()
+                            }
+                        }
+                    } else {
+                        // 平板与折叠屏大屏：水平 Row 物理占位排版（NavigationRail 占独立宽度，完全不遮挡右侧内容与返回键）
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .padding(innerPadding),
+                        ) {
+                            BgmNavigationRail(
+                                currentDestination = navState.currentTopLevelKey,
+                                onDestinationSelected = { route -> navState.navigateTo(route) },
+                            )
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
+                            ) {
+                                BgmNavHost(
+                                    navState = navState,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+
+                                if (isAuthenticating && activity?.isInPictureInPictureMode != true) {
+                                    OAuthProcessingDialog()
+                                }
                             }
                         }
                     }
@@ -262,3 +285,15 @@ fun BgmApp(
         }
     }
 }
+
+/** 宽屏下必须退出分栏并隐藏导航 rail 的全屏路由。 */
+internal fun NavKey.isFullScreenBgmRoute(): Boolean =
+    this is PlayerRoute ||
+        this is InAppLoginRoute ||
+        this is InAppWebRoute
+
+/** 宽屏 chrome 策略：全屏路由不保留 NavigationRail。 */
+internal fun shouldShowNavigationRail(
+    isWideScreen: Boolean,
+    currentRoute: NavKey,
+): Boolean = isWideScreen && !currentRoute.isFullScreenBgmRoute()

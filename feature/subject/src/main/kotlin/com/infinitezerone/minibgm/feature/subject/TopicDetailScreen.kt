@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -146,6 +147,7 @@ fun TopicDetailScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             BgmTopAppBar(
+                contentMaxWidth = 840.dp,
                 title = {
                     Text(
                         text = displayTitle,
@@ -272,81 +274,86 @@ fun TopicDetailScreen(
                 }
                 topic != null -> {
                     val sortedReplies = uiState.sortedFloorReplies
-                    LazyColumn(
-                        state = listState,
+                    Box(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentAlignment = Alignment.TopCenter,
                     ) {
-                        // 1 楼：楼主原帖卡片
-                        item(key = "main_post_${topic.id}") {
-                            TopicMainPostCard(
-                                topic = topic,
-                                onSubjectClick = onSubjectClick,
-                                onUrlClick = handleLinkClick,
-                                onUserClick = { username -> handleLinkClick("https://bgm.tv/user/$username") },
-                                onCopyContent = handleCopyContent,
-                                currentUserId = uiState.currentUserId,
-                                onReactionClick = { reaction -> viewModel.toggleMainPostReaction(reaction) },
-                                onAddReaction = { value -> viewModel.toggleMainPostReaction(value) },
-                            )
-                        }
-
-                        // 回复标题行：回复计数与排序分段器
-                        item(key = "replies_header") {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                HorizontalDivider(
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.widthIn(max = 840.dp).fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            // 1 楼：楼主原帖卡片
+                            item(key = "main_post_${topic.id}") {
+                                TopicMainPostCard(
+                                    topic = topic,
+                                    onSubjectClick = onSubjectClick,
+                                    onUrlClick = handleLinkClick,
+                                    onUserClick = { username -> handleLinkClick("https://bgm.tv/user/$username") },
+                                    onCopyContent = handleCopyContent,
+                                    currentUserId = uiState.currentUserId,
+                                    onReactionClick = { reaction -> viewModel.toggleMainPostReaction(reaction) },
+                                    onAddReaction = { value -> viewModel.toggleMainPostReaction(value) },
                                 )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                            }
+
+                            // 回复标题行：回复计数与排序分段器
+                            item(key = "replies_header") {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    Text(
-                                        text =
-                                            if (topic.floorReplies.isNotEmpty()) {
-                                                stringResource(R.string.feature_subject_topic_all_replies, topic.floorReplies.size)
-                                            } else {
-                                                stringResource(R.string.feature_subject_topic_no_replies)
-                                            },
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
                                     )
-                                    if (topic.floorReplies.isNotEmpty()) {
-                                        CommentSortOrderTabs(
-                                            currentOrder = uiState.sortOrder,
-                                            onOrderSelected = { order -> viewModel.setSortOrder(order) },
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                    ) {
+                                        Text(
+                                            text =
+                                                if (topic.floorReplies.isNotEmpty()) {
+                                                    stringResource(R.string.feature_subject_topic_all_replies, topic.floorReplies.size)
+                                                } else {
+                                                    stringResource(R.string.feature_subject_topic_no_replies)
+                                                },
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                         )
+                                        if (topic.floorReplies.isNotEmpty()) {
+                                            CommentSortOrderTabs(
+                                                currentOrder = uiState.sortOrder,
+                                                onOrderSelected = { order -> viewModel.setSortOrder(order) },
+                                            )
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        // 2 楼及后续楼层回帖列表
-                        items(
-                            items = sortedReplies,
-                            key = { (_, reply) -> reply.id },
-                        ) { (floorNumber, reply) ->
-                            TopicReplyCard(
-                                reply = reply,
-                                floorNumber = floorNumber,
-                                onUrlClick = handleLinkClick,
-                                isOp = opUserId != null && reply.creator?.id == opUserId,
-                                onUserClick = { username -> handleLinkClick("https://bgm.tv/user/$username") },
-                                onCopyContent = handleCopyContent,
-                                currentUserId = uiState.currentUserId,
-                                onReactionClick = { reaction -> viewModel.toggleReaction(reply, reaction) },
-                                onAddReaction = { reactionValue -> viewModel.toggleReaction(reply, reactionValue) },
-                            )
-                        }
+                            // 2 楼及后续楼层回帖列表
+                            items(
+                                items = sortedReplies,
+                                key = { (_, reply) -> reply.id },
+                            ) { (floorNumber, reply) ->
+                                TopicReplyCard(
+                                    reply = reply,
+                                    floorNumber = floorNumber,
+                                    onUrlClick = handleLinkClick,
+                                    isOp = opUserId != null && reply.creator?.id == opUserId,
+                                    onUserClick = { username -> handleLinkClick("https://bgm.tv/user/$username") },
+                                    onCopyContent = handleCopyContent,
+                                    currentUserId = uiState.currentUserId,
+                                    onReactionClick = { reaction -> viewModel.toggleReaction(reply, reaction) },
+                                    onAddReaction = { reactionValue -> viewModel.toggleReaction(reply, reactionValue) },
+                                )
+                            }
 
-                        item(key = "bottom_spacer") {
-                            Spacer(modifier = Modifier.height(16.dp))
+                            item(key = "bottom_spacer") {
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
                         }
                     }
                 }

@@ -2,24 +2,13 @@
 <issues format="6" by="lint 9.3.2" type="baseline" client="gradle" dependencies="false" name="AGP (9.3.2)" variant="all" version="9.3.2">
 
     <issue
-        id="ConfigurationScreenWidthHeight"
-        message="Using Configuration.screenWidthDp instead of LocalWindowInfo.current.containerSize"
-        errorLine1="    val isWideScreen = LocalConfiguration.current.screenWidthDp >= 600"
-        errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/SeasonalGuideSkeleton.kt"
-            line="105"
-            column="24"/>
-    </issue>
-
-    <issue
         id="ModifierParameter"
         message="Modifier parameter should be the first optional parameter"
         errorLine1="    modifier: Modifier = Modifier,"
         errorLine2="    ~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreFilterBottomSheet.kt"
-            line="442"
+            line="441"
             column="5"/>
     </issue>
 
@@ -30,7 +19,7 @@
         errorLine2="    ~~~~~~~~">
         <location
             file="src/main/kotlin/com/infinitezerone/minibgm/feature/search/components/ExploreGridList.kt"
-            line="48"
+            line="50"
             column="5"/>
     </issue>
 

@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.search
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
@@ -187,6 +189,7 @@ fun ExploreScreen(
                     }
                 },
                 mode = BgmTopBarMode.Immersive,
+                contentMaxWidth = 1280.dp,
                 scrollBehavior = topBarScrollBehavior,
             )
         },
@@ -198,11 +201,12 @@ fun ExploreScreen(
         },
         modifier = modifier.fillMaxSize().nestedScroll(topBarScrollBehavior.nestedScrollConnection),
     ) {
-        PullToRefreshBox(
-            isRefreshing = exploreUiState.isRefreshing,
-            onRefresh = exploreViewModel::refresh,
-            modifier = Modifier.fillMaxSize(),
-        ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+            PullToRefreshBox(
+                isRefreshing = exploreUiState.isRefreshing,
+                onRefresh = exploreViewModel::refresh,
+                modifier = Modifier.widthIn(max = 1280.dp).fillMaxSize(),
+            ) {
             if (exploreUiState.browseMode == ExploreBrowseMode.ROWS) {
                 // ════ 精选模式：榜单行区块 ════
                 LazyColumn(
@@ -325,6 +329,7 @@ fun ExploreScreen(
                         )
                     }
                 }
+            }
             }
         }
     }

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -184,335 +185,346 @@ fun AssistantScreenContent(
         }
     }
 
-    Scaffold(
-        topBar = {
-            BgmTopAppBar(
-                mode = BgmTopBarMode.Solid,
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = BgmIcons.Assistant,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.feature_assistant_app_title),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
-                },
-                navigationIcon = {
-                    if (onBackClick != null) {
-                        IconButton(onClick = onBackClick) {
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Scaffold(
+            topBar = {
+                BgmTopAppBar(
+                    mode = BgmTopBarMode.Solid,
+                    contentMaxWidth = 840.dp,
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                imageVector = BgmIcons.ArrowBack,
-                                contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
+                                imageVector = BgmIcons.Assistant,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(R.string.feature_assistant_app_title),
+                                style = MaterialTheme.typography.titleMedium,
                             )
                         }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { onToggleSessionSwitcher(true) }) {
-                        Icon(
-                            imageVector = BgmIcons.ChatBubble,
-                            contentDescription = stringResource(R.string.feature_assistant_cd_session_list),
-                        )
-                    }
-                    IconButton(onClick = { onToggleConfigDialog(true) }) {
-                        Icon(
-                            imageVector = BgmIcons.Settings,
-                            contentDescription = stringResource(R.string.feature_assistant_cd_ai_settings),
-                        )
-                    }
-                    if (uiState.messages.isNotEmpty()) {
-                        val currentSessionTitle =
-                            stringResource(R.string.feature_assistant_session_current_title)
-                        val activeTitle =
-                            uiState.sessions
-                                .firstOrNull { it.id == uiState.activeSessionId }
-                                ?.title
-                                ?.ifBlank { currentSessionTitle } ?: currentSessionTitle
-                        val deleteSessionTitle =
-                            stringResource(R.string.feature_assistant_session_delete_dialog_title)
-                        val deleteSessionMessage =
-                            stringResource(
-                                R.string.feature_assistant_session_delete_message_chat,
-                                activeTitle,
-                            )
-                        val deleteSessionConfirmText = stringResource(R.string.feature_assistant_action_delete)
-                        IconButton(onClick = {
-                            coroutineScope.launch {
-                                val confirmed =
-                                    overlayHostState.await(
-                                        ConfirmDialogAction(
-                                            title = deleteSessionTitle,
-                                            message = deleteSessionMessage,
-                                            confirmText = deleteSessionConfirmText,
-                                            isDestructive = true,
-                                        ),
-                                    )
-                                if (confirmed) {
-                                    onDeleteSession(uiState.activeSessionId)
-                                }
+                    },
+                    navigationIcon = {
+                        if (onBackClick != null) {
+                            IconButton(onClick = onBackClick) {
+                                Icon(
+                                    imageVector = BgmIcons.ArrowBack,
+                                    contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
+                                )
                             }
-                        }) {
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { onToggleSessionSwitcher(true) }) {
                             Icon(
-                                imageVector = BgmIcons.DeleteBorder,
-                                contentDescription = stringResource(R.string.feature_assistant_cd_delete_current_session),
+                                imageVector = BgmIcons.ChatBubble,
+                                contentDescription = stringResource(R.string.feature_assistant_cd_session_list),
                             )
                         }
-                    }
-                },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                    ),
-            )
-        },
-        bottomBar = {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
-            ) {
-                // 底部快捷预设 Prompts 滚动条（仅在有消息时展示辅助操作）
-                if (uiState.messages.isNotEmpty()) {
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        items(PROMPT_SUGGESTION_RES) { promptRes ->
-                            val prompt = stringResource(promptRes)
-                            SuggestionChip(
-                                onClick = {
-                                    focusManager.clearFocus()
-                                    keyboardController?.hide()
-                                    onSendPrompt(prompt)
-                                },
-                                label = { Text(prompt, style = MaterialTheme.typography.labelMedium) },
-                                enabled = !uiState.isLoading,
+                        IconButton(onClick = { onToggleConfigDialog(true) }) {
+                            Icon(
+                                imageVector = BgmIcons.Settings,
+                                contentDescription = stringResource(R.string.feature_assistant_cd_ai_settings),
                             )
                         }
-                    }
-                }
-
-                // 悬浮式胶囊输入框（无边框，发送按钮内嵌）
-                Surface(
-                    shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shadowElevation = 4.dp,
-                    tonalElevation = 2.dp,
+                        if (uiState.messages.isNotEmpty()) {
+                            val currentSessionTitle =
+                                stringResource(R.string.feature_assistant_session_current_title)
+                            val activeTitle =
+                                uiState.sessions
+                                    .firstOrNull { it.id == uiState.activeSessionId }
+                                    ?.title
+                                    ?.ifBlank { currentSessionTitle } ?: currentSessionTitle
+                            val deleteSessionTitle =
+                                stringResource(R.string.feature_assistant_session_delete_dialog_title)
+                            val deleteSessionMessage =
+                                stringResource(
+                                    R.string.feature_assistant_session_delete_message_chat,
+                                    activeTitle,
+                                )
+                            val deleteSessionConfirmText = stringResource(R.string.feature_assistant_action_delete)
+                            IconButton(onClick = {
+                                coroutineScope.launch {
+                                    val confirmed =
+                                        overlayHostState.await(
+                                            ConfirmDialogAction(
+                                                title = deleteSessionTitle,
+                                                message = deleteSessionMessage,
+                                                confirmText = deleteSessionConfirmText,
+                                                isDestructive = true,
+                                            ),
+                                        )
+                                    if (confirmed) {
+                                        onDeleteSession(uiState.activeSessionId)
+                                    }
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = BgmIcons.DeleteBorder,
+                                    contentDescription = stringResource(R.string.feature_assistant_cd_delete_current_session),
+                                )
+                            }
+                        }
+                    },
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                        ),
+                )
+            },
+            bottomBar = {
+                Box(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) {
-                                focusRequester.requestFocus()
-                            },
+                            .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
+                    contentAlignment = Alignment.TopCenter,
                 ) {
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(start = 12.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        TextField(
-                            value = uiState.inputText,
-                            onValueChange = onInputChanged,
-                            placeholder = {
-                                Text(
-                                    text = stringResource(R.string.feature_assistant_input_placeholder),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            },
-                            singleLine = false,
-                            maxLines = 4,
-                            keyboardOptions =
-                                KeyboardOptions(
-                                    imeAction = ImeAction.Send,
-                                    capitalization = KeyboardCapitalization.Sentences,
-                                ),
-                            keyboardActions =
-                                KeyboardActions(
-                                    onSend = {
-                                        val canSend = uiState.inputText.isNotBlank() && !uiState.isLoading
-                                        if (canSend) {
+                    Column(modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth()) {
+                        // 底部快捷预设 Prompts 滚动条（仅在有消息时展示辅助操作）
+                        if (uiState.messages.isNotEmpty()) {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                items(PROMPT_SUGGESTION_RES) { promptRes ->
+                                    val prompt = stringResource(promptRes)
+                                    SuggestionChip(
+                                        onClick = {
                                             focusManager.clearFocus()
                                             keyboardController?.hide()
-                                            onSendMessage()
-                                        }
-                                    },
-                                ),
-                            colors =
-                                TextFieldDefaults.colors(
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    disabledContainerColor = Color.Transparent,
-                                    focusedIndicatorColor = Color.Transparent,
-                                    unfocusedIndicatorColor = Color.Transparent,
-                                    disabledIndicatorColor = Color.Transparent,
-                                ),
+                                            onSendPrompt(prompt)
+                                        },
+                                        label = { Text(prompt, style = MaterialTheme.typography.labelMedium) },
+                                        enabled = !uiState.isLoading,
+                                    )
+                                }
+                            }
+                        }
+
+                        // 悬浮式胶囊输入框（无边框，发送按钮内嵌）
+                        Surface(
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            shadowElevation = 4.dp,
+                            tonalElevation = 2.dp,
                             modifier =
                                 Modifier
-                                    .weight(1f)
-                                    .focusRequester(focusRequester),
-                        )
-
-                        if (uiState.isLoading) {
-                            // 运行中：发送位变成停止按钮——端点挂住时用户不必干等超时
-                            IconButton(
-                                onClick = {
-                                    focusManager.clearFocus()
-                                    keyboardController?.hide()
-                                    onStopGeneration()
-                                },
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        focusRequester.requestFocus()
+                                    },
+                        ) {
+                            Row(
                                 modifier =
                                     Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.errorContainer),
+                                        .fillMaxWidth()
+                                        .padding(start = 12.dp, end = 6.dp, top = 2.dp, bottom = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(
-                                    imageVector = BgmIcons.Stop,
-                                    contentDescription = stringResource(R.string.feature_assistant_cd_stop_generation),
-                                    tint = MaterialTheme.colorScheme.onErrorContainer,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            }
-                        } else {
-                            val canSend = uiState.inputText.isNotBlank()
-                            IconButton(
-                                onClick = {
-                                    focusManager.clearFocus()
-                                    keyboardController?.hide()
-                                    onSendMessage()
+                                TextField(
+                                value = uiState.inputText,
+                                onValueChange = onInputChanged,
+                                placeholder = {
+                                    Text(
+                                        text = stringResource(R.string.feature_assistant_input_placeholder),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 },
-                                enabled = canSend,
-                                modifier =
-                                    Modifier
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(
+                                singleLine = false,
+                                maxLines = 4,
+                                keyboardOptions =
+                                    KeyboardOptions(
+                                        imeAction = ImeAction.Send,
+                                        capitalization = KeyboardCapitalization.Sentences,
+                                    ),
+                                keyboardActions =
+                                    KeyboardActions(
+                                        onSend = {
+                                            val canSend = uiState.inputText.isNotBlank() && !uiState.isLoading
                                             if (canSend) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                                            },
-                                        ),
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Send,
-                                    contentDescription = stringResource(R.string.feature_assistant_cd_send),
-                                    tint =
-                                        if (canSend) {
-                                            MaterialTheme.colorScheme.onPrimary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                focusManager.clearFocus()
+                                                keyboardController?.hide()
+                                                onSendMessage()
+                                            }
                                         },
-                                    modifier = Modifier.size(18.dp),
-                                )
+                                    ),
+                                colors =
+                                    TextFieldDefaults.colors(
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        disabledContainerColor = Color.Transparent,
+                                        focusedIndicatorColor = Color.Transparent,
+                                        unfocusedIndicatorColor = Color.Transparent,
+                                        disabledIndicatorColor = Color.Transparent,
+                                    ),
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .focusRequester(focusRequester),
+                            )
+
+                                if (uiState.isLoading) {
+                                // 运行中：发送位变成停止按钮——端点挂住时用户不必干等超时
+                                IconButton(
+                                    onClick = {
+                                        focusManager.clearFocus()
+                                        keyboardController?.hide()
+                                        onStopGeneration()
+                                    },
+                                    modifier =
+                                        Modifier
+                                            .size(38.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.errorContainer),
+                                ) {
+                                    Icon(
+                                        imageVector = BgmIcons.Stop,
+                                        contentDescription = stringResource(R.string.feature_assistant_cd_stop_generation),
+                                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                                } else {
+                                val canSend = uiState.inputText.isNotBlank()
+                                IconButton(
+                                    onClick = {
+                                        focusManager.clearFocus()
+                                        keyboardController?.hide()
+                                        onSendMessage()
+                                    },
+                                    enabled = canSend,
+                                    modifier =
+                                        Modifier
+                                            .size(38.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                if (canSend) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                                },
+                                            ),
+                                ) {
+                                    Icon(
+                                        imageVector = BgmIcons.Send,
+                                        contentDescription = stringResource(R.string.feature_assistant_cd_send),
+                                        tint =
+                                            if (canSend) {
+                                                MaterialTheme.colorScheme.onPrimary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                            },
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                                }
                             }
                         }
                     }
                 }
-            }
-        },
-        snackbarHost = { BgmSnackbarHost(snackbarHostState) },
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        modifier = modifier.fillMaxSize(),
-    ) { innerPadding ->
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
+            },
+            snackbarHost = { BgmSnackbarHost(snackbarHostState) },
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            modifier = Modifier.fillMaxSize(),
+        ) { innerPadding ->
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) {
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+                        },
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                if (uiState.messages.isEmpty()) {
+                    // 空状态引导卡片
+                    EmptyAssistantGuide(
+                        onSelectPrompt = { prompt ->
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+                            onSendPrompt(prompt)
+                        },
+                        modifier = Modifier.widthIn(max = 840.dp).fillMaxSize(),
+                    )
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier =
+                            Modifier
+                                .widthIn(max = 840.dp)
+                                .fillMaxSize()
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                ) {
+                                    focusManager.clearFocus()
+                                    keyboardController?.hide()
+                                },
                     ) {
-                        focusManager.clearFocus()
-                        keyboardController?.hide()
-                    },
-        ) {
-            if (uiState.messages.isEmpty()) {
-                // 空状态引导卡片
-                EmptyAssistantGuide(
-                    onSelectPrompt = { prompt ->
-                        focusManager.clearFocus()
-                        keyboardController?.hide()
-                        onSendPrompt(prompt)
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                LazyColumn(
-                    state = listState,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) {
-                                focusManager.clearFocus()
-                                keyboardController?.hide()
-                            },
-                ) {
-                    // 重试入口只挂在"最后一条且之后没有成功回复"的错误上：
-                    // 已有成功回答的问题不值得重试，重试成功后错误气泡会被整体移除
-                    val lastErrorId = uiState.messages.lastOrNull { it.isError }?.id
-                    val successAfterLastError =
-                        lastErrorId?.let { id ->
-                            val errorIndex = uiState.messages.indexOfFirst { it.id == id }
-                            uiState.messages
-                                .drop(errorIndex + 1)
-                                .any { it.role == MessageRole.ASSISTANT && !it.isError }
-                        } ?: false
-                    items(uiState.messages, key = { it.id }) { message ->
-                        ChatMessageItem(
-                            message = message,
-                            failedSources = uiState.failedSources,
-                            showRetry = message.isError && message.id == lastErrorId && !successAfterLastError,
-                            onApproveAction = onApproveAction,
-                            onRejectAction = onRejectAction,
-                            onSubjectClick = onSubjectClick,
-                            onPlaySource = onPlaySource,
-                            onRetryMessage = onRetryMessage,
-                        )
-                    }
-
-                    if (uiState.isLoading && uiState.streamingContent != null) {
-                        item(key = "streaming_preview") {
-                            AssistantStreamingBubble(partialText = uiState.streamingContent)
-                        }
-                    }
-
-                    if (uiState.isLoading) {
-                        item(key = "loading_indicator") {
-                            AssistantLoadingBubble(
-                                toolActivity = uiState.toolActivity,
-                                activityStepCount = uiState.activityEvents.size,
+                        // 重试入口只挂在"最后一条且之后没有成功回复"的错误上：
+                        // 已有成功回答的问题不值得重试，重试成功后错误气泡会被整体移除
+                        val lastErrorId = uiState.messages.lastOrNull { it.isError }?.id
+                        val successAfterLastError =
+                            lastErrorId?.let { id ->
+                                val errorIndex = uiState.messages.indexOfFirst { it.id == id }
+                                uiState.messages
+                                    .drop(errorIndex + 1)
+                                    .any { it.role == MessageRole.ASSISTANT && !it.isError }
+                            } ?: false
+                        items(uiState.messages, key = { it.id }) { message ->
+                            ChatMessageItem(
+                                message = message,
+                                failedSources = uiState.failedSources,
+                                showRetry = message.isError && message.id == lastErrorId && !successAfterLastError,
+                                onApproveAction = onApproveAction,
+                                onRejectAction = onRejectAction,
+                                onSubjectClick = onSubjectClick,
+                                onPlaySource = onPlaySource,
+                                onRetryMessage = onRetryMessage,
                             )
                         }
-                    }
 
-                    if (deepResolve != null) {
-                        item(key = "deep_resolve") {
-                            DeepResolveEntry(
-                                isRunning = deepResolve.isRunning,
-                                onClick = onRunDeepResolve,
-                            )
+                        if (uiState.isLoading && uiState.streamingContent != null) {
+                            item(key = "streaming_preview") {
+                                AssistantStreamingBubble(partialText = uiState.streamingContent)
+                            }
+                        }
+
+                        if (uiState.isLoading) {
+                            item(key = "loading_indicator") {
+                                AssistantLoadingBubble(
+                                    toolActivity = uiState.toolActivity,
+                                    activityStepCount = uiState.activityEvents.size,
+                                )
+                            }
+                        }
+
+                        if (deepResolve != null) {
+                            item(key = "deep_resolve") {
+                                DeepResolveEntry(
+                                    isRunning = deepResolve.isRunning,
+                                    onClick = onRunDeepResolve,
+                                )
+                            }
                         }
                     }
                 }
