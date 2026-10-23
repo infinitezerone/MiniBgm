@@ -21,8 +21,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+
+/** 当前设备是否应关闭模糊、玻璃等高成本视觉层（省电模式或低内存设备）。 */
+val LocalReducedTransparency = staticCompositionLocalOf { false }
 
 private object NoIndication : IndicationNodeFactory {
     override fun create(interactionSource: InteractionSource): Modifier.Node = object : Modifier.Node() {}
@@ -186,6 +190,7 @@ fun MiniBgmTheme(
 
     CompositionLocalProvider(
         LocalAppUiStyle provides uiStyle,
+        LocalReducedTransparency provides reducedTransparency,
         LocalLuminousTokens provides
             buildLuminousTokens(
                 darkTheme = darkTheme,

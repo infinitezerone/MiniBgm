@@ -24,13 +24,16 @@ import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.BitmapImage
 import coil3.Image
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
+import coil3.request.ImageRequest
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmMotion
+import com.infinitezerone.minibgm.core.designsystem.theme.LocalReducedTransparency
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -57,6 +60,9 @@ private object AmbientGlowDefaults {
 
     /** 主色降采样时短边像素上限 */
     const val SAMPLE_SHORTER_SIDE_CAP = 24
+
+    /** 模糊背景无需原始海报分辨率；限制解码尺寸，降低内存与 GPU 纹理上传成本。 */
+    const val BLUR_DECODE_SIZE_PX = 720
 }
 
 /**
@@ -108,10 +114,10 @@ fun AmbientGlow(
  * 页面级全景封面高斯模糊氛围层（Ambient Blur Backdrop）。
  *
  * 将海报封面进行大半径硬件高斯模糊，在页面顶部全景漫射，
- * 底部通过纵向渐隐遮罩与页面背景色 [MaterialTheme.colorScheme.surface] 平滑融合。
+ * 底部通过纵向渐隐遮罩与页面背景色 [MaterialTheme.colorScheme.background] 平滑融合。
  *
  * - 全景透光：自然保留封面本身的丰富色相（天空、夕阳、发色、服饰），彻底告别单色渐变画笔的局限；
- * - 性能轻盈：复用 Coil 内存缓存，0 额外网络开销；Android 12+ 走 GPU RenderEffect 硬件加速；
+ * - 性能轻盈：复用 Coil 内存缓存，显式限制解码尺寸；低端机/省电模式跳过模糊；
  * - 容错机制：URL 为空或加载异常时不阻碍页面，装饰性功能 fail-open 绝不崩溃。
  */
 @Composable
@@ -123,27 +129,37 @@ fun AmbientBlurBackdrop(
 ) {
     if (imageUrl.isNullOrBlank()) return
 
-    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val baseAlpha = if (isDarkSurface) 0.36f else 0.22f
+    val context = LocalContext.current
+    val reducedTransparency = LocalReducedTransparency.current
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val isDarkBackground = backgroundColor.luminance() < 0.5f
+    val baseAlpha = if (isDarkBackground) 0.36f else 0.18f
     val resolvedAlpha = (baseAlpha * intensity.coerceIn(0f, 1f)).coerceIn(0f, 1f)
-    val surfaceColor = MaterialTheme.colorScheme.surface
+    val imageRequest =
+        remember(imageUrl, context) {
+            ImageRequest
+                .Builder(context)
+                .data(imageUrl)
+                .size(AmbientGlowDefaults.BLUR_DECODE_SIZE_PX)
+                .build()
+        }
+    val imageModifier =
+        Modifier
+            .fillMaxSize()
+            .graphicsLayer { alpha = resolvedAlpha }
+            .then(if (reducedTransparency) Modifier else Modifier.blur(radius = blurRadius))
 
     Box(
         modifier =
             modifier
                 .clipToBounds()
-                .background(surfaceColor),
+                .background(backgroundColor),
     ) {
         AsyncImage(
-            model = imageUrl,
+            model = imageRequest,
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        alpha = resolvedAlpha
-                    }.blur(radius = blurRadius),
+            modifier = imageModifier,
         )
 
         // 垂直平滑遮罩：顶部保持通透微光，中部渐次柔和过渡，底部完全融合入页面背景色
@@ -155,9 +171,9 @@ fun AmbientBlurBackdrop(
                         brush =
                             Brush.verticalGradient(
                                 0.0f to Color.Transparent,
-                                0.35f to surfaceColor.copy(alpha = 0.25f),
-                                0.70f to surfaceColor.copy(alpha = 0.80f),
-                                1.0f to surfaceColor,
+                                0.35f to backgroundColor.copy(alpha = 0.25f),
+                                0.70f to backgroundColor.copy(alpha = 0.80f),
+                                1.0f to backgroundColor,
                             ),
                     ),
         )
