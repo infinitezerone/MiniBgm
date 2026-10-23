@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -39,6 +40,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -131,9 +133,10 @@ internal fun SubjectDetailContent(
     onRetryEpisodes: () -> Unit = {},
     onShare: (() -> Unit)? = null,
     topPadding: Dp = 12.dp,
+    listState: LazyListState = rememberLazyListState(),
+    onTitleBoundsChanged: (Rect) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
     // 滚动到“加载更多”脚标可见时自动续拉下一屏分集
@@ -238,6 +241,7 @@ internal fun SubjectDetailContent(
                 nextEpSort = mainNextUpEpNumber ?: nextUpEpNumber,
                 watchStatus = watchStatus,
                 onShare = onShare,
+                onTitleBoundsChanged = onTitleBoundsChanged,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }

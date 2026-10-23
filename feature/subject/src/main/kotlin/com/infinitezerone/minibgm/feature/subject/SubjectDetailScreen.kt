@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,6 +32,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,10 +41,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +62,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingPageSca
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
+import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarChrome
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
@@ -417,11 +422,31 @@ fun SubjectDetailScreen(
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val topChromeHeight = statusBarTop + BgmSpacing.TopBar.height
 
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    val topBarBottomPx = with(density) { (statusBarTop + BgmSpacing.TopBar.height).toPx() }
+    val headerItemIndex = if (uiState.error != null) 1 else 0
+    var titleBounds by remember { mutableStateOf<Rect?>(null) }
+    val collapseProgress by remember(topBarBottomPx, headerItemIndex) {
+        derivedStateOf {
+            val bounds = titleBounds
+            if (bounds == null) {
+                if (listState.firstVisibleItemIndex > headerItemIndex) 1f else 0f
+            } else {
+                calculateSubjectTitleCollapseProgress(
+                    titleBounds = bounds,
+                    topBarBottomPx = topBarBottomPx,
+                )
+            }
+        }
+    }
+
     BgmFloatingPageScaffold(
         topBarMode = BgmTopBarMode.Immersive,
         topBar = {
             BgmTopAppBar(
                 mode = BgmTopBarMode.Immersive,
+                chrome = BgmTopBarChrome.collapsing(collapseProgress),
                 contentMaxWidth = 840.dp,
                 title = {
                     Text(
@@ -665,6 +690,8 @@ fun SubjectDetailScreen(
                                 onRetryEpisodes = viewModel::retryLoadEpisodes,
                                 onShare = handleShare,
                                 topPadding = topChromeHeight + 8.dp,
+                                listState = listState,
+                                onTitleBoundsChanged = { titleBounds = it },
                                 modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
                             )
                         }
@@ -814,4 +841,16 @@ fun SubjectDetailScreen(
     BgmOverlayHost(hostState = overlayHostState) {
         confirmDialog()
     }
+}
+
+/**
+ * 标题顶部碰到顶栏底边时开始过渡，标题整体进入顶栏覆盖区时完成过渡。
+ * 使用标题自身高度作为过渡距离，天然适配两行标题、字体缩放与宽屏布局。
+ */
+internal fun calculateSubjectTitleCollapseProgress(
+    titleBounds: Rect?,
+    topBarBottomPx: Float,
+): Float {
+    if (titleBounds == null || titleBounds.height <= 0f) return 0f
+    return ((topBarBottomPx - titleBounds.top) / titleBounds.height).coerceIn(0f, 1f)
 }

@@ -27,14 +27,14 @@ object BgmSpacing {
     val xxxl: Dp = 32.dp
 
     /**
-     * 现代顶栏：48dp 高度，左右 16dp（BgmSpacing.lg）标准内边距，
-     * 保证实体大圆盘操作键（BgmCircleActionButton）与下方内容卡片网格完美左对齐，远离屏幕边框。
+     * 现代顶栏：56dp 高度，左右 16dp（BgmSpacing.lg）标准内边距，
+     * 为 40dp 实体大圆盘操作键（BgmCircleActionButton）保留上下各 8dp 呼吸空间，
+     * 同时保证操作键与下方内容卡片网格完美左对齐，远离屏幕边框。
      */
     object TopBar {
-        val height: Dp = 48.dp
+        val height: Dp = 56.dp
         val horizontal: Dp = BgmSpacing.lg
         val titleHorizontal: Dp = BgmSpacing.sm
-        val hairline: Dp = BgmSpacing.hairline
     }
 
     /** 宽屏侧边导航。只有三个顶层目的地时保持紧凑轨道，不制造空侧栏。 */

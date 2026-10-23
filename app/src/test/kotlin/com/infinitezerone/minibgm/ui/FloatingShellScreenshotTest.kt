@@ -41,6 +41,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.AppUiStyle
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.navigation.ScheduleRoute
 import com.infinitezerone.minibgm.ui.component.BgmFloatingNavigationBar
@@ -119,12 +120,12 @@ private val previewScheduleItems =
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun FloatingShellPreview() {
-    val totalTopChromeHeight = 48.dp + 56.dp
+    val totalTopChromeHeight = BgmSpacing.TopBar.height + 56.dp
     BgmFloatingPageScaffold(
         modifier = Modifier.size(width = 411.dp, height = 891.dp),
         topBarMode = BgmTopBarMode.Immersive,
         topScrimHeight = totalTopChromeHeight,
-        topScrimSolidHeight = 48.dp,
+        topScrimSolidHeight = BgmSpacing.TopBar.height,
         topBar = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 BgmTopAppBar(

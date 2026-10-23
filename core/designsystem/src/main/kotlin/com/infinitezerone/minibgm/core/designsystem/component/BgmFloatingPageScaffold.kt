@@ -30,7 +30,7 @@ object BgmFloatingPageScaffoldDefaults {
     /** 给滚动内容留出的底部避让，避免最后一项被悬浮底栏遮住。 */
     val ContentBottomClearance: Dp = BgmSpacing.Snackbar.floatingBarClearance
 
-    /** 沉浸模式下滚动内容首项距离顶栏的建议避让（48dp 紧凑顶栏标准高度）。 */
+    /** 沉浸模式下滚动内容首项距离顶栏的建议避让（56dp 紧凑顶栏标准高度）。 */
     val ContentTopClearance: Dp = BgmSpacing.TopBar.height
 }
 

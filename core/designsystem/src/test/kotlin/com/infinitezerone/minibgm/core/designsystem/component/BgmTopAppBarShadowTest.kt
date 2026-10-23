@@ -35,10 +35,10 @@ import org.robolectric.annotation.GraphicsMode
 import kotlin.math.roundToInt
 
 /**
- * 顶栏的 48dp 高度只约束 chrome 布局与天幕范围，不得成为图标阴影的裁剪边界。
+ * 顶栏的 56dp 高度只约束 chrome 布局与天幕范围，不得成为图标阴影的裁剪边界。
  *
  * 这条像素断言直接守住「TopBar 底边下方仍有按钮阴影」的视觉契约：
- * 若有人把 [BgmTopAppBar] 的外层改回 `Surface` / `clipToBounds`，阴影会在 48dp 处
+ * 若有人把 [BgmTopAppBar] 的外层改回 `Surface` / `clipToBounds`，阴影会在 56dp 处
  * 突然消失，测试读取的阴影像素会退化成纯背景色。
  */
 @RunWith(RobolectricTestRunner::class)
