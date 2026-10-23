@@ -284,3 +284,12 @@ val AiGlowSweepColors: List<Color> =
         AiGlowCyan,
         AiGlowBlue,
     )
+
+val AiIconGradientColors: List<Color> =
+    listOf(
+        AiGlowCyan,
+        AiGlowBlue,
+        AiGlowPurple,
+        AiGlowPink,
+        AiGlowAmber,
+    )
