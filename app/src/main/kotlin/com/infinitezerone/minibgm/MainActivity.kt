@@ -74,6 +74,7 @@ class MainActivity : ComponentActivity() {
                     onSubjectNavigated = { openSubjectId = null },
                     openUser = openUser,
                     onUserNavigated = { openUser = false },
+                    showBottomAiButton = settings.showBottomAiButton,
                 )
             }
         }

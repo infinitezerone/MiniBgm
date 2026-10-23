@@ -20,6 +20,8 @@ data class UserPreferences(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** Material You 动态取色（minSdk 31 恒可用） */
     val dynamicColor: Boolean = false,
+    /** 是否在主界面底部导航栏旁显示独立 AI 助手入口按钮（默认开启） */
+    val showBottomAiButton: Boolean = true,
     /** 画中画模式开关（开启后播放中划回桌面自动进入小窗） */
     val pipEnabled: Boolean = true,
     /** 弹幕显示开关（播放页长期偏好：关闭期间不发起任何弹幕请求，重开时才补拉） */

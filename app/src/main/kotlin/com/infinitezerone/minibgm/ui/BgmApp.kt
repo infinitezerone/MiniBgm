@@ -70,6 +70,7 @@ fun BgmApp(
     onSubjectNavigated: () -> Unit = {},
     openUser: Boolean = false,
     onUserNavigated: () -> Unit = {},
+    showBottomAiButton: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -283,7 +284,7 @@ fun BgmApp(
                                     onDestinationSelected = { route -> navState.navigateTo(route) },
                                 )
 
-                                if (isAiAssistantEnabled) {
+                                if (isAiAssistantEnabled && showBottomAiButton) {
                                     BgmAiActionButton(
                                         onClick = { navState.navigateTo(AssistantRoute()) },
                                     )

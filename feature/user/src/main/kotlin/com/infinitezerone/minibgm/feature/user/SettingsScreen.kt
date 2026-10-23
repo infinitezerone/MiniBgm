@@ -392,6 +392,8 @@ fun SettingsScreen(
         onSelectThemeMode = viewModel::setThemeMode,
         dynamicColor = uiState.dynamicColor,
         onToggleDynamicColor = viewModel::setDynamicColor,
+        showBottomAiButton = uiState.showBottomAiButton,
+        onToggleShowBottomAiButton = if (enableAiConfig) viewModel::setShowBottomAiButton else null,
         pipEnabled = uiState.pipEnabled,
         onTogglePipEnabled = viewModel::setPipEnabled,
         showRestrictedContent = uiState.showRestrictedContent,
@@ -752,6 +754,8 @@ fun SettingsScreenContent(
     onSelectThemeMode: (ThemeMode) -> Unit = {},
     dynamicColor: Boolean = false,
     onToggleDynamicColor: (Boolean) -> Unit = {},
+    showBottomAiButton: Boolean = true,
+    onToggleShowBottomAiButton: ((Boolean) -> Unit)? = null,
     pipEnabled: Boolean = true,
     onTogglePipEnabled: (Boolean) -> Unit = {},
     showRestrictedContent: Boolean = false,
@@ -814,6 +818,8 @@ fun SettingsScreenContent(
                         onSelectThemeMode = onSelectThemeMode,
                         dynamicColor = dynamicColor,
                         onToggleDynamicColor = onToggleDynamicColor,
+                        showBottomAiButton = showBottomAiButton,
+                        onToggleShowBottomAiButton = onToggleShowBottomAiButton,
                     )
                 }
 

@@ -34,6 +34,8 @@ class FakeSettingsRepository(
         private set
     var setDynamicColorCallCount: Int = 0
         private set
+    var setShowBottomAiButtonCallCount: Int = 0
+        private set
     var setPipEnabledCallCount: Int = 0
         private set
     var setDanmakuEnabledCallCount: Int = 0
@@ -115,6 +117,13 @@ class FakeSettingsRepository(
     override suspend fun setDynamicColor(enabled: Boolean) {
         setDynamicColorCallCount++
         settingsState.value = settingsState.value.copy(dynamicColor = enabled)
+    }
+
+    override val showBottomAiButton: Flow<Boolean> = settingsState.map { it.showBottomAiButton }
+
+    override suspend fun setShowBottomAiButton(enabled: Boolean) {
+        setShowBottomAiButtonCallCount++
+        settingsState.value = settingsState.value.copy(showBottomAiButton = enabled)
     }
 
     override suspend fun setPipEnabled(enabled: Boolean) {

@@ -71,6 +71,8 @@
     <!-- 5. 设置页：外观与播放 -->
     <string name="feature_user_section_appearance">外观显示</string>
     <string name="feature_user_settings_dynamic_color_title">动态取色</string>
+    <string name="feature_user_settings_show_bottom_ai_button_title">底栏 AI 助手入口</string>
+    <string name="feature_user_settings_show_bottom_ai_button_subtitle">在主界面底部导航栏右侧显示独立操作按钮</string>
     <string name="feature_user_section_playback_content">播放与内容</string>
     <string name="feature_user_settings_pip_title">自动画中画</string>
     <string name="feature_user_settings_restricted_content_title">受限内容</string>

@@ -49,6 +49,8 @@ data class UserSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** Material You 动态取色（minSdk 31 恒可用） */
     val dynamicColor: Boolean = false,
+    /** 是否在主界面底部导航栏旁显示独立 AI 助手入口按钮 */
+    val showBottomAiButton: Boolean = true,
     /** 画中画（PiP）模式开关（离开播放页时自动进入画中画小窗） */
     val pipEnabled: Boolean = true,
     /** 弹幕显示开关（播放页长期偏好：关闭期间不发起任何弹幕请求） */
@@ -112,6 +114,12 @@ interface SettingsRepository {
 
     /** Material You 动态取色开关 */
     suspend fun setDynamicColor(enabled: Boolean)
+
+    /** 是否在主界面底部导航栏旁显示独立 AI 助手入口按钮 */
+    val showBottomAiButton: Flow<Boolean>
+
+    /** 设置是否在主界面底部导航栏旁显示独立 AI 助手入口按钮 */
+    suspend fun setShowBottomAiButton(enabled: Boolean)
 
     /** 画中画（PiP）开关 */
     suspend fun setPipEnabled(enabled: Boolean)
@@ -306,6 +314,7 @@ internal class SettingsRepositoryImpl(
                     ),
                 themeMode = prefs.themeMode,
                 dynamicColor = prefs.dynamicColor,
+                showBottomAiButton = prefs.showBottomAiButton,
                 pipEnabled = prefs.pipEnabled,
                 danmakuEnabled = prefs.danmakuEnabled,
                 danmakuAlpha = prefs.danmakuAlpha,
@@ -443,6 +452,13 @@ internal class SettingsRepositoryImpl(
 
     override suspend fun setDynamicColor(enabled: Boolean) {
         userPreferences.setDynamicColor(enabled)
+    }
+
+    override val showBottomAiButton: Flow<Boolean> =
+        userPreferences.userPreferences.map { it.showBottomAiButton }
+
+    override suspend fun setShowBottomAiButton(enabled: Boolean) {
+        userPreferences.setShowBottomAiButton(enabled)
     }
 
     override suspend fun setPipEnabled(enabled: Boolean) {

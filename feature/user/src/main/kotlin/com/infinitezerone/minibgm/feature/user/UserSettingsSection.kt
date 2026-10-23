@@ -192,6 +192,8 @@ internal fun AppearanceSettingsCard(
     onSelectThemeMode: (ThemeMode) -> Unit,
     dynamicColor: Boolean,
     onToggleDynamicColor: (Boolean) -> Unit,
+    showBottomAiButton: Boolean = true,
+    onToggleShowBottomAiButton: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -238,6 +240,23 @@ internal fun AppearanceSettingsCard(
                     )
                 },
             )
+
+            if (onToggleShowBottomAiButton != null) {
+                SettingsDivider()
+
+                SettingsItemRow(
+                    icon = BgmIcons.Assistant,
+                    title = stringResource(R.string.feature_user_settings_show_bottom_ai_button_title),
+                    subtitle = stringResource(R.string.feature_user_settings_show_bottom_ai_button_subtitle),
+                    onClick = { onToggleShowBottomAiButton(!showBottomAiButton) },
+                    trailing = {
+                        Switch(
+                            checked = showBottomAiButton,
+                            onCheckedChange = onToggleShowBottomAiButton,
+                        )
+                    },
+                )
+            }
         }
     }
 }

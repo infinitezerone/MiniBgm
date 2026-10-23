@@ -61,6 +61,7 @@ data class UserUiState(
     val airDelayOffsetMinutes: Int = 0,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val dynamicColor: Boolean = false,
+    val showBottomAiButton: Boolean = true,
     val pipEnabled: Boolean = true,
     val showRestrictedContent: Boolean = false,
     val isCheckingUpdate: Boolean = false,
@@ -231,6 +232,7 @@ class UserViewModel(
                 airDelayOffsetMinutes = sync.airDelayOffsetMinutes,
                 themeMode = sync.settings.themeMode,
                 dynamicColor = sync.settings.dynamicColor,
+                showBottomAiButton = sync.settings.showBottomAiButton,
                 pipEnabled = sync.settings.pipEnabled,
                 showRestrictedContent = sync.settings.showRestrictedContent,
                 isCheckingUpdate = local.isCheckingUpdate,
@@ -400,6 +402,13 @@ class UserViewModel(
     fun setDynamicColor(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setDynamicColor(enabled)
+        }
+    }
+
+    /** 是否在主界面底部导航栏旁显示独立 AI 助手入口按钮 */
+    fun setShowBottomAiButton(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setShowBottomAiButton(enabled)
         }
     }
 

@@ -511,6 +511,27 @@ class UserViewModelTest {
         }
 
     @Test
+    fun initialState_emitsDefaultShowBottomAiButtonTrue() =
+        runTest {
+            val (viewModel, _) = createViewModel()
+
+            val state = viewModel.uiState.first()
+            assertTrue(state.showBottomAiButton)
+        }
+
+    @Test
+    fun setShowBottomAiButton_updatesSettingsRepositoryAndState() =
+        runTest {
+            val (viewModel, _, settingsRepo) = createViewModel()
+
+            viewModel.setShowBottomAiButton(false)
+
+            val state = viewModel.uiState.first { !it.showBottomAiButton }
+            assertFalse(state.showBottomAiButton)
+            assertEquals(1, settingsRepo.setShowBottomAiButtonCallCount)
+        }
+
+    @Test
     fun setAiringNotificationOffsetMinutes_updatesSettingsRepositoryAndState() =
         runTest {
             val (viewModel, _, _) = createViewModel()

@@ -68,6 +68,13 @@ class UserPreferencesDataSource(
         }
     }
 
+    /** 是否在主界面底部导航栏旁显示独立 AI 助手入口按钮 */
+    suspend fun setShowBottomAiButton(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.copy(showBottomAiButton = enabled)
+        }
+    }
+
     /** 画中画模式开关（开启后播放中划回桌面自动进入小窗） */
     suspend fun setPipEnabled(enabled: Boolean) {
         dataStore.updateData { current ->
