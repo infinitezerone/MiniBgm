@@ -21,6 +21,7 @@ import com.infinitezerone.minibgm.core.data.repository.UserSettings
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
 import com.infinitezerone.minibgm.core.designsystem.theme.AppUiStyle
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
+import com.infinitezerone.minibgm.core.model.FeatureCapabilities
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
 import com.infinitezerone.minibgm.ui.BgmApp
@@ -53,6 +54,14 @@ class MainActivity : ComponentActivity() {
             // 主题模式 / 动态取色 偏好由 :app 宿主读取并传给主题（设置页落库后在此生效）
             val settings by settingsRepository.settings
                 .collectAsStateWithLifecycle(initialValue = UserSettings())
+            val capabilities by settingsRepository.featureCapabilities
+                .collectAsStateWithLifecycle(
+                    initialValue =
+                        FeatureCapabilities(
+                            isAiAssistantEnabled = BuildConfig.ENABLE_AI_ASSISTANT,
+                            isInternalPlayerEnabled = BuildConfig.ENABLE_INTERNAL_PLAYER,
+                        ),
+                )
             val darkTheme =
                 when (settings.themeMode) {
                     ThemeMode.LIGHT -> false
@@ -75,6 +84,7 @@ class MainActivity : ComponentActivity() {
                     openUser = openUser,
                     onUserNavigated = { openUser = false },
                     showBottomAiButton = settings.showBottomAiButton,
+                    isAiAssistantEnabled = capabilities.isAiAssistantEnabled,
                 )
             }
         }

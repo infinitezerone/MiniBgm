@@ -71,6 +71,7 @@ fun BgmApp(
     openUser: Boolean = false,
     onUserNavigated: () -> Unit = {},
     showBottomAiButton: Boolean = true,
+    isAiAssistantEnabled: Boolean = BuildConfig.ENABLE_AI_ASSISTANT,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -274,7 +275,6 @@ fun BgmApp(
                                     .navigationBarsPadding()
                                     .padding(bottom = 12.dp),
                         ) {
-                            val isAiAssistantEnabled = BuildConfig.ENABLE_AI_ASSISTANT
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),

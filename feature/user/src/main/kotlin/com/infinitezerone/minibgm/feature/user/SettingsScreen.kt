@@ -393,7 +393,7 @@ fun SettingsScreen(
         dynamicColor = uiState.dynamicColor,
         onToggleDynamicColor = viewModel::setDynamicColor,
         showBottomAiButton = uiState.showBottomAiButton,
-        onToggleShowBottomAiButton = if (enableAiConfig) viewModel::setShowBottomAiButton else null,
+        onToggleShowBottomAiButton = viewModel::setShowBottomAiButton,
         pipEnabled = uiState.pipEnabled,
         onTogglePipEnabled = viewModel::setPipEnabled,
         showRestrictedContent = uiState.showRestrictedContent,
