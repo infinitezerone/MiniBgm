@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.TimeUtils
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSegmentedControl
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
@@ -50,6 +51,8 @@ import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.feature.subject.R
 
 internal const val BGM_BASE_URL = "https://bgm.tv"
+
+private enum class CommunityPane { SHORT_REVIEWS, FORUM }
 
 /** 社区标签页 / 讨论模块：原生展示短评精选与小组讨论帖子 */
 @Composable
@@ -68,133 +71,138 @@ fun SubjectCommunitySection(
 ) {
     val context = LocalContext.current
     var isExpanded by rememberSaveable { mutableStateOf(false) }
+    var selectedPane by rememberSaveable { mutableStateOf(CommunityPane.SHORT_REVIEWS) }
     val displayComments = if (isExpanded) comments else comments.take(5)
+    val reviewCount = if (commentTotal > 0) commentTotal else comments.size
 
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        // 1. 全网即时短评
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(
-                    imageVector = BgmIcons.ChatBubbleOutline,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
+        BgmSegmentedControl(
+            items = CommunityPane.entries,
+            selectedItem = selectedPane,
+            onItemSelected = { selectedPane = it },
+            itemContent = { pane, isSelected ->
                 Text(
-                    text = stringResource(R.string.feature_subject_community_short_reviews),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                if (commentTotal > 0) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                    ) {
-                        Text(
-                            text = "$commentTotal",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
-                    }
-                }
-            }
-
-            if (comments.isEmpty()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    text =
+                        when (pane) {
+                            CommunityPane.SHORT_REVIEWS ->
+                                if (reviewCount > 0) {
+                                    stringResource(R.string.feature_subject_community_pane_reviews_count, reviewCount)
+                                } else {
+                                    stringResource(R.string.feature_subject_community_pane_reviews)
+                                }
+                            CommunityPane.FORUM ->
+                                if (topics.isNotEmpty()) {
+                                    stringResource(R.string.feature_subject_community_pane_forum_count, topics.size)
+                                } else {
+                                    stringResource(R.string.feature_subject_community_pane_forum)
+                                }
+                        },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    color =
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.onSurface
                         } else {
-                            Text(
-                                text = stringResource(R.string.feature_subject_community_short_reviews_empty),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                )
+            },
+        )
+
+        // 1. 全网即时短评
+        if (selectedPane == CommunityPane.SHORT_REVIEWS) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (comments.isEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text(
+                                    text = stringResource(R.string.feature_subject_community_short_reviews_empty),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
-                }
-            } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                } else {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                     ) {
-                        displayComments.forEachIndexed { index, comment ->
-                            SubjectCommentItem(
-                                comment = comment,
-                                onUrlClick = onUrlClick,
-                                onCopyComment = onCopyComment,
-                            )
-                            if (index < displayComments.lastIndex) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            displayComments.forEachIndexed { index, comment ->
+                                SubjectCommentItem(
+                                    comment = comment,
+                                    onUrlClick = onUrlClick,
+                                    onCopyComment = onCopyComment,
+                                )
+                                if (index < displayComments.lastIndex) {
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                                }
                             }
-                        }
 
-                        if (!isExpanded && (comments.size > 5 || commentTotal > 5)) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                            ShortReviewsFooterAction(
-                                text = stringResource(R.string.feature_subject_community_view_more_short_reviews, commentTotal),
-                                onClick = { isExpanded = true },
-                                icon = BgmIcons.KeyboardArrowDown,
-                            )
-                        } else if (isExpanded) {
-                            // 展开态只留一条分隔线收口：三种动作行统一由 ShortReviewsFooterAction 渲染，
-                            // 不再各自一套字号 / 内边距 / 箭头尺寸，也不再出现「禁用后仍是主色」的假可点
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                            if (hasMoreComments) {
+                            if (!isExpanded && (comments.size > 5 || commentTotal > 5)) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
                                 ShortReviewsFooterAction(
-                                    text =
-                                        if (isLoadingMoreComments) {
-                                            stringResource(R.string.feature_subject_community_short_reviews_loading)
-                                        } else {
-                                            stringResource(
-                                                R.string.feature_subject_community_load_more_short_reviews,
-                                                comments.size,
-                                                commentTotal,
-                                            )
-                                        },
-                                    onClick = onLoadMoreComments,
+                                    text = stringResource(R.string.feature_subject_community_view_more_short_reviews, commentTotal),
+                                    onClick = { isExpanded = true },
                                     icon = BgmIcons.KeyboardArrowDown,
-                                    isLoading = isLoadingMoreComments,
                                 )
-                            } else if (comments.size >= commentTotal && commentTotal > 5) {
+                            } else if (isExpanded) {
+                                // 展开态只留一条分隔线收口：三种动作行统一由 ShortReviewsFooterAction 渲染，
+                                // 不再各自一套字号 / 内边距 / 箭头尺寸，也不再出现「禁用后仍是主色」的假可点
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                                if (hasMoreComments) {
+                                    ShortReviewsFooterAction(
+                                        text =
+                                            if (isLoadingMoreComments) {
+                                                stringResource(R.string.feature_subject_community_short_reviews_loading)
+                                            } else {
+                                                stringResource(
+                                                    R.string.feature_subject_community_load_more_short_reviews,
+                                                    comments.size,
+                                                    commentTotal,
+                                                )
+                                            },
+                                        onClick = onLoadMoreComments,
+                                        icon = BgmIcons.KeyboardArrowDown,
+                                        isLoading = isLoadingMoreComments,
+                                    )
+                                } else if (comments.size >= commentTotal && commentTotal > 5) {
+                                    ShortReviewsFooterAction(
+                                        text =
+                                            stringResource(
+                                                R.string.feature_subject_community_all_short_reviews_shown,
+                                                commentTotal,
+                                            ),
+                                        onClick = {},
+                                        emphasized = false,
+                                        enabled = false,
+                                    )
+                                }
                                 ShortReviewsFooterAction(
-                                    text =
-                                        stringResource(
-                                            R.string.feature_subject_community_all_short_reviews_shown,
-                                            commentTotal,
-                                        ),
-                                    onClick = {},
+                                    text = stringResource(R.string.feature_subject_community_collapse_short_reviews),
+                                    onClick = { isExpanded = false },
+                                    icon = BgmIcons.KeyboardArrowUp,
                                     emphasized = false,
-                                    enabled = false,
                                 )
                             }
-                            ShortReviewsFooterAction(
-                                text = stringResource(R.string.feature_subject_community_collapse_short_reviews),
-                                onClick = { isExpanded = false },
-                                icon = BgmIcons.KeyboardArrowUp,
-                                emphasized = false,
-                            )
                         }
                     }
                 }
@@ -202,73 +210,43 @@ fun SubjectCommunitySection(
         }
 
         // 2. 讨论版话题
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(
-                    imageVector = BgmIcons.Forum,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.size(20.dp),
-                )
-                Text(
-                    text = stringResource(R.string.feature_subject_community_forum_section),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                if (topics.isNotEmpty()) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
+        if (selectedPane == CommunityPane.FORUM) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (topics.isEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                     ) {
-                        Text(
-                            text = "${topics.size}",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
-                    }
-                }
-            }
-
-            if (topics.isEmpty()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.feature_subject_community_forum_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        topics.take(6).forEachIndexed { index, topic ->
-                            SubjectTopicItem(
-                                topic = topic,
-                                onClick = { onTopicClick(topic.id, topic.title) },
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.feature_subject_community_forum_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            if (index < topics.take(6).lastIndex) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                        }
+                    }
+                } else {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            topics.take(6).forEachIndexed { index, topic ->
+                                SubjectTopicItem(
+                                    topic = topic,
+                                    onClick = { onTopicClick(topic.id, topic.title) },
+                                )
+                                if (index < topics.take(6).lastIndex) {
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                                }
                             }
                         }
                     }

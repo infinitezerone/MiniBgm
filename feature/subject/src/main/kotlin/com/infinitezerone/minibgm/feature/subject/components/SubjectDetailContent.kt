@@ -2,12 +2,15 @@ package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,16 +26,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -42,12 +44,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.model.CollectionType
@@ -61,6 +67,45 @@ import com.infinitezerone.minibgm.feature.subject.SubjectDetailTab
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailUiState
 import com.infinitezerone.minibgm.feature.subject.computeSubjectWatchStatus
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+
+/** 头部 Hero 在 LazyColumn 中的稳定键；顶栏联动按 key 定位，不依赖列表下标。 */
+internal const val SUBJECT_HEADER_ITEM_KEY = "subject_header"
+
+/** 二级 Tab 在 LazyColumn 中的稳定键；吸顶与背景联动都按 key 定位。 */
+internal const val SUBJECT_TABS_ITEM_KEY = "subject_tabs_bar"
+
+/** Tab 内容到列表底部的固定呼吸距离；尾部自适应留白会叠加在这段距离之上。 */
+private val SubjectTabBottomPadding = 24.dp
+
+/** 列表视口从顶栏底部开始时，Hero 与顶栏之间保留的初始间距。 */
+private val SubjectTabContentTopPadding = 8.dp
+
+private data class SubjectTabBarPlacement(
+    val windowTopPx: Float,
+    val isPinned: Boolean,
+)
+
+/**
+ * 内容不足一屏时，计算为了让 Tab 能够滚到吸顶位置所需的尾部留白。
+ *
+ * [viewportHeightPx] 是已经扣除顶栏高度的滚动视口；[tabBarTopPx] 与
+ * [contentEndTopPx] 必须来自同一坐标系（窗口坐标）。当 Tab 已经吸顶时，
+ * 调用方不应再用本函数回写留白，否则会裁掉刚刚撑开的滚动区间。
+ */
+internal fun calculateSubjectTabTailSpacerPx(
+    viewportHeightPx: Float,
+    bottomPaddingPx: Float,
+    tabBarTopPx: Float,
+    contentEndTopPx: Float,
+): Float {
+    if (!viewportHeightPx.isFinite() || viewportHeightPx <= 0f) return 0f
+    if (!tabBarTopPx.isFinite() || !contentEndTopPx.isFinite()) return 0f
+    val contentBelowTabPx = contentEndTopPx - tabBarTopPx
+    if (contentBelowTabPx <= 0f) return 0f
+    val requiredBelowTabPx = viewportHeightPx - bottomPaddingPx
+    return (requiredBelowTabPx - contentBelowTabPx).coerceAtLeast(0f)
+}
 
 @Composable
 internal fun getTabLabel(
@@ -135,9 +180,47 @@ internal fun SubjectDetailContent(
     topPadding: Dp = 12.dp,
     listState: LazyListState = rememberLazyListState(),
     onTitleBoundsChanged: (Rect) -> Unit = {},
+    onTabBarTopChanged: (Float) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val coroutineScope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val bottomPaddingPx = with(density) { SubjectTabBottomPadding.toPx() }
+    val contentTopPaddingPx = with(density) { SubjectTabContentTopPadding.toPx() }
+    val topPaddingPx = with(density) { topPadding.toPx() }
+    var viewportHeightPx by remember { mutableStateOf(0f) }
+    var tabContentEndTopPx by remember { mutableStateOf(Float.NaN) }
+    var tabTailSpacerPx by remember { mutableStateOf(0f) }
+    val tabBarPlacement by
+        remember(listState, topPaddingPx, contentTopPaddingPx) {
+            derivedStateOf {
+                val tabs = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == SUBJECT_TABS_ITEM_KEY }
+                if (tabs == null) {
+                    SubjectTabBarPlacement(windowTopPx = Float.NaN, isPinned = false)
+                } else {
+                    SubjectTabBarPlacement(
+                        windowTopPx = topPaddingPx + tabs.offset + contentTopPaddingPx,
+                        isPinned = tabs.offset <= 0f,
+                    )
+                }
+            }
+        }
+
+    LaunchedEffect(tabBarPlacement.windowTopPx) {
+        onTabBarTopChanged(tabBarPlacement.windowTopPx)
+    }
+
+    LaunchedEffect(tabBarPlacement, tabContentEndTopPx, viewportHeightPx, bottomPaddingPx) {
+        if (tabBarPlacement.isPinned || !tabBarPlacement.windowTopPx.isFinite()) return@LaunchedEffect
+        val target =
+            calculateSubjectTabTailSpacerPx(
+                viewportHeightPx = viewportHeightPx,
+                bottomPaddingPx = bottomPaddingPx,
+                tabBarTopPx = tabBarPlacement.windowTopPx,
+                contentEndTopPx = tabContentEndTopPx,
+            )
+        if (abs(target - tabTailSpacerPx) >= 0.5f) tabTailSpacerPx = target
+    }
 
     // 滚动到“加载更多”脚标可见时自动续拉下一屏分集
     LaunchedEffect(listState, hasMoreEpisodes) {
@@ -147,7 +230,6 @@ internal fun SubjectDetailContent(
             if (visible && hasMoreEpisodes) onLoadMoreEpisodes()
         }
     }
-    val tabScrollPositions = remember { mutableMapOf<SubjectDetailTab, Pair<Int, Int>>() }
     val lastTabRef =
         remember {
             object {
@@ -159,6 +241,7 @@ internal fun SubjectDetailContent(
     val gridColumns = if (adaptiveInfo.isWide) 7 else 5
 
     val tabHeaderIndex = if (uiState.error != null) 2 else 1
+    val isTabBarPinned = tabBarPlacement.isPinned
 
     val nextUpEpisode =
         remember(currentEpisodes, uiState.collection?.epStatus) {
@@ -179,25 +262,50 @@ internal fun SubjectDetailContent(
     LaunchedEffect(selectedTab) {
         val lastTab = lastTabRef.value
         if (selectedTab != lastTab) {
-            tabScrollPositions[lastTab] = listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
             lastTabRef.value = selectedTab
-
-            val target =
-                if (listState.firstVisibleItemIndex < tabHeaderIndex) {
-                    listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset
-                } else {
-                    tabScrollPositions[selectedTab] ?: (tabHeaderIndex to 0)
-                }
-            val maxIndex = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
-            val safeIndex = target.first.coerceIn(0, maxIndex)
-            listState.scrollToItem(safeIndex, target.second)
+            if (isTabBarPinned) {
+                val tabsIndex =
+                    listState.layoutInfo.visibleItemsInfo
+                        .firstOrNull { it.key == SUBJECT_TABS_ITEM_KEY }
+                        ?.index
+                        ?: tabHeaderIndex
+                listState.requestScrollToItem(tabsIndex, 0)
+            }
         }
     }
 
     LazyColumn(
         state = listState,
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = topPadding, bottom = 24.dp),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .padding(top = topPadding)
+                .onSizeChanged { viewportHeightPx = it.height.toFloat() }
+                .pointerInput(selectedTab) {
+                    var dragTotalPx = 0f
+                    val thresholdPx = 72.dp.toPx()
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragTotalPx = 0f },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            dragTotalPx += dragAmount
+                        },
+                        onDragEnd = {
+                            val target =
+                                when {
+                                    dragTotalPx <= -thresholdPx ->
+                                        SubjectDetailTab.entries.getOrNull(selectedTab.ordinal + 1)
+                                    dragTotalPx >= thresholdPx ->
+                                        SubjectDetailTab.entries.getOrNull(selectedTab.ordinal - 1)
+                                    else -> null
+                                }
+                            if (target != null) onSelectTab(target)
+                            dragTotalPx = 0f
+                        },
+                        onDragCancel = { dragTotalPx = 0f },
+                    )
+                },
+        contentPadding = PaddingValues(top = SubjectTabContentTopPadding, bottom = SubjectTabBottomPadding),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (uiState.error != null) {
@@ -218,7 +326,7 @@ internal fun SubjectDetailContent(
         }
 
         // 1. 条目头部 Hero 区 (首帧在场，支撑即使是首次进入也能顺滑飞渡)
-        item(key = "header") {
+        item(key = SUBJECT_HEADER_ITEM_KEY) {
             val watchStatus =
                 remember(uiState.episodes, uiState.collection) {
                     computeSubjectWatchStatus(uiState.episodes, uiState.collection)
@@ -253,108 +361,97 @@ internal fun SubjectDetailContent(
         } else if (fullSubject != null) {
             val subject = fullSubject
 
-            // 2. 二级分栏 Tab 栏（通栏精致吸顶，带表面底色遮蔽与层次分割线）
-            stickyHeader(key = "subject_tabs_bar") {
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.fillMaxWidth(),
+            // 2. 二级分栏 Tab 栏（吸顶实体指示器）
+            stickyHeader(key = SUBJECT_TABS_ITEM_KEY) {
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (tabBarPlacement.isPinned) {
+                                    MaterialTheme.colorScheme.background
+                                } else {
+                                    Color.Transparent
+                                },
+                            ),
                 ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        PrimaryTabRow(
-                            selectedTabIndex = selectedTab.ordinal,
-                            containerColor = Color.Transparent,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                            divider = {},
-                            indicator = {
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .tabIndicatorOffset(selectedTab.ordinal)
-                                            .fillMaxWidth(),
-                                    contentAlignment = Alignment.BottomCenter,
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SubjectDetailTab.entries.forEach { tab ->
+                            val isSelected = selectedTab == tab
+                            val tabLabel = getTabLabel(tab, subjectType)
+                            val badgeCount =
+                                when (tab) {
+                                    SubjectDetailTab.EPISODES ->
+                                        (
+                                            if (totalEpisodes >
+                                                0
+                                            ) {
+                                                totalEpisodes
+                                            } else {
+                                                currentEpisodes.size
+                                            }
+                                        ).takeIf { it > 0 }
+                                    SubjectDetailTab.COMMUNITY -> uiState.subjectCommentTotal.takeIf { it > 0 }
+                                    else -> null
+                                }
+
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clickable { onSelectTab(tab) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                                 ) {
+                                    Text(
+                                        text = tabLabel,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color =
+                                            if (isSelected) {
+                                                MaterialTheme.colorScheme.onSurface
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                            },
+                                    )
+                                    if (badgeCount != null) {
+                                        Text(
+                                            text = if (badgeCount > 999) "999+" else badgeCount.toString(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color =
+                                                if (isSelected) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                                },
+                                        )
+                                    }
+                                }
+                                if (isSelected) {
                                     Box(
                                         modifier =
                                             Modifier
-                                                .width(28.dp)
+                                                .align(Alignment.BottomCenter)
+                                                .padding(bottom = 7.dp)
+                                                .width(24.dp)
                                                 .height(3.dp)
                                                 .clip(CircleShape)
                                                 .background(MaterialTheme.colorScheme.primary),
                                     )
                                 }
-                            },
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        ) {
-                            SubjectDetailTab.entries.forEach { tab ->
-                                val isSelected = selectedTab == tab
-                                val tabLabel = getTabLabel(tab, subjectType)
-                                val badgeCount =
-                                    when (tab) {
-                                        SubjectDetailTab.EPISODES ->
-                                            (
-                                                if (totalEpisodes >
-                                                    0
-                                                ) {
-                                                    totalEpisodes
-                                                } else {
-                                                    currentEpisodes.size
-                                                }
-                                            ).takeIf { it > 0 }
-                                        SubjectDetailTab.COMMUNITY -> uiState.subjectCommentTotal.takeIf { it > 0 }
-                                        else -> null
-                                    }
-                                Tab(
-                                    selected = isSelected,
-                                    onClick = { onSelectTab(tab) },
-                                    text = {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                        ) {
-                                            Text(
-                                                text = tabLabel,
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                                color =
-                                                    if (isSelected) {
-                                                        MaterialTheme.colorScheme.primary
-                                                    } else {
-                                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                                                    },
-                                            )
-                                            if (badgeCount != null) {
-                                                Surface(
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    color =
-                                                        if (isSelected) {
-                                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                                                        } else {
-                                                            MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
-                                                        },
-                                                ) {
-                                                    Text(
-                                                        text = if (badgeCount > 999) "999+" else badgeCount.toString(),
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        fontSize = 11.sp,
-                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                        color =
-                                                            if (isSelected) {
-                                                                MaterialTheme.colorScheme.primary
-                                                            } else {
-                                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                                                            },
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    },
-                                )
                             }
                         }
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
-                        )
                     }
                 }
             }
@@ -362,27 +459,7 @@ internal fun SubjectDetailContent(
             // 4. Tab 切换内容
             when (selectedTab) {
                 SubjectDetailTab.OVERVIEW -> {
-                    // 1. 横向轻量选集滑轨（若有分集）：紧凑直达点播、打卡与详情
-                    if (currentEpisodes.isNotEmpty()) {
-                        item(key = "overview_episodes_rail") {
-                            EpisodeQuickRail(
-                                episodes = currentEpisodes,
-                                watchedCount = uiState.collection?.epStatus ?: 0,
-                                onEpisodeClick = { episode ->
-                                    if (onEpisodeClickForQuickAction != null) {
-                                        onEpisodeClickForQuickAction(episode)
-                                    } else {
-                                        onSelectEpisodeForDetail(episode)
-                                    }
-                                },
-                                onViewAllClick = { onSelectTab(SubjectDetailTab.EPISODES) },
-                                hasProgress = uiState.collection != null,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                            )
-                        }
-                    }
-
-                    // 2. 评分分布与标签（1~10分柱状图、收藏人数、分类标签）
+                    // 1. 评分分布与标签（1~10分柱状图、收藏人数、分类标签）
                     item(key = "rating_distribution") {
                         RatingDistributionCard(
                             rating = subject.rating,
@@ -686,6 +763,27 @@ internal fun SubjectDetailContent(
                             modifier = Modifier.padding(horizontal = 16.dp),
                         )
                     }
+                }
+            }
+
+            item(key = "tab_content_end_marker") {
+                Spacer(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .onGloballyPositioned { tabContentEndTopPx = it.boundsInWindow().top },
+                )
+            }
+
+            if (tabTailSpacerPx > 0f) {
+                item(key = "tab_content_tail_spacer") {
+                    Spacer(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(with(density) { tabTailSpacerPx.toDp() }),
+                    )
                 }
             }
         }

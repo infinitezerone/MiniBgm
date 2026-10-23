@@ -55,7 +55,6 @@ import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
 import com.infinitezerone.minibgm.core.designsystem.component.formatScore
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
-import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
@@ -505,26 +504,20 @@ private fun TimelineNodeCard(
         border = cardBorder,
         modifier = modifier.width(130.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
+        Column {
             Box(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(105.dp)
-                        .clip(RoundedCornerShape(8.dp)),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 CoverImage(
                     url = node.coverUrl.orEmpty(),
                     contentDescription = node.name,
                     aspectRatio = BGM_POSTER_ASPECT_RATIO,
-                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 )
 
                 Surface(
-                    shape = RoundedCornerShape(topStart = 0.dp, bottomEnd = 8.dp),
+                    shape = RoundedCornerShape(topStart = 12.dp, bottomEnd = 8.dp),
                     color =
                         if (node.isCurrent) {
                             MaterialTheme.colorScheme.primary
@@ -556,41 +549,46 @@ private fun TimelineNodeCard(
                 }
             }
 
-            Text(
-                text = node.name,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (node.isCurrent) FontWeight.Bold else FontWeight.Medium,
-                color =
-                    if (node.isCurrent) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.height(34.dp),
-            )
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = node.name,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (node.isCurrent) FontWeight.Bold else FontWeight.Medium,
+                    color =
+                        if (node.isCurrent) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.height(34.dp),
+                )
 
-            if (node.score > 0.0) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Star,
-                        contentDescription = null,
-                        tint = RatingGold,
-                        modifier = Modifier.size(12.dp),
-                    )
-                    Text(
-                        text = node.score.formatScore(),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                if (node.score > 0.0) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.Star,
+                            contentDescription = null,
+                            tint = RatingGold,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Text(
+                            text = node.score.formatScore(),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(14.dp))
                 }
-            } else {
-                Spacer(modifier = Modifier.height(14.dp))
             }
         }
     }
@@ -617,24 +615,24 @@ private fun RelationCard(
     Card(
         onClick = onClick,
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ),
     ) {
-        Column(modifier = Modifier.padding(7.dp)) {
+        Column {
             Box(modifier = Modifier.fillMaxWidth()) {
                 CoverImage(
                     url = relation.images?.bestImage.orEmpty(),
                     contentDescription = relation.displayName,
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 8.dp,
+                    shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
                     aspectRatio = BGM_POSTER_ASPECT_RATIO,
                 )
                 if (relation.relation.isNotBlank()) {
                     Surface(
-                        shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp),
+                        shape = RoundedCornerShape(topStart = 12.dp, bottomEnd = 8.dp),
                         color = badgeContainerColor.copy(alpha = 0.92f),
                         modifier = Modifier.align(Alignment.TopStart),
                     ) {
@@ -649,34 +647,37 @@ private fun RelationCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = relation.displayName,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.height(34.dp),
+                )
 
-            Text(
-                text = relation.displayName,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            if (relation.score > 0.0) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Star,
-                        contentDescription = null,
-                        tint = RatingGold,
-                        modifier = Modifier.size(12.dp),
-                    )
-                    Text(
-                        text = relation.score.toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = RatingGold,
-                    )
+                if (relation.score > 0.0) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.Star,
+                            contentDescription = null,
+                            tint = RatingGold,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Text(
+                            text = relation.score.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = RatingGold,
+                        )
+                    }
                 }
             }
         }
@@ -748,21 +749,21 @@ private fun CharacterCard(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ),
     ) {
-        Column(modifier = Modifier.padding(8.dp)) {
+        Column {
             Box(modifier = Modifier.fillMaxWidth()) {
                 CoverImage(
                     url = character.images?.bestImage.orEmpty(),
                     contentDescription = character.name,
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 8.dp,
-                    aspectRatio = BGM_PORTRAIT_ASPECT_RATIO,
+                    shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
+                    aspectRatio = 0.85f,
                     alignment = Alignment.TopCenter,
                     placeholder = CoverPlaceholder.Person,
                 )
 
                 if (character.roleName.isNotBlank()) {
                     Surface(
-                        shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp),
+                        shape = RoundedCornerShape(topStart = 12.dp, bottomEnd = 8.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.92f),
                         modifier = Modifier.align(Alignment.TopStart),
                     ) {
@@ -793,50 +794,52 @@ private fun CharacterCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text(
-                text = character.name,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            val actor = character.actors.firstOrNull()
-            if (actor != null && actor.name.isNotBlank()) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Surface(
-                    onClick = { onActorClick(actor.id) },
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.75f),
+            Column(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = character.name,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                )
+
+                val actor = character.actors.firstOrNull()
+                if (actor != null && actor.name.isNotBlank()) {
+                    Surface(
+                        onClick = { onActorClick(actor.id) },
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.75f),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        val actorImage = actor.images?.bestImage.orEmpty()
-                        CoverImage(
-                            url = actorImage,
-                            contentDescription = actor.name,
-                            modifier = Modifier.size(18.dp),
-                            shape = CircleShape,
-                            aspectRatio = 1f,
-                            alignment = Alignment.TopCenter,
-                            placeholder = CoverPlaceholder.Person,
-                        )
-                        Text(
-                            text = "CV: ${actor.name}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                        ) {
+                            val actorImage = actor.images?.bestImage.orEmpty()
+                            CoverImage(
+                                url = actorImage,
+                                contentDescription = actor.name,
+                                modifier = Modifier.size(18.dp),
+                                shape = CircleShape,
+                                aspectRatio = 1f,
+                                alignment = Alignment.TopCenter,
+                                placeholder = CoverPlaceholder.Person,
+                            )
+                            Text(
+                                text = "CV: ${actor.name}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
             }

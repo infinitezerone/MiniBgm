@@ -49,4 +49,24 @@ class SubjectTitleCollapseProgressTest {
             ),
         )
     }
+
+    @Test
+    fun headerScrolledPast_staysCollapsedWhenBoundsBecomeEmpty() {
+        assertEquals(
+            1f,
+            calculateSubjectTitleCollapseProgress(
+                titleBounds = Rect.Zero,
+                topBarBottomPx = 200f,
+                headerScrolledPast = true,
+            ),
+        )
+        assertEquals(
+            1f,
+            calculateSubjectTitleCollapseProgress(
+                titleBounds = null,
+                topBarBottomPx = 200f,
+                headerScrolledPast = true,
+            ),
+        )
+    }
 }

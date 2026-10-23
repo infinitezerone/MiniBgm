@@ -106,8 +106,6 @@
     <string name="feature_subject_play_custom_episode_format">播放%1$s %2$d</string>
     <string name="feature_subject_ep_unwatch_hint">已看过，点击取消打卡</string>
     <string name="feature_subject_ep_mark_watched_hint">未看，点击标记为已看</string>
-    <string name="feature_subject_episodes_select_title">分集选集</string>
-    <string name="feature_subject_episodes_all_count_arrow">全部 %1$d 话 ›</string>
     <string name="feature_subject_ep_highlight_banner_title">本集讨论高光 · %1$s</string>
     <string name="feature_subject_ep_comments_count">共 %1$d 条讨论 · 点击查看热评 ›</string>
     <string name="feature_subject_ep_no_comments">暂无吐槽 · 抢先占楼发表 ›</string>
@@ -337,14 +335,16 @@
     <string name="feature_subject_topic_view_subject_detail">查看条目详情</string>
 
     <!-- 11. 社区短评与讨论版 -->
-    <string name="feature_subject_community_short_reviews">全网短评吐槽</string>
+    <string name="feature_subject_community_pane_reviews">短评</string>
+    <string name="feature_subject_community_pane_reviews_count">短评 %1$d</string>
+    <string name="feature_subject_community_pane_forum">讨论版</string>
+    <string name="feature_subject_community_pane_forum_count">讨论版 %1$d</string>
     <string name="feature_subject_community_short_reviews_empty">暂无短评，快去发表你的看法吧~</string>
     <string name="feature_subject_community_view_more_short_reviews">查看更多短评 (已显示 5 / 共 %1$d 条)</string>
     <string name="feature_subject_community_short_reviews_loading">正在加载更多短评...</string>
     <string name="feature_subject_community_load_more_short_reviews">加载更多短评 (已显示 %1$d / 共 %2$d 条)</string>
     <string name="feature_subject_community_all_short_reviews_shown">已显示全部 %1$d 条短评</string>
     <string name="feature_subject_community_collapse_short_reviews">收起短评</string>
-    <string name="feature_subject_community_forum_section">讨论版交流区</string>
     <string name="feature_subject_community_forum_empty">暂无相关讨论帖</string>
     <string name="feature_subject_community_replies_count">%1$d 回复</string>
 

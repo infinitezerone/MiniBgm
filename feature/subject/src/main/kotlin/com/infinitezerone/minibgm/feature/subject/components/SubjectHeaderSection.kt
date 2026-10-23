@@ -469,44 +469,16 @@ fun SubjectHeaderCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
 
-                        if (isEpisodeLike && onIncrementWatched != null) {
+                        if (isEpisodeLike && onDecrementWatched != null) {
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                if (onDecrementWatched != null) {
-                                    Surface(
-                                        onClick = onDecrementWatched,
-                                        enabled = currentEp > 0,
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                        modifier = Modifier.height(26.dp),
-                                    ) {
-                                        Box(
-                                            contentAlignment = Alignment.Center,
-                                            modifier = Modifier.padding(horizontal = 8.dp),
-                                        ) {
-                                            Text(
-                                                text = "-1",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color =
-                                                    if (currentEp > 0) {
-                                                        MaterialTheme.colorScheme.onSurface
-                                                    } else {
-                                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                                    },
-                                            )
-                                        }
-                                    }
-                                }
-
-                                val canIncrement = totalEpisodes <= 0 || currentEp < totalEpisodes
                                 Surface(
-                                    onClick = onIncrementWatched,
-                                    enabled = canIncrement,
+                                    onClick = onDecrementWatched,
+                                    enabled = currentEp > 0,
                                     shape = RoundedCornerShape(4.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
                                     modifier = Modifier.height(26.dp),
                                 ) {
                                     Box(
@@ -514,12 +486,12 @@ fun SubjectHeaderCard(
                                         modifier = Modifier.padding(horizontal = 8.dp),
                                     ) {
                                         Text(
-                                            text = "+1",
+                                            text = "-1",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
                                             color =
-                                                if (canIncrement) {
-                                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                                if (currentEp > 0) {
+                                                    MaterialTheme.colorScheme.onSurface
                                                 } else {
                                                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                                                 },
@@ -667,8 +639,8 @@ private fun HeaderActionButton(
                 when {
                     !enabled -> MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.38f)
                     isHighlighted -> MaterialTheme.colorScheme.primaryContainer
-                    isDark -> MaterialTheme.colorScheme.surfaceContainerHigh
-                    else -> MaterialTheme.colorScheme.surfaceContainerHighest
+                    isDark -> MaterialTheme.colorScheme.surfaceContainerLow
+                    else -> MaterialTheme.colorScheme.surface
                 },
             contentColor =
                 when {

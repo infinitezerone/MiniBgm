@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -83,6 +84,7 @@ import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.isNavEntering
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
+import com.infinitezerone.minibgm.feature.subject.components.SUBJECT_HEADER_ITEM_KEY
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailContent
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailFullSkeleton
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailOverlays
@@ -425,17 +427,44 @@ fun SubjectDetailScreen(
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     val topBarBottomPx = with(density) { (statusBarTop + BgmSpacing.TopBar.height).toPx() }
-    val headerItemIndex = if (uiState.error != null) 1 else 0
+    val contentTopPadding = topChromeHeight + 8.dp
+    val fadeRangePx = with(density) { 200.dp.toPx() }
+    val maxParallaxPx = with(density) { 420.dp.toPx() }
     var titleBounds by remember { mutableStateOf<Rect?>(null) }
-    val collapseProgress by remember(topBarBottomPx, headerItemIndex) {
+    var tabBarTopPx by remember { mutableStateOf(Float.NaN) }
+    val ambientAlpha by remember(topBarBottomPx, fadeRangePx) {
         derivedStateOf {
+            if (!tabBarTopPx.isFinite()) {
+                1f
+            } else {
+                ((tabBarTopPx - topBarBottomPx) / fadeRangePx).coerceIn(0f, 1f)
+            }
+        }
+    }
+    val heroScrollPx by remember(maxParallaxPx) {
+        derivedStateOf {
+            val headerIndex = if (uiState.error != null) 1 else 0
+            when {
+                listState.firstVisibleItemIndex < headerIndex -> 0f
+                listState.firstVisibleItemIndex == headerIndex -> listState.firstVisibleItemScrollOffset.toFloat()
+                else -> maxParallaxPx
+            }.coerceIn(0f, maxParallaxPx)
+        }
+    }
+    val backdropTranslationY = -heroScrollPx * 0.25f
+    val collapseProgress by remember(topBarBottomPx) {
+        derivedStateOf {
+            val headerInViewport = listState.layoutInfo.visibleItemsInfo.any { it.key == SUBJECT_HEADER_ITEM_KEY }
+            // 头部不在可见项中时，用滚动容器自身的能力区分“已经滚过去”与“还没滚到”。
+            val headerScrolledPast = !headerInViewport && listState.canScrollBackward
             val bounds = titleBounds
             if (bounds == null) {
-                if (listState.firstVisibleItemIndex > headerItemIndex) 1f else 0f
+                if (headerScrolledPast) 1f else 0f
             } else {
                 calculateSubjectTitleCollapseProgress(
                     titleBounds = bounds,
                     topBarBottomPx = topBarBottomPx,
+                    headerScrolledPast = headerScrolledPast,
                 )
             }
         }
@@ -463,34 +492,17 @@ fun SubjectDetailScreen(
                     )
                 },
                 actions = {
-                    val isEpisodeLike = subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(end = 4.dp),
                     ) {
-                        if (isEpisodeLike) {
-                            BgmCircleActionButton(
-                                onClick = {
-                                    // 顶部栏 TV 入口属于条目全局级别，展示全剧规则、合集种子与多源配置
-                                    selectedEpisodeForSources = null
-                                    showSourcesBottomSheet = true
-                                },
-                                icon = BgmIcons.Tv,
-                                contentDescription = stringResource(R.string.feature_subject_ep_sources),
-                            )
-                        }
                         BgmCircleActionButton(
                             onClick = {
                                 context.launchWebUrl("https://bgm.tv/subject/$subjectId")
                             },
                             icon = BgmIcons.OpenInBrowser,
                             contentDescription = stringResource(R.string.feature_subject_open_in_browser),
-                        )
-                        BgmCircleActionButton(
-                            onClick = handleShare,
-                            icon = BgmIcons.Share,
-                            contentDescription = stringResource(R.string.feature_subject_share_title),
                         )
                     }
                 },
@@ -505,7 +517,11 @@ fun SubjectDetailScreen(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .height(420.dp),
+                        .height(420.dp)
+                        .graphicsLayer {
+                            alpha = ambientAlpha
+                            translationY = backdropTranslationY
+                        },
             )
         }
 
@@ -526,7 +542,7 @@ fun SubjectDetailScreen(
             ) {
                 when {
                     displaySubject == null && uiState.isLoading -> {
-                        SubjectDetailFullSkeleton(topPadding = topChromeHeight + 8.dp)
+                        SubjectDetailFullSkeleton(topPadding = contentTopPadding)
                     }
 
                     displaySubject == null && uiState.error != null -> {
@@ -689,9 +705,13 @@ fun SubjectDetailScreen(
                                 onPromptLogin = viewModel::promptLogin,
                                 onRetryEpisodes = viewModel::retryLoadEpisodes,
                                 onShare = handleShare,
-                                topPadding = topChromeHeight + 8.dp,
+                                topPadding = topChromeHeight,
                                 listState = listState,
-                                onTitleBoundsChanged = { titleBounds = it },
+                                onTitleBoundsChanged = { bounds ->
+                                    // Lazy 项被回收/预取时可能回调空矩形；忽略它，避免顶栏在滚过标题后重新变透明。
+                                    if (bounds.height > 0f) titleBounds = bounds
+                                },
+                                onTabBarTopChanged = { tabBarTopPx = it },
                                 modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
                             )
                         }
@@ -846,11 +866,15 @@ fun SubjectDetailScreen(
 /**
  * 标题顶部碰到顶栏底边时开始过渡，标题整体进入顶栏覆盖区时完成过渡。
  * 使用标题自身高度作为过渡距离，天然适配两行标题、字体缩放与宽屏布局。
+ * [headerScrolledPast] 表示头部项已整体滚出视口，此时必须锁定完成态，
+ * 不能因为 Lazy 项回收时上报空 bounds 而退回透明。
  */
 internal fun calculateSubjectTitleCollapseProgress(
     titleBounds: Rect?,
     topBarBottomPx: Float,
+    headerScrolledPast: Boolean = false,
 ): Float {
+    if (headerScrolledPast) return 1f
     if (titleBounds == null || titleBounds.height <= 0f) return 0f
     return ((topBarBottomPx - titleBounds.top) / titleBounds.height).coerceIn(0f, 1f)
 }

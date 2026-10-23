@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -829,8 +828,8 @@ fun EpisodeGrid(
                         when {
                             isWatched -> MaterialTheme.colorScheme.primaryContainer
                             isNextToWatch -> statusDoingContainerColor()
-                            isFuture -> MaterialTheme.colorScheme.surfaceContainerLowest
-                            else -> MaterialTheme.colorScheme.surfaceContainerHigh
+                            isFuture -> MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.55f)
+                            else -> MaterialTheme.colorScheme.surfaceContainerLow
                         }
                     val cellContentColor =
                         when {
@@ -1015,133 +1014,6 @@ fun buildEpisodesProgressLabel(
 
         else ->
             ""
-    }
-}
-
-/** 概览页横向分集快捷滑轨（符合 Bilibili / 豆瓣 选集标准）：一行紧凑方块，带全集跳转入口 */
-@Composable
-fun EpisodeQuickRail(
-    episodes: List<Episode>,
-    watchedCount: Int,
-    onEpisodeClick: (Episode) -> Unit,
-    onViewAllClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    hasProgress: Boolean = true,
-) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.feature_subject_episodes_select_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = stringResource(R.string.feature_subject_episodes_all_count_arrow, episodes.size),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier =
-                    Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable(onClick = onViewAllClick)
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-            )
-        }
-
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(horizontal = 0.dp),
-        ) {
-            items(items = episodes.take(24), key = { it.id }) { episode ->
-                val isWatched = isEpisodeWatched(episode, watchedCount)
-                val isFuture = isEpisodeFutureAir(episode)
-                val isNextToWatch = isEpisodeNextToWatch(episode, watchedCount, hasProgress)
-                val label =
-                    if (episode.isMain) {
-                        episode.formattedNumber
-                    } else {
-                        val prefix =
-                            when (episode.type) {
-                                1 -> "SP"
-                                2 -> "OP"
-                                3 -> "ED"
-                                else -> "E"
-                            }
-                        "$prefix${episode.sort.toInt()}"
-                    }
-
-                val cellShape = RoundedCornerShape(8.dp)
-                val cellBackground =
-                    when {
-                        isNextToWatch -> MaterialTheme.colorScheme.primary
-                        isWatched -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                        isFuture -> MaterialTheme.colorScheme.surfaceContainerLowest
-                        else -> MaterialTheme.colorScheme.surfaceContainerHigh
-                    }
-                val cellContentColor =
-                    when {
-                        isNextToWatch -> MaterialTheme.colorScheme.onPrimary
-                        isWatched -> MaterialTheme.colorScheme.onPrimaryContainer
-                        isFuture -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                        else -> MaterialTheme.colorScheme.onSurface
-                    }
-
-                Box(
-                    modifier =
-                        Modifier
-                            .width(48.dp)
-                            .height(44.dp)
-                            .clip(cellShape)
-                            .background(cellBackground)
-                            .clickable { onEpisodeClick(episode) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = if (isNextToWatch) FontWeight.ExtraBold else FontWeight.Bold,
-                            color = cellContentColor,
-                        )
-                        if (isWatched) {
-                            Icon(
-                                imageVector = BgmIcons.Check,
-                                contentDescription = null,
-                                tint = cellContentColor.copy(alpha = 0.8f),
-                                modifier = Modifier.size(11.dp),
-                            )
-                        }
-                    }
-
-                    if (isNextToWatch) {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .align(Alignment.TopStart)
-                                    .padding(3.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.Play,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(9.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
