@@ -1,11 +1,5 @@
 package com.infinitezerone.minibgm.ui.component
 
-import androidx.compose.animation.core.EaseInOutSine
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -15,7 +9,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,7 +30,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 /**
  * 底部导航栏右侧独立的 AI Action Button。
  *
- * 采用 56dp 圆形形态（与悬浮底栏严格齐平），外围环绕动态彩虹呼吸晕染阴影 (sweepGradient shadow)，
+ * 采用 56dp 圆形形态（与悬浮底栏严格齐平），外围环绕彩虹晕染阴影 (sweepGradient shadow)，
  * 响应触控压缩交互并直通 AI 助手会话。
  */
 @Composable
@@ -54,28 +47,6 @@ fun BgmAiActionButton(
             MaterialTheme.colorScheme.surface
         }
 
-    val infiniteTransition = rememberInfiniteTransition(label = "ai_shadow_breathing")
-    val animatedSpread by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 5.5f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(durationMillis = 2000, easing = EaseInOutSine),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "ai_shadow_spread",
-    )
-    val animatedAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.40f,
-        targetValue = 0.85f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(durationMillis = 2000, easing = EaseInOutSine),
-                repeatMode = RepeatMode.Reverse,
-            ),
-        label = "ai_shadow_alpha",
-    )
-
     val shape = CircleShape
     val colors = AiGlowSweepColors
 
@@ -91,10 +62,10 @@ fun BgmAiActionButton(
                     shadow =
                         Shadow(
                             radius = 10.dp,
-                            spread = animatedSpread.dp,
+                            spread = 2.dp,
                             brush = Brush.sweepGradient(colors),
                             offset = DpOffset(x = 0.dp, y = 0.dp),
-                            alpha = animatedAlpha,
+                            alpha = if (isDark) 0.55f else 0.45f,
                         ),
                 ).clip(shape)
                 .background(containerColor)
