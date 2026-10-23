@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,84 +44,82 @@ fun SubjectDetailFullSkeleton(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         userScrollEnabled = false,
     ) {
-        // 1. 顶部 Header 骨架卡片（与真实 SubjectHeaderCard 几何尺寸严格同构）
+        // 1. 顶部 Hero 骨架（与真实 SubjectHeaderCard 几何尺寸严格同构，通透无灰卡）
         item(key = "skeleton_header") {
-            Card(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors =
-                    CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    ),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                // 海报封面占位 (140dp 宽，0.7f 比例，16dp 圆角)
+                SkeletonBox(
+                    modifier =
+                        Modifier
+                            .width(140.dp)
+                            .aspectRatio(0.7f),
+                    shape = RoundedCornerShape(16.dp),
+                    state = skeletonState,
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 大标题占位
+                SkeletonBox(
+                    modifier = Modifier.fillMaxWidth(0.65f).height(24.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    state = skeletonState,
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // 副标题占位
+                SkeletonBox(
+                    modifier = Modifier.fillMaxWidth(0.42f).height(14.dp),
+                    shape = RoundedCornerShape(4.dp),
+                    state = skeletonState,
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 元数据胶囊行占位
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // 海报封面占位（严格保持 108.dp 宽，0.7f 比例）
-                    SkeletonBox(
-                        modifier =
-                            Modifier
-                                .width(108.dp)
-                                .aspectRatio(0.7f),
-                        shape = RoundedCornerShape(8.dp),
-                        state = skeletonState,
-                    )
-
-                    // 右侧元数据占位
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
+                    repeat(4) {
                         SkeletonBox(
-                            modifier = Modifier.fillMaxWidth(0.9f).height(20.dp),
+                            modifier = Modifier.size(width = 52.dp, height = 20.dp),
                             shape = RoundedCornerShape(4.dp),
                             state = skeletonState,
                         )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 主播放 CTA 按钮占位
+                SkeletonBox(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .height(48.dp),
+                    shape = CircleShape,
+                    state = skeletonState,
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 次级操作行占位
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    repeat(4) {
                         SkeletonBox(
-                            modifier = Modifier.fillMaxWidth(0.6f).height(14.dp),
-                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.size(40.dp),
+                            shape = CircleShape,
                             state = skeletonState,
                         )
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        // 评分栏占位
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            SkeletonBox(
-                                modifier = Modifier.size(width = 44.dp, height = 24.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                state = skeletonState,
-                            )
-                            SkeletonBox(
-                                modifier = Modifier.size(width = 68.dp, height = 14.dp),
-                                shape = RoundedCornerShape(4.dp),
-                                state = skeletonState,
-                            )
-                        }
-
-                        // 标签胶囊占位
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            SkeletonBox(
-                                modifier = Modifier.size(width = 42.dp, height = 20.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                state = skeletonState,
-                            )
-                            SkeletonBox(
-                                modifier = Modifier.size(width = 50.dp, height = 20.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                state = skeletonState,
-                            )
-                            SkeletonBox(
-                                modifier = Modifier.size(width = 38.dp, height = 20.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                state = skeletonState,
-                            )
-                        }
                     }
                 }
             }

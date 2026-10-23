@@ -155,7 +155,7 @@ internal fun SubjectDetailContent(
     val adaptiveInfo = LocalWindowAdaptiveInfo.current
     val gridColumns = if (adaptiveInfo.isWide) 7 else 5
 
-    val tabHeaderIndex = if (uiState.error != null) 3 else 2
+    val tabHeaderIndex = if (uiState.error != null) 2 else 1
 
     val nextUpEpisode =
         remember(currentEpisodes, uiState.collection?.epStatus) {
@@ -214,7 +214,7 @@ internal fun SubjectDetailContent(
             }
         }
 
-        // 1. 条目头部 Hero 卡片 (首帧在场，支撑即使是首次进入也能顺滑飞渡)
+        // 1. 条目头部 Hero 区 (首帧在场，支撑即使是首次进入也能顺滑飞渡)
         item(key = "header") {
             val watchStatus =
                 remember(uiState.episodes, uiState.collection) {
@@ -226,38 +226,18 @@ internal fun SubjectDetailContent(
                 sharedElementSource = source,
                 collection = uiState.collection,
                 totalEpisodes = totalEpisodes,
-                onOpenCollectionSheet = onOpenCollectionSheet,
-                onTagClick = onTagClick,
-                onPlayNext = onPlayNextEpisode,
-                onOpenSources = onOpenSources,
-                onIncrementWatched = onIncrementWatched,
-                nextEpSort = mainNextUpEpNumber ?: nextUpEpNumber,
-                watchStatus = watchStatus,
-                onShare = onShare,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-        }
-
-        // 2. 个人追番与进度看板卡片
-        item(key = "collection_progress_card") {
-            val watchStatus =
-                remember(uiState.episodes, uiState.collection) {
-                    computeSubjectWatchStatus(uiState.episodes, uiState.collection)
-                }
-            SubjectCollectionCard(
-                collection = uiState.collection,
-                totalEpisodes = totalEpisodes,
-                subjectType = subjectType,
                 isLoggedIn = uiState.isLoggedIn,
-                nextEpSort = mainNextUpEpNumber ?: nextUpEpNumber,
-                watchStatus = watchStatus,
                 onOpenCollectionSheet = onOpenCollectionSheet,
-                onUpdateCollectionStatus = onUpdateCollectionStatus ?: {},
+                onUpdateCollectionStatus = onUpdateCollectionStatus,
+                onTagClick = onTagClick,
                 onPlayNext = onPlayNextEpisode,
                 onOpenSources = onOpenSources,
                 onIncrementWatched = onIncrementWatched,
                 onDecrementWatched = onDecrementWatched,
                 onPromptLogin = onPromptLogin,
+                nextEpSort = mainNextUpEpNumber ?: nextUpEpNumber,
+                watchStatus = watchStatus,
+                onShare = onShare,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
