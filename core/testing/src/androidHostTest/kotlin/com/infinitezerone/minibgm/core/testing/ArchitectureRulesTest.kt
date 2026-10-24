@@ -4016,6 +4016,48 @@ class ArchitectureRulesTest {
         )
     }
 
+    /**
+     * 详情页二级 Tab 结构红线（切 tab 抖动复盘）：
+     * 旧实现是「单个共享 LazyColumn 换 items + stickyHeader 假吸顶 + 尾部自适应留白 +
+     * requestScrollToItem 重锚 + 72dp 阈值手势假滑动」。切到瞬时矮内容的 tab（讨论页
+     * loading 占位）时，列表总高度突然小于「当前滚动位置 + 视口」，共享滚动被钳制弹回——
+     * Robolectric 最小复现实测吸顶 tab 栏 offset 从 0 掉到 1920px，且头部随弹回重新入视口、
+     * headerScrolledPast 翻 false，顶栏标题折叠进度错误归零（用户看到「标题不见了」）；
+     * 尾部留白只会在底部追加空间、无法恢复被钳掉的滚动，弹回后永不自愈。
+     * 根治结构：HorizontalPager 每页独立滚动 + 头部 nestedScroll 收合 + Tab 栏常驻，
+     * 「瞬时矮内容」在结构上不可表达。回退到共享容器换 items 即为本测试绊线。
+     */
+    @Test
+    fun subject_detail_tabs_must_use_pager() {
+        val violations = mutableListOf<String>()
+        val contentRelPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectDetailContent.kt"
+        val screenRelPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailScreen.kt"
+        val content = KotlinSourceScanner.sanitize(File(projectRoot, contentRelPath).readText())
+        val screen = KotlinSourceScanner.sanitize(File(projectRoot, screenRelPath).readText())
+
+        for (required in listOf("HorizontalPager(", "rememberPagerState", "SubjectHeaderCollapseState")) {
+            if (!content.contains(required)) {
+                violations.add("$contentRelPath 丢失 `$required`：二级 Tab 必须是 Pager + 每页独立滚动结构")
+            }
+        }
+        for (banned in listOf("stickyHeader", "requestScrollToItem", "detectHorizontalDragGestures")) {
+            if (content.contains(banned)) {
+                violations.add("$contentRelPath 违规出现 `$banned`：禁止共享 LazyColumn 换 items 假吸顶/假滑动")
+            }
+        }
+        if (screen.contains("SUBJECT_TABS_ITEM_KEY") || screen.contains("SUBJECT_HEADER_ITEM_KEY")) {
+            violations.add("$screenRelPath 仍按列表 key 定位吸顶栏/头部：吸顶已由收合结构承担，禁止回退")
+        }
+
+        assertTrue(
+            violations.isEmpty(),
+            "详情页二级 Tab 必须保持 Pager 结构（共享滚动容器切 tab 会被瞬时矮内容钳制弹回）：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
     /** [inner] 是否出现在以 [blockToken] 开头、花括号配对的代码块内 */
     private fun mentionsInsideBlock(
         code: String,

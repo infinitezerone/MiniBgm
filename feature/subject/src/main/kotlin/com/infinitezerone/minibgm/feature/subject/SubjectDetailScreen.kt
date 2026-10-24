@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -84,10 +83,10 @@ import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.core.navigation.isNavEntering
 import com.infinitezerone.minibgm.core.navigation.launchStreamingUrl
 import com.infinitezerone.minibgm.core.navigation.launchWebUrl
-import com.infinitezerone.minibgm.feature.subject.components.SUBJECT_HEADER_ITEM_KEY
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailContent
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailFullSkeleton
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailOverlays
+import com.infinitezerone.minibgm.feature.subject.components.SubjectHeaderCollapseState
 import com.infinitezerone.minibgm.feature.subject.components.rememberDownloadNotificationPermissionRequester
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -426,39 +425,32 @@ fun SubjectDetailScreen(
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val topChromeHeight = statusBarTop + BgmSpacing.TopBar.height
 
-    val listState = rememberLazyListState()
     val density = LocalDensity.current
     val topBarBottomPx = with(density) { (statusBarTop + BgmSpacing.TopBar.height).toPx() }
     val contentTopPadding = topChromeHeight + 8.dp
     val fadeRangePx = with(density) { 200.dp.toPx() }
     val maxParallaxPx = with(density) { 420.dp.toPx() }
     var titleBounds by remember { mutableStateOf<Rect?>(null) }
-    var tabBarTopPx by remember { mutableStateOf(Float.NaN) }
-    val ambientAlpha by remember(topBarBottomPx, fadeRangePx) {
+    val headerCollapse = remember { SubjectHeaderCollapseState() }
+    val ambientAlpha by remember(fadeRangePx) {
         derivedStateOf {
-            if (!tabBarTopPx.isFinite()) {
+            val height = headerCollapse.heightPx
+            if (height <= 0f) {
                 1f
             } else {
-                ((tabBarTopPx - topBarBottomPx) / fadeRangePx).coerceIn(0f, 1f)
+                // Tab 栏距顶栏底边的剩余距离：头部展开时最远，收合完成后归零
+                ((height - headerCollapse.offsetPx) / fadeRangePx).coerceIn(0f, 1f)
             }
         }
     }
     val heroScrollPx by remember(maxParallaxPx) {
-        derivedStateOf {
-            val headerIndex = if (uiState.error != null) 1 else 0
-            when {
-                listState.firstVisibleItemIndex < headerIndex -> 0f
-                listState.firstVisibleItemIndex == headerIndex -> listState.firstVisibleItemScrollOffset.toFloat()
-                else -> maxParallaxPx
-            }.coerceIn(0f, maxParallaxPx)
-        }
+        derivedStateOf { headerCollapse.offsetPx.coerceIn(0f, maxParallaxPx) }
     }
     val backdropTranslationY = -heroScrollPx * 0.25f
     val collapseProgress by remember(topBarBottomPx) {
         derivedStateOf {
-            val headerInViewport = listState.layoutInfo.visibleItemsInfo.any { it.key == SUBJECT_HEADER_ITEM_KEY }
-            // 头部不在可见项中时，用滚动容器自身的能力区分“已经滚过去”与“还没滚到”。
-            val headerScrolledPast = !headerInViewport && listState.canScrollBackward
+            val headerScrolledPast =
+                headerCollapse.heightPx > 0f && headerCollapse.offsetPx >= headerCollapse.heightPx - 0.5f
             val bounds = titleBounds
             if (bounds == null) {
                 if (headerScrolledPast) 1f else 0f
@@ -707,12 +699,11 @@ fun SubjectDetailScreen(
                                 onRetryEpisodes = viewModel::retryLoadEpisodes,
                                 onShare = handleShare,
                                 topPadding = topChromeHeight,
-                                listState = listState,
+                                headerCollapse = headerCollapse,
                                 onTitleBoundsChanged = { bounds ->
                                     // Lazy 项被回收/预取时可能回调空矩形；忽略它，避免顶栏在滚过标题后重新变透明。
                                     if (bounds.height > 0f) titleBounds = bounds
                                 },
-                                onTabBarTopChanged = { tabBarTopPx = it },
                                 modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
                             )
                         }
