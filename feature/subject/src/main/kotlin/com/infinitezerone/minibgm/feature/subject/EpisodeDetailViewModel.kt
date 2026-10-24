@@ -89,7 +89,6 @@ sealed interface EpisodeDetailUiEvent {
         @StringRes val messageRes: Int = 0,
     ) : EpisodeDetailUiEvent
 
-    /** 把找源请求交接给 AI 助手会话（[prefillPrompt] 即助手首条提问） */
     /** 找源请求交接给 AI 助手会话：提问文案经 [promptResId] 资源 + [formatArgs] 在 UI 侧解析 */
     data class OpenSourceSearch(
         @get:StringRes val promptResId: Int,

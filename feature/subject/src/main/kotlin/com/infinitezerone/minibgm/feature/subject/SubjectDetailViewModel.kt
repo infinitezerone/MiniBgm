@@ -512,8 +512,9 @@ class SubjectDetailViewModel(
                     }
 
                     // 2. 分集数据（本地已有且非用户显式下拉时优先命中缓存短路，不打扰网络）
+                    val hasCachedEpisodes = !subjectRepository.getCachedEpisodes(subjectId).isNullOrEmpty()
                     val episodesResult =
-                        if (isUserPullToRefresh || _uiState.value.episodes.isEmpty()) {
+                        if (isUserPullToRefresh || !hasCachedEpisodes) {
                             subjectRepository.loadEpisodes(subjectId, _uiState.value.episodeSortDescending)
                         } else {
                             subjectRepository.fetchEpisodes(subjectId)

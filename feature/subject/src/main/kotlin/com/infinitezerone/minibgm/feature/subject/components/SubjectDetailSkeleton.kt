@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
+import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 
 /**
@@ -49,90 +50,95 @@ fun SubjectDetailFullSkeleton(
         item(key = "skeleton_header") {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // 背景弥散光晕 + 居中悬浮海报占位（对齐真实头部 246dp 光晕区，消除加载→内容跳变）
-                Box(
-                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    SkeletonBox(
-                        modifier = Modifier.size(width = 176.dp, height = 246.dp),
-                        shape = RoundedCornerShape(24.dp),
-                        state = skeletonState,
-                    )
-                    SkeletonBox(
-                        modifier =
-                            Modifier
-                                .width(140.dp)
-                                .aspectRatio(0.7f),
-                        shape = RoundedCornerShape(16.dp),
-                        state = skeletonState,
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // 大标题占位
-                SkeletonBox(
-                    modifier = Modifier.fillMaxWidth(0.65f).height(24.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    state = skeletonState,
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // 副标题占位
-                SkeletonBox(
-                    modifier = Modifier.fillMaxWidth(0.42f).height(14.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    state = skeletonState,
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // 元数据胶囊行占位
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
                 ) {
-                    repeat(4) {
+                    // 左侧悬浮海报占位
+                    Box(
+                        modifier = Modifier.padding(top = 2.dp, bottom = 2.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         SkeletonBox(
-                            modifier = Modifier.size(width = 52.dp, height = 20.dp),
+                            modifier =
+                                Modifier
+                                    .width(104.dp)
+                                    .aspectRatio(BGM_POSTER_ASPECT_RATIO),
+                            shape = RoundedCornerShape(16.dp),
+                            state = skeletonState,
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(14.dp))
+
+                    // 右侧信息占位
+                    Column(
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        // 大标题占位
+                        SkeletonBox(
+                            modifier = Modifier.fillMaxWidth(0.85f).height(20.dp),
                             shape = RoundedCornerShape(4.dp),
                             state = skeletonState,
                         )
-                    }
-                }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
-                // 主播放 CTA 按钮占位
-                SkeletonBox(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .height(48.dp),
-                    shape = CircleShape,
-                    state = skeletonState,
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // 次级操作行占位
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    repeat(4) {
+                        // 副标题占位
                         SkeletonBox(
-                            modifier = Modifier.size(40.dp),
-                            shape = CircleShape,
+                            modifier = Modifier.fillMaxWidth(0.5f).height(12.dp),
+                            shape = RoundedCornerShape(4.dp),
                             state = skeletonState,
                         )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // 元数据胶囊行占位
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            repeat(3) {
+                                SkeletonBox(
+                                    modifier = Modifier.size(width = 46.dp, height = 18.dp),
+                                    shape = RoundedCornerShape(4.dp),
+                                    state = skeletonState,
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // 操作按钮占位
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            SkeletonBox(
+                                modifier = Modifier.size(width = 96.dp, height = 36.dp),
+                                shape = CircleShape,
+                                state = skeletonState,
+                            )
+                            repeat(2) {
+                                SkeletonBox(
+                                    modifier = Modifier.size(36.dp),
+                                    shape = CircleShape,
+                                    state = skeletonState,
+                                )
+                            }
+                        }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 简介占位
+                SkeletonBox(
+                    modifier = Modifier.fillMaxWidth().height(36.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    state = skeletonState,
+                )
             }
         }
 

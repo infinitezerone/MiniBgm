@@ -44,7 +44,6 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
@@ -65,13 +64,11 @@ import com.infinitezerone.minibgm.feature.subject.SubjectWatchStatus
 import kotlin.math.roundToInt
 
 /**
- * 电影级大画幅沉浸头部：
- * 1. 顶部大画幅圆角海报（140dp，14dp 圆角，背景弥散微光，共享元素飞渡锚点）；
- * 2. 醒目大标题、原名与多维元信息胶囊（类型、开播年份、集数、评分金徽章、全站 Rank）；
- * 3. 醒目主播放 CTA 大胶囊按钮（播放/续看第 X 话）；
- * 4. 紧凑副级操作条（追番、打卡+1、换源、分享）；
- * 5. 个人追番进度条与 -1/+1 快捷微调（登录且有在看/进度时自然融入，告别双重卡片堆叠）；
- * 6. 核心制作人员与智能可折叠简介。
+ * 紧凑现代条目头部（首屏高效生产力，高度约 200dp，保留水生弥散光晕与 M3 视觉风格）：
+ * 1. 左侧圆角海报（104dp 宽，3:4 大画幅比例，14dp 圆角，背景弥散微光，共享元素锚点）；
+ * 2. 右侧紧凑信息栏：大标题、原名、类型/开播年份/总集数、评分金徽章、全站 Rank、主播放 CTA 大胶囊与快捷微操作；
+ * 3. 个人追番进度条与 -1/+1 快捷微调（登录且有在看/进度时自然融入）；
+ * 4. 核心制作人员与智能可折叠简介。
  */
 @Composable
 fun SubjectHeaderCard(
@@ -101,313 +98,350 @@ fun SubjectHeaderCard(
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.fillMaxWidth(),
     ) {
-        // 1. 电影感立体大画幅海报 + 弥散微光
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+        // 1. 顶部图文紧凑混排：左侧海报 + 右侧标题与操作
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
         ) {
-            // 背景弥散光晕
+            // 左侧海报与弥散光晕
             Box(
-                modifier =
-                    Modifier
-                        .size(width = 176.dp, height = 246.dp)
-                        .background(
-                            brush =
-                                Brush.radialGradient(
-                                    colors =
-                                        listOf(
-                                            MaterialTheme.colorScheme.primary.copy(
-                                                alpha = if (isDark) 0.28f else 0.16f,
-                                            ),
-                                            MaterialTheme.colorScheme.tertiary.copy(
-                                                alpha = if (isDark) 0.12f else 0.06f,
-                                            ),
-                                            Color.Transparent,
-                                        ),
-                                ),
-                            shape = RoundedCornerShape(24.dp),
-                        ),
-            )
-
-            // 悬浮封面
-            CoverImage(
-                url = subject.images?.bestImage.orEmpty(),
-                contentDescription = subject.displayName,
-                cornerRadius = 16.dp,
-                aspectRatio = BGM_POSTER_ASPECT_RATIO,
-                modifier =
-                    Modifier
-                        .width(140.dp)
-                        .shadow(
-                            elevation = 12.dp,
-                            shape = RoundedCornerShape(16.dp),
-                            clip = false,
-                        ).bgmSharedElement(
-                            key = BgmSharedElementKeys.subjectCover(subject.id, sharedElementSource),
-                            clipInOverlayDuringTransition = RoundedCornerShape(16.dp),
-                        ),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // 2. 醒目大标题与原名
-        Text(
-            text = subject.displayName,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.ExtraBold,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier =
-                Modifier
-                    .padding(horizontal = 12.dp)
-                    .onGloballyPositioned { onTitleBoundsChanged(it.boundsInWindow()) },
-        )
-
-        if (subject.name.isNotBlank() && subject.name != subject.displayName) {
-            Spacer(modifier = Modifier.height(3.dp))
-            Text(
-                text = subject.name,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // 3. 元信息胶囊（类型徽章、放送/发行日期、总集数、评分金徽章、全站 Rank）
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-        ) {
-            Surface(
-                shape = RoundedCornerShape(4.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.padding(top = 2.dp, bottom = 2.dp),
             ) {
-                Text(
-                    text = subjectType.label,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    maxLines = 1,
-                    softWrap = false,
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                )
-            }
-
-            val dateText = subject.date.ifBlank { subject.airDate }
-            if (dateText.isNotBlank()) {
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                ) {
-                    Text(
-                        text = dateText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        softWrap = false,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                    )
-                }
-            }
-
-            val episodeCount = if (subject.eps > 0) subject.eps else subject.totalEpisodes
-            if (episodeCount > 0 && subjectType != SubjectType.GAME) {
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                ) {
-                    Text(
-                        text =
-                            stringResource(
-                                R.string.feature_subject_total_episodes_format,
-                                episodeCount,
-                                subjectType.unitName,
+                // 背景微光晕
+                Box(
+                    modifier =
+                        Modifier
+                            .size(width = 114.dp, height = 156.dp)
+                            .background(
+                                brush =
+                                    Brush.radialGradient(
+                                        colors =
+                                            listOf(
+                                                MaterialTheme.colorScheme.primary.copy(
+                                                    alpha = if (isDark) 0.28f else 0.16f,
+                                                ),
+                                                MaterialTheme.colorScheme.tertiary.copy(
+                                                    alpha = if (isDark) 0.12f else 0.06f,
+                                                ),
+                                                Color.Transparent,
+                                            ),
+                                    ),
+                                shape = RoundedCornerShape(16.dp),
                             ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        softWrap = false,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                    )
-                }
-            }
-
-            val rating = subject.rating
-            if (rating != null && rating.score > 0.0) {
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = RatingGold.copy(alpha = 0.15f),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.Star,
-                            contentDescription = null,
-                            tint = RatingGold,
-                            modifier = Modifier.size(13.dp),
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = rating.score.toString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = RatingGold,
-                        )
-                    }
-                }
-
-                if (rating.rank > 0) {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                    ) {
-                        Text(
-                            text = "Rank #${rating.rank}",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            maxLines = 1,
-                            softWrap = false,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                        )
-                    }
-                }
-            }
-        }
-
-        // 4. 醒目主播放 CTA 大胶囊按钮（剧集类首要转化入口）
-        if (isEpisodeLike) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            val playLabel =
-                when (watchStatus) {
-                    is SubjectWatchStatus.ContinueWatching ->
-                        stringResource(R.string.feature_subject_resume_watch, watchStatus.nextEpisode.formattedNumber)
-                    is SubjectWatchStatus.Completed ->
-                        stringResource(R.string.feature_subject_rewatch_from_start)
-                    else ->
-                        if (nextEpSort != null && nextEpSort > 0f) {
-                            stringResource(R.string.feature_subject_play_episode_format, nextEpSort.toEpisodeLabel())
-                        } else {
-                            stringResource(R.string.feature_subject_cd_play)
-                        }
-                }
-
-            Button(
-                onClick = { onPlayNext?.invoke() ?: onOpenSources?.invoke() },
-                enabled = onPlayNext != null || onOpenSources != null,
-                shape = CircleShape,
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .height(48.dp),
-            ) {
-                Icon(
-                    imageVector = BgmIcons.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(22.dp),
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+
+                CoverImage(
+                    url = subject.images?.bestImage.orEmpty(),
+                    contentDescription = subject.displayName,
+                    cornerRadius = 16.dp,
+                    aspectRatio = BGM_POSTER_ASPECT_RATIO,
+                    modifier =
+                        Modifier
+                            .width(104.dp)
+                            .shadow(
+                                elevation = 8.dp,
+                                shape = RoundedCornerShape(16.dp),
+                                clip = false,
+                            ).bgmSharedElement(
+                                key = BgmSharedElementKeys.subjectCover(subject.id, sharedElementSource),
+                                clipInOverlayDuringTransition = RoundedCornerShape(16.dp),
+                            ),
+                )
+            }
+
+            Spacer(modifier = Modifier.width(14.dp))
+
+            // 右侧信息栏
+            Column(
+                modifier = Modifier.weight(1f),
+            ) {
+                // 标题与顶栏折叠测算
                 Text(
-                    text = playLabel,
+                    text = subject.displayName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned { onTitleBoundsChanged(it.boundsInWindow()) },
                 )
-            }
-        }
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // 5. 紧凑副级操作条 (追番、打卡+1、换源、分享)
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // a. 追番 / 收藏
-            val isCollected = collection != null
-            val collectLabel =
-                if (isCollected) {
-                    CollectionType.fromValue(collection.type).getVerb(subjectType)
-                } else {
-                    stringResource(R.string.feature_subject_action_collect)
+                if (subject.name.isNotBlank() && subject.name != subject.displayName) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subject.name,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-            HeaderActionButton(
-                icon = if (isCollected) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
-                label = collectLabel,
-                contentDescription = collectLabel,
-                isHighlighted = isCollected,
-                onClick = {
-                    if (!isLoggedIn) {
-                        onPromptLogin?.invoke() ?: onOpenCollectionSheet?.invoke()
-                    } else {
-                        onOpenCollectionSheet?.invoke()
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // 元信息胶囊（类型、日期、集数、评分、Rank）
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                    ) {
+                        Text(
+                            text = subjectType.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
                     }
-                },
-            )
 
-            // b. 打卡 +1（剧集类作品且有分集时可用）
-            if (isEpisodeLike) {
-                val canCheckIn = totalEpisodes > 0 || (collection?.epStatus ?: 0) > 0
-                HeaderActionButton(
-                    icon = BgmIcons.Check,
-                    label = stringResource(R.string.feature_subject_action_check_in),
-                    contentDescription = stringResource(R.string.feature_subject_check_in_next_ep),
-                    enabled = canCheckIn && onIncrementWatched != null,
-                    onClick = {
-                        if (!isLoggedIn) {
-                            onPromptLogin?.invoke() ?: onIncrementWatched?.invoke()
-                        } else {
-                            onIncrementWatched?.invoke()
+                    val dateText = subject.date.ifBlank { subject.airDate }
+                    if (dateText.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        ) {
+                            Text(
+                                text = dateText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
                         }
-                    },
-                )
-            }
+                    }
 
-            // c. 换源 / 多源（剧集类作品入口）
-            if (isEpisodeLike && onOpenSources != null) {
-                HeaderActionButton(
-                    icon = BgmIcons.Tv,
-                    label = stringResource(R.string.feature_subject_ep_sources),
-                    contentDescription = stringResource(R.string.feature_subject_ep_sources),
-                    onClick = onOpenSources,
-                )
-            }
+                    val episodeCount = if (subject.eps > 0) subject.eps else subject.totalEpisodes
+                    if (episodeCount > 0 && subjectType != SubjectType.GAME) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        ) {
+                            Text(
+                                text =
+                                    stringResource(
+                                        R.string.feature_subject_total_episodes_format,
+                                        episodeCount,
+                                        subjectType.unitName,
+                                    ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
 
-            // d. 分享
-            if (onShare != null) {
-                HeaderActionButton(
-                    icon = BgmIcons.Share,
-                    label = stringResource(R.string.feature_subject_action_share),
-                    contentDescription = stringResource(R.string.feature_subject_share_title),
-                    onClick = onShare,
-                )
+                    val rating = subject.rating
+                    if (rating != null && rating.score > 0.0) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = RatingGold.copy(alpha = 0.15f),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.Star,
+                                    contentDescription = null,
+                                    tint = RatingGold,
+                                    modifier = Modifier.size(12.dp),
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text(
+                                    text = rating.score.toString(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = RatingGold,
+                                )
+                            }
+                        }
+
+                        if (rating.rank > 0) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                            ) {
+                                Text(
+                                    text = "Rank #${rating.rank}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 操作按钮群：主播放胶囊 + 紧凑副级操作
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (isEpisodeLike) {
+                        val playLabel =
+                            when (watchStatus) {
+                                is SubjectWatchStatus.ContinueWatching ->
+                                    stringResource(R.string.feature_subject_resume_watch, watchStatus.nextEpisode.formattedNumber)
+                                is SubjectWatchStatus.Completed ->
+                                    stringResource(R.string.feature_subject_rewatch_from_start)
+                                else ->
+                                    if (nextEpSort != null && nextEpSort > 0f) {
+                                        stringResource(R.string.feature_subject_play_episode_format, nextEpSort.toEpisodeLabel())
+                                    } else {
+                                        stringResource(R.string.feature_subject_cd_play)
+                                    }
+                            }
+
+                        Button(
+                            onClick = { onPlayNext?.invoke() ?: onOpenSources?.invoke() },
+                            enabled = onPlayNext != null || onOpenSources != null,
+                            shape = CircleShape,
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            modifier = Modifier.height(36.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = playLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+
+                    // 追番 / 收藏
+                    val isCollected = collection != null
+                    val collectLabel =
+                        if (isCollected) {
+                            CollectionType.fromValue(collection.type).getVerb(subjectType)
+                        } else {
+                            stringResource(R.string.feature_subject_action_collect)
+                        }
+                    BgmCircleActionButton(
+                        onClick = {
+                            if (!isLoggedIn) {
+                                onPromptLogin?.invoke() ?: onOpenCollectionSheet?.invoke()
+                            } else {
+                                onOpenCollectionSheet?.invoke()
+                            }
+                        },
+                        icon = if (isCollected) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
+                        contentDescription = collectLabel,
+                        size = 36.dp,
+                        iconSize = 18.dp,
+                        containerColor =
+                            if (isCollected) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else if (isDark) {
+                                MaterialTheme.colorScheme.surfaceContainerLow
+                            } else {
+                                MaterialTheme.colorScheme.surface
+                            },
+                        contentColor =
+                            if (isCollected) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                    )
+
+                    // 打卡 +1
+                    if (isEpisodeLike) {
+                        val canCheckIn = totalEpisodes > 0 || (collection?.epStatus ?: 0) > 0
+                        BgmCircleActionButton(
+                            onClick = {
+                                if (!isLoggedIn) {
+                                    onPromptLogin?.invoke() ?: onIncrementWatched?.invoke()
+                                } else {
+                                    onIncrementWatched?.invoke()
+                                }
+                            },
+                            icon = BgmIcons.Check,
+                            contentDescription = stringResource(R.string.feature_subject_check_in_next_ep),
+                            enabled = canCheckIn && onIncrementWatched != null,
+                            size = 36.dp,
+                            iconSize = 18.dp,
+                            containerColor =
+                                if (isDark) {
+                                    MaterialTheme.colorScheme.surfaceContainerLow
+                                } else {
+                                    MaterialTheme.colorScheme.surface
+                                },
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+
+                    // 换源
+                    if (isEpisodeLike && onOpenSources != null) {
+                        BgmCircleActionButton(
+                            onClick = onOpenSources,
+                            icon = BgmIcons.Tv,
+                            contentDescription = stringResource(R.string.feature_subject_ep_sources),
+                            size = 36.dp,
+                            iconSize = 18.dp,
+                            containerColor =
+                                if (isDark) {
+                                    MaterialTheme.colorScheme.surfaceContainerLow
+                                } else {
+                                    MaterialTheme.colorScheme.surface
+                                },
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+
+                    // 分享
+                    if (onShare != null) {
+                        BgmCircleActionButton(
+                            onClick = onShare,
+                            icon = BgmIcons.Share,
+                            contentDescription = stringResource(R.string.feature_subject_share_title),
+                            size = 36.dp,
+                            iconSize = 18.dp,
+                            containerColor =
+                                if (isDark) {
+                                    MaterialTheme.colorScheme.surfaceContainerLow
+                                } else {
+                                    MaterialTheme.colorScheme.surface
+                                },
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
             }
         }
 
-        // 6. 个人追番进度条与 -1/+1 快捷微调（登录且有在看/进度时自然融入，告别双重卡片堆叠）
+        // 2. 个人追番进度条与 -1/+1 快捷微调
         if (isLoggedIn && (collection != null || totalEpisodes > 0)) {
             val currentEp = collection?.epStatus ?: 0
             val progressFraction =
@@ -418,16 +452,16 @@ fun SubjectHeaderCard(
                 }
             val progressPercent = (progressFraction * 100f).roundToInt()
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -467,39 +501,34 @@ fun SubjectHeaderCard(
 
                         Text(
                             text = progressLabel,
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
 
                         if (isEpisodeLike && onDecrementWatched != null) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                            Surface(
+                                onClick = onDecrementWatched,
+                                enabled = currentEp > 0,
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                modifier = Modifier.height(24.dp),
                             ) {
-                                Surface(
-                                    onClick = onDecrementWatched,
-                                    enabled = currentEp > 0,
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                    modifier = Modifier.height(26.dp),
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.padding(horizontal = 8.dp),
                                 ) {
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier = Modifier.padding(horizontal = 8.dp),
-                                    ) {
-                                        Text(
-                                            text = "-1",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color =
-                                                if (currentEp > 0) {
-                                                    MaterialTheme.colorScheme.onSurface
-                                                } else {
-                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                                },
-                                        )
-                                    }
+                                    Text(
+                                        text = "-1",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color =
+                                            if (currentEp > 0) {
+                                                MaterialTheme.colorScheme.onSurface
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                            },
+                                    )
                                 }
                             }
                         }
@@ -511,7 +540,7 @@ fun SubjectHeaderCard(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .height(4.dp)
+                                    .height(3.dp)
                                     .clip(CircleShape),
                             color = MaterialTheme.colorScheme.primary,
                             trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -521,28 +550,26 @@ fun SubjectHeaderCard(
             }
         }
 
-        // 7. 核心制作人员
+        // 3. 核心制作人员
         val staffHighlights = subject.keyStaff.take(2)
         if (staffHighlights.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             val staffText = staffHighlights.joinToString(separator = "  ·  ") { (role, name) -> "$role: $name" }
             Text(
                 text = staffText,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
 
-        // 8. 智能段落折叠简介
+        // 4. 智能段落折叠简介
         val trimmedSummary = remember(subject.summary) { subject.summary.trim() }
         if (trimmedSummary.isNotBlank()) {
             HorizontalDivider(
-                modifier = Modifier.padding(top = 12.dp, bottom = 10.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+                modifier = Modifier.padding(top = 8.dp, bottom = 6.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
             )
 
             val summaryBlocks =
@@ -553,7 +580,7 @@ fun SubjectHeaderCard(
             val firstParagraph = summaryBlocks.firstOrNull().orEmpty()
             val isSingleLongBlock =
                 !hasMultiParagraphs &&
-                    (trimmedSummary.length > 120 || trimmedSummary.count { it == '\n' } >= 3)
+                    (trimmedSummary.length > 100 || trimmedSummary.count { it == '\n' } >= 2)
             val canExpand = hasMultiParagraphs || isSingleLongBlock
 
             val displayText =
@@ -568,12 +595,12 @@ fun SubjectHeaderCard(
                 if (isSummaryExpanded || !canExpand || hasMultiParagraphs) {
                     Int.MAX_VALUE
                 } else {
-                    4
+                    2
                 }
 
             Text(
                 text = displayText,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = onSurfaceBodyColor(),
                 maxLines = maxLines,
                 overflow = TextOverflow.Ellipsis,
@@ -593,13 +620,13 @@ fun SubjectHeaderCard(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(4.dp))
                             .clickable { isSummaryExpanded = !isSummaryExpanded }
-                            .padding(top = 6.dp, bottom = 2.dp),
+                            .padding(vertical = 2.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         text = expandLabel,
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -607,7 +634,7 @@ fun SubjectHeaderCard(
                         imageVector = if (isSummaryExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(14.dp),
                     )
                 }
             }

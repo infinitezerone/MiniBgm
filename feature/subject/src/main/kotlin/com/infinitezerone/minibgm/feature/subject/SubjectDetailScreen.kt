@@ -150,7 +150,6 @@ fun SubjectDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val overlayHostState = rememberOverlayHostState()
     val coroutineScope = rememberCoroutineScope()
-    var selectedEpisodeForQuickAction by remember { mutableStateOf<Episode?>(null) }
     var hasDismissedAiringReminderPrompt by rememberSaveable { mutableStateOf(false) }
     var showAiringReminderPrompt by remember { mutableStateOf(false) }
 
@@ -257,7 +256,8 @@ fun SubjectDetailScreen(
         }
     }
     val hasPreview = initialName.isNotBlank() || initialCoverUrl.isNotBlank()
-    val isTransitionStabilizing = isEntering && !hasEnteredTransitionFinished && hasPreview
+    val isTransitionStabilizing =
+        isEntering && !hasEnteredTransitionFinished && hasPreview && uiState.subject == null
 
     val previewSubject =
         if (hasPreview) {
@@ -743,10 +743,7 @@ fun SubjectDetailScreen(
                 }
             }
         },
-        selectedEpisodeForQuickAction = selectedEpisodeForQuickAction,
-        onDismissQuickAction = { selectedEpisodeForQuickAction = null },
         episodes = uiState.episodes,
-        onSelectEpisodeForQuickAction = { selectedEpisodeForQuickAction = it },
         onToggleEpisodeWatched = { episode, isWatched, epNumber, episodeType ->
             viewModel.toggleEpisodeWatched(
                 episodeId = episode.id,
