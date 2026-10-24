@@ -1,40 +1,22 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,13 +25,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -59,13 +38,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
-import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeGroup
@@ -76,8 +51,6 @@ import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailTab
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailUiState
 import com.infinitezerone.minibgm.feature.subject.computeSubjectWatchStatus
-import kotlinx.coroutines.launch
-import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
 /** 顶栏与头部 Hero 之间的初始间距。 */
@@ -85,9 +58,6 @@ private val SubjectHeaderTopPadding = 4.dp
 
 /** 头部 Hero 与 Tab 栏之间的呼吸距离；随头部一同参与收合。 */
 private val SubjectHeaderTabGap = 14.dp
-
-/** 二级 Tab 栏高度。 */
-private val SubjectTabBarHeight = 48.dp
 
 /** 各 Tab 页列表底部的呼吸距离。 */
 private val SubjectTabBottomPadding = 24.dp
@@ -103,23 +73,6 @@ class SubjectHeaderCollapseState {
     var offsetPx by mutableFloatStateOf(0f)
     var heightPx by mutableFloatStateOf(0f)
 }
-
-@Composable
-internal fun getTabLabel(
-    tab: SubjectDetailTab,
-    subjectType: SubjectType,
-): String =
-    when (tab) {
-        SubjectDetailTab.OVERVIEW -> stringResource(R.string.feature_subject_tab_overview)
-        SubjectDetailTab.EPISODES ->
-            when (subjectType) {
-                SubjectType.BOOK -> stringResource(R.string.feature_subject_tab_volumes)
-                SubjectType.MUSIC -> stringResource(R.string.feature_subject_tab_tracks)
-                SubjectType.GAME -> stringResource(R.string.feature_subject_tab_chapters)
-                SubjectType.ANIME, SubjectType.REAL -> stringResource(R.string.feature_subject_tab_episodes)
-            }
-        SubjectDetailTab.COMMUNITY -> stringResource(R.string.feature_subject_tab_community)
-    }
 
 /**
  * 条目详情主滚动内容：
@@ -186,6 +139,7 @@ internal fun SubjectDetailContent(
     val density = LocalDensity.current
 
     // 头部收合 nested scroll：上滑先收头部再滚列表；列表到顶后下拉先展头部再交还 overscroll。
+    // 去除人造突变硬吸顶阈值，平滑跟随手势位移。
     val collapseConnection =
         remember(headerCollapse) {
             object : NestedScrollConnection {
@@ -218,7 +172,7 @@ internal fun SubjectDetailContent(
             }
         }
 
-    val coroutineScope = rememberCoroutineScope()
+    // 纯净手势联动：跟手位移，禁止抬手强制贴合全吸顶
     val headerDragModifier =
         Modifier.draggable(
             state =
@@ -229,27 +183,6 @@ internal fun SubjectDetailContent(
                     }
                 },
             orientation = Orientation.Vertical,
-            onDragStopped = { velocity ->
-                val height = headerCollapse.heightPx
-                if (height > 0f) {
-                    val target =
-                        when {
-                            velocity < -800f -> height
-                            velocity > 800f -> 0f
-                            headerCollapse.offsetPx > height * 0.5f -> height
-                            else -> 0f
-                        }
-                    val anim = Animatable(headerCollapse.offsetPx)
-                    coroutineScope.launch {
-                        anim.animateTo(
-                            targetValue = target,
-                            initialVelocity = -velocity,
-                        ) {
-                            headerCollapse.offsetPx = value
-                        }
-                    }
-                }
-            },
         )
 
     val currentSelectedTab by rememberUpdatedState(selectedTab)
@@ -279,6 +212,11 @@ internal fun SubjectDetailContent(
         val viewportHeightPx = constraints.maxHeight.toFloat()
         val pagerHeight =
             with(density) { (viewportHeightPx - SubjectTabBarHeight.toPx()).coerceAtLeast(0f).toDp() }
+        // 动态底部安全内边距：随头部展开动态补偿尾部留白，展开时绝不截断内容，收合时恢复默认 24dp 呼吸距离
+        val dynamicBottomPadding =
+            with(density) {
+                (headerCollapse.heightPx - headerCollapse.offsetPx).coerceAtLeast(0f).toDp() + SubjectTabBottomPadding
+            }
 
         Column(
             modifier =
@@ -389,6 +327,7 @@ internal fun SubjectDetailContent(
                                 onPreviewCharacter = onPreviewCharacter,
                                 onPersonClick = onPersonClick,
                                 onSubjectClick = onSubjectClick,
+                                bottomPadding = dynamicBottomPadding,
                             )
 
                         SubjectDetailTab.EPISODES ->
@@ -417,6 +356,7 @@ internal fun SubjectDetailContent(
                                 onOpenSources = onOpenSources,
                                 onOpenEpisodeSources = onOpenEpisodeSources,
                                 onPlayNextEpisode = onPlayNextEpisode,
+                                bottomPadding = dynamicBottomPadding,
                             )
 
                         SubjectDetailTab.COMMUNITY ->
@@ -426,6 +366,7 @@ internal fun SubjectDetailContent(
                                 onLinkClick = onLinkClick,
                                 onTopicClick = onTopicClick,
                                 onCopyComment = onCopyComment,
+                                bottomPadding = dynamicBottomPadding,
                             )
                     }
                 }
@@ -509,508 +450,5 @@ private fun SubjectInlineError(message: String) {
             color = MaterialTheme.colorScheme.onErrorContainer,
             modifier = Modifier.padding(12.dp),
         )
-    }
-}
-
-/** 吸顶二级 Tab 栏（概览/分集/讨论）：支持滑动渐变背景与平滑位移指示胶囊。 */
-@Composable
-internal fun SubjectDetailTabBar(
-    selectedTab: SubjectDetailTab,
-    pagerState: PagerState,
-    collapseRatio: Float,
-    subjectType: SubjectType,
-    totalEpisodes: Int,
-    currentEpisodeCount: Int,
-    commentTotal: Int,
-    onSelectTab: (SubjectDetailTab) -> Unit,
-) {
-    val tabBgAlpha = (collapseRatio * 1.25f).coerceIn(0f, 1f)
-    val tabContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = tabBgAlpha)
-
-    Surface(
-        color = tabContainerColor,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(SubjectTabBarHeight),
-    ) {
-        BoxWithConstraints(
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            val tabCount = SubjectDetailTab.entries.size
-            val contentWidth = maxWidth - 32.dp
-            val tabWidth = contentWidth / tabCount
-            val pageOffset =
-                (pagerState.currentPage + pagerState.currentPageOffsetFraction)
-                    .coerceIn(0f, (tabCount - 1).toFloat())
-            val indicatorWidth = 28.dp
-            val indicatorCenterX = 16.dp + tabWidth * (pageOffset + 0.5f)
-            val indicatorLeft = indicatorCenterX - (indicatorWidth / 2f)
-
-            Row(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SubjectDetailTab.entries.forEachIndexed { index, tab ->
-                    val tabLabel = getTabLabel(tab, subjectType)
-                    val badgeCount =
-                        when (tab) {
-                            SubjectDetailTab.EPISODES ->
-                                (if (totalEpisodes > 0) totalEpisodes else currentEpisodeCount).takeIf { it > 0 }
-                            SubjectDetailTab.COMMUNITY -> commentTotal.takeIf { it > 0 }
-                            else -> null
-                        }
-                    val tabDistance = (pageOffset - index).absoluteValue.coerceIn(0f, 1f)
-                    val isSelected = tabDistance < 0.5f
-
-                    Box(
-                        modifier =
-                            Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .clickable { onSelectTab(tab) },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        ) {
-                            Text(
-                                text = tabLabel,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color =
-                                    if (isSelected) {
-                                        MaterialTheme.colorScheme.onSurface
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                                    },
-                            )
-                            if (badgeCount != null) {
-                                Text(
-                                    text = if (badgeCount > 999) "999+" else badgeCount.toString(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color =
-                                        if (isSelected) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                        },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 平滑滑动的指示胶囊
-            Box(
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(bottom = 6.dp)
-                        .offset(x = indicatorLeft)
-                        .width(indicatorWidth)
-                        .height(3.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-            )
-
-            // 吸顶时微细分割线，阻隔下方穿行内容
-            if (collapseRatio > 0.05f) {
-                HorizontalDivider(
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f * collapseRatio),
-                )
-            }
-        }
-    }
-}
-
-/** 概览页：评分分布与标签、角色与声优、Staff、关联作品。 */
-@Composable
-private fun OverviewTabPage(
-    subject: Subject,
-    uiState: SubjectDetailUiState,
-    displaySubject: Subject,
-    onTagClick: (String) -> Unit,
-    onCharacterClick: (Long) -> Unit,
-    onActorClick: (Long) -> Unit,
-    onPreviewCharacter: (SubjectCharacter) -> Unit,
-    onPersonClick: (Long) -> Unit,
-    onSubjectClick: (Long) -> Unit,
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = SubjectTabBottomPadding),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        item(key = "rating_distribution") {
-            RatingDistributionCard(
-                rating = subject.rating,
-                collection = subject.collection,
-                tags = subject.tags,
-                onTagClick = onTagClick,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-        }
-
-        if (uiState.characters.isNotEmpty()) {
-            item(key = "characters_section") {
-                CharactersSection(
-                    characters = uiState.characters,
-                    onCharacterClick = onCharacterClick,
-                    onActorClick = onActorClick,
-                    onPreviewCharacter = onPreviewCharacter,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
-        }
-
-        if (uiState.persons.isNotEmpty()) {
-            item(key = "staff_section") {
-                StaffSection(
-                    persons = uiState.persons,
-                    onPersonClick = onPersonClick,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
-        }
-
-        if (uiState.relations.isNotEmpty()) {
-            item(key = "relations_section") {
-                RelationsSection(
-                    relations = uiState.relations,
-                    onSubjectClick = onSubjectClick,
-                    currentSubjectId = displaySubject.id,
-                    currentSubjectName = displaySubject.nameCn.ifBlank { displaySubject.name },
-                    currentSubjectCover = displaySubject.images?.bestImage ?: displaySubject.images?.large,
-                    currentSubjectScore = displaySubject.rating?.score ?: 0.0,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
-        }
-
-        if (uiState.isDetailsLoading &&
-            uiState.relations.isEmpty() &&
-            uiState.characters.isEmpty() &&
-            uiState.persons.isEmpty()
-        ) {
-            item(key = "details_loading_indicator") {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp,
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** 分集页：头部工具条、分组筛选、列表/网格、加载更多。 */
-@Composable
-private fun EpisodesTabPage(
-    uiState: SubjectDetailUiState,
-    subjectType: SubjectType,
-    totalEpisodes: Int,
-    currentEpisodes: List<Episode>,
-    availableGroups: List<EpisodeGroup>,
-    groupedEpisodes: Map<EpisodeGroup, List<Episode>>,
-    activeGroup: EpisodeGroup,
-    onSelectGroup: (EpisodeGroup) -> Unit,
-    isGridView: Boolean,
-    onToggleGridView: () -> Unit,
-    episodeSortDescending: Boolean,
-    hasMoreEpisodes: Boolean,
-    isLoadingMoreEpisodes: Boolean,
-    onToggleEpisodeSort: () -> Unit,
-    onLoadMoreEpisodes: () -> Unit,
-    onRetryEpisodes: () -> Unit,
-    onToggleEpisodeWatched: (Episode, Boolean) -> Unit,
-    onSelectEpisodeForDetail: (Episode) -> Unit,
-    onEpisodeClickForQuickAction: ((Episode) -> Unit)?,
-    onBatchMarkEpisode: (Episode) -> Unit,
-    onPlayEpisode: ((Episode) -> Unit)?,
-    onOpenSources: (() -> Unit)?,
-    onOpenEpisodeSources: ((Episode) -> Unit)?,
-    onPlayNextEpisode: (() -> Unit)?,
-) {
-    val adaptiveInfo = LocalWindowAdaptiveInfo.current
-    val gridColumns = if (adaptiveInfo.isWide) 7 else 5
-    val pageListState = rememberLazyListState()
-    val nextUpEpNumber =
-        remember(currentEpisodes, uiState.collection?.epStatus) {
-            currentEpisodes
-                .firstOrNull {
-                    isEpisodeNextToWatch(it, uiState.collection?.epStatus ?: 0, hasProgress = uiState.collection != null)
-                }?.episodeNumber
-        }
-
-    // 滚动到「加载更多」脚标可见时自动续拉下一屏分集
-    LaunchedEffect(pageListState, hasMoreEpisodes) {
-        snapshotFlow {
-            pageListState.layoutInfo.visibleItemsInfo.any { it.key == "episodes_load_more" }
-        }.collect { visible ->
-            if (visible && hasMoreEpisodes) onLoadMoreEpisodes()
-        }
-    }
-
-    LazyColumn(
-        state = pageListState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = SubjectTabBottomPadding),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        val watchedInGroup =
-            currentEpisodes.count {
-                isEpisodeWatched(it, uiState.collection?.epStatus ?: 0)
-            }
-
-        val effectiveTotalEpisodes =
-            if (activeGroup == EpisodeGroup.MAIN) {
-                if (totalEpisodes > 0) maxOf(totalEpisodes, currentEpisodes.size) else 0
-            } else {
-                currentEpisodes.size
-            }
-
-        item(key = "episodes_header") {
-            EpisodesSectionHeader(
-                totalEpisodes = effectiveTotalEpisodes,
-                watchedEpisodes = watchedInGroup,
-                subjectType = subjectType,
-                isGridView = isGridView,
-                onToggleView = onToggleGridView,
-                episodeSortDescending = episodeSortDescending,
-                onToggleSort = onToggleEpisodeSort,
-                nextUpEpisodeSort = nextUpEpNumber,
-                onPlayNext = onPlayNextEpisode.takeIf { currentEpisodes.isNotEmpty() },
-                onOpenSources = onOpenSources,
-                group = activeGroup,
-                hasMoreEpisodes = hasMoreEpisodes,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-        }
-
-        if (availableGroups.size > 1) {
-            item(key = "episode_group_chips") {
-                EpisodeGroupFilterChips(
-                    availableGroups = availableGroups,
-                    groupedEpisodes = groupedEpisodes,
-                    selectedGroup = activeGroup,
-                    onGroupSelected = onSelectGroup,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
-        }
-
-        when {
-            (uiState.isEpisodesLoading || uiState.isLoading) && currentEpisodes.isEmpty() -> {
-                item(key = "episodes_skeleton") {
-                    if (isGridView) {
-                        EpisodeGridSkeleton(columns = gridColumns, modifier = Modifier.padding(horizontal = 16.dp))
-                    } else {
-                        EpisodeListSkeleton(modifier = Modifier.padding(horizontal = 16.dp))
-                    }
-                }
-            }
-
-            uiState.episodesError != null && currentEpisodes.isEmpty() -> {
-                item(key = "episodes_error") {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.Warning,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(36.dp),
-                            )
-                            Text(
-                                text = stringResource(R.string.feature_subject_episodes_load_failed),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = uiState.episodesError.orEmpty(),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                            )
-                            FilledTonalButton(
-                                onClick = onRetryEpisodes,
-                                modifier = Modifier.padding(top = 4.dp),
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Refresh,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(text = stringResource(R.string.feature_subject_reload))
-                            }
-                        }
-                    }
-                }
-            }
-
-            currentEpisodes.isEmpty() -> {
-                item(key = "episodes_empty") {
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 32.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.feature_subject_episodes_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-
-            isGridView -> {
-                item(key = "episodes_grid") {
-                    EpisodeGrid(
-                        episodes = currentEpisodes,
-                        watchedCount = uiState.collection?.epStatus ?: 0,
-                        hasProgress = uiState.collection != null,
-                        onToggleWatched = onToggleEpisodeWatched,
-                        onEpisodeClick = { episode ->
-                            if (onEpisodeClickForQuickAction != null) {
-                                onEpisodeClickForQuickAction(episode)
-                            } else {
-                                onSelectEpisodeForDetail(episode)
-                            }
-                        },
-                        onEpisodeLongClick = { episode ->
-                            val isWatched = isEpisodeWatched(episode, uiState.collection?.epStatus ?: 0)
-                            if (!isWatched && episode.type == 0) {
-                                onBatchMarkEpisode(episode)
-                            } else {
-                                onSelectEpisodeForDetail(episode)
-                            }
-                        },
-                        columns = gridColumns,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                }
-            }
-
-            else -> {
-                items(items = currentEpisodes, key = { it.id }) { episode ->
-                    val watchedCount = uiState.collection?.epStatus ?: 0
-                    val isWatched = isEpisodeWatched(episode, watchedCount)
-                    val isNextToWatch =
-                        isEpisodeNextToWatch(episode, watchedCount, hasProgress = uiState.collection != null)
-                    EpisodeListItem(
-                        episode = episode,
-                        isWatched = isWatched,
-                        isNextToWatch = isNextToWatch,
-                        onClick = {
-                            if (onEpisodeClickForQuickAction != null) {
-                                onEpisodeClickForQuickAction(episode)
-                            } else {
-                                onSelectEpisodeForDetail(episode)
-                            }
-                        },
-                        onToggleWatched = {
-                            onToggleEpisodeWatched(episode, !isWatched)
-                        },
-                        onPlayClick =
-                            if ((subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL) &&
-                                onPlayEpisode != null
-                            ) {
-                                { onPlayEpisode(episode) }
-                            } else {
-                                null
-                            },
-                        onOpenSources =
-                            if ((subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL) &&
-                                onOpenEpisodeSources != null
-                            ) {
-                                { onOpenEpisodeSources(episode) }
-                            } else {
-                                null
-                            },
-                        onLongClick = {
-                            if (!isWatched && episode.type == 0) {
-                                onBatchMarkEpisode(episode)
-                            } else {
-                                onSelectEpisodeForDetail(episode)
-                            }
-                        },
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                }
-            }
-        }
-
-        if (hasMoreEpisodes) {
-            item(key = "episodes_load_more") {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (isLoadingMoreEpisodes) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp))
-                    } else {
-                        Text(
-                            text = stringResource(R.string.feature_subject_load_more_episodes),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** 讨论页：评论区与话题。 */
-@Composable
-private fun CommunityTabPage(
-    uiState: SubjectDetailUiState,
-    onLoadMoreComments: () -> Unit,
-    onLinkClick: (String) -> Unit,
-    onTopicClick: (Long, String) -> Unit,
-    onCopyComment: ((String) -> Unit)?,
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = SubjectTabBottomPadding),
-    ) {
-        item(key = "community_tab_section") {
-            SubjectCommunitySection(
-                comments = uiState.subjectComments,
-                commentTotal = uiState.subjectCommentTotal,
-                isLoadingMoreComments = uiState.isLoadingMoreComments,
-                hasMoreComments = uiState.hasMoreComments,
-                onLoadMoreComments = onLoadMoreComments,
-                topics = uiState.subjectTopics,
-                onUrlClick = onLinkClick,
-                onTopicClick = onTopicClick,
-                onCopyComment = onCopyComment,
-                isLoading = uiState.isCommunityLoading,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-        }
     }
 }
