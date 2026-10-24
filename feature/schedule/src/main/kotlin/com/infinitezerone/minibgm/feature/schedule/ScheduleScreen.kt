@@ -243,7 +243,9 @@ fun ScheduleScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
             when {
-                !uiState.hasSchedules && uiState.isLoading -> {
+                // 全局无数据且无错误 = 数据未就绪（首启冷加载或刷新置位前的竞态窗口），
+                // 一律骨架——严禁把这个窗口渲染成「本日暂无排播」空态（空态只属于"确实没排播的一天"）
+                !uiState.hasSchedules && uiState.error == null -> {
                     Box(
                         modifier = Modifier.fillMaxSize().padding(top = totalTopChromeHeight),
                         contentAlignment = Alignment.TopCenter,
@@ -254,7 +256,7 @@ fun ScheduleScreen(
                     }
                 }
 
-                !uiState.hasSchedules && uiState.error != null -> {
+                !uiState.hasSchedules -> {
                     Box(
                         modifier = Modifier.fillMaxSize().padding(top = totalTopChromeHeight),
                         contentAlignment = Alignment.Center,
