@@ -24,11 +24,9 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -183,21 +182,19 @@ fun TopicDetailScreen(
                 enter = fadeIn() + scaleIn(),
                 exit = fadeOut() + scaleOut(),
             ) {
-                FloatingActionButton(
+                BgmCircleActionButton(
                     onClick = {
                         coroutineScope.launch {
                             listState.animateScrollToItem(0)
                         }
                     },
-                    shape = CircleShape,
+                    icon = BgmIcons.KeyboardArrowUp,
+                    contentDescription = stringResource(R.string.feature_subject_topic_back_to_top),
+                    size = 48.dp,
+                    iconSize = 24.dp,
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.KeyboardArrowUp,
-                        contentDescription = stringResource(R.string.feature_subject_topic_back_to_top),
-                    )
-                }
+                )
             }
         },
         bottomBar = {

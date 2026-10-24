@@ -42,6 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillSize
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
@@ -206,7 +208,7 @@ fun PlaybackRulesScreen(
         },
         floatingActionButton = {
             if (!uiState.isLoading) {
-                ExtendedFloatingActionButton(
+                BgmPillButton(
                     onClick = {
                         scope.launch {
                             val choice =
@@ -227,8 +229,9 @@ fun PlaybackRulesScreen(
                             }
                         }
                     },
-                    icon = { Icon(imageVector = BgmIcons.Add, contentDescription = null) },
-                    text = { Text(stringResource(R.string.feature_user_action_add_rule)) },
+                    text = stringResource(R.string.feature_user_action_add_rule),
+                    icon = BgmIcons.Add,
+                    size = BgmPillSize.Large,
                 )
             }
         },
