@@ -34,6 +34,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGoldBright
@@ -144,6 +146,24 @@ fun DateCapsule(
             }
         }
 
+    // 读屏语义合并：视觉上被移除的日期数字与更新圆点在此对读屏完整可见
+    val updatesLabel =
+        if (watchingCount > 0) {
+            stringResource(R.string.feature_schedule_capsule_watching_updates, watchingCount)
+        } else {
+            null
+        }
+    val capsuleContentDescription =
+        listOf(item.dateLabel, item.weekdayLabel, updatesLabel)
+            .filter { !it.isNullOrBlank() }
+            .joinToString("，")
+    val capsuleSemantics =
+        if (capsuleContentDescription.isNotBlank()) {
+            Modifier.semantics { contentDescription = capsuleContentDescription }
+        } else {
+            Modifier
+        }
+
     val circleColor =
         when {
             isSelected -> MaterialTheme.colorScheme.primary
@@ -170,6 +190,7 @@ fun DateCapsule(
             modifier
                 .width(44.dp)
                 .clip(CircleShape)
+                .then(capsuleSemantics)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

@@ -26,6 +26,7 @@
     <string name="feature_schedule_countdown_hours_minutes">%1$d时%2$d分后</string>
     <string name="feature_schedule_countdown_hours">%1$d时后</string>
     <string name="feature_schedule_countdown_minutes">%1$d分后</string>
+    <string name="feature_schedule_capsule_watching_updates">%1$d 部在追更新</string>
     <string name="feature_schedule_anime_count">%1$d部</string>
     <string name="feature_schedule_action_watch">追番</string>
     <string name="feature_schedule_action_watching">在追</string>
