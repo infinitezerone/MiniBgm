@@ -1187,6 +1187,39 @@ class ArchitectureRulesTest {
         )
     }
 
+/**
+     * 动作键原语统一（红线）：
+     * 全局移除涟漪后，M3 原生 IconButton / FloatingActionButton 按下半径内零反馈——
+     * 水生按压反馈只挂在自家原语（BgmCircleActionButton / BgmGhostIconButton / BgmPillButton）上，
+     * 生产代码严禁再引入 M3 图标键与 FAB（对话框转圈、角标等场景用原语的 content 槽重载承接）。
+     */
+    @Test
+    fun production_code_never_uses_material3_icon_or_fab_buttons() {
+        val violations = mutableListOf<String>()
+        val pattern = Regex("""androidx.compose.material3.(IconButton|FloatingActionButton|ExtendedFloatingActionButton)""")
+        listOf(File(projectRoot, "feature"), File(projectRoot, "app/src/main")).forEach { dir ->
+            if (!dir.isDirectory) return@forEach
+            dir
+                .walkTopDown()
+                .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+                .filter { it.isFile && it.extension == "kt" }
+                .forEach { file ->
+                    val relPath = file.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                    KotlinSourceScanner.fromFile(file).findMatches(pattern).forEach { match ->
+                        violations.add(
+                            "$relPath:${match.lineNumber} 违规引入 M3 原生动作键 -> ${match.lineContent.trim()}，" +
+                                "必须使用 BgmGhostIconButton / BgmCircleActionButton / BgmPillButton（水生按压反馈 + 48dp 靶区）",
+                        )
+                    }
+                }
+        }
+        assertTrue(
+            violations.isEmpty(),
+            "动作键必须统一为水生原语（M3 IconButton/FAB 无按压反馈）：" +
+                violations.joinToString("\n"),
+        )
+    }
+
     @Test
     fun stream_engines_never_use_fake_placeholders_or_unbound_sockets() {
         val dataDir = File(projectRoot, "core/data")
