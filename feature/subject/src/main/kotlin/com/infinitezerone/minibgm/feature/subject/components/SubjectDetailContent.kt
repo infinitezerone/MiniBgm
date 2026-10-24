@@ -81,7 +81,7 @@ import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
 /** 顶栏与头部 Hero 之间的初始间距。 */
-private val SubjectHeaderTopPadding = 8.dp
+private val SubjectHeaderTopPadding = 4.dp
 
 /** 头部 Hero 与 Tab 栏之间的呼吸距离；随头部一同参与收合。 */
 private val SubjectHeaderTabGap = 14.dp
@@ -514,7 +514,7 @@ private fun SubjectInlineError(message: String) {
 
 /** 吸顶二级 Tab 栏（概览/分集/讨论）：支持滑动渐变背景与平滑位移指示胶囊。 */
 @Composable
-private fun SubjectDetailTabBar(
+internal fun SubjectDetailTabBar(
     selectedTab: SubjectDetailTab,
     pagerState: PagerState,
     collapseRatio: Float,
@@ -538,13 +538,14 @@ private fun SubjectDetailTabBar(
             modifier = Modifier.fillMaxSize(),
         ) {
             val tabCount = SubjectDetailTab.entries.size
-            val tabWidth = maxWidth / tabCount
+            val contentWidth = maxWidth - 32.dp
+            val tabWidth = contentWidth / tabCount
             val pageOffset =
                 (pagerState.currentPage + pagerState.currentPageOffsetFraction)
                     .coerceIn(0f, (tabCount - 1).toFloat())
             val indicatorWidth = 28.dp
-            val indicatorCenterX = (pageOffset + 0.5f) * (maxWidth.value / tabCount)
-            val indicatorLeft = (indicatorCenterX - (indicatorWidth.value / 2f)).dp
+            val indicatorCenterX = 16.dp + tabWidth * (pageOffset + 0.5f)
+            val indicatorLeft = indicatorCenterX - (indicatorWidth / 2f)
 
             Row(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
