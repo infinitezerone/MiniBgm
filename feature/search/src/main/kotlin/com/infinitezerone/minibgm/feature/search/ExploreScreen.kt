@@ -24,7 +24,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -36,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -93,7 +91,6 @@ fun ExploreScreen(
     val exploreGridState = rememberLazyStaggeredGridState()
     val rowsListState = rememberLazyListState()
     var customFilterExpanded by rememberSaveable { mutableStateOf(false) }
-    val topBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
 
     val isFilterActive = exploreUiState.isCustomFilterActive
 
@@ -190,7 +187,6 @@ fun ExploreScreen(
                 },
                 mode = BgmTopBarMode.Immersive,
                 contentMaxWidth = 1280.dp,
-                scrollBehavior = topBarScrollBehavior,
             )
         },
         snackbarHost = {
@@ -199,7 +195,7 @@ fun ExploreScreen(
                 isTopLevel = true,
             )
         },
-        modifier = modifier.fillMaxSize().nestedScroll(topBarScrollBehavior.nestedScrollConnection),
+        modifier = modifier.fillMaxSize(),
     ) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             PullToRefreshBox(
