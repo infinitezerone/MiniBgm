@@ -19,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeContent
+import com.infinitezerone.minibgm.core.designsystem.theme.onSurfaceBodyColor
 import com.infinitezerone.minibgm.feature.subject.R
 
 /**
@@ -46,7 +47,7 @@ internal fun ExpandableCommentContent(
         BgmBbCodeContent(
             content = content,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = onSurfaceBodyColor(),
             maxLines = if (isExpanded) Int.MAX_VALUE else collapsedMaxLines,
             onOverflowChanged = { overflow ->
                 if (overflow) canExpand = true

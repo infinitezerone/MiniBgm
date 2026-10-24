@@ -34,6 +34,7 @@ import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.designsystem.component.bbcode.BgmBbCodeContent
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.onSurfaceBodyColor
 import com.infinitezerone.minibgm.core.model.CommentReaction
 import com.infinitezerone.minibgm.core.model.TopicDetail
 import com.infinitezerone.minibgm.core.model.TopicParentSubject
@@ -166,7 +167,7 @@ fun TopicMainPostCard(
                     BgmBbCodeContent(
                         content = mainContent,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = onSurfaceBodyColor(),
                         onUrlClick = onUrlClick,
                     )
                 }

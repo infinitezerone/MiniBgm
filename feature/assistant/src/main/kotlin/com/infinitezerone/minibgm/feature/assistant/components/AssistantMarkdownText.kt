@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.assistant.components
 
+import com.infinitezerone.minibgm.core.designsystem.theme.onSurfaceBodyColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -394,7 +395,7 @@ fun AssistantMarkdownText(
                             )
                         Text(
                             text = annotated,
-                            style = style.copy(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)),
+                            style = style.copy(color = onSurfaceBodyColor()),
                             modifier = Modifier.weight(1f),
                         )
                     }

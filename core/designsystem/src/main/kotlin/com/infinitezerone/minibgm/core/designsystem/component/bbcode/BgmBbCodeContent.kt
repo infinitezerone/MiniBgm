@@ -72,6 +72,7 @@ import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.designsystem.R
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
+import com.infinitezerone.minibgm.core.designsystem.theme.onSurfaceBodyColor
 
 /**
  * Bangumi 专用 BBCode 富文本渲染组件
@@ -91,7 +92,7 @@ fun BgmBbCodeContent(
     content: String,
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodySmall,
-    color: Color = MaterialTheme.colorScheme.onSurface,
+    color: Color = onSurfaceBodyColor(),
     maxLines: Int = Int.MAX_VALUE,
     onOverflowChanged: ((Boolean) -> Unit)? = null,
     onUrlClick: ((String) -> Unit)? = null,

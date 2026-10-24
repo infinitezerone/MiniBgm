@@ -136,6 +136,22 @@ fun onStatusAiringContainerColor(): Color =
     if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) OnStatusAiringContainerDark else OnStatusAiringContainerLight
 
 // ==========================================
+// 正文文本层次（标题/强调用 onSurface；长读正文降一档柔化暗色观感）
+// ==========================================
+
+/**
+ * 长读正文色（成段评论、简介、主题帖、AI 对话等）。
+ * 亮色与 onSurface 同档；暗色降档对齐 ChatGPT「标题亮、正文柔和」的做法（ECECEC 一档），
+ * 夜间长阅读不刺眼，对比度仍 >10:1。BBCode 渲染层的默认色即本档。
+ */
+val OnSurfaceBodyLight = Color(0xFF18181B)
+val OnSurfaceBodyDark = Color(0xFFD4D4D8)
+
+@Composable
+@ReadOnlyComposable
+fun onSurfaceBodyColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) OnSurfaceBodyDark else OnSurfaceBodyLight
+
+// ==========================================
 // 评分与收藏
 // ==========================================
 

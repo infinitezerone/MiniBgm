@@ -52,6 +52,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
+import com.infinitezerone.minibgm.core.designsystem.theme.onSurfaceBodyColor
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectType
@@ -573,6 +574,7 @@ fun SubjectHeaderCard(
             Text(
                 text = displayText,
                 style = MaterialTheme.typography.bodyMedium,
+                color = onSurfaceBodyColor(),
                 maxLines = maxLines,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth().animateContentSize(),

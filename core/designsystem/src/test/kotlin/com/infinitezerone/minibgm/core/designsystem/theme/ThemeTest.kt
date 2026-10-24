@@ -131,6 +131,10 @@ class ThemeTest {
         // Classic badge (Tailwind Indigo-600)
         assertEquals(Color(0xFF4F46E5), BadgeClassic)
 
+        // Body text hierarchy (dark body softened one step, aligned with ChatGPT body tone)
+        assertEquals(Color(0xFF18181B), OnSurfaceBodyLight)
+        assertEquals(Color(0xFFD4D4D8), OnSurfaceBodyDark)
+
         // Rating
         assertEquals(Color(0xFFF59E0B), RatingGold)
         assertEquals(Color(0xFFFCD34D), RatingGoldBright)
@@ -211,6 +215,17 @@ class ThemeTest {
                 assertTrue(ratio >= 3f, "图形/次要配对 $fg on $bg 对比度 $ratio 低于 WCAG 3:1")
             }
         }
+    }
+
+    @Test
+    fun theme_bodyTextColor_meetsComfortAndClarityTiers() {
+        // 暗色正文档在所有卡片容器上仍 ≥4.5:1（清晰），且低于 onSurface 满亮度（夜间柔和）
+        assertTrue(contrastRatio(OnSurfaceBodyDark, SurfaceContainerLowDark) >= 4.5f)
+        assertTrue(contrastRatio(OnSurfaceBodyDark, SurfaceContainerDark) >= 4.5f)
+        assertTrue(contrastRatio(OnSurfaceBodyDark, SurfaceContainerHighestDark) >= 4.5f)
+        assertTrue(contrastRatio(OnSurfaceBodyLight, SurfaceContainerLowLight) >= 4.5f)
+        // 柔和不等于过暗：暗色正文对背景的对比必须明显高于 4.5 下限（目标档约 10:1）
+        assertTrue(contrastRatio(OnSurfaceBodyDark, SurfaceDark) >= 8f)
     }
 
     private fun contrastRatio(
