@@ -90,8 +90,10 @@ sealed interface EpisodeDetailUiEvent {
     ) : EpisodeDetailUiEvent
 
     /** 把找源请求交接给 AI 助手会话（[prefillPrompt] 即助手首条提问） */
+    /** 找源请求交接给 AI 助手会话：提问文案经 [promptResId] 资源 + [formatArgs] 在 UI 侧解析 */
     data class OpenSourceSearch(
-        val prefillPrompt: String,
+        @get:StringRes val promptResId: Int,
+        val formatArgs: List<Any>,
     ) : EpisodeDetailUiEvent
 }
 
@@ -389,7 +391,12 @@ class EpisodeDetailViewModel(
                 "《$title》 ${episode.guideLabel}"
             }
         viewModelScope.launch {
-            _events.send(EpisodeDetailUiEvent.OpenSourceSearch("帮我找${target}的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 $subjectId）"))
+            _events.send(
+                EpisodeDetailUiEvent.OpenSourceSearch(
+                    R.string.feature_subject_ai_search_prompt,
+                    listOf(target, subjectId),
+                ),
+            )
         }
     }
 

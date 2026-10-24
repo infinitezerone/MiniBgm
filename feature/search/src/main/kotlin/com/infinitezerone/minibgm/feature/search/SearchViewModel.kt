@@ -104,10 +104,10 @@ class SearchViewModel(
     private val loginPromptVisible = MutableStateFlow(false)
 
     // 一次性提示：形态与 TagSubjectsViewModel.userMessage 一致（Channel(BUFFERED) + receiveAsFlow）
-    private val _userMessage = Channel<String>(Channel.BUFFERED)
+    private val _userMessage = Channel<SearchUserMessage>(Channel.BUFFERED)
 
     /** 一次性事件流。UI 收集它来弹 Snackbar；不需要也不应该有人回写它 */
-    val userMessage: Flow<String> = _userMessage.receiveAsFlow()
+    val userMessage: Flow<SearchUserMessage> = _userMessage.receiveAsFlow()
 
     /** 取页信号源：More（触底）/ Retry（同键重搜）接入换挡会话（见 [runSearchSession]） */
     private val pageTriggers = PagingTriggers()
@@ -238,13 +238,18 @@ class SearchViewModel(
 
                 when (syncResult) {
                     is AppResult.Success -> {
-                        _userMessage.trySend("已标记为「$verb」")
+                        _userMessage.trySend(SearchUserMessage(R.string.feature_search_msg_marked_format, listOf(verb)))
                     }
 
                     is AppResult.Error -> {
                         // syncResult.message 已由仓库层带上动作前缀（如「打卡失败：网络超时，请重试」）。
                         // 这里再拼一层就会变成「打卡失败：打卡失败：…」——只兜底，不加前缀。
-                        _userMessage.trySend(syncResult.message.ifBlank { "打卡失败，请重试" })
+                        _userMessage.trySend(
+                            SearchUserMessage(
+                                R.string.feature_search_msg_checkin_failed,
+                                serverMessage = syncResult.message.ifBlank { null },
+                            ),
+                        )
                     }
 
                     is AppResult.Loading -> Unit

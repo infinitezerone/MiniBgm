@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.AppResult
@@ -71,13 +72,17 @@ sealed interface SubjectDetailUiEvent {
         val previousType: Int,
     ) : SubjectDetailUiEvent
 
+    /** 一次性提示：资源文案 + 格式化参数，UI 侧解析；服务端原始文案经 [serverMessage] 透传 */
     data class ShowMessage(
-        val message: String,
+        @get:StringRes val resId: Int,
+        val formatArgs: List<Any> = emptyList(),
+        val serverMessage: String? = null,
     ) : SubjectDetailUiEvent
 
-    /** 把找源请求交接给 AI 助手会话（[prefillPrompt] 即助手首条提问，结果为可播放清单） */
+    /** 把找源请求交接给 AI 助手会话（提问文案经 [promptResId] 资源 + [formatArgs] 在 UI 侧解析，结果为可播放清单） */
     data class OpenSourceSearch(
-        val prefillPrompt: String,
+        @get:StringRes val promptResId: Int,
+        val formatArgs: List<Any>,
     ) : SubjectDetailUiEvent
 }
 
@@ -224,9 +229,13 @@ class SubjectDetailViewModel(
                 ?.displayName
                 ?.ifBlank { "本条目" } ?: "本条目"
         val target = if (episode == null) "《$title》" else "《$title》 ${episode.guideLabel}"
-        val prompt = "帮我找${target}的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 $subjectId）"
         viewModelScope.launch {
-            _uiEvents.send(SubjectDetailUiEvent.OpenSourceSearch(prompt))
+            _uiEvents.send(
+                SubjectDetailUiEvent.OpenSourceSearch(
+                    R.string.feature_subject_ai_search_prompt,
+                    listOf(target, subjectId),
+                ),
+            )
         }
     }
 
@@ -454,10 +463,14 @@ class SubjectDetailViewModel(
             val current = _uiState.value.customFilterTags
             if (tag in current) {
                 searchRepository?.removeCustomFilterTag(tag)
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("已从常用筛选标签中移除「#$tag」"))
+                _uiEvents.send(
+                    SubjectDetailUiEvent.ShowMessage(R.string.feature_subject_msg_tag_removed, listOf("#$tag")),
+                )
             } else {
                 searchRepository?.addCustomFilterTag(tag)
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage("已将「#$tag」添加至常用筛选标签"))
+                _uiEvents.send(
+                    SubjectDetailUiEvent.ShowMessage(R.string.feature_subject_msg_tag_added, listOf("#$tag")),
+                )
             }
         }
     }
@@ -835,7 +848,12 @@ class SubjectDetailViewModel(
             result.onError { _, message ->
                 // 2. 失败回滚为原状态并提示错误
                 _uiState.update { it.copy(collection = previousCollection, error = message) }
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage(message.ifBlank { "更新收藏状态失败，请确认是否已登录账号" }))
+                _uiEvents.send(
+                    SubjectDetailUiEvent.ShowMessage(
+                        R.string.feature_subject_msg_update_collection_failed,
+                        serverMessage = message.ifBlank { null },
+                    ),
+                )
             }
         }
     }
@@ -999,7 +1017,12 @@ class SubjectDetailViewModel(
             result.onError { _, message ->
                 // 回滚
                 _uiState.update { it.copy(collection = previousCollection, error = message) }
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage(message.ifBlank { "打卡失败，请确认是否已登录账号" }))
+                _uiEvents.send(
+                    SubjectDetailUiEvent.ShowMessage(
+                        R.string.feature_subject_msg_checkin_failed,
+                        serverMessage = message.ifBlank { null },
+                    ),
+                )
             }
         }
     }
@@ -1080,7 +1103,12 @@ class SubjectDetailViewModel(
                 )
             result.onError { _, message ->
                 _uiState.update { it.copy(collection = previousCollection, error = message) }
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage(message.ifBlank { "批量打卡失败，请确认是否已登录账号" }))
+                _uiEvents.send(
+                    SubjectDetailUiEvent.ShowMessage(
+                        R.string.feature_subject_msg_batch_checkin_failed,
+                        serverMessage = message.ifBlank { null },
+                    ),
+                )
             }
         }
     }
@@ -1125,7 +1153,12 @@ class SubjectDetailViewModel(
                 )
             result.onError { _, message ->
                 _uiState.update { it.copy(collection = previousState) }
-                _uiEvents.send(SubjectDetailUiEvent.ShowMessage(message.ifBlank { "撤销失败，请确认是否已登录账号" }))
+                _uiEvents.send(
+                    SubjectDetailUiEvent.ShowMessage(
+                        R.string.feature_subject_msg_undo_failed,
+                        serverMessage = message.ifBlank { null },
+                    ),
+                )
             }
         }
     }

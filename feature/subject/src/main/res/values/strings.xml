@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 一次性事件文案（VM 经 @StringRes 载体下发，UI 解析；服务端文案透传） -->
+    <string name="feature_subject_ai_search_prompt">帮我找%1$s的可播放资源，直接给我能播放的地址和集数列表（Bangumi 条目号 %2$d）</string>
+    <string name="feature_subject_msg_tag_removed">已从常用筛选标签中移除「%1$s」</string>
+    <string name="feature_subject_msg_tag_added">已将「%1$s」添加至常用筛选标签</string>
+    <string name="feature_subject_msg_update_collection_failed">更新收藏状态失败，请确认是否已登录账号</string>
+    <string name="feature_subject_msg_checkin_failed">打卡失败，请确认是否已登录账号</string>
+    <string name="feature_subject_msg_batch_checkin_failed">批量打卡失败，请确认是否已登录账号</string>
+    <string name="feature_subject_msg_undo_failed">撤销失败，请确认是否已登录账号</string>
     <!-- 1. 页面通用与顶部栏 -->
     <string name="feature_subject_title">条目详情</string>
     <string name="feature_subject_cd_back">返回</string>

@@ -141,7 +141,10 @@ fun EpisodeDetailScreen(
                         ?: context.getString(event.messageRes)
                 snackbarHostState.showSnackbar(text)
             }
-            is EpisodeDetailUiEvent.OpenSourceSearch -> onSourceSearch?.invoke(event.prefillPrompt)
+            is EpisodeDetailUiEvent.OpenSourceSearch ->
+                onSourceSearch?.invoke(
+                    context.resources.getString(event.promptResId, *event.formatArgs.toTypedArray()),
+                )
         }
     }
     val overlayHostState = rememberOverlayHostState()

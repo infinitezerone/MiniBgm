@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,8 +59,9 @@ fun TagSubjectsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // 一次性提示走 Channel 流（消费即消失），与状态流隔离；UI 只收集、不回写
+    val resources = LocalContext.current.resources
     ObserveAsEvents(viewModel.userMessage) { msg ->
-        snackbarHostState.showSnackbar(msg)
+        snackbarHostState.showSnackbar(msg.serverMessage ?: resources.getString(msg.resId, *msg.formatArgs.toTypedArray()))
     }
 
     Scaffold(

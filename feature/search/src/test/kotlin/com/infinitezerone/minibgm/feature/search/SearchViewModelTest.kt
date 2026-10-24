@@ -12,6 +12,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionReposito
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import com.infinitezerone.minibgm.feature.search.R
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceTimeBy
@@ -387,8 +388,10 @@ class SearchViewModelTest {
 
             // 验证 0ms 乐观更新成功
             assertEquals(CollectionType.DOING, viewModel.uiState.value.userCollections[888L])
-            // 验证动词为书籍对应的“在读”；一次性提示走 Channel（userMessage），不在状态流里
-            assertEquals("已标记为「在读」", viewModel.userMessage.first())
+            // 验证动词为书籍对应的“在读”；一次性提示走 Channel（userMessage 资源载体），不在状态流里
+            val message = viewModel.userMessage.first()
+            assertEquals(R.string.feature_search_msg_marked_format, message.resId)
+            assertEquals(listOf<Any>("在读"), message.formatArgs)
         }
 
     @Test

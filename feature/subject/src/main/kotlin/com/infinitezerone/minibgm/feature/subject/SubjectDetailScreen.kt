@@ -186,10 +186,12 @@ fun SubjectDetailScreen(
     ObserveAsEvents(viewModel.uiEvents) { event ->
         when (event) {
             is SubjectDetailUiEvent.ShowMessage -> {
-                snackbarHostState.showSnackbar(event.message)
+                snackbarHostState.showSnackbar(
+                    event.serverMessage ?: context.resources.getString(event.resId, *event.formatArgs.toTypedArray()),
+                )
             }
             is SubjectDetailUiEvent.OpenSourceSearch -> {
-                onSourceSearch?.invoke(event.prefillPrompt)
+                onSourceSearch?.invoke(context.resources.getString(event.promptResId, *event.formatArgs.toTypedArray()))
             }
             is SubjectDetailUiEvent.EpisodeMarked -> {
                 val epLabel =

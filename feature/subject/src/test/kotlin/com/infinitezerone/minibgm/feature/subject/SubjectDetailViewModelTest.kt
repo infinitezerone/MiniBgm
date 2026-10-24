@@ -27,6 +27,7 @@ import com.infinitezerone.minibgm.core.testing.repository.FakeSearchRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSubjectRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import com.infinitezerone.minibgm.feature.subject.R
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -1447,7 +1448,7 @@ class SubjectDetailViewModelTest {
             events.add(viewModel.uiEvents.first())
             events.add(viewModel.uiEvents.first())
             val errorEvent = events.filterIsInstance<SubjectDetailUiEvent.ShowMessage>().firstOrNull()
-            assertEquals("网络异常", errorEvent?.message)
+            assertEquals("网络异常", errorEvent?.serverMessage)
         }
 
     @Test
@@ -1470,11 +1471,11 @@ class SubjectDetailViewModelTest {
             viewModel.requestSourceSearch(sampleEpisodeList.first())
 
             val event = viewModel.uiEvents.first() as SubjectDetailUiEvent.OpenSourceSearch
-            assertTrue(event.prefillPrompt.contains("葬送的芙莉莲"))
-            assertTrue(event.prefillPrompt.contains("1001"))
-            // 交接给助手的找源请求要求可播放数据，本页面自身不做任何检索
-            assertTrue(event.prefillPrompt.contains("可播放资源"))
-            assertTrue(event.prefillPrompt.contains("能播放的地址"))
+            assertEquals(R.string.feature_subject_ai_search_prompt, event.promptResId)
+            val args = event.formatArgs
+            // 目标参数携带条目名与条目号；提示模板本身由资源承载
+            assertTrue((args[0] as String).contains("葬送的芙莉莲"))
+            assertEquals(1001L, args[1])
         }
 
     @Test
@@ -1497,7 +1498,9 @@ class SubjectDetailViewModelTest {
             viewModel.requestSourceSearch()
 
             val event = viewModel.uiEvents.first() as SubjectDetailUiEvent.OpenSourceSearch
-            assertTrue(event.prefillPrompt.contains("《葬送的芙莉莲》的可播放资源"))
+            assertEquals(R.string.feature_subject_ai_search_prompt, event.promptResId)
+            val targetArg = event.formatArgs.first() as String
+            assertTrue(targetArg.startsWith("《葬送的芙莉莲》"))
         }
 
     @Test
@@ -1690,7 +1693,11 @@ class SubjectDetailViewModelTest {
             viewModel.toggleCustomFilterTag("机战")
             val event1 = viewModel.uiEvents.first()
             assertTrue(event1 is SubjectDetailUiEvent.ShowMessage)
-            assertEquals("已将「#机战」添加至常用筛选标签", (event1 as SubjectDetailUiEvent.ShowMessage).message)
+            assertEquals(
+                R.string.feature_subject_msg_tag_added,
+                (event1 as SubjectDetailUiEvent.ShowMessage).resId,
+            )
+            assertEquals(listOf<Any>("#机战"), event1.formatArgs)
             assertTrue(
                 viewModel.uiState.value.customFilterTags
                     .contains("机战"),
@@ -1699,7 +1706,11 @@ class SubjectDetailViewModelTest {
             viewModel.toggleCustomFilterTag("机战")
             val event2 = viewModel.uiEvents.first()
             assertTrue(event2 is SubjectDetailUiEvent.ShowMessage)
-            assertEquals("已从常用筛选标签中移除「#机战」", (event2 as SubjectDetailUiEvent.ShowMessage).message)
+            assertEquals(
+                R.string.feature_subject_msg_tag_removed,
+                (event2 as SubjectDetailUiEvent.ShowMessage).resId,
+            )
+            assertEquals(listOf<Any>("#机战"), event2.formatArgs)
             assertFalse(
                 viewModel.uiState.value.customFilterTags
                     .contains("机战"),

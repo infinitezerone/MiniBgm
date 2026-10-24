@@ -97,10 +97,10 @@ class TagSubjectsViewModel(
     private val viewMode = MutableStateFlow(SearchViewMode.LIST)
 
     // 一次性提示（追加失败 / 打卡失败）走 Channel：发生一次就该消失，与状态流物理隔离
-    private val _userMessage = Channel<String>(Channel.BUFFERED)
+    private val _userMessage = Channel<SearchUserMessage>(Channel.BUFFERED)
 
     /** 一次性事件流。UI 收集它来弹 Snackbar；不需要也不应该有人回写它 */
-    val userMessage: Flow<String> = _userMessage.receiveAsFlow()
+    val userMessage: Flow<SearchUserMessage> = _userMessage.receiveAsFlow()
 
     /** 取页信号源：公共触发器管线，`signals()` 汇流后经 `flatMapLatest` 换挡 */
     private val pageTriggers = PagingTriggers()
@@ -228,7 +228,12 @@ class TagSubjectsViewModel(
                 )
             if (syncResult is AppResult.Error) {
                 // message 自带仓库层的动作前缀，再拼「打卡失败：」会叠成两层——只兜底，不加前缀
-                _userMessage.send(syncResult.message.ifBlank { "打卡失败，请重试" })
+                _userMessage.send(
+                    SearchUserMessage(
+                        R.string.feature_search_msg_checkin_failed,
+                        serverMessage = syncResult.message.ifBlank { null },
+                    ),
+                )
             }
         }
     }
@@ -279,7 +284,12 @@ class TagSubjectsViewModel(
                     if (isMore) {
                         // 追加失败：保留原数据展示，仅收起进度并通过一次性提示告知
                         pagedSubjects.value = pagedSubjects.value.copy(isLoadingMore = false)
-                        _userMessage.send(result.message.ifBlank { "加载更多失败" })
+                        _userMessage.send(
+                            SearchUserMessage(
+                                R.string.feature_search_msg_load_more_failed,
+                                serverMessage = result.message.ifBlank { null },
+                            ),
+                        )
                     } else {
                         // 首屏 / 重试 / 刷新失败：交由全屏错误态呈现（刷新时保留原列表）
                         settle(error = result.message.ifBlank { "获取标签条目失败" })
@@ -315,7 +325,7 @@ class TagSubjectsViewModel(
         } catch (e: Exception) {
             if (isMore) {
                 pagedSubjects.value = pagedSubjects.value.copy(isLoadingMore = false)
-                _userMessage.send("加载更多失败")
+                _userMessage.send(SearchUserMessage(R.string.feature_search_msg_load_more_failed))
             } else {
                 settle(error = "网络连接异常，请重试")
             }

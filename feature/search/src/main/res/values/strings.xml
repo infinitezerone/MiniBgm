@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- 一次性操作提示（VM 经 SearchUserMessage 资源下发，服务端文案透传） -->
+    <string name="feature_search_msg_marked_format">已标记为「%1$s」</string>
+    <string name="feature_search_msg_checkin_failed">打卡失败，请重试</string>
+    <string name="feature_search_msg_load_more_failed">加载更多失败</string>
     <!-- 1. 探索页壳与顶部栏 -->
     <string name="feature_search_explore_title">探索发现</string>
     <string name="feature_search_cd_back_to_featured">返回精选</string>

@@ -1103,9 +1103,13 @@ class ArchitectureRulesTest {
             .filter { it.isFile && it.name.endsWith("ViewModel.kt") }
             .forEach { sourceFile ->
                 val relPath = sourceFile.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
-                findCjkLiteralsInSnackbarArgs(sourceFile.readText()).forEach { (lineNumber, literal) ->
+                val content = sourceFile.readText()
+                // 两种形态一并拦截：SnackbarHost 直发，以及 Channel/SharedFlow 的 send/trySend 直发
+                // （"trySend(" 与 "resend(" 等词尾均含 "send("，此处只匹配 .send( / .trySend( 调用）。
+                val cjkInSend = findCjkLiteralsInCallArgs(content, ".send(") + findCjkLiteralsInCallArgs(content, ".trySend(")
+                (findCjkLiteralsInCallArgs(content, "ShowSnackbar(") + cjkInSend).forEach { (lineNumber, literal) ->
                     violations.add(
-                        "$relPath:$lineNumber ShowSnackbar 内联用户文案 -> \"$literal\"。" +
+                        "$relPath:$lineNumber 一次性事件内联用户文案 -> \"$literal\"。" +
                             "文案必须以 @StringRes + formatArgs 下发、UI 侧解析（服务端运行时消息经 message 字段透传），" +
                             "严禁在 ViewModel 直写用户可见文案绕开资源体系",
                     )
@@ -1118,6 +1122,69 @@ class ArchitectureRulesTest {
                     violations.joinToString("\n"),
             )
         }
+    }
+
+    /**
+     * 明暗判定统一走当前生效色阶（红线）：
+     * 应用支持 `ThemeMode.LIGHT/DARK` 强制覆盖系统设置，`isSystemInDarkTheme()` 读的是系统配置，
+     * 与生效色 scheme 相悖——同一组件会出现「亮色阴影 + 暗档底色」的明暗错配。
+     *
+     * 允许名单只有主题引导层两处（它们正是把系统偏好投影进色 scheme 的入口）：
+     * `app/.../MainActivity.kt`（ThemeMode.SYSTEM 分支）与
+     * `core/designsystem/.../theme/Theme.kt`（默认参数兜底）。
+     * 其余任何 UI 代码需要明暗档位时，一律 `MaterialTheme.colorScheme.surface.luminance() < 0.5f`。
+     */
+    @Test
+    fun feature_ui_must_not_decide_darkness_from_system_config() {
+        val violations = mutableListOf<String>()
+        val pattern = Regex("""\bisSystemInDarkTheme\s*\(""")
+        val allowedPaths =
+            setOf(
+                "app/src/main/kotlin/com/infinitezerone/minibgm/MainActivity.kt",
+                "core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/theme/Theme.kt",
+            )
+
+        projectRoot
+            .walkTopDown()
+            .onEnter { it.name !in NON_SOURCE_DIR_NAMES }
+            .filter { it.isFile && it.extension == "kt" && "src/main" in it.path }
+            .forEach { file ->
+                val relPath = file.relativeTo(projectRoot).path.replace(File.separatorChar, '/')
+                if (relPath in allowedPaths) return@forEach
+                KotlinSourceScanner.fromFile(file).findMatches(pattern).forEach { match ->
+                    violations.add(
+                        "$relPath:${match.lineNumber} 违规使用 isSystemInDarkTheme -> ${match.lineContent.trim()}。" +
+                            "应用支持强制亮/暗主题覆盖，明暗判定必须走生效色阶（surface.luminance()）",
+                    )
+                }
+            }
+
+        assertTrue(
+            violations.isEmpty(),
+            "明暗判定必须与生效色阶同源（isSystemInDarkTheme 只允许出现在主题引导层）：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
+    /**
+     * 触控靶区红线（M3 ≥48dp）：
+     * 设计系统的可点击视觉原语（如 40dp 圆盘）必须在组件层显式扩展交互区
+     * （`minimumInteractiveComponentSize`），不得让触控靶区等于视觉尺寸。
+     * 本规则是对 [com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton] 的
+     * 回归绊线——它是「40dp 视觉 + 48dp 靶区」范式的落点。
+     */
+    @Test
+    fun designsystem_touch_target_primitives_must_extend_interactive_area() {
+        val file =
+            File(
+                projectRoot,
+                "core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/component/BgmCircleActionButton.kt",
+            )
+        assertTrue(file.isFile, "BgmCircleActionButton.kt 未找到: ${file.absolutePath}")
+        assertTrue(
+            file.readText().contains("minimumInteractiveComponentSize"),
+            "BgmCircleActionButton 必须经 minimumInteractiveComponentSize 保证 ≥48dp 触控靶区（视觉尺寸 != 触控靶区）",
+        )
     }
 
     @Test
@@ -1203,16 +1270,19 @@ class ArchitectureRulesTest {
      * 定位 [content] 中所有 ShowSnackbar(...) 实参跨度内的中文字符串字面量。
      *
      * 借助 [KotlinSourceScanner.sanitize] 的"长度与索引不变"特性：先用脱敏文本（注释与字符串已抹平）
-     * 做 ShowSnackbar( 的括号配对得到跨度，再回原文提取跨度内的字符串字面量检查 CJK——
-     * 注释里提到 ShowSnackbar("示例") 不会误伤，跨行调用也不会漏判。
+     * 对 [callToken] 做括号配对得到跨度，再回原文提取跨度内的字符串字面量检查 CJK——
+     * 注释里提到 callToken("示例") 不会误伤，跨行调用也不会漏判。
      */
-    private fun findCjkLiteralsInSnackbarArgs(content: String): List<Pair<Int, String>> {
+    private fun findCjkLiteralsInCallArgs(
+        content: String,
+        callToken: String,
+    ): List<Pair<Int, String>> {
         val sanitized = KotlinSourceScanner.fromContent(content).sanitizedContent
         val spans = mutableListOf<IntRange>()
-        var index = sanitized.indexOf("ShowSnackbar(")
+        var index = sanitized.indexOf(callToken)
         while (index >= 0) {
             var depth = 1
-            var cursor = index + "ShowSnackbar(".length
+            var cursor = index + callToken.length
             while (cursor < sanitized.length && depth > 0) {
                 when (sanitized[cursor]) {
                     '(' -> depth++
@@ -1221,7 +1291,7 @@ class ArchitectureRulesTest {
                 cursor++
             }
             spans += index until cursor
-            index = sanitized.indexOf("ShowSnackbar(", cursor)
+            index = sanitized.indexOf(callToken, cursor)
         }
         if (spans.isEmpty()) return emptyList()
 

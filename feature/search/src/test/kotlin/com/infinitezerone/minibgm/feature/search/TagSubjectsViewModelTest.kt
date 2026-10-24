@@ -156,7 +156,7 @@ class TagSubjectsViewModelTest {
             viewModel.updateCollection(sampleSubject, CollectionType.DOING)
             advanceUntilIdle()
 
-            assertEquals("打卡失败：服务异常", viewModel.userMessage.first())
+            assertEquals("打卡失败：服务异常", viewModel.userMessage.first().serverMessage)
             // 状态流里不再有 userMessage 字段：失败不影响任何状态投影
             assertNull(viewModel.uiState.value.errorMessage)
         }
@@ -178,7 +178,7 @@ class TagSubjectsViewModelTest {
             // 追加失败：保留原列表，提示走一次性事件流而非状态
             assertEquals(20, viewModel.uiState.value.subjects.size)
             assertFalse(viewModel.uiState.value.isLoadingMore)
-            assertEquals("追加失败", viewModel.userMessage.first())
+            assertEquals("追加失败", viewModel.userMessage.first().serverMessage)
         }
 
     @Test
