@@ -11,8 +11,9 @@ import androidx.compose.ui.unit.dp
  *   4dp baseline grid 一致，不引入 iOS 的 8pt 网格，也不重排现有页面边距。
  * - [TopBar] / [SideNavigation] / [FloatingNav] / [Snackbar] 只固化跨页面复用的 chrome 尺寸；
  *   页面级 padding 仍由各 feature 持有，后续页面结构重构时可独立演进。
- * - 6dp、10dp、48dp、64dp、88dp 是实测后的固定交互尺寸（触控靶区、胶囊呼吸、
- *   底栏避让），不参与 4dp 阶梯推导，避免为了“整齐”牺牲可达性。
+ * - Chrome 尺寸（顶栏/底栏 56dp 高度、底栏 12/4dp 呼吸、Snackbar 76dp 避让、136dp scrim）
+ *   是实测后的固定交互尺寸，不参与 4dp 阶梯推导；48dp 触控靶区由组件层
+ *   `minimumInteractiveComponentSize` 统一保证，不设间距 token。
  */
 object BgmSpacing {
     val none: Dp = 0.dp

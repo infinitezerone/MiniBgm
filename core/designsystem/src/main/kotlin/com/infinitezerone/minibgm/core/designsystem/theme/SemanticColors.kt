@@ -275,16 +275,6 @@ val AiGlowPink = Color(0xFFFF3366)
 val AiGlowAmber = Color(0xFFFF9900)
 val AiGlowCyan = Color(0xFF00E5FF)
 
-val AiGlowSweepColors: List<Color> =
-    listOf(
-        AiGlowBlue,
-        AiGlowPurple,
-        AiGlowPink,
-        AiGlowAmber,
-        AiGlowCyan,
-        AiGlowBlue,
-    )
-
 val AiIconGradientColors: List<Color> =
     listOf(
         AiGlowCyan,
