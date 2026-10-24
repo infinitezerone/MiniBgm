@@ -99,12 +99,37 @@ class ThemeTest {
         assertEquals(Color(0xFF1E293B), StatusDroppedContainerDark)
         assertEquals(Color(0xFFCBD5E1), OnStatusDroppedContainerDark)
 
-        // Airing
-        assertEquals(Color(0xFFFF5722), StatusAiring)
-        assertEquals(Color(0xFFFFEBE5), StatusAiringContainer)
-        assertEquals(Color(0xFFC42B00), OnStatusAiringContainer)
-        assertEquals(Color(0xFF4D1405), StatusAiringContainerDark)
-        assertEquals(Color(0xFFFFCCBC), OnStatusAiringContainerDark)
+        // Airing (Tailwind Orange family)
+        assertEquals(Color(0xFFEA580C), StatusAiring)
+        assertEquals(Color(0xFFFFF7ED), StatusAiringContainer)
+        assertEquals(Color(0xFFC2410C), OnStatusAiringContainer)
+        assertEquals(Color(0xFF451A03), StatusAiringContainerDark)
+        assertEquals(Color(0xFFFDBA74), OnStatusAiringContainerDark)
+
+        // Type palette (Tailwind family, aligned with status colors)
+        assertEquals(Color(0xFFFFF7ED), TypeBookContainer)
+        assertEquals(Color(0xFFC2410C), OnTypeBook)
+        assertEquals(Color(0xFF4A2210), TypeBookContainerDark)
+        assertEquals(Color(0xFFFDBA74), OnTypeBookDark)
+        assertEquals(Color(0xFFEFF6FF), TypeAnimeContainer)
+        assertEquals(Color(0xFF1D4ED8), OnTypeAnime)
+        assertEquals(Color(0xFF17335C), TypeAnimeContainerDark)
+        assertEquals(Color(0xFF93C5FD), OnTypeAnimeDark)
+        assertEquals(Color(0xFFFAF5FF), TypeMusicContainer)
+        assertEquals(Color(0xFF7E22CE), OnTypeMusic)
+        assertEquals(Color(0xFF3B1A5E), TypeMusicContainerDark)
+        assertEquals(Color(0xFFD8B4FE), OnTypeMusicDark)
+        assertEquals(Color(0xFFF0FDF4), TypeGameContainer)
+        assertEquals(Color(0xFF15803D), OnTypeGame)
+        assertEquals(Color(0xFF123B24), TypeGameContainerDark)
+        assertEquals(Color(0xFF86EFAC), OnTypeGameDark)
+        assertEquals(Color(0xFFFDF2F8), TypeRealContainer)
+        assertEquals(Color(0xFFBE185D), OnTypeReal)
+        assertEquals(Color(0xFF4C1D3C), TypeRealContainerDark)
+        assertEquals(Color(0xFFF9A8D4), OnTypeRealDark)
+
+        // Classic badge (Tailwind Indigo-600)
+        assertEquals(Color(0xFF4F46E5), BadgeClassic)
 
         // Rating
         assertEquals(Color(0xFFF59E0B), RatingGold)
@@ -144,6 +169,57 @@ class ThemeTest {
         // Primary brand color satisfies WCAG AA (>= 4.5:1) against white
         val primaryContrastAgainstWhite = (1.0f + 0.05f) / (light.primary.luminance() + 0.05f)
         assertTrue(primaryContrastAgainstWhite >= 4.5f, "PrimaryLight contrast ($primaryContrastAgainstWhite) must be >= 4.5:1")
+    }
+
+    /**
+     * 全角色 WCAG 对比度断言（对齐 WCAG 1.4.3 / 1.4.11）：
+     * 正文与主操作前景/背景配对 ≥4.5:1；次要文本与描边等图形配对 ≥3:1。
+     * 配色改动若拉低任一配对，此处先于人工审查失败。
+     */
+    @Test
+    fun theme_colorPairs_meetWcagContrastTiers() {
+        listOf(MiniBgmLightColors, MiniBgmDarkColors).forEach { scheme ->
+            val bodyPairs =
+                listOf(
+                    scheme.onBackground to scheme.background,
+                    scheme.onSurface to scheme.surface,
+                    scheme.onSurface to scheme.surfaceContainerLow,
+                    scheme.onSurface to scheme.surfaceContainer,
+                    scheme.onSurface to scheme.surfaceContainerHigh,
+                    scheme.onSurfaceVariant to scheme.surface,
+                    scheme.onSurfaceVariant to scheme.surfaceContainerLow,
+                    scheme.onSurfaceVariant to scheme.surfaceContainer,
+                    scheme.onPrimary to scheme.primary,
+                    scheme.onPrimaryContainer to scheme.primaryContainer,
+                    scheme.onSecondaryContainer to scheme.secondaryContainer,
+                    scheme.onTertiaryContainer to scheme.tertiaryContainer,
+                    scheme.onError to scheme.error,
+                    scheme.onErrorContainer to scheme.errorContainer,
+                    scheme.inverseOnSurface to scheme.inverseSurface,
+                )
+            bodyPairs.forEach { (fg, bg) ->
+                val ratio = contrastRatio(fg, bg)
+                assertTrue(ratio >= 4.5f, "正文级配对 $fg on $bg 对比度 $ratio 低于 WCAG AA 4.5:1")
+            }
+            val graphicPairs =
+                listOf(
+                    scheme.onSurfaceVariant to scheme.surfaceContainerHighest,
+                    scheme.outline to scheme.surface,
+                )
+            graphicPairs.forEach { (fg, bg) ->
+                val ratio = contrastRatio(fg, bg)
+                assertTrue(ratio >= 3f, "图形/次要配对 $fg on $bg 对比度 $ratio 低于 WCAG 3:1")
+            }
+        }
+    }
+
+    private fun contrastRatio(
+        fg: Color,
+        bg: Color,
+    ): Float {
+        val lf = fg.luminance()
+        val lb = bg.luminance()
+        return (maxOf(lf, lb) + 0.05f) / (minOf(lf, lb) + 0.05f)
     }
 
     @Test

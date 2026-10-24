@@ -59,17 +59,17 @@ val OnStatusDroppedContainer = OnStatusDroppedContainerLight
 // 放送状态与徽章
 // ==========================================
 
-/** 放送中（正在播出） - 活力珊瑚橙 */
-val StatusAiring = Color(0xFFFF5722)
-val StatusAiringContainerLight = Color(0xFFFFEBE5)
-val OnStatusAiringContainerLight = Color(0xFFC42B00)
-val StatusAiringContainerDark = Color(0xFF4D1405)
-val OnStatusAiringContainerDark = Color(0xFFFFCCBC)
+/** 放送中（正在播出） - 成熟橘（Tailwind Orange-600，实色徽章上白字可读） */
+val StatusAiring = Color(0xFFEA580C)
+val StatusAiringContainerLight = Color(0xFFFFF7ED)
+val OnStatusAiringContainerLight = Color(0xFFC2410C)
+val StatusAiringContainerDark = Color(0xFF451A03)
+val OnStatusAiringContainerDark = Color(0xFFFDBA74)
 val StatusAiringContainer = StatusAiringContainerLight
 val OnStatusAiringContainer = OnStatusAiringContainerLight
 
-/** 经典口碑徽章（非近期热播、以评分人数取胜） */
-val BadgeClassic = Color(0xFF3F51B5)
+/** 经典口碑徽章（非近期热播、以评分人数取胜）- 尾随靛蓝（Tailwind Indigo-600） */
+val BadgeClassic = Color(0xFF4F46E5)
 
 // ==========================================
 // 语义容器色自适应辅助函数 (Theme-adaptive Composable Helpers)
@@ -171,28 +171,28 @@ val OnHighlightContainerDark = Color(0xFFFCD34D)
 val HighlightContainer = HighlightContainerLight
 val OnHighlightContainer = OnHighlightContainerLight
 
-// 条目类型色板（container 为浅底，On 为其上的内容色；亮/暗双档）
+// 条目类型色板（与状态色同族：Tailwind 50/700 亮色阶梯 + 项目暗色深容器 / 300 前景；亮/暗双档）
 
-val TypeBookContainer = Color(0xFFFFF3E0)
-val OnTypeBook = Color(0xFFE65100)
-val TypeBookContainerDark = Color(0xFF4E2606)
-val OnTypeBookDark = Color(0xFFFFB68F)
-val TypeAnimeContainer = Color(0xFFE3F2FD)
-val OnTypeAnime = Color(0xFF1976D2)
-val TypeAnimeContainerDark = Color(0xFF0D3B6F)
-val OnTypeAnimeDark = Color(0xFF90CAF9)
-val TypeMusicContainer = Color(0xFFF3E5F5)
-val OnTypeMusic = Color(0xFF7B1FA2)
-val TypeMusicContainerDark = Color(0xFF4A1B66)
-val OnTypeMusicDark = Color(0xFFCE93D8)
-val TypeGameContainer = Color(0xFFE8F5E9)
-val OnTypeGame = Color(0xFF2E7D32)
-val TypeGameContainerDark = Color(0xFF12402A)
-val OnTypeGameDark = Color(0xFFA5D6A7)
-val TypeRealContainer = Color(0xFFFCE4EC)
-val OnTypeReal = Color(0xFFC2185B)
-val TypeRealContainerDark = Color(0xFF59113D)
-val OnTypeRealDark = Color(0xFFF48FB1)
+val TypeBookContainer = Color(0xFFFFF7ED)
+val OnTypeBook = Color(0xFFC2410C)
+val TypeBookContainerDark = Color(0xFF4A2210)
+val OnTypeBookDark = Color(0xFFFDBA74)
+val TypeAnimeContainer = Color(0xFFEFF6FF)
+val OnTypeAnime = Color(0xFF1D4ED8)
+val TypeAnimeContainerDark = Color(0xFF17335C)
+val OnTypeAnimeDark = Color(0xFF93C5FD)
+val TypeMusicContainer = Color(0xFFFAF5FF)
+val OnTypeMusic = Color(0xFF7E22CE)
+val TypeMusicContainerDark = Color(0xFF3B1A5E)
+val OnTypeMusicDark = Color(0xFFD8B4FE)
+val TypeGameContainer = Color(0xFFF0FDF4)
+val OnTypeGame = Color(0xFF15803D)
+val TypeGameContainerDark = Color(0xFF123B24)
+val OnTypeGameDark = Color(0xFF86EFAC)
+val TypeRealContainer = Color(0xFFFDF2F8)
+val OnTypeReal = Color(0xFFBE185D)
+val TypeRealContainerDark = Color(0xFF4C1D3C)
+val OnTypeRealDark = Color(0xFFF9A8D4)
 
 // ==========
 // 搜索关键词高亮自适应助手
