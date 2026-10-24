@@ -396,6 +396,7 @@ private fun DayScheduleList(
                                     schedules = entry.value,
                                     isToday = isTodayPage,
                                     watchingSubjectIds = uiState.watchingSubjectIds,
+                                    todayYear = uiState.todayYear,
                                     onSubjectClick = onSubjectClick,
                                     onToggleWatching = onToggleWatching,
                                     currentMinutesCst = nowMinutes,
@@ -410,6 +411,7 @@ private fun DayScheduleList(
                                 schedules = entry.value,
                                 isToday = isTodayPage,
                                 watchingSubjectIds = uiState.watchingSubjectIds,
+                                todayYear = uiState.todayYear,
                                 onSubjectClick = onSubjectClick,
                                 onToggleWatching = onToggleWatching,
                                 currentMinutesCst = nowMinutes,
@@ -430,6 +432,7 @@ private fun DayScheduleList(
                         ScheduleUntimedSection(
                             schedules = allDaySchedules,
                             watchingSubjectIds = uiState.watchingSubjectIds,
+                            todayYear = uiState.todayYear,
                             onSubjectClick = onSubjectClick,
                             onToggleWatching = onToggleWatching,
                         )

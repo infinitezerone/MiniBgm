@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.schedule.components
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
@@ -151,6 +152,7 @@ fun TimelineSlotRow(
     schedules: List<AirSchedule>,
     isToday: Boolean,
     watchingSubjectIds: Set<Long>,
+    todayYear: Int,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
     onToggleWatching: (Long) -> Unit = {},
@@ -185,6 +187,7 @@ fun TimelineSlotRow(
                 schedule = group.primarySchedule,
                 episodes = group.episodes,
                 isWatching = watchingSubjectIds.contains(group.primarySchedule.bgmId),
+                todayYear = todayYear,
                 onSubjectClick = onSubjectClick,
                 onToggleWatching = { onToggleWatching(group.primarySchedule.bgmId) },
             )
@@ -271,84 +274,94 @@ fun TimelineSlotHeader(
 }
 
 /**
- * 从番剧属性与标题智能提取高价值关键词（档期、载体、季数、题材标签）
+ * 时间线卡片关键词语义档位：纯函数只产出资源档位与格式化参数，
+ * 展示文案一律由 UI 经 [labelRes] 的 `stringResource` 解析，严禁回退到字面量。
  */
-internal fun extractScheduleKeywords(schedule: AirSchedule): List<String> {
-    val keywords = mutableListOf<String>()
+internal data class ScheduleKeyword(
+    @get:StringRes val labelRes: Int,
+    val formatArgs: List<Any> = emptyList(),
+)
 
-    // 1. 档期/年份 (如 10月新番、长篇连载)
+/**
+ * 从番剧属性与标题提取高价值关键词语义档位（档期、载体、季数、题材标签）。
+ * 时钟依赖经 [todayYear] 注入（VM 按 CST 口径下发），保持纯函数可测。
+ */
+internal fun extractScheduleKeywords(
+    schedule: AirSchedule,
+    todayYear: Int,
+): List<ScheduleKeyword> {
+    val keywords = mutableListOf<ScheduleKeyword>()
+
+    // 1. 档期/年份
     val airDate = schedule.airDate
     val nextEp = schedule.nextEpisodeNumber
     if (nextEp > 52) {
-        keywords.add("长篇连载")
+        keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_long_running))
     } else if (airDate.length >= 4) {
         val year = airDate.take(4).toIntOrNull()
         val month = if (airDate.length >= 7) airDate.substring(5, 7).toIntOrNull() else null
-        val currentYear =
-            java.time.LocalDate
-                .now()
-                .year
-        if (year == currentYear && month != null) {
-            when (month) {
-                in 1..3 -> keywords.add("1月新番")
-                in 4..6 -> keywords.add("4月新番")
-                in 7..9 -> keywords.add("7月新番")
-                in 10..12 -> keywords.add("10月新番")
+        if (year == todayYear && month != null) {
+            month.takeIf { it in 1..12 }?.let {
+                keywords.add(ScheduleKeyword(R.string.feature_schedule_season_format, listOf(it)))
             }
         } else if (year != null && year < 2015 && nextEp > 24) {
-            keywords.add("长篇连载")
+            keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_long_running))
         } else if (year != null && month != null) {
-            keywords.add("${year}年${month}月")
+            keywords.add(ScheduleKeyword(R.string.feature_schedule_season_year_month_format, listOf(year, month)))
         } else if (year != null) {
-            keywords.add("${year}年")
+            keywords.add(ScheduleKeyword(R.string.feature_schedule_season_year_format, listOf(year)))
         }
     }
 
-    // 2. 载体类型 (TV, 泡面番, Web, 剧场版, OVA)
-    val format = schedule.format.uppercase()
-    when {
-        format == "TV_SHORT" -> keywords.add("泡面番")
-        format == "TV" -> keywords.add("TV")
-        format in listOf("ONA", "WEB") -> keywords.add("Web动画")
-        format in listOf("OVA", "OAD") -> keywords.add("OVA")
-        format == "MOVIE" -> keywords.add("剧场版")
-        format == "SPECIAL" -> keywords.add("特别篇")
+    // 2. 载体类型
+    when (schedule.format.uppercase()) {
+        "TV_SHORT" -> keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_format_tv_short))
+        "TV" -> keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_format_tv))
+        "ONA", "WEB" -> keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_format_web))
+        "OVA", "OAD" -> keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_format_ova))
+        "MOVIE" -> keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_format_movie))
+        "SPECIAL" -> keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_format_special))
     }
 
-    // 3. 季数/续作属性 (从标题中特征提取)
+    // 3. 季数/续作属性（contains 里的中文字面量是标题匹配模式，不是展示文案）
     val title = schedule.displayName
     when {
-        title.contains("第二季") || title.contains("第2季") || title.contains("Season 2", ignoreCase = true) -> keywords.add("第二季")
-        title.contains("第三季") || title.contains("第3季") || title.contains("Season 3", ignoreCase = true) -> keywords.add("第三季")
-        title.contains("第四季") || title.contains("第4季") || title.contains("Season 4", ignoreCase = true) -> keywords.add("第四季")
-        title.contains("Final") || title.contains("完结篇") || title.contains("最终季") -> keywords.add("最终季")
-        title.contains("第") && title.contains("幕") -> keywords.add("续篇")
-        nextEp == 1 -> keywords.add("新作首播")
+        title.contains("第二季") || title.contains("第2季") || title.contains("Season 2", ignoreCase = true) ->
+            keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_season_2))
+        title.contains("第三季") || title.contains("第3季") || title.contains("Season 3", ignoreCase = true) ->
+            keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_season_3))
+        title.contains("第四季") || title.contains("第4季") || title.contains("Season 4", ignoreCase = true) ->
+            keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_season_4))
+        title.contains("Final") || title.contains("完结篇") || title.contains("最终季") ->
+            keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_final_season))
+        title.contains("第") && title.contains("幕") ->
+            keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_sequel))
+        nextEp == 1 -> keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_premiere))
     }
 
-    // 4. 题材关键词 (从标题中提取典型风格)
+    // 4. 题材关键词
     if (title.contains("异世界") || title.contains("转生")) {
-        keywords.add("异世界")
+        keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_genre_isekai))
     }
     if (title.contains("战车") || title.contains("重骑士") || title.contains("战斗") || title.contains("无双") || title.contains("暗鬼")) {
-        keywords.add("战斗")
+        keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_genre_action))
     }
     if (title.contains("恋爱") || title.contains("出嫁") || title.contains("女友") || title.contains("婚")) {
-        keywords.add("恋爱")
+        keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_genre_romance))
     }
     if (title.contains("侦探") || title.contains("推理")) {
-        keywords.add("悬疑")
+        keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_genre_mystery))
     }
     if (title.contains("日常") || title.contains("涂鸦") || title.contains("放松")) {
-        keywords.add("日常")
+        keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_genre_daily))
     }
     if (title.contains("少女") && !title.contains("魔法少女")) {
-        keywords.add("少女")
+        keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_genre_shoujo))
     }
 
     // 5. 高分口碑
     if (schedule.ratingScore >= 8.0) {
-        keywords.add("高分推荐")
+        keywords.add(ScheduleKeyword(R.string.feature_schedule_tag_acclaimed))
     }
 
     return keywords.distinct().take(4)
@@ -366,6 +379,7 @@ internal fun extractScheduleKeywords(schedule: AirSchedule): List<String> {
 fun ScheduleTimelineCard(
     schedule: AirSchedule,
     isWatching: Boolean,
+    todayYear: Int,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
     onToggleWatching: (() -> Unit)? = null,
@@ -376,7 +390,7 @@ fun ScheduleTimelineCard(
     val isMultiEpisode = episodes.size > 1
     val isFirstEp = episodes.firstOrNull() == 1
     val rowInteractionSource = remember { MutableInteractionSource() }
-    val keywords = remember(schedule) { extractScheduleKeywords(schedule) }
+    val keywords = remember(schedule, todayYear) { extractScheduleKeywords(schedule, todayYear) }
 
     Row(
         modifier =
@@ -457,8 +471,9 @@ fun ScheduleTimelineCard(
                 )
 
                 if (keywords.isNotEmpty()) {
+                    val keywordLabels = keywords.map { stringResource(it.labelRes, *it.formatArgs.toTypedArray()) }
                     Text(
-                        text = keywords.joinToString(" · "),
+                        text = keywordLabels.joinToString(" · "),
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
                         maxLines = 1,
@@ -654,6 +669,7 @@ fun ScheduleTimelineCard(
 fun ScheduleTimelineSingleCard(
     schedule: AirSchedule,
     isWatching: Boolean,
+    todayYear: Int,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
     onToggleWatching: (() -> Unit)? = null,
@@ -661,6 +677,7 @@ fun ScheduleTimelineSingleCard(
     ScheduleTimelineCard(
         schedule = schedule,
         isWatching = isWatching,
+        todayYear = todayYear,
         onSubjectClick = onSubjectClick,
         modifier = modifier,
         onToggleWatching = onToggleWatching,
@@ -732,6 +749,7 @@ fun ScheduleNowIndicator(
 fun ScheduleUntimedSection(
     schedules: List<AirSchedule>,
     watchingSubjectIds: Set<Long>,
+    todayYear: Int,
     onSubjectClick: (SubjectDetailRoute) -> Unit,
     modifier: Modifier = Modifier,
     onToggleWatching: (Long) -> Unit = {},
@@ -814,6 +832,7 @@ fun ScheduleUntimedSection(
                         schedule = group.primarySchedule,
                         episodes = group.episodes,
                         isWatching = watchingSubjectIds.contains(group.primarySchedule.bgmId),
+                        todayYear = todayYear,
                         onSubjectClick = onSubjectClick,
                         onToggleWatching = { onToggleWatching(group.primarySchedule.bgmId) },
                     )
