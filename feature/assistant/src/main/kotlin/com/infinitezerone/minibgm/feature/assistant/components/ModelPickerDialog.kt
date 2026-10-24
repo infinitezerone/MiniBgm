@@ -29,7 +29,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.assistant.R
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
@@ -410,9 +411,11 @@ internal fun ModelPickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_close))
-            }
+            BgmPillButton(
+                onClick = onDismiss,
+                text = stringResource(DesignSystemR.string.core_designsystem_action_close),
+                variant = BgmPillVariant.Secondary,
+            )
         },
     )
 }

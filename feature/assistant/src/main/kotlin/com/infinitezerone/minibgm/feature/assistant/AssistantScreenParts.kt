@@ -56,6 +56,8 @@ import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.OverlayRequest
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
@@ -234,17 +236,22 @@ internal fun SessionSwitcherSheet(
                         )
                     },
                     confirmButton = {
-                        TextButton(
-                            onClick = { onRespond(text.trim()) },
+                        BgmPillButton(
+                            onClick = {
+                                onRespond(text.trim())
+                            },
+                            text =
+                                stringResource(
+                                    DesignSystemR.string.core_designsystem_action_save,
+                                ),
                             enabled = text.trim().isNotBlank(),
-                        ) {
-                            Text(stringResource(DesignSystemR.string.core_designsystem_action_save))
-                        }
+                            variant = BgmPillVariant.Secondary,
+                        )
                     },
                     dismissButton = {
-                        TextButton(onClick = { onRespond(null) }) {
-                            Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
-                        }
+                        BgmPillButton(onClick = {
+                            onRespond(null)
+                        }, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), variant = BgmPillVariant.Secondary)
                     },
                 )
             }
@@ -563,9 +570,11 @@ internal fun DeepResolveEntry(
             if (isRunning) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
             } else {
-                TextButton(onClick = onClick) {
-                    Text(stringResource(R.string.feature_assistant_deep_resolve_action))
-                }
+                BgmPillButton(
+                    onClick = onClick,
+                    text = stringResource(R.string.feature_assistant_deep_resolve_action),
+                    variant = BgmPillVariant.Secondary,
+                )
             }
         }
     }

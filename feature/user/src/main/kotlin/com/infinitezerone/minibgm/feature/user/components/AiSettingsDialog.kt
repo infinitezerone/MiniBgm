@@ -11,12 +11,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +26,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AiConfig
@@ -220,8 +220,7 @@ internal fun AiSettingsDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
+            BgmPillButton(onClick = {
                     val defaultEndpoint =
                         when (selectedProvider) {
                             AiConfig.PROVIDER_OLLAMA -> DEFAULT_OLLAMA_ENDPOINT
@@ -243,15 +242,10 @@ internal fun AiSettingsDialog(
                         ),
                     )
                     onDismiss()
-                },
-            ) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_save))
-            }
+                }, text = stringResource(DesignSystemR.string.core_designsystem_action_save))
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
-            }
+            BgmPillButton(onClick = onDismiss, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), variant = BgmPillVariant.Secondary)
         },
     )
 }

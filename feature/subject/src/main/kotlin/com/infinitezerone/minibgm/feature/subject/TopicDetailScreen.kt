@@ -28,7 +28,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -54,6 +53,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -258,9 +259,16 @@ fun TopicDetailScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.error,
                             )
-                            OutlinedButton(onClick = { viewModel.refresh(isUserPullToRefresh = false) }) {
-                                Text(text = stringResource(DesignSystemR.string.core_designsystem_action_retry))
-                            }
+                            BgmPillButton(
+                                onClick = {
+                                    viewModel.refresh(isUserPullToRefresh = false)
+                                },
+                                text =
+                                    stringResource(
+                                        DesignSystemR.string.core_designsystem_action_retry,
+                                    ),
+                                variant = BgmPillVariant.Outlined,
+                            )
                         }
                     }
                 }

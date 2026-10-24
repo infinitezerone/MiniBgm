@@ -25,7 +25,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +39,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
@@ -190,9 +191,11 @@ fun SearchResultsList(
                                         color = MaterialTheme.colorScheme.onTertiaryContainer,
                                         modifier = Modifier.weight(1f),
                                     )
-                                    TextButton(onClick = onRetrySearch) {
-                                        Text(stringResource(DesignSystemR.string.core_designsystem_action_retry))
-                                    }
+                                    BgmPillButton(
+                                        onClick = onRetrySearch,
+                                        text = stringResource(DesignSystemR.string.core_designsystem_action_retry),
+                                        variant = BgmPillVariant.Secondary,
+                                    )
                                 }
                             }
                         }

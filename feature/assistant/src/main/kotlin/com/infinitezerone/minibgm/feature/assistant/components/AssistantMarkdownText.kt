@@ -1,6 +1,5 @@
 package com.infinitezerone.minibgm.feature.assistant.components
 
-import com.infinitezerone.minibgm.core.designsystem.theme.onSurfaceBodyColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +35,7 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.infinitezerone.minibgm.core.designsystem.theme.onSurfaceBodyColor
 
 private val TRAILING_PUNCTUATION = charArrayOf('，', '。', '、', '）', ')', '】', '」', '’', '"', '.', ',')
 

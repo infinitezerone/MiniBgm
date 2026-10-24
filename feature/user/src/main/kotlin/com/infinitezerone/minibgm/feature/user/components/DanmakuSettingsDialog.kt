@@ -8,11 +8,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
@@ -126,19 +126,14 @@ internal fun DanmakuSettingsDialog(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    TextButton(
-                        onClick = {
+                    BgmPillButton(onClick = {
                             endpoint = ""
-                        },
-                    ) {
-                        Text(stringResource(R.string.feature_user_danmaku_reset_default))
-                    }
+                        }, text = stringResource(R.string.feature_user_danmaku_reset_default), variant = BgmPillVariant.Secondary)
                 }
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
+            BgmPillButton(onClick = {
                     onSaveConfig(
                         DanmakuConfig(
                             endpoint = endpoint.trim(),
@@ -147,15 +142,10 @@ internal fun DanmakuSettingsDialog(
                         ),
                     )
                     onDismiss()
-                },
-            ) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_save))
-            }
+                }, text = stringResource(DesignSystemR.string.core_designsystem_action_save))
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
-            }
+            BgmPillButton(onClick = onDismiss, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), variant = BgmPillVariant.Secondary)
         },
     )
 }

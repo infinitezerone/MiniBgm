@@ -20,7 +20,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AiConfig
@@ -765,12 +766,9 @@ fun AssistantConfigDialog(
                     }
                 }
 
-                Button(
-                    onClick = { commitAndSave() },
-                    modifier = Modifier.weight(1.3f),
-                ) {
-                    Text(stringResource(R.string.feature_assistant_config_action_save_enable))
-                }
+                BgmPillButton(onClick = {
+                    commitAndSave()
+                }, text = stringResource(R.string.feature_assistant_config_action_save_enable), modifier = Modifier.weight(1.3f))
             }
         }
     }
@@ -820,9 +818,9 @@ fun AssistantConfigDialog(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirmDialog = false }) {
-                    Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
-                }
+                BgmPillButton(onClick = {
+                    showDeleteConfirmDialog = false
+                }, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), variant = BgmPillVariant.Secondary)
             },
         )
     }

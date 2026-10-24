@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -28,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -359,13 +359,9 @@ internal fun InAppWebUnavailable(
         )
         Spacer(modifier = Modifier.height(16.dp))
         if (onOpenInBrowser != null) {
-            Button(onClick = onOpenInBrowser) {
-                Text(stringResource(R.string.feature_user_web_open_in_system_browser))
-            }
+            BgmPillButton(onClick = onOpenInBrowser, text = stringResource(R.string.feature_user_web_open_in_system_browser))
             Spacer(modifier = Modifier.height(8.dp))
         }
-        TextButton(onClick = onClose) {
-            Text(stringResource(DesignSystemR.string.core_designsystem_action_back))
-        }
+        BgmPillButton(onClick = onClose, text = stringResource(DesignSystemR.string.core_designsystem_action_back), variant = BgmPillVariant.Secondary)
     }
 }

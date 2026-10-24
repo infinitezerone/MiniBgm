@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -40,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.DEFAULT_SEASONS
 import com.infinitezerone.minibgm.feature.search.ExploreCategory
@@ -408,28 +408,22 @@ fun ExploreFilterBottomSheet(
                             modifier = Modifier.weight(1f),
                         )
 
-                        Button(
-                            onClick = {
-                                if (customTagText.isNotBlank()) {
-                                    onCustomTagSubmit(customTagText)
-                                    customTagText = ""
-                                }
-                            },
-                            enabled = customTagText.isNotBlank(),
-                        ) {
-                            Text(stringResource(R.string.feature_search_action_add))
-                        }
+                        BgmPillButton(onClick = {
+                            if (customTagText.isNotBlank()) {
+                                onCustomTagSubmit(customTagText)
+                                customTagText = ""
+                            }
+                        }, text = stringResource(R.string.feature_search_action_add), enabled = customTagText.isNotBlank())
                     }
                 }
             }
 
             // 3. 底部完成按钮
-            Button(
+            BgmPillButton(
                 onClick = onDismiss,
+                text = stringResource(R.string.feature_search_action_view_results),
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-            ) {
-                Text(stringResource(R.string.feature_search_action_view_results))
-            }
+            )
         }
     }
 }

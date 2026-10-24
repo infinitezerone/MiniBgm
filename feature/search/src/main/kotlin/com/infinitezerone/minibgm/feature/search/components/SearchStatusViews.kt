@@ -12,12 +12,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
@@ -150,13 +150,13 @@ fun SearchNoResultsState(
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (selectedType != 0) {
-                Button(onClick = onResetCategory) {
-                    Text(stringResource(R.string.feature_search_action_reset_category))
-                }
+                BgmPillButton(onClick = onResetCategory, text = stringResource(R.string.feature_search_action_reset_category))
             }
-            OutlinedButton(onClick = onClearQuery) {
-                Text(stringResource(R.string.feature_search_action_clear_and_search))
-            }
+            BgmPillButton(
+                onClick = onClearQuery,
+                text = stringResource(R.string.feature_search_action_clear_and_search),
+                variant = BgmPillVariant.Outlined,
+            )
         }
     }
 }

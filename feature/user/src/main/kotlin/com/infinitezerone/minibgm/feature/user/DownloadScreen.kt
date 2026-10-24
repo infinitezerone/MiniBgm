@@ -23,7 +23,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
@@ -236,9 +237,7 @@ internal fun DownloadScreenContent(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
-                                TextButton(onClick = { selectedFilter = DownloadFilterTab.ALL }) {
-                                    Text(stringResource(R.string.feature_user_downloads_filter_reset))
-                                }
+                                BgmPillButton(onClick = { selectedFilter = DownloadFilterTab.ALL }, text = stringResource(R.string.feature_user_downloads_filter_reset), variant = BgmPillVariant.Secondary)
                             }
                         }
                     }

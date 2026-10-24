@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -51,6 +50,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
 import com.infinitezerone.minibgm.core.designsystem.component.formatScore
@@ -1057,14 +1058,10 @@ fun CharacterImagePreviewDialog(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    FilledTonalButton(
-                        onClick = {
-                            onDismiss()
-                            onViewDetail(character.id)
-                        },
-                    ) {
-                        Text(stringResource(R.string.feature_subject_view_character_detail))
-                    }
+                    BgmPillButton(onClick = {
+                        onDismiss()
+                        onViewDetail(character.id)
+                    }, text = stringResource(R.string.feature_subject_view_character_detail), variant = BgmPillVariant.Tonal)
                 }
             }
         }

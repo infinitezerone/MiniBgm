@@ -37,6 +37,8 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.user.R
@@ -296,12 +298,7 @@ private fun PersonalAccessTokenDialog(
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isLoading,
-            ) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
-            }
+            BgmPillButton(onClick = onDismiss, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), enabled = !isLoading, variant = BgmPillVariant.Secondary)
         },
     )
 }

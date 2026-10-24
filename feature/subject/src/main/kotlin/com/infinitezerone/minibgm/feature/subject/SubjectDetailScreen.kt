@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,6 +60,7 @@ import com.infinitezerone.minibgm.core.designsystem.ambient.AmbientBlurBackdrop
 import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingPageScaffold
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarChrome
@@ -585,12 +585,11 @@ fun SubjectDetailScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onErrorContainer,
                                     )
-                                    Button(
+                                    BgmPillButton(
                                         onClick = viewModel::refresh,
+                                        text = stringResource(R.string.feature_subject_reload),
                                         modifier = Modifier.padding(top = 8.dp),
-                                    ) {
-                                        Text(text = stringResource(R.string.feature_subject_reload))
-                                    }
+                                    )
                                 }
                             }
                         }

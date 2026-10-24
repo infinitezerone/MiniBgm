@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -21,7 +20,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +33,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
@@ -254,17 +254,10 @@ internal fun RuleImportDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = { onConfirm(jsonText) },
-                enabled = jsonText.isNotBlank(),
-            ) {
-                Text(stringResource(R.string.feature_user_action_import))
-            }
+            BgmPillButton(onClick = { onConfirm(jsonText) }, text = stringResource(R.string.feature_user_action_import), enabled = jsonText.isNotBlank())
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
-            }
+            BgmPillButton(onClick = onDismiss, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), variant = BgmPillVariant.Secondary)
         },
     )
 }
@@ -352,22 +345,13 @@ internal fun SiteProbeDialog(
         },
         confirmButton = {
             if (state.result != null) {
-                Button(onClick = onConfirm) {
-                    Text(stringResource(R.string.feature_user_probe_add_action))
-                }
+                BgmPillButton(onClick = onConfirm, text = stringResource(R.string.feature_user_probe_add_action))
             } else {
-                Button(
-                    onClick = onProbe,
-                    enabled = !state.isProbing && state.input.isNotBlank(),
-                ) {
-                    Text(stringResource(R.string.feature_user_probe_action))
-                }
+                BgmPillButton(onClick = onProbe, text = stringResource(R.string.feature_user_probe_action), enabled = !state.isProbing && state.input.isNotBlank())
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
-            }
+            BgmPillButton(onClick = onDismiss, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), variant = BgmPillVariant.Secondary)
         },
     )
 }
@@ -504,25 +488,13 @@ internal fun SubscriptionImportDialog(
         },
         confirmButton = {
             if (report != null) {
-                Button(
-                    onClick = onConfirm,
-                    enabled = state.selected.isNotEmpty(),
-                ) {
-                    Text(stringResource(R.string.feature_user_subscription_import_selected, state.selected.size))
-                }
+                BgmPillButton(onClick = onConfirm, text = stringResource(R.string.feature_user_subscription_import_selected, state.selected.size), enabled = state.selected.isNotEmpty())
             } else {
-                Button(
-                    onClick = onValidate,
-                    enabled = !state.isValidating && state.input.isNotBlank(),
-                ) {
-                    Text(stringResource(R.string.feature_user_subscription_check_action))
-                }
+                BgmPillButton(onClick = onValidate, text = stringResource(R.string.feature_user_subscription_check_action), enabled = !state.isValidating && state.input.isNotBlank())
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
-            }
+            BgmPillButton(onClick = onDismiss, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), variant = BgmPillVariant.Secondary)
         },
     )
 }
@@ -637,17 +609,10 @@ internal fun AddTorrentRuleDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = { onConfirm(name.trim(), urlTemplate.trim(), description.trim()) },
-                enabled = name.isNotBlank() && urlTemplate.isNotBlank(),
-            ) {
-                Text(stringResource(R.string.feature_user_probe_add_action))
-            }
+            BgmPillButton(onClick = { onConfirm(name.trim(), urlTemplate.trim(), description.trim()) }, text = stringResource(R.string.feature_user_probe_add_action), enabled = name.isNotBlank() && urlTemplate.isNotBlank())
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
-            }
+            BgmPillButton(onClick = onDismiss, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), variant = BgmPillVariant.Secondary)
         },
     )
 }

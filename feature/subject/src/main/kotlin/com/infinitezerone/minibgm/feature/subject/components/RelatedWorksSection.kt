@@ -22,7 +22,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +38,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_PORTRAIT_ASPECT_RATIO
@@ -330,12 +331,18 @@ fun RelatedWorksSection(
 
                 if (hasMoreGridWorks) {
                     val remainingCount = filteredWorks.size - gridDisplayLimit
-                    OutlinedButton(
-                        onClick = { gridDisplayLimit += 24 },
+                    BgmPillButton(
+                        onClick = {
+                            gridDisplayLimit += 24
+                        },
+                        text =
+                            stringResource(
+                                R.string.feature_subject_expand_more_works,
+                                remainingCount,
+                            ),
                         modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    ) {
-                        Text(stringResource(R.string.feature_subject_expand_more_works, remainingCount))
-                    }
+                        variant = BgmPillVariant.Outlined,
+                    )
                 }
             }
         }

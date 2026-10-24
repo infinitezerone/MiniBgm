@@ -37,7 +37,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,6 +65,8 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
@@ -616,8 +617,7 @@ private fun DirectNumberInputDialog(
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
+            BgmPillButton(onClick = {
                     val rawMinutes = inputString.toIntOrNull() ?: 0
                     val finalOffset =
                         if (isEarly) {
@@ -626,15 +626,10 @@ private fun DirectNumberInputDialog(
                             rawMinutes.coerceIn(minOffset, maxOffset)
                         }
                     onConfirm(finalOffset)
-                },
-            ) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_confirm))
-            }
+                }, text = stringResource(DesignSystemR.string.core_designsystem_action_confirm))
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(DesignSystemR.string.core_designsystem_action_cancel))
-            }
+            BgmPillButton(onClick = onDismiss, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), variant = BgmPillVariant.Secondary)
         },
     )
 }
