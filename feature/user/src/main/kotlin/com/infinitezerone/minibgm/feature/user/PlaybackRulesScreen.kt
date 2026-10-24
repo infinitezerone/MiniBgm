@@ -15,10 +15,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
@@ -42,9 +40,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillSize
-import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
@@ -168,16 +168,15 @@ fun PlaybackRulesScreen(
                 mode = BgmTopBarMode.Solid,
                 title = { Text(text = stringResource(R.string.feature_user_title_playback_rules)) },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = BgmIcons.ArrowBack,
-                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
-                        )
-                    }
+                    BgmCircleActionButton(
+                        onClick = onBackClick,
+                        icon = BgmIcons.ArrowBack,
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
+                    )
                 },
                 actions = {
                     if (uiState.subscriptionUrl.isNotBlank()) {
-                        IconButton(
+                        BgmGhostIconButton(
                             onClick = { viewModel.refreshSubscription() },
                             enabled = !uiState.isRefreshingSubscription,
                         ) {
@@ -195,13 +194,12 @@ fun PlaybackRulesScreen(
                         }
                     }
                     FeatureGate(capability = { it.isAiAssistantEnabled && onAiSourceSearch != null }) {
-                        IconButton(onClick = { viewModel.requestAiSourceSearch() }) {
-                            Icon(
-                                imageVector = BgmIcons.Assistant,
-                                contentDescription = stringResource(R.string.feature_user_cd_ai_source_search),
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
+                        BgmCircleActionButton(
+                            onClick = { viewModel.requestAiSourceSearch() },
+                            icon = BgmIcons.Assistant,
+                            contentDescription = stringResource(R.string.feature_user_cd_ai_source_search),
+                            contentColor = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 },
             )

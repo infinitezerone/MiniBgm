@@ -29,7 +29,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -52,6 +51,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -310,12 +310,11 @@ fun AssistantConfigDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = BgmIcons.Close,
-                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
-                    )
-                }
+                BgmGhostIconButton(
+                    onClick = onDismiss,
+                    icon = BgmIcons.Close,
+                    contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
+                )
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -496,17 +495,16 @@ fun AssistantConfigDialog(
                     placeholder = { Text(stringResource(R.string.feature_assistant_config_endpoint_placeholder)) },
                     trailingIcon = {
                         if (endpoint.isNotBlank()) {
-                            IconButton(onClick = {
-                                endpoint = ""
-                                selectedPresetId = "custom"
-                                availableRemoteModels = emptyList()
-                                diagnosticState = ConnectionDiagnosticState.Idle
-                            }) {
-                                Icon(
-                                    BgmIcons.Clear,
-                                    contentDescription = stringResource(R.string.feature_assistant_config_cd_clear_endpoint),
-                                )
-                            }
+                            BgmGhostIconButton(
+                                onClick = {
+                                    endpoint = ""
+                                    selectedPresetId = "custom"
+                                    availableRemoteModels = emptyList()
+                                    diagnosticState = ConnectionDiagnosticState.Idle
+                                },
+                                icon = BgmIcons.Clear,
+                                contentDescription = stringResource(R.string.feature_assistant_config_cd_clear_endpoint),
+                            )
                         }
                     },
                     singleLine = true,
@@ -533,38 +531,36 @@ fun AssistantConfigDialog(
                     visualTransformation = if (isApiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = {
-                                coroutineScope.launch {
-                                    val clipEntry = clipboard.getClipEntry()
-                                    val pasted =
-                                        clipEntry
-                                            ?.clipData
-                                            ?.getItemAt(0)
-                                            ?.text
-                                            ?.toString()
-                                            .orEmpty()
-                                            .trim()
-                                    if (pasted.isNotBlank()) {
-                                        onApiKeyUpdated(pasted)
+                            BgmGhostIconButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        val clipEntry = clipboard.getClipEntry()
+                                        val pasted =
+                                            clipEntry
+                                                ?.clipData
+                                                ?.getItemAt(0)
+                                                ?.text
+                                                ?.toString()
+                                                .orEmpty()
+                                                .trim()
+                                        if (pasted.isNotBlank()) {
+                                            onApiKeyUpdated(pasted)
+                                        }
                                     }
-                                }
-                            }) {
-                                Icon(
-                                    BgmIcons.ContentPaste,
-                                    contentDescription = stringResource(R.string.feature_assistant_config_cd_paste),
-                                )
-                            }
-                            IconButton(onClick = { isApiKeyVisible = !isApiKeyVisible }) {
-                                Icon(
-                                    imageVector = if (isApiKeyVisible) BgmIcons.VisibilityOff else BgmIcons.Visibility,
-                                    contentDescription =
-                                        if (isApiKeyVisible) {
-                                            stringResource(R.string.feature_assistant_config_cd_hide_key)
-                                        } else {
-                                            stringResource(R.string.feature_assistant_config_cd_show_key)
-                                        },
-                                )
-                            }
+                                },
+                                icon = BgmIcons.ContentPaste,
+                                contentDescription = stringResource(R.string.feature_assistant_config_cd_paste),
+                            )
+                            BgmGhostIconButton(
+                                onClick = { isApiKeyVisible = !isApiKeyVisible },
+                                icon = if (isApiKeyVisible) BgmIcons.VisibilityOff else BgmIcons.Visibility,
+                                contentDescription =
+                                    if (isApiKeyVisible) {
+                                        stringResource(R.string.feature_assistant_config_cd_hide_key)
+                                    } else {
+                                        stringResource(R.string.feature_assistant_config_cd_show_key)
+                                    },
+                            )
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),

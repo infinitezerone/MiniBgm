@@ -23,7 +23,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -52,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.data.download.TorrentIntentDispatcher
 import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourceActionCard
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourcesBottomSheet
@@ -1783,17 +1783,14 @@ fun TorrentMediaResourceCard(
 
                 // 3. 更多操作折叠菜单 (收纳：外部打开、复制磁力、保存种子文件、复制哈希)
                 Box {
-                    IconButton(
+                    BgmGhostIconButton(
                         onClick = { showMoreMenu = true },
+                        icon = BgmIcons.MoreVert,
+                        contentDescription = stringResource(R.string.feature_subject_source_torrent_more_actions),
                         modifier = Modifier.size(34.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.MoreVert,
-                            contentDescription = stringResource(R.string.feature_subject_source_torrent_more_actions),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
+                        iconSize = 18.dp,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
 
                     DropdownMenu(
                         expanded = showMoreMenu,

@@ -19,7 +19,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -38,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.PlaybackHistory
@@ -183,23 +183,21 @@ private fun PlaybackHistoryMainRow(
                 }
             }
         }
-        IconButton(onClick = { onResume(group.latest) }) {
-            Icon(
-                imageVector = BgmIcons.PlayCircle,
-                contentDescription = stringResource(R.string.feature_user_history_resume_play),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp),
-            )
-        }
+        BgmGhostIconButton(
+            onClick = { onResume(group.latest) },
+            icon = BgmIcons.PlayCircle,
+            contentDescription = stringResource(R.string.feature_user_history_resume_play),
+            tint = MaterialTheme.colorScheme.primary,
+            iconSize = 22.dp,
+        )
         Box {
-            IconButton(onClick = { menuExpanded = true }) {
-                Icon(
-                    imageVector = BgmIcons.MoreVert,
-                    contentDescription = stringResource(R.string.feature_user_history_group_more),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
+            BgmGhostIconButton(
+                onClick = { menuExpanded = true },
+                icon = BgmIcons.MoreVert,
+                contentDescription = stringResource(R.string.feature_user_history_group_more),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                iconSize = 18.dp,
+            )
             DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                 if (group.subjectId > 0L) {
                     DropdownMenuItem(
@@ -339,14 +337,13 @@ private fun HistoryEpisodeRow(
             )
         }
         HistoryTimeText(updatedAt = history.updatedAt)
-        IconButton(onClick = onDelete) {
-            Icon(
-                imageVector = BgmIcons.Delete,
-                contentDescription = stringResource(R.string.feature_user_history_cd_delete),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(16.dp),
-            )
-        }
+        BgmGhostIconButton(
+            onClick = onDelete,
+            icon = BgmIcons.Delete,
+            contentDescription = stringResource(R.string.feature_user_history_cd_delete),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            iconSize = 16.dp,
+        )
     }
 }
 

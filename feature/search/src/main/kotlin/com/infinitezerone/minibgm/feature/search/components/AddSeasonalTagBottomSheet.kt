@@ -19,7 +19,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -38,6 +37,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.R
@@ -178,14 +178,13 @@ fun AddSeasonalTagBottomSheet(
                         },
                         trailingIcon = {
                             if (inputText.isNotBlank()) {
-                                IconButton(onClick = { inputText = "" }) {
-                                    Icon(
-                                        imageVector = BgmIcons.Close,
-                                        contentDescription = stringResource(R.string.feature_search_cd_clear_search),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                }
+                                BgmGhostIconButton(
+                                    onClick = { inputText = "" },
+                                    icon = BgmIcons.Close,
+                                    contentDescription = stringResource(R.string.feature_search_cd_clear_search),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    iconSize = 16.dp,
+                                )
                             }
                         },
                         singleLine = true,

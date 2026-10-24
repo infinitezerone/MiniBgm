@@ -16,7 +16,6 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -27,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.OverlayProviderScope
 import com.infinitezerone.minibgm.core.designsystem.component.OverlayRequest
@@ -134,7 +134,7 @@ internal fun DanmakuMatchEntryButton(
     onClick: () -> Unit,
 ) {
     if (!hasCandidates) return
-    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+    BgmGhostIconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
         BadgedBox(
             badge = {
                 if (isFallback) {

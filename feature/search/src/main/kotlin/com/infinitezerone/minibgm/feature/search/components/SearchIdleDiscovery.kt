@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.R
 
@@ -115,17 +115,14 @@ fun SearchIdleView(
                                             },
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    IconButton(
+                                    BgmGhostIconButton(
                                         onClick = { onDeleteHistoryItem(historyQuery) },
+                                        icon = BgmIcons.Close,
+                                        contentDescription = stringResource(R.string.feature_search_cd_delete_history),
+                                        tint = MaterialTheme.colorScheme.outline,
                                         modifier = Modifier.size(20.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.Close,
-                                            contentDescription = stringResource(R.string.feature_search_cd_delete_history),
-                                            tint = MaterialTheme.colorScheme.outline,
-                                            modifier = Modifier.size(12.dp),
-                                        )
-                                    }
+                                        iconSize = 12.dp,
+                                    )
                                 }
                             }
                         }

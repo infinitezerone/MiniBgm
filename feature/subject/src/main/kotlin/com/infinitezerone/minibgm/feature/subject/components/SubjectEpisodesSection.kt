@@ -26,12 +26,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -45,6 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.TimeUtils
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.designsystem.theme.WishOrange
@@ -139,45 +138,37 @@ fun EpisodesSectionHeader(
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 if (onToggleSort != null) {
-                    IconButton(
+                    BgmGhostIconButton(
                         onClick = onToggleSort,
-                        modifier = Modifier.size(36.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.SwapVert,
-                            contentDescription =
-                                if (episodeSortDescending) {
-                                    stringResource(R.string.feature_subject_episodes_sort_asc)
-                                } else {
-                                    stringResource(R.string.feature_subject_episodes_sort_desc)
-                                },
-                            tint =
-                                if (episodeSortDescending) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-                }
-
-                IconButton(
-                    onClick = onToggleView,
-                    modifier = Modifier.size(36.dp),
-                ) {
-                    Icon(
-                        imageVector = if (isGridView) BgmIcons.FormatListNumbered else BgmIcons.GridView,
+                        icon = BgmIcons.SwapVert,
                         contentDescription =
-                            if (isGridView) {
-                                stringResource(R.string.feature_subject_episodes_view_list)
+                            if (episodeSortDescending) {
+                                stringResource(R.string.feature_subject_episodes_sort_asc)
                             } else {
-                                stringResource(R.string.feature_subject_episodes_view_grid)
+                                stringResource(R.string.feature_subject_episodes_sort_desc)
                             },
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
+                        iconSize = 20.dp,
+                        tint =
+                            if (episodeSortDescending) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                     )
                 }
+
+                BgmGhostIconButton(
+                    onClick = onToggleView,
+                    icon = if (isGridView) BgmIcons.FormatListNumbered else BgmIcons.GridView,
+                    contentDescription =
+                        if (isGridView) {
+                            stringResource(R.string.feature_subject_episodes_view_list)
+                        } else {
+                            stringResource(R.string.feature_subject_episodes_view_grid)
+                        },
+                    iconSize = 20.dp,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
         }
 
@@ -719,20 +710,21 @@ fun EpisodeListItem(
                         }
                     val handleAction = onPlayClick ?: onOpenSources
                     if (handleAction != null) {
-                        FilledTonalIconButton(
+                        BgmCircleActionButton(
                             onClick = handleAction,
                             modifier = Modifier.size(36.dp),
-                            colors =
+                            size = 36.dp,
+                            containerColor =
                                 if (isNextToWatch) {
-                                    IconButtonDefaults.filledTonalIconButtonColors(
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    )
+                                    MaterialTheme.colorScheme.primaryContainer
                                 } else {
-                                    IconButtonDefaults.filledTonalIconButtonColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                        contentColor = MaterialTheme.colorScheme.primary,
-                                    )
+                                    MaterialTheme.colorScheme.surfaceContainerHighest
+                                },
+                            contentColor =
+                                if (isNextToWatch) {
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.primary
                                 },
                         ) {
                             Icon(
@@ -744,20 +736,21 @@ fun EpisodeListItem(
                     }
                 }
 
-                FilledTonalIconButton(
+                BgmCircleActionButton(
                     onClick = onToggleWatched,
                     modifier = Modifier.size(36.dp),
-                    colors =
+                    size = 36.dp,
+                    containerColor =
                         if (isWatched) {
-                            IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                            )
+                            MaterialTheme.colorScheme.primary
                         } else {
-                            IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            MaterialTheme.colorScheme.surfaceContainerHighest
+                        },
+                    contentColor =
+                        if (isWatched) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
                         },
                 ) {
                     Icon(

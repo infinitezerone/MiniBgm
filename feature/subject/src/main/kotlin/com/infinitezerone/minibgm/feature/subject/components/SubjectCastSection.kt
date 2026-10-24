@@ -29,7 +29,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
 import com.infinitezerone.minibgm.core.designsystem.component.formatScore
@@ -987,16 +987,13 @@ fun CharacterImagePreviewDialog(
             color = Color.Black.copy(alpha = 0.92f),
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                IconButton(
+                BgmGhostIconButton(
                     onClick = onDismiss,
+                    icon = BgmIcons.Close,
+                    contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
                     modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Close,
-                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
-                        tint = Color.White,
-                    )
-                }
+                    tint = Color.White,
+                )
 
                 Column(
                     modifier =

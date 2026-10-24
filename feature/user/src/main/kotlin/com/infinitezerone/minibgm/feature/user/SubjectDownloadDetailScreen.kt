@@ -33,7 +33,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -58,6 +57,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
@@ -212,7 +213,7 @@ internal fun SubjectDownloadDetailContent(
                     )
                 },
                 navigationIcon = {
-                    IconButton(
+                    BgmCircleActionButton(
                         onClick = {
                             if (isBatchMode) {
                                 isBatchMode = false
@@ -221,18 +222,16 @@ internal fun SubjectDownloadDetailContent(
                                 onBackClick()
                             }
                         },
-                    ) {
-                        val navigationActionRes =
-                            if (isBatchMode) {
-                                DesignSystemR.string.core_designsystem_action_cancel
-                            } else {
-                                DesignSystemR.string.core_designsystem_action_back
-                            }
-                        Icon(
-                            imageVector = if (isBatchMode) BgmIcons.Close else BgmIcons.ArrowBack,
-                            contentDescription = stringResource(navigationActionRes),
-                        )
-                    }
+                        icon = if (isBatchMode) BgmIcons.Close else BgmIcons.ArrowBack,
+                        contentDescription =
+                            stringResource(
+                                if (isBatchMode) {
+                                    DesignSystemR.string.core_designsystem_action_cancel
+                                } else {
+                                    DesignSystemR.string.core_designsystem_action_back
+                                },
+                            ),
+                    )
                 },
                 actions = {
                     if (isBatchMode) {
@@ -254,30 +253,27 @@ internal fun SubjectDownloadDetailContent(
                         }
                     } else {
                         if (hasActive) {
-                            IconButton(onClick = onPauseAll) {
-                                Icon(
-                                    imageVector = BgmIcons.Pause,
-                                    contentDescription = stringResource(R.string.feature_user_downloads_all_pause),
-                                )
-                            }
+                            BgmCircleActionButton(
+                                onClick = onPauseAll,
+                                icon = BgmIcons.Pause,
+                                contentDescription = stringResource(R.string.feature_user_downloads_all_pause),
+                            )
                         } else if (hasResumable) {
-                            IconButton(onClick = onResumeAll) {
-                                Icon(
-                                    imageVector = BgmIcons.PlayArrow,
-                                    contentDescription = stringResource(R.string.feature_user_downloads_all_resume),
-                                )
-                            }
+                            BgmCircleActionButton(
+                                onClick = onResumeAll,
+                                icon = BgmIcons.PlayArrow,
+                                contentDescription = stringResource(R.string.feature_user_downloads_all_resume),
+                            )
                         }
 
                         if (tasks.isNotEmpty()) {
-                            IconButton(onClick = { isBatchMode = true }) {
-                                Icon(
-                                    imageVector = BgmIcons.Check,
-                                    contentDescription = stringResource(R.string.feature_user_downloads_batch_mode),
-                                )
-                            }
+                            BgmCircleActionButton(
+                                onClick = { isBatchMode = true },
+                                icon = BgmIcons.Check,
+                                contentDescription = stringResource(R.string.feature_user_downloads_batch_mode),
+                            )
 
-                            IconButton(
+                            BgmCircleActionButton(
                                 onClick = {
                                     coroutineScope.launch {
                                         val confirmed =
@@ -300,12 +296,9 @@ internal fun SubjectDownloadDetailContent(
                                         }
                                     }
                                 },
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.DeleteBorder,
-                                    contentDescription = stringResource(R.string.feature_user_action_delete),
-                                )
-                            }
+                                icon = BgmIcons.DeleteBorder,
+                                contentDescription = stringResource(R.string.feature_user_action_delete),
+                            )
                         }
                     }
                 },
@@ -862,77 +855,62 @@ internal fun EpisodeDownloadCard(
                             // 仅下载/排队/暂停/异常时提供顶行快捷动作，已完成时直接点击卡片起播
                             when {
                                 task.isFileMissing -> {
-                                    IconButton(
+                                    BgmGhostIconButton(
                                         onClick = onRedownload,
+                                        icon = BgmIcons.Refresh,
+                                        contentDescription = stringResource(R.string.feature_user_downloads_action_redownload),
                                         modifier = Modifier.size(28.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.Refresh,
-                                            contentDescription = stringResource(R.string.feature_user_downloads_action_redownload),
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
+                                        tint = MaterialTheme.colorScheme.error,
+                                        iconSize = 16.dp,
+                                    )
                                 }
 
                                 task.status == TorrentTaskStatus.DOWNLOADING ||
                                     task.status == TorrentTaskStatus.RESOLVING ||
                                     task.status == TorrentTaskStatus.QUEUED -> {
-                                    IconButton(
+                                    BgmGhostIconButton(
                                         onClick = onPause,
+                                        icon = BgmIcons.Pause,
+                                        contentDescription = stringResource(R.string.feature_user_downloads_status_paused),
                                         modifier = Modifier.size(28.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.Pause,
-                                            contentDescription = stringResource(R.string.feature_user_downloads_status_paused),
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        iconSize = 16.dp,
+                                    )
                                 }
 
                                 task.status == TorrentTaskStatus.PAUSED -> {
-                                    IconButton(
+                                    BgmGhostIconButton(
                                         onClick = onResume,
+                                        icon = BgmIcons.PlayArrow,
+                                        contentDescription = stringResource(R.string.feature_user_downloads_all_resume),
                                         modifier = Modifier.size(28.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.PlayArrow,
-                                            contentDescription = stringResource(R.string.feature_user_downloads_all_resume),
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        iconSize = 16.dp,
+                                    )
                                 }
 
                                 task.status == TorrentTaskStatus.ERROR -> {
-                                    IconButton(
+                                    BgmGhostIconButton(
                                         onClick = onResume,
+                                        icon = BgmIcons.Refresh,
+                                        contentDescription = stringResource(R.string.feature_user_downloads_action_retry),
                                         modifier = Modifier.size(28.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.Refresh,
-                                            contentDescription = stringResource(R.string.feature_user_downloads_action_retry),
-                                            tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
+                                        tint = MaterialTheme.colorScheme.error,
+                                        iconSize = 16.dp,
+                                    )
                                 }
                             }
 
                             // 更多操作 (⋮) 统一收口二级抽屉与深层动作
                             Box {
-                                IconButton(
+                                BgmGhostIconButton(
                                     onClick = { menuExpanded = true },
+                                    icon = BgmIcons.MoreVert,
+                                    contentDescription = stringResource(R.string.feature_user_downloads_action_more),
                                     modifier = Modifier.size(28.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.MoreVert,
-                                        contentDescription = stringResource(R.string.feature_user_downloads_action_more),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                }
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    iconSize = 16.dp,
+                                )
                                 DropdownMenu(
                                     expanded = menuExpanded,
                                     onDismissRequest = { menuExpanded = false },

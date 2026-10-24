@@ -24,7 +24,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -49,6 +48,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -156,13 +156,12 @@ fun DeveloperOptionsBottomSheet(
                             style = MaterialTheme.typography.labelMedium,
                         )
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = BgmIcons.Close,
-                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    BgmGhostIconButton(
+                        onClick = onDismiss,
+                        icon = BgmIcons.Close,
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
@@ -311,12 +310,14 @@ fun DeveloperOptionsBottomSheet(
                         },
                         trailingIcon = {
                             if (customMirrorInput.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    customMirrorInput = ""
-                                    onCustomMirrorPrefixChange("")
-                                }) {
-                                    Icon(imageVector = BgmIcons.Clear, contentDescription = null)
-                                }
+                                BgmGhostIconButton(
+                                    onClick = {
+                                        customMirrorInput = ""
+                                        onCustomMirrorPrefixChange("")
+                                    },
+                                    icon = BgmIcons.Clear,
+                                    contentDescription = null,
+                                )
                             }
                         },
                         singleLine = true,

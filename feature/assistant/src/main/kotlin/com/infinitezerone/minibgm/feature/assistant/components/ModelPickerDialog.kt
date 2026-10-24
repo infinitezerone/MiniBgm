@@ -25,7 +25,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -43,6 +42,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.assistant.R
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
@@ -135,7 +135,7 @@ internal fun ModelSelectorCard(
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // 原地同步远端模型按钮
-                IconButton(
+                BgmGhostIconButton(
                     onClick = onSyncRemote,
                     enabled = !isTesting,
                 ) {
@@ -247,12 +247,11 @@ internal fun ModelPickerDialog(
                     },
                     trailingIcon = {
                         if (searchQuery.isNotBlank()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(
-                                    BgmIcons.Clear,
-                                    contentDescription = stringResource(R.string.feature_assistant_model_picker_cd_clear_search),
-                                )
-                            }
+                            BgmGhostIconButton(
+                                onClick = { searchQuery = "" },
+                                icon = BgmIcons.Clear,
+                                contentDescription = stringResource(R.string.feature_assistant_model_picker_cd_clear_search),
+                            )
                         }
                     },
                     singleLine = true,

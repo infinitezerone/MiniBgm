@@ -28,7 +28,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
@@ -54,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.common.TimeUtils
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
@@ -180,42 +180,40 @@ internal fun SessionSwitcherSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    IconButton(onClick = {
-                        coroutineScope.launch {
-                            val newTitle = overlayHostState.await(RenameSessionRequest(session.title))
-                            if (!newTitle.isNullOrBlank()) {
-                                onRename(session.id, newTitle)
+                    BgmGhostIconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                val newTitle = overlayHostState.await(RenameSessionRequest(session.title))
+                                if (!newTitle.isNullOrBlank()) {
+                                    onRename(session.id, newTitle)
+                                }
                             }
-                        }
-                    }) {
-                        Icon(
-                            imageVector = BgmIcons.EditBorder,
-                            contentDescription = renameSessionCd,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    IconButton(onClick = {
-                        coroutineScope.launch {
-                            val confirmed =
-                                overlayHostState.await(
-                                    ConfirmDialogAction(
-                                        title = deleteSessionTitle,
-                                        message = deleteSessionMessage,
-                                        confirmText = deleteSessionConfirmText,
-                                        isDestructive = true,
-                                    ),
-                                )
-                            if (confirmed) {
-                                onDelete(session.id)
+                        },
+                        icon = BgmIcons.EditBorder,
+                        contentDescription = renameSessionCd,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    BgmGhostIconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                val confirmed =
+                                    overlayHostState.await(
+                                        ConfirmDialogAction(
+                                            title = deleteSessionTitle,
+                                            message = deleteSessionMessage,
+                                            confirmText = deleteSessionConfirmText,
+                                            isDestructive = true,
+                                        ),
+                                    )
+                                if (confirmed) {
+                                    onDelete(session.id)
+                                }
                             }
-                        }
-                    }) {
-                        Icon(
-                            imageVector = BgmIcons.DeleteBorder,
-                            contentDescription = deleteSessionCd,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                        },
+                        icon = BgmIcons.DeleteBorder,
+                        contentDescription = deleteSessionCd,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -464,7 +462,7 @@ internal fun ChatMessageItem(
                 val clipboard = LocalClipboard.current
                 val coroutineScope = rememberCoroutineScope()
                 var copied by remember { mutableStateOf(false) }
-                IconButton(
+                BgmGhostIconButton(
                     onClick = {
                         val textToCopy = parsedContent.mainContent.ifBlank { message.content }
                         coroutineScope.launch {
@@ -473,20 +471,17 @@ internal fun ChatMessageItem(
                         }
                         copied = true
                     },
+                    icon = if (copied) BgmIcons.Check else BgmIcons.ContentCopy,
+                    contentDescription = stringResource(R.string.feature_assistant_cd_copy_answer),
+                    tint =
+                        if (copied) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        },
                     modifier = Modifier.size(28.dp),
-                ) {
-                    Icon(
-                        imageVector = if (copied) BgmIcons.Check else BgmIcons.ContentCopy,
-                        contentDescription = stringResource(R.string.feature_assistant_cd_copy_answer),
-                        tint =
-                            if (copied) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            },
-                        modifier = Modifier.size(15.dp),
-                    )
-                }
+                    iconSize = 15.dp,
+                )
             }
             if (showRetry) {
                 TextButton(

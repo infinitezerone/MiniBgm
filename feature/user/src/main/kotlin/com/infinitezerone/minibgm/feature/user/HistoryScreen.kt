@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
@@ -29,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
@@ -176,21 +176,19 @@ private fun HistoryContent(
                 mode = BgmTopBarMode.Solid,
                 title = { Text(text = stringResource(R.string.feature_user_history_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = BgmIcons.ArrowBack,
-                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
-                        )
-                    }
+                    BgmCircleActionButton(
+                        onClick = onBackClick,
+                        icon = BgmIcons.ArrowBack,
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
+                    )
                 },
                 actions = {
                     if (uiState.history.isNotEmpty()) {
-                        IconButton(onClick = onClearAll) {
-                            Icon(
-                                imageVector = BgmIcons.CleaningServices,
-                                contentDescription = stringResource(R.string.feature_user_history_clear_all_action),
-                            )
-                        }
+                        BgmCircleActionButton(
+                            onClick = onClearAll,
+                            icon = BgmIcons.CleaningServices,
+                            contentDescription = stringResource(R.string.feature_user_history_clear_all_action),
+                        )
                     }
                 },
             )

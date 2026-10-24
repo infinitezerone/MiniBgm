@@ -21,7 +21,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,6 +37,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
@@ -280,17 +280,13 @@ internal fun VideoTaskDetailBottomSheet(
                             fontWeight = FontWeight.Normal,
                             modifier = Modifier.weight(1f),
                         )
-                        IconButton(
+                        BgmGhostIconButton(
                             onClick = { copyToClipboard(task.title) },
-                            modifier = Modifier.size(32.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.ContentCopy,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
+                            icon = BgmIcons.ContentCopy,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            iconSize = 16.dp,
+                        )
                     }
                 }
             }
@@ -576,17 +572,13 @@ private fun DetailInfoRow(
         }
         if (onCopy != null) {
             Spacer(modifier = Modifier.width(8.dp))
-            IconButton(
+            BgmGhostIconButton(
                 onClick = onCopy,
-                modifier = Modifier.size(28.dp),
-            ) {
-                Icon(
-                    imageVector = BgmIcons.ContentCopy,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(15.dp),
-                )
-            }
+                icon = BgmIcons.ContentCopy,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                iconSize = 15.dp,
+            )
         }
     }
 }

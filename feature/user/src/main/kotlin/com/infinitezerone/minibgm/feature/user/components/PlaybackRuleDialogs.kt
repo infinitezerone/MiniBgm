@@ -16,7 +16,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -36,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
@@ -197,29 +197,21 @@ internal fun PlaybackRuleCard(
                         modifier = Modifier.weight(1f),
                     )
                     if (onCopyUrl != null) {
-                        IconButton(
+                        BgmGhostIconButton(
                             onClick = { onCopyUrl(rule.urlTemplate) },
-                            modifier = Modifier.size(24.dp),
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.ContentCopy,
-                                contentDescription = stringResource(R.string.feature_user_rule_copy_url_action),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(14.dp),
-                            )
-                        }
-                    }
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(24.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.Delete,
-                            contentDescription = stringResource(R.string.feature_user_action_delete),
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(14.dp),
+                            icon = BgmIcons.ContentCopy,
+                            contentDescription = stringResource(R.string.feature_user_rule_copy_url_action),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            iconSize = 14.dp,
                         )
                     }
+                    BgmGhostIconButton(
+                        onClick = onDelete,
+                        icon = BgmIcons.Delete,
+                        contentDescription = stringResource(R.string.feature_user_action_delete),
+                        tint = MaterialTheme.colorScheme.error,
+                        iconSize = 14.dp,
+                    )
                 }
             }
         }
@@ -418,18 +410,15 @@ internal fun SubscriptionImportDialog(
                     },
                     trailingIcon = {
                         if (state.input.isNotBlank()) {
-                            IconButton(
+                            BgmGhostIconButton(
                                 onClick = { onInputChanged("") },
+                                icon = BgmIcons.Close,
+                                contentDescription = stringResource(R.string.feature_user_action_clear),
                                 enabled = !state.isValidating,
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Close,
-                                    contentDescription = stringResource(R.string.feature_user_action_clear),
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
+                                iconSize = 20.dp,
+                            )
                         } else {
-                            IconButton(
+                            BgmGhostIconButton(
                                 onClick = {
                                     coroutineScope.launch {
                                         runCatching {
@@ -448,14 +437,11 @@ internal fun SubscriptionImportDialog(
                                         }
                                     }
                                 },
+                                icon = BgmIcons.ContentPaste,
+                                contentDescription = stringResource(R.string.feature_user_action_paste),
                                 enabled = !state.isValidating,
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.ContentPaste,
-                                    contentDescription = stringResource(R.string.feature_user_action_paste),
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
+                                iconSize = 20.dp,
+                            )
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),

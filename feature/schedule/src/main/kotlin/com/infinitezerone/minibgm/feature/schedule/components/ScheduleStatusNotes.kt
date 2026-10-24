@@ -13,8 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -24,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.schedule.R
@@ -94,14 +93,14 @@ fun OfflineCacheBanner(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer,
             )
-            IconButton(onClick = onRetry, modifier = Modifier.size(24.dp)) {
-                Icon(
-                    imageVector = BgmIcons.Refresh,
-                    contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_retry),
-                    tint = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
+            BgmGhostIconButton(
+                onClick = onRetry,
+                icon = BgmIcons.Refresh,
+                contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_retry),
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(24.dp),
+                iconSize = 16.dp,
+            )
         }
     }
 }

@@ -22,7 +22,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.R
@@ -113,29 +114,24 @@ fun SearchTopHeader(
                     enter = fadeIn(),
                     exit = fadeOut(),
                 ) {
-                    IconButton(
+                    BgmGhostIconButton(
                         onClick = onClear,
+                        icon = BgmIcons.Clear,
+                        contentDescription = stringResource(R.string.feature_search_cd_clear_input),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(24.dp),
-                    ) {
-                        Icon(
-                            imageVector = BgmIcons.Clear,
-                            contentDescription = stringResource(R.string.feature_search_cd_clear_input),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(15.dp),
-                        )
-                    }
+                        iconSize = 15.dp,
+                    )
                 }
             }
         },
         navigationIcon = {
             if (onBackClick != null) {
-                IconButton(onClick = onBackClick) {
-                    Icon(
-                        imageVector = BgmIcons.ArrowBack,
-                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
+                BgmCircleActionButton(
+                    onClick = onBackClick,
+                    icon = BgmIcons.ArrowBack,
+                    contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
+                )
             }
         },
         actions = {

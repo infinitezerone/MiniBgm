@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -27,6 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.search.R
@@ -156,29 +156,26 @@ fun SeasonalFilterBar(
             }
 
             // 3. 视图形态切换（紧凑列表 ↔ 海报网格）
-            IconButton(
+            BgmGhostIconButton(
                 onClick = onToggleViewMode,
-                modifier = Modifier.size(36.dp),
-            ) {
-                Icon(
-                    imageVector =
+                icon =
+                    if (uiState.viewMode == SeasonalViewMode.LIST) {
+                        BgmIcons.GridView
+                    } else {
+                        BgmIcons.ViewList
+                    },
+                contentDescription =
+                    stringResource(
                         if (uiState.viewMode == SeasonalViewMode.LIST) {
-                            BgmIcons.GridView
+                            R.string.feature_search_cd_switch_to_grid
                         } else {
-                            BgmIcons.ViewList
+                            R.string.feature_search_cd_switch_to_compact_list
                         },
-                    contentDescription =
-                        stringResource(
-                            if (uiState.viewMode == SeasonalViewMode.LIST) {
-                                R.string.feature_search_cd_switch_to_grid
-                            } else {
-                                R.string.feature_search_cd_switch_to_compact_list
-                            },
-                        ),
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(19.dp),
-                )
-            }
+                    ),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(36.dp),
+                iconSize = 19.dp,
+            )
         }
     }
 

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,8 +27,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -155,20 +152,18 @@ fun TopicDetailScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = BgmIcons.ArrowBack,
-                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
-                        )
-                    }
+                    BgmCircleActionButton(
+                        onClick = onBackClick,
+                        icon = BgmIcons.ArrowBack,
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
+                    )
                 },
                 actions = {
-                    IconButton(onClick = { context.launchWebUrl(topicWebUrl) }) {
-                        Icon(
-                            imageVector = BgmIcons.OpenInBrowser,
-                            contentDescription = stringResource(R.string.feature_subject_action_open_in_browser),
-                        )
-                    }
+                    BgmCircleActionButton(
+                        onClick = { context.launchWebUrl(topicWebUrl) },
+                        icon = BgmIcons.OpenInBrowser,
+                        contentDescription = stringResource(R.string.feature_subject_action_open_in_browser),
+                    )
                 },
                 colors =
                     TopAppBarDefaults.topAppBarColors(

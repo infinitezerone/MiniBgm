@@ -19,7 +19,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -38,6 +37,7 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.user.R
 import kotlinx.coroutines.launch
@@ -236,7 +236,7 @@ private fun PersonalAccessTokenDialog(
                         }
                     },
                     trailingIcon = {
-                        IconButton(
+                        BgmGhostIconButton(
                             onClick = {
                                 coroutineScope.launch {
                                     val clipEntry = clipboard.getClipEntry()
@@ -254,13 +254,10 @@ private fun PersonalAccessTokenDialog(
                                     }
                                 }
                             },
+                            icon = BgmIcons.ContentPaste,
+                            contentDescription = stringResource(R.string.feature_user_action_paste),
                             enabled = !isLoading,
-                        ) {
-                            Icon(
-                                imageVector = BgmIcons.ContentPaste,
-                                contentDescription = stringResource(R.string.feature_user_action_paste),
-                            )
-                        }
+                        )
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )

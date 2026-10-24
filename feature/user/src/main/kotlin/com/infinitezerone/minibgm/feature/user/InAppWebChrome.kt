@@ -23,8 +23,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -41,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
@@ -135,71 +134,53 @@ internal fun InAppWebScaffold(
                     },
                     navigationIcon = {
                         if (canGoBack && onNavigateBack != null) {
-                            IconButton(
+                            BgmCircleActionButton(
                                 onClick = onNavigateBack,
+                                icon = BgmIcons.ArrowBack,
+                                contentDescription = stringResource(R.string.feature_user_web_cd_back_prev),
                                 enabled = closeEnabled,
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.ArrowBack,
-                                    contentDescription = stringResource(R.string.feature_user_web_cd_back_prev),
-                                )
-                            }
+                            )
                         } else {
-                            IconButton(
+                            BgmCircleActionButton(
                                 onClick = onClose,
+                                icon = BgmIcons.Close,
+                                contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
                                 enabled = closeEnabled,
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Close,
-                                    contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
-                                )
-                            }
+                            )
                         }
                     },
                     actions = {
                         if (canGoBack && onNavigateBack != null) {
-                            IconButton(
+                            BgmCircleActionButton(
                                 onClick = onClose,
+                                icon = BgmIcons.Close,
+                                contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
                                 enabled = closeEnabled,
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Close,
-                                    contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
-                                )
-                            }
+                            )
                         }
                         if (onReload != null) {
-                            IconButton(
+                            BgmCircleActionButton(
                                 onClick = onReload,
+                                icon = BgmIcons.Refresh,
+                                contentDescription = stringResource(R.string.feature_user_web_cd_reload),
                                 enabled = closeEnabled,
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.Refresh,
-                                    contentDescription = stringResource(R.string.feature_user_web_cd_reload),
-                                )
-                            }
+                            )
                         }
                         if (onCopyUrl != null) {
-                            IconButton(
+                            BgmCircleActionButton(
                                 onClick = onCopyUrl,
+                                icon = BgmIcons.ContentCopy,
+                                contentDescription = stringResource(R.string.feature_user_web_cd_copy_link),
                                 enabled = closeEnabled,
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.ContentCopy,
-                                    contentDescription = stringResource(R.string.feature_user_web_cd_copy_link),
-                                )
-                            }
+                            )
                         }
                         if (onOpenInBrowser != null) {
-                            IconButton(
+                            BgmCircleActionButton(
                                 onClick = onOpenInBrowser,
+                                icon = BgmIcons.OpenInNew,
+                                contentDescription = stringResource(R.string.feature_user_web_open_in_system_browser),
                                 enabled = closeEnabled,
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.OpenInNew,
-                                    contentDescription = stringResource(R.string.feature_user_web_open_in_system_browser),
-                                )
-                            }
+                            )
                         }
                     },
                     colors =

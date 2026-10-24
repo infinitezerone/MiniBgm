@@ -9,8 +9,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -26,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
@@ -110,17 +109,16 @@ internal fun DanmakuSettingsDialog(
                     singleLine = true,
                     visualTransformation = if (isSecretVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
-                        IconButton(onClick = { isSecretVisible = !isSecretVisible }) {
-                            Icon(
-                                imageVector = if (isSecretVisible) BgmIcons.VisibilityOff else BgmIcons.Visibility,
-                                contentDescription =
-                                    if (isSecretVisible) {
-                                        stringResource(R.string.feature_user_danmaku_appsecret_hide)
-                                    } else {
-                                        stringResource(R.string.feature_user_danmaku_appsecret_show)
-                                    },
-                            )
-                        }
+                        BgmGhostIconButton(
+                            onClick = { isSecretVisible = !isSecretVisible },
+                            icon = if (isSecretVisible) BgmIcons.VisibilityOff else BgmIcons.Visibility,
+                            contentDescription =
+                                if (isSecretVisible) {
+                                    stringResource(R.string.feature_user_danmaku_appsecret_hide)
+                                } else {
+                                    stringResource(R.string.feature_user_danmaku_appsecret_show)
+                                },
+                        )
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )

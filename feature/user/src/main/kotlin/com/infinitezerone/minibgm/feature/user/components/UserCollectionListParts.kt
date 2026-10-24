@@ -22,9 +22,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
@@ -42,6 +40,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
@@ -432,30 +432,27 @@ internal fun UserCollectionCard(
                     ) {
                         val isAnimeOrReal = collection.subjectType == 2 || collection.subjectType == 6
                         if (!isFinished && isAnimeOrReal && onToggleBinge != null) {
-                            IconButton(
+                            BgmGhostIconButton(
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onToggleBinge()
                                 },
+                                icon = if (isBinge) BgmIcons.Inventory else BgmIcons.InventoryBorder,
+                                contentDescription =
+                                    if (isBinge) {
+                                        stringResource(R.string.feature_user_binge_cd_remove)
+                                    } else {
+                                        stringResource(R.string.feature_user_binge_cd_add)
+                                    },
                                 modifier = Modifier.size(30.dp),
-                            ) {
-                                Icon(
-                                    imageVector = if (isBinge) BgmIcons.Inventory else BgmIcons.InventoryBorder,
-                                    contentDescription =
-                                        if (isBinge) {
-                                            stringResource(R.string.feature_user_binge_cd_remove)
-                                        } else {
-                                            stringResource(R.string.feature_user_binge_cd_add)
-                                        },
-                                    tint =
-                                        if (isBinge) {
-                                            MaterialTheme.colorScheme.tertiary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            }
+                                tint =
+                                    if (isBinge) {
+                                        MaterialTheme.colorScheme.tertiary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                iconSize = 18.dp,
+                            )
                         }
 
                         if (onPlayClick != null && isAnimeOrReal) {
@@ -489,10 +486,13 @@ internal fun UserCollectionCard(
                         }
 
                         if (canIncrement || isUpdating) {
-                            FilledTonalIconButton(
+                            BgmCircleActionButton(
                                 onClick = onIncrementProgress,
                                 enabled = !isUpdating && canIncrement,
                                 modifier = Modifier.size(30.dp),
+                                size = 30.dp,
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                             ) {
                                 if (isUpdating) {
                                     CircularProgressIndicator(

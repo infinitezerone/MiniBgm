@@ -33,7 +33,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -67,6 +66,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -217,20 +217,17 @@ fun AiringTimingBottomSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                IconButton(
+                BgmGhostIconButton(
                     onClick = {
                         if (selectedOffset > minOffsetMinutes) {
                             selectedOffset--
                         }
                     },
+                    icon = BgmIcons.Remove,
+                    contentDescription = stringResource(R.string.feature_user_timing_cd_minus),
                     enabled = selectedOffset > minOffsetMinutes,
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Remove,
-                        contentDescription = stringResource(R.string.feature_user_timing_cd_minus),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
+                    tint = MaterialTheme.colorScheme.primary,
+                )
 
                 Text(
                     text = stringResource(R.string.feature_user_timing_fine_tune),
@@ -238,20 +235,17 @@ fun AiringTimingBottomSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-                IconButton(
+                BgmGhostIconButton(
                     onClick = {
                         if (selectedOffset < maxOffsetMinutes) {
                             selectedOffset++
                         }
                     },
+                    icon = BgmIcons.Add,
+                    contentDescription = stringResource(R.string.feature_user_timing_cd_plus),
                     enabled = selectedOffset < maxOffsetMinutes,
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Add,
-                        contentDescription = stringResource(R.string.feature_user_timing_cd_plus),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
 
             // 6. 确认应用按钮
@@ -363,14 +357,13 @@ private fun TimingHeroCard(
                 )
             }
 
-            IconButton(onClick = onEditClick) {
-                Icon(
-                    imageVector = BgmIcons.Edit,
-                    contentDescription = stringResource(R.string.feature_user_timing_cd_manual_input),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
+            BgmGhostIconButton(
+                onClick = onEditClick,
+                icon = BgmIcons.Edit,
+                contentDescription = stringResource(R.string.feature_user_timing_cd_manual_input),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                iconSize = 18.dp,
+            )
         }
     }
 }

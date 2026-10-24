@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
@@ -50,6 +51,46 @@ fun BgmCircleActionButton(
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     border: BorderStroke? = null,
     hasDiffuseShadow: Boolean = true,
+) {
+    BgmCircleActionButton(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+        size = size,
+        containerColor = containerColor,
+        contentColor = contentColor,
+        border = border,
+        hasDiffuseShadow = hasDiffuseShadow,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(iconSize),
+            tint = if (enabled) contentColor else contentColor.copy(alpha = 0.38f),
+        )
+    }
+}
+
+/**
+ * 自定义内容槽变体：用于加载中转圈、角标徽标（BadgedBox）等非单一图标的圆盘内容。
+ * 视觉圆盘、水生阴影与靶区行为与图标版完全一致。
+ */
+@Composable
+fun BgmCircleActionButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    size: Dp = 40.dp,
+    containerColor: Color =
+        if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    border: BorderStroke? = null,
+    hasDiffuseShadow: Boolean = true,
+    content: @Composable BoxScope.() -> Unit,
 ) {
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val interactionSource = remember { MutableInteractionSource() }
@@ -102,13 +143,7 @@ fun BgmCircleActionButton(
                         },
                     ).clip(CircleShape),
             contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(iconSize),
-                tint = if (enabled) contentColor else contentColor.copy(alpha = 0.38f),
-            )
-        }
+            content = content,
+        )
     }
 }

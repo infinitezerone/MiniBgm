@@ -22,8 +22,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -41,6 +39,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.core.navigation.PlayerQueueEntry
@@ -142,13 +141,12 @@ internal fun PlayerEpisodeQueueDrawer(
                 Spacer(modifier = Modifier.width(4.dp))
                 Switch(checked = autoNextEnabled, onCheckedChange = { onToggleAutoNext() })
                 Spacer(modifier = Modifier.width(4.dp))
-                IconButton(onClick = onClose) {
-                    Icon(
-                        imageVector = BgmIcons.Close,
-                        contentDescription = stringResource(R.string.feature_subject_player_close_drawer),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                BgmGhostIconButton(
+                    onClick = onClose,
+                    icon = BgmIcons.Close,
+                    contentDescription = stringResource(R.string.feature_subject_player_close_drawer),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             // 分集分段 Tab（长篇动画）

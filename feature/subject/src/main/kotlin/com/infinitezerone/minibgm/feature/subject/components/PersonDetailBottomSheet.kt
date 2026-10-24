@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.component.CoverPlaceholder
@@ -112,17 +112,13 @@ fun PersonDetailBottomSheet(
                     )
                 }
 
-                IconButton(
+                BgmGhostIconButton(
                     onClick = onDismiss,
-                    modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Close,
-                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
+                    icon = BgmIcons.Close,
+                    contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
+                    iconSize = 18.dp,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             // 2. 主体形象与现代胶囊元数据（Hero Section）

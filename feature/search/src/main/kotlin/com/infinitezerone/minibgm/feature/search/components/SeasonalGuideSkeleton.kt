@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
@@ -301,29 +301,26 @@ fun SeasonalGuideTriStateFilterChip(
                 color = labelColor,
             )
             if (onToggleFavorite != null) {
-                IconButton(
+                BgmGhostIconButton(
                     onClick = onToggleFavorite,
-                    modifier = Modifier.size(24.dp),
-                ) {
-                    Icon(
-                        imageVector = if (isFavorite) BgmIcons.Star else BgmIcons.StarBorder,
-                        contentDescription =
-                            stringResource(
-                                if (isFavorite) {
-                                    R.string.feature_search_cd_remove_favorite
-                                } else {
-                                    R.string.feature_search_cd_add_favorite
-                                },
-                            ),
-                        tint =
+                    icon = if (isFavorite) BgmIcons.Star else BgmIcons.StarBorder,
+                    contentDescription =
+                        stringResource(
                             if (isFavorite) {
-                                MaterialTheme.colorScheme.primary
+                                R.string.feature_search_cd_remove_favorite
                             } else {
-                                labelColor.copy(alpha = 0.5f)
+                                R.string.feature_search_cd_add_favorite
                             },
-                        modifier = Modifier.size(15.dp),
-                    )
-                }
+                        ),
+                    tint =
+                        if (isFavorite) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            labelColor.copy(alpha = 0.5f)
+                        },
+                    modifier = Modifier.size(24.dp),
+                    iconSize = 15.dp,
+                )
             }
         }
     }

@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -50,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.DanmakuMatch
 import com.infinitezerone.minibgm.core.model.DanmakuMatchState
@@ -153,22 +153,19 @@ internal fun PlayerControlsOverlay(
                         .displayCutoutPadding()
                         .padding(start = 20.dp),
             ) {
-                IconButton(
+                BgmGhostIconButton(
                     onClick = onToggleLock,
+                    icon = if (isLocked) BgmIcons.Lock else BgmIcons.LockOpen,
+                    contentDescription =
+                        if (isLocked) {
+                            stringResource(R.string.feature_subject_player_unlock_screen)
+                        } else {
+                            stringResource(R.string.feature_subject_player_lock_screen)
+                        },
                     modifier = Modifier.size(44.dp),
-                ) {
-                    Icon(
-                        imageVector = if (isLocked) BgmIcons.Lock else BgmIcons.LockOpen,
-                        contentDescription =
-                            if (isLocked) {
-                                stringResource(R.string.feature_subject_player_unlock_screen)
-                            } else {
-                                stringResource(R.string.feature_subject_player_lock_screen)
-                            },
-                        tint = if (isLocked) MaterialTheme.colorScheme.primary else Color.White,
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
+                    iconSize = 22.dp,
+                    tint = if (isLocked) MaterialTheme.colorScheme.primary else Color.White,
+                )
             }
         }
 
@@ -204,13 +201,12 @@ internal fun PlayerControlsOverlay(
             modifier = topBarModifier,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBackClick) {
-                Icon(
-                    imageVector = BgmIcons.ArrowBack,
-                    contentDescription = stringResource(R.string.feature_subject_cd_back),
-                    tint = Color.White,
-                )
-            }
+            BgmGhostIconButton(
+                onClick = onBackClick,
+                icon = BgmIcons.ArrowBack,
+                contentDescription = stringResource(R.string.feature_subject_cd_back),
+                tint = Color.White,
+            )
             Spacer(modifier = Modifier.width(4.dp))
             Column(modifier = Modifier.weight(1f)) {
                 val title = if (episodeName.isNotBlank()) "$epLabel · $episodeName" else epLabel.ifBlank { subjectName }
@@ -241,22 +237,20 @@ internal fun PlayerControlsOverlay(
             // 顶部操作栏右侧（横竖屏一致）：画中画在左、"更多"固定右上角最右——
             // 汇聚清晰度/音画字幕/倍速/比例/弹幕/循环（对齐 B 站/YouTube 的右上角"更多"位）
             if (showPipButton) {
-                IconButton(onClick = onEnterPip) {
-                    Icon(
-                        imageVector = BgmIcons.PictureInPicture,
-                        contentDescription = stringResource(R.string.feature_subject_player_pip),
-                        tint = Color.White,
-                    )
-                }
-            }
-
-            IconButton(onClick = onOpenTrackSelection) {
-                Icon(
-                    imageVector = BgmIcons.MoreVert,
-                    contentDescription = stringResource(R.string.feature_subject_player_settings),
+                BgmGhostIconButton(
+                    onClick = onEnterPip,
+                    icon = BgmIcons.PictureInPicture,
+                    contentDescription = stringResource(R.string.feature_subject_player_pip),
                     tint = Color.White,
                 )
             }
+
+            BgmGhostIconButton(
+                onClick = onOpenTrackSelection,
+                icon = BgmIcons.MoreVert,
+                contentDescription = stringResource(R.string.feature_subject_player_settings),
+                tint = Color.White,
+            )
         }
 
         // 底部控制栏：对齐 B站/腾讯视频现代单行内嵌布局（播放键 + 时间 + 进度条 + 全屏/扩展按键）
@@ -329,43 +323,37 @@ internal fun PlayerControlsOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // 播放/暂停
-                        IconButton(
+                        val isPlaybackActive = isPlaying || isBuffering
+                        val playPauseIcon =
+                            when {
+                                isEnded -> BgmIcons.Replay
+                                isPlaybackActive -> BgmIcons.Pause
+                                else -> BgmIcons.Play
+                            }
+                        BgmGhostIconButton(
                             onClick = onPlayPauseToggle,
+                            icon = playPauseIcon,
+                            contentDescription =
+                                if (isPlaybackActive) {
+                                    stringResource(R.string.feature_subject_player_pause)
+                                } else {
+                                    stringResource(R.string.feature_subject_player_play)
+                                },
                             modifier = Modifier.size(40.dp),
-                        ) {
-                            val isPlaybackActive = isPlaying || isBuffering
-                            val icon =
-                                when {
-                                    isEnded -> BgmIcons.Replay
-                                    isPlaybackActive -> BgmIcons.Pause
-                                    else -> BgmIcons.Play
-                                }
-                            Icon(
-                                imageVector = icon,
-                                contentDescription =
-                                    if (isPlaybackActive) {
-                                        stringResource(R.string.feature_subject_player_pause)
-                                    } else {
-                                        stringResource(R.string.feature_subject_player_play)
-                                    },
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp),
-                            )
-                        }
+                            iconSize = 24.dp,
+                            tint = Color.White,
+                        )
 
                         // 下一集按键（仅当有下一集且传入了回调时）
                         if (hasNextEpisode && onPlayNextEpisode != null) {
-                            IconButton(
+                            BgmGhostIconButton(
                                 onClick = onPlayNextEpisode,
+                                icon = BgmIcons.SkipNext,
+                                contentDescription = stringResource(R.string.feature_subject_ep_next),
                                 modifier = Modifier.size(40.dp),
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.SkipNext,
-                                    contentDescription = stringResource(R.string.feature_subject_ep_next),
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp),
-                                )
-                            }
+                                iconSize = 24.dp,
+                                tint = Color.White,
+                            )
                         }
 
                         Spacer(modifier = Modifier.width(4.dp))
@@ -460,29 +448,26 @@ internal fun PlayerControlsOverlay(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // 1. 左下角播放/暂停键：缓冲中只要处于意图播放态即显示暂停，允许用户打断缓冲
-                    IconButton(
+                    val isPlaybackActive = isPlaying || isBuffering
+                    val playPauseIcon =
+                        when {
+                            isEnded -> BgmIcons.Replay
+                            isPlaybackActive -> BgmIcons.Pause
+                            else -> BgmIcons.Play
+                        }
+                    BgmGhostIconButton(
                         onClick = onPlayPauseToggle,
+                        icon = playPauseIcon,
+                        contentDescription =
+                            if (isPlaybackActive) {
+                                stringResource(R.string.feature_subject_player_pause)
+                            } else {
+                                stringResource(R.string.feature_subject_player_play)
+                            },
                         modifier = Modifier.size(40.dp),
-                    ) {
-                        val isPlaybackActive = isPlaying || isBuffering
-                        val icon =
-                            when {
-                                isEnded -> BgmIcons.Replay
-                                isPlaybackActive -> BgmIcons.Pause
-                                else -> BgmIcons.Play
-                            }
-                        Icon(
-                            imageVector = icon,
-                            contentDescription =
-                                if (isPlaybackActive) {
-                                    stringResource(R.string.feature_subject_player_pause)
-                                } else {
-                                    stringResource(R.string.feature_subject_player_play)
-                                },
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
+                        iconSize = 24.dp,
+                        tint = Color.White,
+                    )
 
                     Spacer(modifier = Modifier.width(4.dp))
 
@@ -589,14 +574,14 @@ private fun ControlsBarIconButton(
     onClick: () -> Unit,
     tint: Color = Color.White,
 ) {
-    IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = tint,
-            modifier = Modifier.size(22.dp),
-        )
-    }
+    BgmGhostIconButton(
+        onClick = onClick,
+        icon = icon,
+        contentDescription = contentDescription,
+        modifier = Modifier.size(40.dp),
+        iconSize = 22.dp,
+        tint = tint,
+    )
 }
 
 /**
@@ -712,20 +697,17 @@ private fun BoxScope.PlayerErrorState(
     onRequestOpenSources: (() -> Unit)?,
     onOpenSourcesPanel: (() -> Unit)? = null,
 ) {
-    IconButton(
+    BgmGhostIconButton(
         onClick = onBackClick,
+        icon = BgmIcons.ArrowBack,
+        contentDescription = stringResource(R.string.feature_subject_cd_back),
         modifier =
             Modifier
                 .align(Alignment.TopStart)
                 .displayCutoutPadding()
                 .padding(if (isLandscape) 16.dp else 4.dp),
-    ) {
-        Icon(
-            imageVector = BgmIcons.ArrowBack,
-            contentDescription = stringResource(R.string.feature_subject_cd_back),
-            tint = Color.White,
-        )
-    }
+        tint = Color.White,
+    )
 
     Column(
         modifier = Modifier.align(Alignment.Center).padding(horizontal = 24.dp),

@@ -20,7 +20,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -37,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -233,13 +233,12 @@ private fun AccountItemRow(
                     modifier = Modifier.size(24.dp),
                 )
             } else {
-                IconButton(onClick = onLogoutClick) {
-                    Icon(
-                        imageVector = BgmIcons.Delete,
-                        contentDescription = stringResource(R.string.feature_user_logout_account_action),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                }
+                BgmGhostIconButton(
+                    onClick = onLogoutClick,
+                    icon = BgmIcons.Delete,
+                    contentDescription = stringResource(R.string.feature_user_logout_account_action),
+                    tint = MaterialTheme.colorScheme.error,
+                )
             }
         }
     }

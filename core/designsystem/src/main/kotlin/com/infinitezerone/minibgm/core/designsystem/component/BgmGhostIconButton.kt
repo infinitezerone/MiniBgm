@@ -3,6 +3,7 @@ package com.infinitezerone.minibgm.core.designsystem.component
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,10 +37,35 @@ fun BgmGhostIconButton(
     iconSize: Dp = 22.dp,
     tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
+    BgmGhostIconButton(
+        onClick = onClick,
+        modifier = modifier,
+        enabled = enabled,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(iconSize),
+            tint = if (enabled) tint else tint.copy(alpha = 0.38f),
+        )
+    }
+}
+
+/**
+ * 自定义内容槽变体：用于加载中转圈、角标徽标（BadgedBox）等非单一图标的幽灵键内容。
+ * 靶区与按压反馈行为与图标版完全一致。
+ */
+@Composable
+fun BgmGhostIconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable BoxScope.() -> Unit,
+) {
     val interactionSource = remember { MutableInteractionSource() }
 
-    // 触控靶区节点持有 clickable（与视觉图标共享 interactionSource），
-    // 图标居中其上，按压水生微缩事件由同一 interactionSource 驱动。
+    // 触控靶区节点持有 clickable（与内容共享 interactionSource），
+    // 内容居中其上，按压水生微缩事件由同一 interactionSource 驱动。
     Box(
         modifier =
             modifier
@@ -56,12 +82,6 @@ fun BgmGhostIconButton(
                     onClick = onClick,
                 ),
         contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            modifier = Modifier.size(iconSize),
-            tint = if (enabled) tint else tint.copy(alpha = 0.38f),
-        )
-    }
+        content = content,
+    )
 }

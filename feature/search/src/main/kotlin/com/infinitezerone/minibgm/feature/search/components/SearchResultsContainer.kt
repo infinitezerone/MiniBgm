@@ -22,8 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -41,6 +39,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
@@ -359,29 +358,26 @@ fun SearchSortFilterBar(
 
         Spacer(modifier = Modifier.width(6.dp))
 
-        IconButton(
+        BgmGhostIconButton(
             onClick = onViewModeToggle,
-            modifier = Modifier.size(32.dp),
-        ) {
-            Icon(
-                imageVector =
+            icon =
+                if (viewMode == SearchViewMode.LIST) {
+                    BgmIcons.GridView
+                } else {
+                    BgmIcons.ViewList
+                },
+            contentDescription =
+                stringResource(
                     if (viewMode == SearchViewMode.LIST) {
-                        BgmIcons.GridView
+                        R.string.feature_search_cd_switch_to_grid
                     } else {
-                        BgmIcons.ViewList
+                        R.string.feature_search_cd_switch_to_list
                     },
-                contentDescription =
-                    stringResource(
-                        if (viewMode == SearchViewMode.LIST) {
-                            R.string.feature_search_cd_switch_to_grid
-                        } else {
-                            R.string.feature_search_cd_switch_to_list
-                        },
-                    ),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(19.dp),
-            )
-        }
+                ),
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(32.dp),
+            iconSize = 19.dp,
+        )
     }
 }
 

@@ -30,7 +30,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
@@ -61,6 +60,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
@@ -211,27 +212,24 @@ fun AssistantScreenContent(
                     },
                     navigationIcon = {
                         if (onBackClick != null) {
-                            IconButton(onClick = onBackClick) {
-                                Icon(
-                                    imageVector = BgmIcons.ArrowBack,
-                                    contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
-                                )
-                            }
+                            BgmCircleActionButton(
+                                onClick = onBackClick,
+                                icon = BgmIcons.ArrowBack,
+                                contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
+                            )
                         }
                     },
                     actions = {
-                        IconButton(onClick = { onToggleSessionSwitcher(true) }) {
-                            Icon(
-                                imageVector = BgmIcons.ChatBubble,
-                                contentDescription = stringResource(R.string.feature_assistant_cd_session_list),
-                            )
-                        }
-                        IconButton(onClick = { onToggleConfigDialog(true) }) {
-                            Icon(
-                                imageVector = BgmIcons.Settings,
-                                contentDescription = stringResource(R.string.feature_assistant_cd_ai_settings),
-                            )
-                        }
+                        BgmCircleActionButton(
+                            onClick = { onToggleSessionSwitcher(true) },
+                            icon = BgmIcons.ChatBubble,
+                            contentDescription = stringResource(R.string.feature_assistant_cd_session_list),
+                        )
+                        BgmCircleActionButton(
+                            onClick = { onToggleConfigDialog(true) },
+                            icon = BgmIcons.Settings,
+                            contentDescription = stringResource(R.string.feature_assistant_cd_ai_settings),
+                        )
                         if (uiState.messages.isNotEmpty()) {
                             val currentSessionTitle =
                                 stringResource(R.string.feature_assistant_session_current_title)
@@ -248,27 +246,26 @@ fun AssistantScreenContent(
                                     activeTitle,
                                 )
                             val deleteSessionConfirmText = stringResource(R.string.feature_assistant_action_delete)
-                            IconButton(onClick = {
-                                coroutineScope.launch {
-                                    val confirmed =
-                                        overlayHostState.await(
-                                            ConfirmDialogAction(
-                                                title = deleteSessionTitle,
-                                                message = deleteSessionMessage,
-                                                confirmText = deleteSessionConfirmText,
-                                                isDestructive = true,
-                                            ),
-                                        )
-                                    if (confirmed) {
-                                        onDeleteSession(uiState.activeSessionId)
+                            BgmCircleActionButton(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        val confirmed =
+                                            overlayHostState.await(
+                                                ConfirmDialogAction(
+                                                    title = deleteSessionTitle,
+                                                    message = deleteSessionMessage,
+                                                    confirmText = deleteSessionConfirmText,
+                                                    isDestructive = true,
+                                                ),
+                                            )
+                                        if (confirmed) {
+                                            onDeleteSession(uiState.activeSessionId)
+                                        }
                                     }
-                                }
-                            }) {
-                                Icon(
-                                    imageVector = BgmIcons.DeleteBorder,
-                                    contentDescription = stringResource(R.string.feature_assistant_cd_delete_current_session),
-                                )
-                            }
+                                },
+                                icon = BgmIcons.DeleteBorder,
+                                contentDescription = stringResource(R.string.feature_assistant_cd_delete_current_session),
+                            )
                         }
                     },
                     colors =
@@ -377,34 +374,39 @@ fun AssistantScreenContent(
 
                                 if (uiState.isLoading) {
                                     // 运行中：发送位变成停止按钮——端点挂住时用户不必干等超时
-                                    IconButton(
+                                    BgmGhostIconButton(
                                         onClick = {
                                             focusManager.clearFocus()
                                             keyboardController?.hide()
                                             onStopGeneration()
                                         },
+                                        icon = BgmIcons.Stop,
+                                        contentDescription = stringResource(R.string.feature_assistant_cd_stop_generation),
+                                        tint = MaterialTheme.colorScheme.onErrorContainer,
                                         modifier =
                                             Modifier
                                                 .size(38.dp)
                                                 .clip(CircleShape)
                                                 .background(MaterialTheme.colorScheme.errorContainer),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.Stop,
-                                            contentDescription = stringResource(R.string.feature_assistant_cd_stop_generation),
-                                            tint = MaterialTheme.colorScheme.onErrorContainer,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                    }
+                                        iconSize = 18.dp,
+                                    )
                                 } else {
                                     val canSend = uiState.inputText.isNotBlank()
-                                    IconButton(
+                                    BgmGhostIconButton(
                                         onClick = {
                                             focusManager.clearFocus()
                                             keyboardController?.hide()
                                             onSendMessage()
                                         },
                                         enabled = canSend,
+                                        icon = BgmIcons.Send,
+                                        contentDescription = stringResource(R.string.feature_assistant_cd_send),
+                                        tint =
+                                            if (canSend) {
+                                                MaterialTheme.colorScheme.onPrimary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            },
                                         modifier =
                                             Modifier
                                                 .size(38.dp)
@@ -416,19 +418,8 @@ fun AssistantScreenContent(
                                                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                                                     },
                                                 ),
-                                    ) {
-                                        Icon(
-                                            imageVector = BgmIcons.Send,
-                                            contentDescription = stringResource(R.string.feature_assistant_cd_send),
-                                            tint =
-                                                if (canSend) {
-                                                    MaterialTheme.colorScheme.onPrimary
-                                                } else {
-                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                                },
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                    }
+                                        iconSize = 18.dp,
+                                    )
                                 }
                             }
                         }

@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -47,6 +46,7 @@ import androidx.media3.common.Format
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.DanmakuEpisodeCandidate
@@ -732,13 +732,12 @@ internal fun PlayerTrackSelectionContent(
                     },
                 )
             }
-            IconButton(onClick = onClose) {
-                Icon(
-                    imageVector = BgmIcons.Close,
-                    contentDescription = stringResource(R.string.feature_subject_player_close_drawer),
-                    tint = if (isDarkThemed) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            BgmGhostIconButton(
+                onClick = onClose,
+                icon = BgmIcons.Close,
+                contentDescription = stringResource(R.string.feature_subject_player_close_drawer),
+                tint = if (isDarkThemed) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         HorizontalDivider(

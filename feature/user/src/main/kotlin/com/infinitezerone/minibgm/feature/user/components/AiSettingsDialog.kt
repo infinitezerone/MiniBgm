@@ -12,8 +12,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -30,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.feature.user.R
@@ -186,17 +185,16 @@ internal fun AiSettingsDialog(
                     singleLine = true,
                     visualTransformation = if (isApiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
-                        IconButton(onClick = { isApiKeyVisible = !isApiKeyVisible }) {
-                            Icon(
-                                imageVector = if (isApiKeyVisible) BgmIcons.VisibilityOff else BgmIcons.Visibility,
-                                contentDescription =
-                                    if (isApiKeyVisible) {
-                                        stringResource(R.string.feature_user_ai_apikey_hide)
-                                    } else {
-                                        stringResource(R.string.feature_user_ai_apikey_show)
-                                    },
-                            )
-                        }
+                        BgmGhostIconButton(
+                            onClick = { isApiKeyVisible = !isApiKeyVisible },
+                            icon = if (isApiKeyVisible) BgmIcons.VisibilityOff else BgmIcons.Visibility,
+                            contentDescription =
+                                if (isApiKeyVisible) {
+                                    stringResource(R.string.feature_user_ai_apikey_hide)
+                                } else {
+                                    stringResource(R.string.feature_user_ai_apikey_show)
+                                },
+                        )
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )

@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -24,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.subject.R
 import kotlinx.coroutines.delay
@@ -75,17 +74,14 @@ internal fun PlayerResumeOverlay(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
-            IconButton(
+            BgmGhostIconButton(
                 onClick = onDismiss,
+                icon = BgmIcons.Close,
+                contentDescription = null,
                 modifier = Modifier.size(24.dp),
-            ) {
-                Icon(
-                    imageVector = BgmIcons.Close,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.size(14.dp),
-                )
-            }
+                iconSize = 14.dp,
+                tint = Color.White.copy(alpha = 0.7f),
+            )
         }
     }
 }

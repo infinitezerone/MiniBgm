@@ -31,7 +31,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -63,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.BgmLink
 import com.infinitezerone.minibgm.core.common.BgmUrlParser
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
@@ -227,37 +227,33 @@ fun EpisodeDetailScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = BgmIcons.ArrowBack,
-                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
-                        )
-                    }
+                    BgmCircleActionButton(
+                        onClick = onBackClick,
+                        icon = BgmIcons.ArrowBack,
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
+                    )
                 },
                 actions = {
                     if (episode != null) {
-                        IconButton(
+                        BgmCircleActionButton(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                 viewModel.toggleWatched(episode, !uiState.isWatched)
                             },
-                        ) {
-                            Icon(
-                                imageVector = if (uiState.isWatched) BgmIcons.Check else BgmIcons.CheckBorder,
-                                contentDescription =
-                                    if (uiState.isWatched) {
-                                        stringResource(R.string.feature_subject_ep_status_watched)
-                                    } else {
-                                        stringResource(R.string.feature_subject_ep_status_unwatched)
-                                    },
-                                tint =
-                                    if (uiState.isWatched) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                            )
-                        }
+                            icon = if (uiState.isWatched) BgmIcons.Check else BgmIcons.CheckBorder,
+                            contentDescription =
+                                if (uiState.isWatched) {
+                                    stringResource(R.string.feature_subject_ep_status_watched)
+                                } else {
+                                    stringResource(R.string.feature_subject_ep_status_unwatched)
+                                },
+                            contentColor =
+                                if (uiState.isWatched) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                        )
                     }
                 },
             )

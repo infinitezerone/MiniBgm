@@ -16,10 +16,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -40,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
@@ -142,29 +141,26 @@ internal fun DownloadScreenContent(
                 mode = BgmTopBarMode.Solid,
                 title = { Text(text = stringResource(R.string.feature_user_downloads_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = BgmIcons.ArrowBack,
-                            contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
-                        )
-                    }
+                    BgmCircleActionButton(
+                        onClick = onBackClick,
+                        icon = BgmIcons.ArrowBack,
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_back),
+                    )
                 },
                 actions = {
                     if (downloadGroups.isNotEmpty()) {
                         if (hasActive) {
-                            IconButton(onClick = onPauseAll) {
-                                Icon(
-                                    imageVector = BgmIcons.Pause,
-                                    contentDescription = stringResource(R.string.feature_user_downloads_all_pause),
-                                )
-                            }
+                            BgmCircleActionButton(
+                                onClick = onPauseAll,
+                                icon = BgmIcons.Pause,
+                                contentDescription = stringResource(R.string.feature_user_downloads_all_pause),
+                            )
                         } else if (hasResumable) {
-                            IconButton(onClick = onResumeAll) {
-                                Icon(
-                                    imageVector = BgmIcons.PlayArrow,
-                                    contentDescription = stringResource(R.string.feature_user_downloads_all_resume),
-                                )
-                            }
+                            BgmCircleActionButton(
+                                onClick = onResumeAll,
+                                icon = BgmIcons.PlayArrow,
+                                contentDescription = stringResource(R.string.feature_user_downloads_all_resume),
+                            )
                         }
                     }
                 },
@@ -628,9 +624,12 @@ private fun SubjectDownloadCard(
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 if (hasActive) {
-                    FilledTonalIconButton(
+                    BgmCircleActionButton(
                         onClick = { onPauseSubject(group.subjectId) },
                         modifier = Modifier.size(34.dp),
+                        size = 34.dp,
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     ) {
                         Icon(
                             imageVector = BgmIcons.Pause,
@@ -639,9 +638,12 @@ private fun SubjectDownloadCard(
                         )
                     }
                 } else if (hasPausedOrError) {
-                    FilledTonalIconButton(
+                    BgmCircleActionButton(
                         onClick = { onResumeSubject(group.subjectId) },
                         modifier = Modifier.size(34.dp),
+                        size = 34.dp,
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                     ) {
                         Icon(
                             imageVector = BgmIcons.PlayArrow,

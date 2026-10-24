@@ -25,7 +25,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -49,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
 import com.infinitezerone.minibgm.core.designsystem.component.formatScore
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
@@ -238,24 +238,21 @@ internal fun EpisodeSectionHeader(
             }
             Spacer(modifier = Modifier.weight(1f))
             if (onToggleViewMode != null) {
-                IconButton(
+                BgmGhostIconButton(
                     onClick = onToggleViewMode,
+                    icon = if (isListView) BgmIcons.GridView else BgmIcons.ViewList,
+                    contentDescription =
+                        stringResource(
+                            if (isListView) {
+                                R.string.feature_subject_player_view_mode_grid
+                            } else {
+                                R.string.feature_subject_player_view_mode_list
+                            },
+                        ),
                     modifier = Modifier.size(32.dp),
-                ) {
-                    Icon(
-                        imageVector = if (isListView) BgmIcons.GridView else BgmIcons.ViewList,
-                        contentDescription =
-                            stringResource(
-                                if (isListView) {
-                                    R.string.feature_subject_player_view_mode_grid
-                                } else {
-                                    R.string.feature_subject_player_view_mode_list
-                                },
-                            ),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
+                    iconSize = 18.dp,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Spacer(modifier = Modifier.width(4.dp))
             }
             Row(
