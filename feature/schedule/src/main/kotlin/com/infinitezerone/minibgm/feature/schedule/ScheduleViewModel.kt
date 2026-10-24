@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.schedule
 
+import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -42,6 +43,16 @@ data class WeekdayDateItem(
     val pageIndex: Int = 0,
     val dateString: String = "",
     val dayOffset: Int = 0,
+)
+
+/**
+ * 一次性用户提示：资源文案 + 格式化参数，UI 侧解析；
+ * 服务端原始文案经 [serverMessage] 透传，非空时 UI 优先展示（红线「事件文案一律 @StringRes 下发」）。
+ */
+data class ScheduleUserMessage(
+    @get:StringRes val resId: Int,
+    val formatArgs: List<Any> = emptyList(),
+    val serverMessage: String? = null,
 )
 
 /** 「放送」Tab 的单一不可变 UI 状态 */
@@ -266,8 +277,8 @@ class ScheduleViewModel(
         authRepository.isLoggedIn
             .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _userMessage = Channel<String>(Channel.BUFFERED)
-    val userMessage: Flow<String> = _userMessage.receiveAsFlow()
+    private val _userMessage = Channel<ScheduleUserMessage>(Channel.BUFFERED)
+    val userMessage: Flow<ScheduleUserMessage> = _userMessage.receiveAsFlow()
 
     // 监听全量放送流与播出事件，聚合生成 13 天时刻表（以今天为中心锚点，前6天 + 今天 + 后6天）
     private val scheduleDataFlow: Flow<Pair<Map<Int, List<AirSchedule>>, Map<Int, List<AirSchedule>>>> =
@@ -500,7 +511,7 @@ class ScheduleViewModel(
     fun enableAiringReminder() {
         viewModelScope.launch {
             settingsRepository.setAiringReminderEnabled(true)
-            _userMessage.send("已开启追番开播提醒")
+            _userMessage.send(ScheduleUserMessage(R.string.feature_schedule_msg_reminder_enabled))
         }
     }
 
@@ -522,10 +533,20 @@ class ScheduleViewModel(
             collectionRepository
                 .updateCollectionStatus(subjectId, targetType)
                 .onSuccess {
-                    val msg = if (targetType == CollectionType.DOING) "已加入在看追番" else "已移出在看追番"
+                    val msg =
+                        if (targetType == CollectionType.DOING) {
+                            ScheduleUserMessage(R.string.feature_schedule_msg_watching_added)
+                        } else {
+                            ScheduleUserMessage(R.string.feature_schedule_msg_watching_removed)
+                        }
                     _userMessage.send(msg)
                 }.onError { _, message ->
-                    _userMessage.send(message.ifBlank { "操作失败，请确认是否已登录账号" })
+                    _userMessage.send(
+                        ScheduleUserMessage(
+                            R.string.feature_schedule_msg_watch_failed,
+                            serverMessage = message.ifBlank { null },
+                        ),
+                    )
                 }
         }
     }
@@ -552,9 +573,16 @@ class ScheduleViewModel(
                     isWatched = true,
                     epNumber = epNumber,
                 ).onSuccess {
-                    _userMessage.send("已标记第 $epNumber 话已看过")
+                    _userMessage.send(
+                        ScheduleUserMessage(R.string.feature_schedule_msg_episode_watched, listOf(epNumber)),
+                    )
                 }.onError { _, message ->
-                    _userMessage.send(message.ifBlank { "标记失败，请确认是否已登录账号" })
+                    _userMessage.send(
+                        ScheduleUserMessage(
+                            R.string.feature_schedule_msg_mark_failed,
+                            serverMessage = message.ifBlank { null },
+                        ),
+                    )
                 }
         }
     }

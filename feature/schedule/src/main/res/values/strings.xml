@@ -76,9 +76,16 @@
     <string name="feature_schedule_season_year_month_format">%1$d年%2$d月</string>
     <string name="feature_schedule_now_indicator">现在 %1$s</string>
 
+    <!-- 一次性操作提示（VM 经 ScheduleUserMessage 资源下发，服务端文案透传） -->
+    <string name="feature_schedule_msg_reminder_enabled">已开启追番开播提醒</string>
+    <string name="feature_schedule_msg_watching_added">已加入在看追番</string>
+    <string name="feature_schedule_msg_watching_removed">已移出在看追番</string>
+    <string name="feature_schedule_msg_watch_failed">操作失败，请确认是否已登录账号</string>
+    <string name="feature_schedule_msg_episode_watched">已标记第 %1$d 话已看过</string>
+    <string name="feature_schedule_msg_mark_failed">标记失败，请确认是否已登录账号</string>
+
     <!-- 未定番剧区 -->
-    <string name="feature_schedule_untimed_title">全天 / 网络独播待定</string>
-    <string name="feature_schedule_untimed_count">%1$d 部</string>
+    <string name="feature_schedule_untimed_title">全天 / 网络独播待定</string>    <string name="feature_schedule_untimed_count">%1$d 部</string>
     <string name="feature_schedule_cd_collapse">折叠</string>
     <string name="feature_schedule_cd_expand">展开</string>
 

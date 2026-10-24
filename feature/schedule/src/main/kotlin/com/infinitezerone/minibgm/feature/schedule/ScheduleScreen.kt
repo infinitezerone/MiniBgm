@@ -35,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -115,9 +116,11 @@ fun ScheduleScreen(
         }
     }
 
-    // 监听 ViewModel 提示消息（如快捷追番或标记已看反馈）
+    // 监听 ViewModel 提示消息（如快捷追番或标记已看反馈）；文案资源在非组合回调经 resources 解析
+    val resources = LocalContext.current.resources
     ObserveAsEvents(viewModel.userMessage) { message ->
-        snackbarHostState.showSnackbar(message)
+        val text = message.serverMessage ?: resources.getString(message.resId, *message.formatArgs.toTypedArray())
+        snackbarHostState.showSnackbar(text)
     }
 
     // 滑动 Pager 时，双向同步选中的天索引

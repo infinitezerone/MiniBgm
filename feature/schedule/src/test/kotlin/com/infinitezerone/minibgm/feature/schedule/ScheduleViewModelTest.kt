@@ -203,7 +203,7 @@ class ScheduleViewModelTest {
             assertEquals(1, collectionRepository.updateCollectionCallCount)
 
             val message = viewModel.userMessage.first()
-            assertEquals("已加入在看追番", message)
+            assertEquals(R.string.feature_schedule_msg_watching_added, message.resId)
         }
 
     @Test
@@ -229,7 +229,7 @@ class ScheduleViewModelTest {
             )
 
             val message = viewModel.userMessage.first()
-            assertEquals("已加入在看追番", message)
+            assertEquals(R.string.feature_schedule_msg_watching_added, message.resId)
             assertTrue(
                 viewModel.uiState.value.watchingSubjectIds
                     .contains(101L),
@@ -255,7 +255,7 @@ class ScheduleViewModelTest {
             viewModel.toggleWatching(101L)
 
             val message = viewModel.userMessage.first()
-            assertEquals("网络异常", message)
+            assertEquals("网络异常", message.serverMessage)
             // 写仓失败：fake 仓库流从未发射新收藏，uiState 终态保持原样（不存在乐观残留需要回滚）
             assertFalse(
                 viewModel.uiState.value.watchingSubjectIds
@@ -392,7 +392,8 @@ class ScheduleViewModelTest {
 
             assertEquals(1, collectionRepository.updateEpisodeCallCount)
             val message = viewModel.userMessage.first()
-            assertEquals("已标记第 9 话已看过", message)
+            assertEquals(R.string.feature_schedule_msg_episode_watched, message.resId)
+            assertEquals(9, message.formatArgs.single())
             // 规范第 3 条「写后读」：打卡写仓后 fake 仓库流发射（条目推进为在看 DOING），
             // uiState 终态的在看集合随之包含该条目
             assertTrue(
