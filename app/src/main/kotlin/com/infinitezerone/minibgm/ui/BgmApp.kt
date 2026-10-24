@@ -32,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.NavKey
 import com.infinitezerone.minibgm.BuildConfig
@@ -41,8 +40,10 @@ import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.util.NetworkMonitor
 import com.infinitezerone.minibgm.core.designsystem.component.BgmBackdrop
 import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingChromeScrim
+import com.infinitezerone.minibgm.core.designsystem.component.BgmFloatingPageScaffoldDefaults
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbar
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarDefaults
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 import com.infinitezerone.minibgm.core.designsystem.theme.LocalWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.designsystem.theme.ProvideWindowAdaptiveInfo
 import com.infinitezerone.minibgm.core.navigation.AssistantRoute
@@ -273,11 +274,11 @@ fun BgmApp(
                                 Modifier
                                     .align(Alignment.BottomCenter)
                                     .navigationBarsPadding()
-                                    .padding(bottom = 12.dp),
+                                    .padding(bottom = BgmFloatingPageScaffoldDefaults.FloatingChromeSink),
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(BgmSpacing.FloatingNav.actionGap),
                             ) {
                                 BgmFloatingNavigationBar(
                                     currentDestination = navState.currentTopLevelKey,

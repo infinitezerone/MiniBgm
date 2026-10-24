@@ -35,11 +35,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation3.runtime.NavKey
 import com.infinitezerone.minibgm.core.designsystem.component.CombinedInteractionSource
 import com.infinitezerone.minibgm.core.designsystem.component.aquamorphicPress
 import com.infinitezerone.minibgm.core.designsystem.component.aquamorphicShadow
+import com.infinitezerone.minibgm.core.designsystem.theme.BgmContentTokens
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmMotion
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 import com.infinitezerone.minibgm.core.navigation.TopLevelDestination
@@ -193,7 +193,7 @@ private fun BgmFloatingNavItem(
         Spacer(modifier = Modifier.height(BgmSpacing.FloatingNav.labelGap))
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp),
+            style = BgmContentTokens.Typography.navLabel,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
             color = textColor,
             maxLines = 1,

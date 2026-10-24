@@ -154,6 +154,16 @@ object BgmContentTokens {
                 fontFeatureSettings = "tnum",
             )
 
+        /** 底栏导航标签 (11.5sp, Medium)：紧凑浮岛的单行文字档，选中态由调用处覆盖为 Bold */
+        val navLabel: TextStyle =
+            TextStyle(
+                fontFamily = FontFamily.Default,
+                fontWeight = FontWeight.Medium,
+                fontSize = 11.5.sp,
+                lineHeight = 16.sp,
+                letterSpacing = 0.5.sp,
+            )
+
         /** 微型角标 (10sp, Bold, 等宽)：用于海报评分徽章、集数微角标 */
         val microLabel: TextStyle =
             TextStyle(

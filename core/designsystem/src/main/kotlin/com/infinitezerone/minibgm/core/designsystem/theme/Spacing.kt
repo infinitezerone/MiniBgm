@@ -61,6 +61,9 @@ object BgmSpacing {
         val iconVerticalPadding: Dp = BgmSpacing.xxs
         val labelGap: Dp = 3.dp
 
+        /** 导航胶囊与 AI 入口按钮之间的水平间距 */
+        val actionGap: Dp = 10.dp
+
         /** 悬浮底栏背后的底部渐隐高度；由内容滚动到胶囊下方时的可读性决定。 */
         val scrimHeight: Dp = 136.dp
     }
