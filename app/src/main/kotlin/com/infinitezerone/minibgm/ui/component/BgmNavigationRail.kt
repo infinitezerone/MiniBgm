@@ -47,7 +47,6 @@ fun BgmNavigationRail(
         } else {
             MaterialTheme.colorScheme.surface
         }
-    val effectiveBorder = null
     val shape = RoundedCornerShape(24.dp)
 
     Box(
@@ -64,7 +63,7 @@ fun BgmNavigationRail(
             contentColor = MaterialTheme.colorScheme.onSurface,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
-            border = effectiveBorder,
+            border = null,
             modifier =
                 Modifier
                     .fillMaxSize()

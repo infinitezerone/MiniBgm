@@ -34,7 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -69,7 +68,6 @@ fun SubjectCommunitySection(
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
 ) {
-    val context = LocalContext.current
     var isExpanded by rememberSaveable { mutableStateOf(false) }
     var selectedPane by rememberSaveable { mutableStateOf(CommunityPane.SHORT_REVIEWS) }
     val displayComments = if (isExpanded) comments else comments.take(5)
@@ -255,9 +253,6 @@ fun SubjectCommunitySection(
         }
     }
 }
-
-@Composable
-private fun MaterialTheme.labelMediumSmallOrFallback() = typography.labelSmall
 
 /** 单条短评卡片组件 */
 @Composable

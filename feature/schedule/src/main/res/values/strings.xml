@@ -6,14 +6,6 @@
     <string name="feature_schedule_cd_search">搜索条目</string>
 
     <!-- 星期与日期导航 -->
-    <string name="feature_schedule_today">今天</string>
-    <string name="feature_schedule_weekday_mon">周一</string>
-    <string name="feature_schedule_weekday_tue">周二</string>
-    <string name="feature_schedule_weekday_wed">周三</string>
-    <string name="feature_schedule_weekday_thu">周四</string>
-    <string name="feature_schedule_weekday_fri">周五</string>
-    <string name="feature_schedule_weekday_sat">周六</string>
-    <string name="feature_schedule_weekday_sun">周日</string>
     <string name="feature_schedule_weekday_short_today">今</string>
     <string name="feature_schedule_weekday_short_mon">一</string>
     <string name="feature_schedule_weekday_short_tue">二</string>
@@ -26,9 +18,6 @@
     <!-- 筛选栏 -->
     <string name="feature_schedule_filter_my_watchlist">我的追番</string>
     <string name="feature_schedule_filter_all_broadcast">全网开播</string>
-    <string name="feature_schedule_filter_my_watchlist_not_logged_in">我的追番 (未登录)</string>
-    <string name="feature_schedule_filter_my_watchlist_count">我的追番 (%1$d)</string>
-    <string name="feature_schedule_filter_all_broadcast_count">全网开播 (%1$d)</string>
 
     <!-- 时间线卡片与状态 -->
     <string name="feature_schedule_status_aired">已播</string>
@@ -38,7 +27,6 @@
     <string name="feature_schedule_countdown_hours">%1$d时后</string>
     <string name="feature_schedule_countdown_minutes">%1$d分后</string>
     <string name="feature_schedule_anime_count">%1$d部</string>
-    <string name="feature_schedule_watching_badge">在追</string>
     <string name="feature_schedule_action_watch">追番</string>
     <string name="feature_schedule_action_watching">在追</string>
     <string name="feature_schedule_first_episode">首播 · 第 1 话</string>
@@ -77,12 +65,9 @@
     <string name="feature_schedule_now_indicator">现在 %1$s</string>
 
     <!-- 一次性操作提示（VM 经 ScheduleUserMessage 资源下发，服务端文案透传） -->
-    <string name="feature_schedule_msg_reminder_enabled">已开启追番开播提醒</string>
     <string name="feature_schedule_msg_watching_added">已加入在看追番</string>
     <string name="feature_schedule_msg_watching_removed">已移出在看追番</string>
     <string name="feature_schedule_msg_watch_failed">操作失败，请确认是否已登录账号</string>
-    <string name="feature_schedule_msg_episode_watched">已标记第 %1$d 话已看过</string>
-    <string name="feature_schedule_msg_mark_failed">标记失败，请确认是否已登录账号</string>
 
     <!-- 未定番剧区 -->
     <string name="feature_schedule_untimed_title">全天 / 网络独播待定</string>    <string name="feature_schedule_untimed_count">%1$d 部</string>
@@ -98,11 +83,6 @@
     <string name="feature_schedule_error_network">网络连接异常</string>
 
     <!-- 顶部 Hero 接着看 -->
-    <string name="feature_schedule_hero_next_up">接着看</string>
-    <string name="feature_schedule_hero_completed">已看完</string>
-    <string name="feature_schedule_hero_resume_cta">继续观看</string>
-    <string name="feature_schedule_hero_episode_format">第 %1$d 话 · %2$s</string>
-    <string name="feature_schedule_hero_episode_only">第 %1$d 话</string>
 
     <string name="feature_schedule_login_prompt_desc">追番与打卡需要同步至您的 Bangumi 账号，登录后即可随手收藏、打卡并同步进度。</string>
 </resources>

@@ -664,27 +664,6 @@ fun ScheduleTimelineCard(
     }
 }
 
-/** 兼容旧调用的单番时间线卡片入口 */
-@Composable
-fun ScheduleTimelineSingleCard(
-    schedule: AirSchedule,
-    isWatching: Boolean,
-    todayYear: Int,
-    onSubjectClick: (SubjectDetailRoute) -> Unit,
-    modifier: Modifier = Modifier,
-    onToggleWatching: (() -> Unit)? = null,
-) {
-    ScheduleTimelineCard(
-        schedule = schedule,
-        isWatching = isWatching,
-        todayYear = todayYear,
-        onSubjectClick = onSubjectClick,
-        modifier = modifier,
-        onToggleWatching = onToggleWatching,
-        episodes = if (schedule.nextEpisodeNumber > 0) listOf(schedule.nextEpisodeNumber) else emptyList(),
-    )
-}
-
 /** 今日时间线上的「现在」指示：贯穿全宽的精细指示线与实心发光节点 */
 @Composable
 fun ScheduleNowIndicator(

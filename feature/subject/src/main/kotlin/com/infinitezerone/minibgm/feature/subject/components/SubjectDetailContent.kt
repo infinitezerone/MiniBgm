@@ -36,7 +36,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -66,7 +65,6 @@ import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailTab
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailUiState
 import com.infinitezerone.minibgm.feature.subject.computeSubjectWatchStatus
-import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 /** 头部 Hero 在 LazyColumn 中的稳定键；顶栏联动按 key 定位，不依赖列表下标。 */
@@ -183,7 +181,6 @@ internal fun SubjectDetailContent(
     onTabBarTopChanged: (Float) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     val bottomPaddingPx = with(density) { SubjectTabBottomPadding.toPx() }
     val contentTopPaddingPx = with(density) { SubjectTabContentTopPadding.toPx() }
@@ -552,11 +549,6 @@ internal fun SubjectDetailContent(
                             episodeSortDescending = episodeSortDescending,
                             onToggleSort = onToggleEpisodeSort,
                             nextUpEpisodeSort = nextUpEpNumber,
-                            onJumpToNextUp = {
-                                coroutineScope.launch {
-                                    listState.animateScrollToItem(tabHeaderIndex)
-                                }
-                            },
                             onPlayNext = onPlayNextEpisode.takeIf { currentEpisodes.isNotEmpty() },
                             onOpenSources = onOpenSources,
                             group = activeGroup,

@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -42,10 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSegmentedControl
 import com.infinitezerone.minibgm.core.designsystem.component.expressivePress
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
-import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
-import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
 import com.infinitezerone.minibgm.core.model.AiConfig
-import com.infinitezerone.minibgm.core.model.DanmakuConfig
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.model.UserProfile
@@ -55,136 +51,6 @@ private const val BGM_HOME_URL = "https://bgm.tv"
 private const val BGM_WIKI_URL = "https://bgm.tv/wiki"
 
 internal const val PROJECT_GITHUB_URL = "https://github.com/infinitezerone/MiniBgm"
-
-@Composable
-internal fun SettingsSection(
-    isLoggedIn: Boolean,
-    activeProfile: UserProfile?,
-    savedAccountsCount: Int,
-    syncInterval: SyncInterval,
-    airingReminderEnabled: Boolean,
-    onToggleAiringReminder: (Boolean) -> Unit,
-    airingDailySummaryEnabled: Boolean = true,
-    onToggleAiringDailySummary: (Boolean) -> Unit = {},
-    airingPreAirEnabled: Boolean = true,
-    onToggleAiringPreAir: (Boolean) -> Unit = {},
-    airingBingeFinaleEnabled: Boolean = true,
-    onToggleAiringBingeFinale: (Boolean) -> Unit = {},
-    airingReminderHour: Int,
-    hasNotificationPermission: Boolean = true,
-    aiConfig: AiConfig = AiConfig(),
-    onOpenAiSettingsDialog: (() -> Unit)? = null,
-    onOpenReminderHourDialog: () -> Unit,
-    airingNotificationOffsetMinutes: Int = -15,
-    onOpenTimingBottomSheet: () -> Unit = {},
-    onOpenSystemNotificationSettings: () -> Unit = {},
-    isIgnoringBatteryOptimizations: Boolean = false,
-    onOpenKeepAliveSettings: () -> Unit = {},
-    onOpenSyncDialog: () -> Unit,
-    onOpenWebUrl: (String) -> Unit,
-    onClearCache: () -> Unit,
-    isClearingCache: Boolean = false,
-    onOpenCrashLog: () -> Unit = {},
-    onLogoutCurrentClick: () -> Unit,
-    onLogoutAllClick: () -> Unit,
-    onOpenPlaybackRules: (() -> Unit)? = null,
-    danmakuConfig: DanmakuConfig = DanmakuConfig(),
-    onOpenDanmakuSettings: (() -> Unit)? = null,
-    themeMode: ThemeMode = ThemeMode.SYSTEM,
-    onSelectThemeMode: (ThemeMode) -> Unit = {},
-    dynamicColor: Boolean = false,
-    onToggleDynamicColor: (Boolean) -> Unit = {},
-    pipEnabled: Boolean = true,
-    onTogglePipEnabled: (Boolean) -> Unit = {},
-    showRestrictedContent: Boolean = false,
-    onToggleShowRestrictedContent: (Boolean) -> Unit = {},
-    isCheckingUpdate: Boolean = false,
-    onCheckForUpdate: () -> Unit = {},
-    onOpenDownloads: (() -> Unit)? = null,
-    modifier: Modifier = Modifier,
-) {
-    // 版本号取自 PackageManager，与 BuildConfig 保持一致；预览环境下取不到则留空
-    val context = LocalContext.current
-    val clientVersion =
-        remember {
-            runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
-                .getOrNull()
-                .orEmpty()
-        }
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        AppearanceSettingsCard(
-            themeMode = themeMode,
-            onSelectThemeMode = onSelectThemeMode,
-            dynamicColor = dynamicColor,
-            onToggleDynamicColor = onToggleDynamicColor,
-        )
-
-        PlaybackAndContentSettingsCard(
-            pipEnabled = pipEnabled,
-            onTogglePipEnabled = onTogglePipEnabled,
-            showRestrictedContent = showRestrictedContent,
-            onToggleShowRestrictedContent = onToggleShowRestrictedContent,
-            syncInterval = syncInterval,
-            onOpenSyncDialog = onOpenSyncDialog,
-            onOpenPlaybackRules = onOpenPlaybackRules,
-            onOpenDanmakuSettings = onOpenDanmakuSettings,
-            danmakuSummary =
-                if (danmakuConfig.endpoint.isNotBlank()) {
-                    danmakuConfig.endpoint
-                } else if (danmakuConfig.appId.isNotBlank()) {
-                    stringResource(R.string.feature_user_settings_danmaku_desc_configured)
-                } else {
-                    null
-                },
-        )
-
-        ReminderSettingsCard(
-            airingReminderEnabled = airingReminderEnabled,
-            onToggleAiringReminder = onToggleAiringReminder,
-            hasNotificationPermission = hasNotificationPermission,
-            airingDailySummaryEnabled = airingDailySummaryEnabled,
-            onToggleAiringDailySummary = onToggleAiringDailySummary,
-            airingReminderHour = airingReminderHour,
-            onOpenReminderHourDialog = onOpenReminderHourDialog,
-            airingPreAirEnabled = airingPreAirEnabled,
-            onToggleAiringPreAir = onToggleAiringPreAir,
-            airingNotificationOffsetMinutes = airingNotificationOffsetMinutes,
-            onOpenTimingBottomSheet = onOpenTimingBottomSheet,
-            airingBingeFinaleEnabled = airingBingeFinaleEnabled,
-            onToggleAiringBingeFinale = onToggleAiringBingeFinale,
-            onOpenSystemNotificationSettings = onOpenSystemNotificationSettings,
-            isIgnoringBatteryOptimizations = isIgnoringBatteryOptimizations,
-            onOpenKeepAliveSettings = onOpenKeepAliveSettings,
-        )
-
-        DataAndStorageSettingsCard(
-            aiConfig = aiConfig,
-            onOpenAiSettingsDialog = onOpenAiSettingsDialog,
-            onClearCache = onClearCache,
-            isClearingCache = isClearingCache,
-            onOpenDownloads = onOpenDownloads,
-        )
-
-        AboutSettingsCard(
-            onOpenWebUrl = onOpenWebUrl,
-            isCheckingUpdate = isCheckingUpdate,
-            onCheckForUpdate = onCheckForUpdate,
-        )
-
-        if (isLoggedIn) {
-            AccountSettingsCard(
-                activeProfile = activeProfile,
-                savedAccountsCount = savedAccountsCount,
-                onLogoutCurrentClick = onLogoutCurrentClick,
-                onLogoutAllClick = onLogoutAllClick,
-            )
-        }
-    }
-}
 
 @Composable
 internal fun AppearanceSettingsCard(
@@ -847,31 +713,5 @@ private fun SettingsItemRow(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
         }
-    }
-}
-
-@ThemePreviews
-@Composable
-private fun SettingsSectionPreview() {
-    MiniBgmTheme {
-        SettingsSection(
-            isLoggedIn = true,
-            activeProfile = null,
-            savedAccountsCount = 1,
-            syncInterval = SyncInterval.DAILY,
-            airingReminderEnabled = true,
-            onToggleAiringReminder = {},
-            airingReminderHour = 8,
-            onOpenReminderHourDialog = {},
-            airingNotificationOffsetMinutes = -15,
-            onOpenTimingBottomSheet = {},
-            onOpenSyncDialog = {},
-            onOpenWebUrl = {},
-            onClearCache = {},
-            onLogoutCurrentClick = {},
-            onLogoutAllClick = {},
-            pipEnabled = true,
-            onTogglePipEnabled = {},
-        )
     }
 }

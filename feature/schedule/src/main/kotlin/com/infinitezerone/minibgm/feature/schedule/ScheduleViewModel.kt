@@ -9,12 +9,10 @@ import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
-import com.infinitezerone.minibgm.core.data.repository.PlaybackHistoryRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
-import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -74,7 +72,6 @@ data class ScheduleUiState(
     val onlyWatching: Boolean = false,
     val showLoginPromptDialog: Boolean = false,
     val isLoggedIn: Boolean = false,
-    val latestPlaybackHistory: PlaybackHistory? = null,
 ) {
     /** 兼容旧接口：当前所选星期的原始番剧列表 */
     val schedules: List<AirSchedule>
@@ -186,22 +183,6 @@ data class ScheduleUiState(
                 .takeIf { it >= 0 }
             ?: (weekday - 1).coerceIn(0, (dateItems.size - 1).coerceAtLeast(0))
     }
-
-    /** 今日正在追番的更新列表（在“今天”视图置顶呈现） */
-    val todayWatchingSchedules: List<AirSchedule>
-        get() {
-            val todayRaw = daySchedules[todayPageIndex] ?: weeklySchedules[todayWeekday].orEmpty()
-            return todayRaw
-                .filter { watchingSubjectIds.contains(it.bgmId) }
-                .sortedWith(
-                    compareBy<AirSchedule> {
-                        val time = it.timeCst.ifBlank { it.timeJst }
-                        if (time.isNotBlank()) 0 else 1
-                    }.thenBy {
-                        it.timeCst.ifBlank { it.timeJst }
-                    },
-                )
-        }
 }
 
 /**
@@ -221,7 +202,6 @@ class ScheduleViewModel(
     private val collectionRepository: CollectionRepository,
     private val settingsRepository: SettingsRepository,
     private val authRepository: AuthRepository,
-    private val playbackHistoryRepository: PlaybackHistoryRepository,
     /**
      * 时钟注入点，默认取系统时间。
      *
@@ -374,25 +354,17 @@ class ScheduleViewModel(
             pageIndex to onlyWatch
         }
 
-    private val latestHistoryFlow: Flow<PlaybackHistory?> =
-        playbackHistoryRepository
-            .observeRecentHistory(limit = 1)
-            .map { it.firstOrNull() }
-            .distinctUntilChanged()
-
     private data class ExtraScheduleState(
         val showLogin: Boolean,
         val loggedIn: Boolean,
-        val latestHistory: PlaybackHistory?,
     )
 
     private val extraStateFlow =
         combine(
             showLoginPromptDialog,
             isLoggedIn,
-            latestHistoryFlow,
-        ) { showLogin, loggedIn, latestHistory ->
-            ExtraScheduleState(showLogin, loggedIn, latestHistory)
+        ) { showLogin, loggedIn ->
+            ExtraScheduleState(showLogin, loggedIn)
         }
 
     private val baseUiState: StateFlow<ScheduleUiState> =
@@ -409,7 +381,7 @@ class ScheduleViewModel(
             (refreshing, syncing, error),
             extra,
             ->
-            val (showLogin, loggedIn, latestHistory) = extra
+            val (showLogin, loggedIn) = extra
             val currentToday = today()
             val currentWeekday = currentToday.dayOfWeek.value
             val currentDateItems = calculateDateItems(currentToday)
@@ -432,7 +404,6 @@ class ScheduleViewModel(
                 onlyWatching = onlyWatch,
                 showLoginPromptDialog = showLogin,
                 isLoggedIn = loggedIn,
-                latestPlaybackHistory = latestHistory,
             )
         }.stateIn(
             scope = viewModelScope,
@@ -504,17 +475,6 @@ class ScheduleViewModel(
         }
     }
 
-    fun promptLogin() {
-        showLoginPromptDialog.value = true
-    }
-
-    fun enableAiringReminder() {
-        viewModelScope.launch {
-            settingsRepository.setAiringReminderEnabled(true)
-            _userMessage.send(ScheduleUserMessage(R.string.feature_schedule_msg_reminder_enabled))
-        }
-    }
-
     /**
      * 1-tap 快捷追番/移出追番（规范第 3 条「写后读」：写仓后由收藏流回读新状态，无本地乐观旁路；
      * 仓库层本地优先写库 + 失败回滚，NonCancellable 约束在 CollectionRepository 内）。
@@ -544,42 +504,6 @@ class ScheduleViewModel(
                     _userMessage.send(
                         ScheduleUserMessage(
                             R.string.feature_schedule_msg_watch_failed,
-                            serverMessage = message.ifBlank { null },
-                        ),
-                    )
-                }
-        }
-    }
-
-    /**
-     * 1-tap 快捷标记某话为看过，供待补清单一键打卡（规范第 3 条「写后读」：写仓后由收藏流回读
-     * 新进度，无本地乐观旁路）。未登录时拦截弹窗；写失败仅弹 Snackbar 提示。
-     */
-    fun markEpisodeWatched(
-        subjectId: Long,
-        epNumber: Int,
-    ) {
-        if (!isLoggedIn.value) {
-            showLoginPromptDialog.value = true
-            return
-        }
-
-        viewModelScope.launch {
-            collectionRepository
-                .updateEpisodeStatus(
-                    subjectId = subjectId,
-                    // 时间表数据无单集 ID：由仓库按话数解析真实单集 ID
-                    episodeId = null,
-                    isWatched = true,
-                    epNumber = epNumber,
-                ).onSuccess {
-                    _userMessage.send(
-                        ScheduleUserMessage(R.string.feature_schedule_msg_episode_watched, listOf(epNumber)),
-                    )
-                }.onError { _, message ->
-                    _userMessage.send(
-                        ScheduleUserMessage(
-                            R.string.feature_schedule_msg_mark_failed,
                             serverMessage = message.ifBlank { null },
                         ),
                     )

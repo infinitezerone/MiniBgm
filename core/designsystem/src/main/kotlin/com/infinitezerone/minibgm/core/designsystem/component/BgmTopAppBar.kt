@@ -25,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -118,8 +117,7 @@ fun BgmTopAppBar(
         modifier =
             modifier
                 .fillMaxWidth()
-                .background(resolvedColors.containerColor)
-                .pointerInput(Unit) {},
+                .background(resolvedColors.containerColor),
         propagateMinConstraints = true,
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {

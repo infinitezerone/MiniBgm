@@ -61,8 +61,6 @@ fun BgmFloatingNavigationBar(
             MaterialTheme.colorScheme.surface
         }
 
-    val effectiveBorder = null
-
     // 独立收集各项交互，汇聚为复合源供底栏 Node 零重组驱动 RenderNode 物理缩放
     val scheduleInteraction = remember { MutableInteractionSource() }
     val exploreInteraction = remember { MutableInteractionSource() }
@@ -91,7 +89,7 @@ fun BgmFloatingNavigationBar(
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border = effectiveBorder,
+        border = null,
         modifier = navModifier,
     ) {
         Row(

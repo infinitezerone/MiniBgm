@@ -36,7 +36,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.infinitezerone.minibgm.core.designsystem.component.BgmSegmentedControl
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGoldBright
 import com.infinitezerone.minibgm.core.designsystem.theme.WishOrange
 import com.infinitezerone.minibgm.feature.schedule.R
@@ -214,74 +213,4 @@ fun DateCapsule(
             }
         }
     }
-}
-
-enum class ScheduleFilterType {
-    WATCHING,
-    ALL,
-}
-
-@Composable
-fun FilterAndMetaBar(
-    totalCount: Int,
-    watchingCount: Int,
-    onlyWatching: Boolean,
-    onToggleOnlyWatching: () -> Unit,
-    modifier: Modifier = Modifier,
-    isLoggedIn: Boolean = true,
-    onPromptLogin: () -> Unit = {},
-) {
-    val currentTab = if (onlyWatching) ScheduleFilterType.WATCHING else ScheduleFilterType.ALL
-
-    BgmSegmentedControl(
-        items = listOf(ScheduleFilterType.WATCHING, ScheduleFilterType.ALL),
-        selectedItem = currentTab,
-        onItemSelected = { tab ->
-            when (tab) {
-                ScheduleFilterType.WATCHING -> {
-                    if (!isLoggedIn) {
-                        onPromptLogin()
-                    } else if (!onlyWatching) {
-                        onToggleOnlyWatching()
-                    }
-                }
-                ScheduleFilterType.ALL -> {
-                    if (onlyWatching) {
-                        onToggleOnlyWatching()
-                    }
-                }
-            }
-        },
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-        height = 36.dp,
-        itemContent = { tab, isSelected ->
-            val labelText =
-                when (tab) {
-                    ScheduleFilterType.WATCHING -> {
-                        if (!isLoggedIn) {
-                            stringResource(R.string.feature_schedule_filter_my_watchlist_not_logged_in)
-                        } else {
-                            stringResource(R.string.feature_schedule_filter_my_watchlist_count, watchingCount)
-                        }
-                    }
-                    ScheduleFilterType.ALL -> {
-                        stringResource(R.string.feature_schedule_filter_all_broadcast_count, totalCount)
-                    }
-                }
-            Text(
-                text = labelText,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                color =
-                    if (isSelected) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-            )
-        },
-    )
 }

@@ -3,12 +3,10 @@ package com.infinitezerone.minibgm.feature.schedule
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.model.AirSchedule
 import com.infinitezerone.minibgm.core.model.CollectionType
-import com.infinitezerone.minibgm.core.model.PlaybackHistory
 import com.infinitezerone.minibgm.core.model.UserCollection
 import com.infinitezerone.minibgm.core.testing.data.sampleAirScheduleList
 import com.infinitezerone.minibgm.core.testing.repository.FakeAuthRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
-import com.infinitezerone.minibgm.core.testing.repository.FakePlaybackHistoryRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeScheduleRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository
 import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
@@ -55,14 +53,12 @@ class ScheduleViewModelTest {
         collectionRepository: FakeCollectionRepository = FakeCollectionRepository(),
         settingsRepository: FakeSettingsRepository = FakeSettingsRepository(),
         authRepository: FakeAuthRepository = FakeAuthRepository(initialLoggedIn = true),
-        playbackHistoryRepository: FakePlaybackHistoryRepository = FakePlaybackHistoryRepository(),
     ): ScheduleViewModel =
         ScheduleViewModel(
             scheduleRepository = repository,
             collectionRepository = collectionRepository,
             settingsRepository = settingsRepository,
             authRepository = authRepository,
-            playbackHistoryRepository = playbackHistoryRepository,
             clock = { fixedNow.toEpochMilli() },
         )
 
@@ -178,9 +174,7 @@ class ScheduleViewModelTest {
             assertEquals(1, allDayList.size)
             assertEquals(103L, allDayList.first().bgmId)
 
-            // 2. 验证今日追番 spotlight 推荐
-            assertEquals(1, initialState.todayWatchingSchedules.size)
-            assertEquals(102L, initialState.todayWatchingSchedules[0].bgmId)
+            // 2. 验证追番计数
             assertEquals(1, initialState.getWatchingCountForWeekday(today))
             assertEquals(3, initialState.getTotalCountForWeekday(today))
 
@@ -379,30 +373,6 @@ class ScheduleViewModelTest {
         }
 
     @Test
-    fun markEpisodeWatched_invokesRepositoryAndSendsFeedback() =
-        runTest {
-            val repository = FakeScheduleRepository()
-            val collectionRepository = FakeCollectionRepository()
-            val viewModel = createViewModel(repository, collectionRepository)
-            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
-                viewModel.uiState.collect()
-            }
-
-            viewModel.markEpisodeWatched(subjectId = 888L, epNumber = 9)
-
-            assertEquals(1, collectionRepository.updateEpisodeCallCount)
-            val message = viewModel.userMessage.first()
-            assertEquals(R.string.feature_schedule_msg_episode_watched, message.resId)
-            assertEquals(9, message.formatArgs.single())
-            // 规范第 3 条「写后读」：打卡写仓后 fake 仓库流发射（条目推进为在看 DOING），
-            // uiState 终态的在看集合随之包含该条目
-            assertTrue(
-                viewModel.uiState.value.watchingSubjectIds
-                    .contains(888L),
-            )
-        }
-
-    @Test
     fun watchingSubjectIds_includesBothDoingAndWishCollections() =
         runTest {
             val repository = FakeScheduleRepository()
@@ -496,39 +466,6 @@ class ScheduleViewModelTest {
             viewModel.dismissLoginPrompt()
             val dismissedState = viewModel.uiState.first { !it.showLoginPromptDialog }
             assertFalse(dismissedState.showLoginPromptDialog)
-        }
-
-    @Test
-    fun unauthenticated_markEpisodeWatched_showsLoginPromptDialog() =
-        runTest {
-            val authRepository = FakeAuthRepository(initialLoggedIn = false)
-            val collectionRepository = FakeCollectionRepository()
-            val viewModel = createViewModel(collectionRepository = collectionRepository, authRepository = authRepository)
-
-            assertFalse(viewModel.uiState.value.showLoginPromptDialog)
-
-            viewModel.markEpisodeWatched(101L, 1)
-
-            val url = viewModel.uiState.first { it.showLoginPromptDialog }
-            assertTrue(url.showLoginPromptDialog)
-            assertEquals(0, collectionRepository.updateEpisodeCallCount)
-
-            // 登录由独立路由接管（应用内 WebView + ECH 通道），ViewModel 只负责收起提示
-            viewModel.dismissLoginPrompt()
-            val dismissedState = viewModel.uiState.first { !it.showLoginPromptDialog }
-            assertFalse(dismissedState.showLoginPromptDialog)
-        }
-
-    @Test
-    fun enableAiringReminder_setsSettingsRepositoryTrue() =
-        runTest {
-            val settingsRepository = FakeSettingsRepository()
-            val viewModel = createViewModel(settingsRepository = settingsRepository)
-
-            viewModel.enableAiringReminder()
-
-            assertEquals(1, settingsRepository.setAiringReminderEnabledCallCount)
-            assertTrue(settingsRepository.settings.first().airingReminderEnabled)
         }
 
     @Test
@@ -627,34 +564,5 @@ class ScheduleViewModelTest {
             assertEquals("20:00", state.schedules[0].timeCst)
             assertEquals(2, state.schedules[1].nextEpisodeNumber)
             assertEquals("20:30", state.schedules[1].timeCst)
-        }
-
-    @Test
-    fun latestPlaybackHistoryReflectsRepositoryUpdates() =
-        runTest {
-            val historyRepo = FakePlaybackHistoryRepository()
-            val viewModel = createViewModel(playbackHistoryRepository = historyRepo)
-
-            val initialState = viewModel.uiState.first()
-            assertNull(initialState.latestPlaybackHistory)
-
-            val history =
-                PlaybackHistory(
-                    episodeId = 101L,
-                    subjectId = 2001L,
-                    subjectName = "葬送的芙莉莲",
-                    episodeName = "第12话",
-                    episodeSort = 12f,
-                    coverUrl = "https://example.com/cover.jpg",
-                    positionMs = 120_000L,
-                    durationMs = 1440_000L,
-                    updatedAt = 1000L,
-                )
-            historyRepo.saveHistory(history)
-
-            val stateWithHistory = viewModel.uiState.first { it.latestPlaybackHistory != null }
-            assertNotNull(stateWithHistory.latestPlaybackHistory)
-            assertEquals(101L, stateWithHistory.latestPlaybackHistory?.episodeId)
-            assertEquals("葬送的芙莉莲", stateWithHistory.latestPlaybackHistory?.subjectName)
         }
 }

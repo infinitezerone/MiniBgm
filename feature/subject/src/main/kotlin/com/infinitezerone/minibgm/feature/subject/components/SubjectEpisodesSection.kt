@@ -74,7 +74,6 @@ fun EpisodesSectionHeader(
     episodeSortDescending: Boolean = false,
     onToggleSort: (() -> Unit)? = null,
     nextUpEpisodeSort: Float? = null,
-    onJumpToNextUp: (() -> Unit)? = null,
     group: EpisodeGroup = EpisodeGroup.MAIN,
     hasMoreEpisodes: Boolean = false,
     showPlaybackCard: Boolean = false,
