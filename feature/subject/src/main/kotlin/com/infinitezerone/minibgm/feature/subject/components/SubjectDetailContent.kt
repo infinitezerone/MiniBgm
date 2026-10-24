@@ -4,13 +4,11 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -35,11 +33,10 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Episode
@@ -136,8 +133,6 @@ internal fun SubjectDetailContent(
     onTitleBoundsChanged: (Rect) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
-
     // 头部收合 nested scroll：上滑先收头部再滚列表；列表到顶后下拉先展头部再交还 overscroll。
     // 去除人造突变硬吸顶阈值，平滑跟随手势位移。
     val collapseConnection =
@@ -201,80 +196,67 @@ internal fun SubjectDetailContent(
         }
     }
 
-    BoxWithConstraints(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .padding(top = topPadding)
-                .clipToBounds()
-                .nestedScroll(collapseConnection),
-    ) {
-        val viewportHeightPx = constraints.maxHeight.toFloat()
-        val pagerHeight =
-            with(density) { (viewportHeightPx - SubjectTabBarHeight.toPx()).coerceAtLeast(0f).toDp() }
-        // 动态底部安全内边距：随头部展开动态补偿尾部留白，展开时绝不截断内容，收合时恢复默认 24dp 呼吸距离
-        val dynamicBottomPadding =
-            with(density) {
-                (headerCollapse.heightPx - headerCollapse.offsetPx).coerceAtLeast(0f).toDp() + SubjectTabBottomPadding
-            }
-
-        Column(
+    if (fullSubject == null) {
+        Box(
             modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .offset {
-                        IntOffset(0, -headerCollapse.offsetPx.coerceIn(0f, headerCollapse.heightPx).roundToInt())
-                    },
+                modifier
+                    .fillMaxSize()
+                    .padding(top = topPadding)
+                    .clipToBounds(),
         ) {
-            if (uiState.error != null) {
-                SubjectInlineError(message = uiState.error.orEmpty())
-            }
-
-            if (fullSubject == null && (uiState.isLoading || isTransitionStabilizing)) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                ) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(top = SubjectHeaderTopPadding)) {
-                        SubjectHeader(
-                            displaySubject = displaySubject,
-                            subjectType = subjectType,
-                            uiState = uiState,
-                            source = source,
-                            totalEpisodes = totalEpisodes,
-                            currentEpisodes = currentEpisodes,
-                            groupedEpisodes = groupedEpisodes,
-                            onOpenCollectionSheet = onOpenCollectionSheet,
-                            onUpdateCollectionStatus = onUpdateCollectionStatus,
-                            onTagClick = onTagClick,
-                            onPlayNextEpisode = onPlayNextEpisode,
-                            onOpenSources = onOpenSources,
-                            onIncrementWatched = onIncrementWatched,
-                            onDecrementWatched = onDecrementWatched,
-                            onPromptLogin = onPromptLogin,
-                            onShare = onShare,
-                            onTitleBoundsChanged = onTitleBoundsChanged,
-                        )
-                    }
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+            ) {
+                if (uiState.error != null) {
+                    SubjectInlineError(message = uiState.error.orEmpty())
+                }
+                Box(modifier = Modifier.fillMaxWidth().padding(top = SubjectHeaderTopPadding)) {
+                    SubjectHeader(
+                        displaySubject = displaySubject,
+                        subjectType = subjectType,
+                        uiState = uiState,
+                        source = source,
+                        totalEpisodes = totalEpisodes,
+                        currentEpisodes = currentEpisodes,
+                        groupedEpisodes = groupedEpisodes,
+                        onOpenCollectionSheet = onOpenCollectionSheet,
+                        onUpdateCollectionStatus = onUpdateCollectionStatus,
+                        onTagClick = onTagClick,
+                        onPlayNextEpisode = onPlayNextEpisode,
+                        onOpenSources = onOpenSources,
+                        onIncrementWatched = onIncrementWatched,
+                        onDecrementWatched = onDecrementWatched,
+                        onPromptLogin = onPromptLogin,
+                        onShare = onShare,
+                        onTitleBoundsChanged = onTitleBoundsChanged,
+                    )
+                }
+                if (uiState.isLoading || isTransitionStabilizing) {
                     SubjectDetailBodySkeleton(modifier = Modifier.padding(horizontal = 16.dp))
                 }
-            } else if (fullSubject != null) {
-                val subject = fullSubject
-                val collapseRatio =
-                    if (headerCollapse.heightPx > 0f) {
-                        (headerCollapse.offsetPx / headerCollapse.heightPx).coerceIn(0f, 1f)
-                    } else {
-                        0f
-                    }
-
-                // 头部收合区：上间距 + Hero 卡片 + 与 Tab 栏的呼吸距离，整体实测回写 heightPx，附着垂直滑动手势联动
+            }
+        }
+    } else {
+        val subject = fullSubject
+        Layout(
+            modifier =
+                modifier
+                    .fillMaxSize()
+                    .padding(top = topPadding)
+                    .clipToBounds()
+                    .nestedScroll(collapseConnection),
+            content = {
+                // Measurable 0: 头部收合区（错误提示 + 上间距 + Hero 卡片 + 与 Tab 栏的呼吸距离）
                 Box(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .onSizeChanged { headerCollapse.heightPx = it.height.toFloat() }
                             .then(headerDragModifier),
                 ) {
                     Column {
+                        if (uiState.error != null) {
+                            SubjectInlineError(message = uiState.error.orEmpty())
+                        }
                         Spacer(Modifier.height(SubjectHeaderTopPadding))
                         SubjectHeader(
                             displaySubject = displaySubject,
@@ -299,6 +281,13 @@ internal fun SubjectDetailContent(
                     }
                 }
 
+                // Measurable 1: 吸顶二级 Tab 栏
+                val collapseRatio =
+                    if (headerCollapse.heightPx > 0f) {
+                        (headerCollapse.offsetPx / headerCollapse.heightPx).coerceIn(0f, 1f)
+                    } else {
+                        0f
+                    }
                 SubjectDetailTabBar(
                     selectedTab = selectedTab,
                     pagerState = pagerState,
@@ -310,9 +299,10 @@ internal fun SubjectDetailContent(
                     onSelectTab = onSelectTab,
                 )
 
+                // Measurable 2: Pager 分页内容容器
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxWidth().height(pagerHeight),
+                    modifier = Modifier.fillMaxWidth(),
                     beyondViewportPageCount = SubjectDetailTab.entries.size - 1,
                 ) { page ->
                     when (SubjectDetailTab.entries.getOrElse(page) { SubjectDetailTab.OVERVIEW }) {
@@ -327,7 +317,7 @@ internal fun SubjectDetailContent(
                                 onPreviewCharacter = onPreviewCharacter,
                                 onPersonClick = onPersonClick,
                                 onSubjectClick = onSubjectClick,
-                                bottomPadding = dynamicBottomPadding,
+                                bottomPadding = SubjectTabBottomPadding,
                             )
 
                         SubjectDetailTab.EPISODES ->
@@ -356,7 +346,7 @@ internal fun SubjectDetailContent(
                                 onOpenSources = onOpenSources,
                                 onOpenEpisodeSources = onOpenEpisodeSources,
                                 onPlayNextEpisode = onPlayNextEpisode,
-                                bottomPadding = dynamicBottomPadding,
+                                bottomPadding = SubjectTabBottomPadding,
                             )
 
                         SubjectDetailTab.COMMUNITY ->
@@ -366,10 +356,41 @@ internal fun SubjectDetailContent(
                                 onLinkClick = onLinkClick,
                                 onTopicClick = onTopicClick,
                                 onCopyComment = onCopyComment,
-                                bottomPadding = dynamicBottomPadding,
+                                bottomPadding = SubjectTabBottomPadding,
                             )
                     }
                 }
+            },
+        ) { measurables, constraints ->
+            val headerPlaceable =
+                measurables[0].measure(
+                    constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity),
+                )
+            val headerHeight = headerPlaceable.height
+            headerCollapse.heightPx = headerHeight.toFloat()
+
+            val tabBarPlaceable =
+                measurables[1].measure(
+                    constraints.copy(minHeight = 0, maxHeight = constraints.maxHeight),
+                )
+            val tabBarHeight = tabBarPlaceable.height
+
+            val pagerHeight = (constraints.maxHeight - tabBarHeight).coerceAtLeast(0)
+            val pagerPlaceable =
+                measurables[2].measure(
+                    constraints.copy(
+                        minWidth = constraints.maxWidth,
+                        maxWidth = constraints.maxWidth,
+                        minHeight = pagerHeight,
+                        maxHeight = pagerHeight,
+                    ),
+                )
+
+            layout(constraints.maxWidth, constraints.maxHeight) {
+                val offset = headerCollapse.offsetPx.coerceIn(0f, headerHeight.toFloat()).roundToInt()
+                headerPlaceable.placeRelative(0, -offset)
+                tabBarPlaceable.placeRelative(0, headerHeight - offset)
+                pagerPlaceable.placeRelative(0, headerHeight + tabBarHeight - offset)
             }
         }
     }
