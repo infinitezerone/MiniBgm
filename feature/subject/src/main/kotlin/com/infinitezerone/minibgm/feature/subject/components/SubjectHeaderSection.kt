@@ -3,7 +3,6 @@ package com.infinitezerone.minibgm.feature.subject.components
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +38,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -96,6 +96,8 @@ fun SubjectHeaderCard(
 ) {
     var isSummaryExpanded by rememberSaveable { mutableStateOf(false) }
     val isEpisodeLike = subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL
+    // 明暗判定走当前生效色阶：应用支持强制亮/暗主题覆盖，isSystemInDarkTheme() 会与之相悖
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -117,10 +119,10 @@ fun SubjectHeaderCard(
                                     colors =
                                         listOf(
                                             MaterialTheme.colorScheme.primary.copy(
-                                                alpha = if (isSystemInDarkTheme()) 0.28f else 0.16f,
+                                                alpha = if (isDark) 0.28f else 0.16f,
                                             ),
                                             MaterialTheme.colorScheme.tertiary.copy(
-                                                alpha = if (isSystemInDarkTheme()) 0.12f else 0.06f,
+                                                alpha = if (isDark) 0.12f else 0.06f,
                                             ),
                                             Color.Transparent,
                                         ),
@@ -622,7 +624,7 @@ private fun HeaderActionButton(
     enabled: Boolean = true,
     isHighlighted: Boolean = false,
 ) {
-    val isDark = isSystemInDarkTheme()
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
