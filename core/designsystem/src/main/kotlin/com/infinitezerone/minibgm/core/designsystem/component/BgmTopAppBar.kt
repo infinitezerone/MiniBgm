@@ -21,8 +21,12 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -68,7 +72,8 @@ object BgmTopAppBarDefaults {
  * 传入 [scrollBehavior] 时支持滚动收合（如 enterAlways）：内容区高度随滚动从 [height]
  * 收合至 0（仅保留状态栏内边距），调用方需自行挂接 `scrollBehavior.nestedScrollConnection`。
  *
- * 传入 [chrome] 时，顶栏背景和标题由连续进度驱动；不传时完全保持 [mode] 的静态行为。
+ * 传入 [chrome] 时，顶栏背景和标题由连续进度驱动；进度以 lambda 延迟读取（draw/graphicsLayer
+ * 阶段求值），滚动联动不会触发逐帧重组；不传时完全保持 [mode] 的静态行为。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,25 +85,44 @@ fun BgmTopAppBar(
     actions: @Composable RowScope.() -> Unit = {},
     windowInsets: WindowInsets = TopAppBarDefaults.windowInsets,
     colors: TopAppBarColors? = null,
-    chrome: BgmTopBarChrome? = null,
+    chrome: (() -> BgmTopBarChrome)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     height: Dp = BgmSpacing.TopBar.height,
     contentMaxWidth: Dp? = null,
 ) {
     val density = LocalDensity.current
     val contentHeightPx = with(density) { height.toPx() }
-    val resolvedChrome = chrome?.normalized()
+    val chromeProvider = chrome?.let { provider -> ({ provider().normalized() }) }
+
+    // 标题显隐是 0.01 阈值的离散判定，用 derivedStateOf 折叠成布尔，避免进度逐帧穿透到组合期
+    val titleVisible =
+        if (chromeProvider != null) {
+            val visible by remember(chromeProvider) {
+                derivedStateOf { chromeProvider().titleProgress > 0.01f }
+            }
+            visible
+        } else {
+            true
+        }
 
     val resolvedColors =
         colors ?: when (mode) {
-            BgmTopBarMode.Immersive ->
-                BgmTopAppBarDefaults.immersiveColors(
-                    containerColor =
-                        resolvedChrome?.let {
-                            MaterialTheme.colorScheme.background.copy(alpha = it.surfaceProgress)
-                        } ?: Color.Transparent,
-                )
+            BgmTopBarMode.Immersive -> BgmTopAppBarDefaults.immersiveColors(containerColor = Color.Transparent)
             BgmTopBarMode.Solid -> BgmTopAppBarDefaults.solidColors()
+        }
+
+    // 滚动联动的表面色在绘制期按进度求值（defer reads），组合期不再逐帧重算颜色
+    val backgroundModifier =
+        if (colors == null && mode == BgmTopBarMode.Immersive && chromeProvider != null) {
+            val surfaceColor = MaterialTheme.colorScheme.background
+            Modifier.drawBehind {
+                val progress = chromeProvider().surfaceProgress
+                if (progress > 0f) {
+                    drawRect(surfaceColor.copy(alpha = progress))
+                }
+            }
+        } else {
+            Modifier.background(resolvedColors.containerColor)
         }
 
     // 收合上限以自身实际高度为准（不依赖 M3 默认高度假设）
@@ -117,7 +141,7 @@ fun BgmTopAppBar(
         modifier =
             modifier
                 .fillMaxWidth()
-                .background(resolvedColors.containerColor),
+                .then(backgroundModifier),
         propagateMinConstraints = true,
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -150,9 +174,9 @@ fun BgmTopAppBar(
                                 .weight(1f)
                                 .padding(horizontal = BgmSpacing.TopBar.titleHorizontal)
                                 .then(
-                                    if (resolvedChrome != null) {
+                                    if (chromeProvider != null) {
                                         Modifier.graphicsLayer {
-                                            val titleProgress = resolvedChrome.titleProgress
+                                            val titleProgress = chromeProvider().titleProgress
                                             alpha = titleProgress
                                             translationY = (1f - titleProgress) * 6.dp.toPx()
                                             scaleX = 0.96f + 0.04f * titleProgress
@@ -164,7 +188,7 @@ fun BgmTopAppBar(
                                 ),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                        if (resolvedChrome == null || resolvedChrome.titleProgress > 0.01f) {
+                        if (titleVisible) {
                             ProvideTextStyle(
                                 value =
                                     MaterialTheme.typography.titleMedium.copy(

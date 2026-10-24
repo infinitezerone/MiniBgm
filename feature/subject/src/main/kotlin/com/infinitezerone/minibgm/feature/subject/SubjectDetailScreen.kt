@@ -475,7 +475,7 @@ fun SubjectDetailScreen(
         topBar = {
             BgmTopAppBar(
                 mode = BgmTopBarMode.Immersive,
-                chrome = BgmTopBarChrome.collapsing(collapseProgress),
+                chrome = { BgmTopBarChrome.collapsing(collapseProgress) },
                 contentMaxWidth = 840.dp,
                 title = {
                     Text(

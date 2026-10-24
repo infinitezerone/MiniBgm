@@ -22,6 +22,7 @@
 
     <!-- 宽屏默认详情总览 -->
     <string name="app_overview_title">今日总览</string>
+    <string name="app_overview_today_date_format">%1$d月%2$d日</string>
     <string name="app_overview_subtitle">接着上次的进度，或从左侧时间线挑一部</string>
     <string name="app_overview_continue_watching">接着看</string>
     <string name="app_overview_recent_history">最近观看</string>

@@ -26,6 +26,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,9 +47,12 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmContentTokens
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmSpacing
 import com.infinitezerone.minibgm.core.model.PlaybackHistory
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import java.time.ZonedDateTime
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -63,14 +68,22 @@ fun BgmScheduleOverview(
     onOpenAssistant: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    val today = remember { LocalDate.now(ZoneId.of("Asia/Shanghai")) }
-    val gradientEndY = with(LocalDensity.current) { 460.dp.toPx() }
-    val dateLabel =
-        remember(today) {
-            today.format(DateTimeFormatter.ofPattern("M月d日", Locale.CHINA)) +
-                " · " +
-                today.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.CHINA)
+    // bgm.tv 播出时刻与排期全链路按 CST 计算，总览的「今天」必须同源（对齐 ScheduleViewModel 口径）
+    val cstZone = ZoneId.of("Asia/Shanghai")
+    // 当日锚定：本组件常驻宽屏详情位，跨午夜自动翻到新的一天
+    val today by
+        produceState(initialValue = LocalDate.now(cstZone), cstZone) {
+            while (isActive) {
+                val now = ZonedDateTime.now(cstZone)
+                val nextDayStart = now.toLocalDate().plusDays(1).atStartOfDay(cstZone)
+                delay(Duration.between(now, nextDayStart).toMillis() + 1_000)
+                value = LocalDate.now(cstZone)
+            }
         }
+    val gradientEndY = with(LocalDensity.current) { 460.dp.toPx() }
+    val dateText = stringResource(R.string.app_overview_today_date_format, today.monthValue, today.dayOfMonth)
+    val weekdayText = today.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
+    val dateLabel = "$dateText · $weekdayText"
 
     Box(
         modifier =

@@ -65,9 +65,9 @@ fun ScheduleTimelineSkeleton(
                     )
                 }
 
-                // 全幅通透卡片占位
+                // 全幅通透卡片占位（98dp 对齐实卡 88dp 内容 + 上下 5dp 呼吸，消除加载→内容跳变）
                 Card(
-                    modifier = Modifier.fillMaxWidth().height(112.dp),
+                    modifier = Modifier.fillMaxWidth().height(98.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors =
                         CardDefaults.cardColors(

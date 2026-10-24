@@ -36,6 +36,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -203,20 +204,23 @@ internal fun SubjectDetailContent(
             }
         }
 
-    LaunchedEffect(tabBarPlacement.windowTopPx) {
-        onTabBarTopChanged(tabBarPlacement.windowTopPx)
-    }
-
-    LaunchedEffect(tabBarPlacement, tabContentEndTopPx, viewportHeightPx, bottomPaddingPx) {
-        if (tabBarPlacement.isPinned || !tabBarPlacement.windowTopPx.isFinite()) return@LaunchedEffect
-        val target =
-            calculateSubjectTabTailSpacerPx(
-                viewportHeightPx = viewportHeightPx,
-                bottomPaddingPx = bottomPaddingPx,
-                tabBarTopPx = tabBarPlacement.windowTopPx,
-                contentEndTopPx = tabContentEndTopPx,
-            )
-        if (abs(target - tabTailSpacerPx) >= 0.5f) tabTailSpacerPx = target
+    // 滚动期间 placement 每帧变化：改用单条 snapshotFlow 收集，避免 LaunchedEffect 逐帧取消/重启
+    val currentOnTabBarTopChanged by rememberUpdatedState(onTabBarTopChanged)
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            Triple(tabBarPlacement, tabContentEndTopPx, viewportHeightPx)
+        }.collect { (placement, contentEndTopPx, viewportHeight) ->
+            currentOnTabBarTopChanged(placement.windowTopPx)
+            if (placement.isPinned || !placement.windowTopPx.isFinite()) return@collect
+            val target =
+                calculateSubjectTabTailSpacerPx(
+                    viewportHeightPx = viewportHeight,
+                    bottomPaddingPx = bottomPaddingPx,
+                    tabBarTopPx = placement.windowTopPx,
+                    contentEndTopPx = contentEndTopPx,
+                )
+            if (abs(target - tabTailSpacerPx) >= 0.5f) tabTailSpacerPx = target
+        }
     }
 
     // 滚动到“加载更多”脚标可见时自动续拉下一屏分集

@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -50,15 +51,25 @@ fun SubjectDetailFullSkeleton(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                // 海报封面占位 (140dp 宽，0.7f 比例，16dp 圆角)
-                SkeletonBox(
-                    modifier =
-                        Modifier
-                            .width(140.dp)
-                            .aspectRatio(0.7f),
-                    shape = RoundedCornerShape(16.dp),
-                    state = skeletonState,
-                )
+                // 背景弥散光晕 + 居中悬浮海报占位（对齐真实头部 246dp 光晕区，消除加载→内容跳变）
+                Box(
+                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SkeletonBox(
+                        modifier = Modifier.size(width = 176.dp, height = 246.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        state = skeletonState,
+                    )
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .width(140.dp)
+                                .aspectRatio(0.7f),
+                        shape = RoundedCornerShape(16.dp),
+                        state = skeletonState,
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
