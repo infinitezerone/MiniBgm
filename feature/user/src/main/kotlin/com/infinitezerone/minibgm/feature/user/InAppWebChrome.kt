@@ -37,9 +37,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
-import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
@@ -362,6 +362,10 @@ internal fun InAppWebUnavailable(
             BgmPillButton(onClick = onOpenInBrowser, text = stringResource(R.string.feature_user_web_open_in_system_browser))
             Spacer(modifier = Modifier.height(8.dp))
         }
-        BgmPillButton(onClick = onClose, text = stringResource(DesignSystemR.string.core_designsystem_action_back), variant = BgmPillVariant.Secondary)
+        BgmPillButton(
+            onClick = onClose,
+            text = stringResource(DesignSystemR.string.core_designsystem_action_back),
+            variant = BgmPillVariant.Secondary,
+        )
     }
 }

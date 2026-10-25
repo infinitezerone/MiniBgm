@@ -7,7 +7,6 @@ import kotlin.test.fail
 
 /** 域规则文件：从 ArchitectureRulesTest 拆出（测试名即规则名，复盘在各测试 KDoc）。 */
 class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
-
     /**
      * ECH 引擎必须把「自有请求超时」翻译成 Ktor 的 `HttpRequestTimeoutException`（IOException）。
      *
@@ -31,7 +30,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
                 "严禁直接 throw cancellation——重试插件会把它当成调用方取消",
         )
     }
-
 
     /**
      * 网络切换必须真的重置探测冷却与解析缓存，并且**真的被注册**。
@@ -72,7 +70,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     @Test
     fun stream_engines_never_use_fake_placeholders_or_unbound_sockets() {
         val dataDir = File(projectRoot, "core/data")
@@ -112,7 +109,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
             )
         }
     }
-
 
     /**
      * ECH 边缘优选池防污染与本地回环流分流红线（见 AGENTS.md 领域规则 & 剧本 8）：
@@ -282,7 +278,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * JNI 符号绑定与流统计失败信号红线（见 AGENTS.md 领域规则 & 剧本 8）：
      * 1. Kotlin 侧 6 个 `external fun` 必须各自带 `@JvmStatic`：只有 `@JvmStatic` 会把 native 跳板
@@ -402,7 +397,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * 播放优先红线（见 AGENTS.md 领域规则 & 剧本 8）：
      * 单实例 librqbit 会话下，后台离线下载起任何新任务都会 release 掉当前会话；若此时前台播放器
@@ -460,7 +454,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * 磁力文件挑选链路红线（见 AGENTS.md 领域规则 & 剧本 8）：
      * 1. `server.rs` 必须以 `paused: true` 添加种子，并在锁定单集后调用 `session.unpause(&handle)`：
@@ -506,7 +499,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
             "违反磁力文件挑选链路红线（见 AGENTS.md 领域规则 & 剧本 8）：\n" + violations.joinToString("\n"),
         )
     }
-
 
     /**
      * 磁力分集隔离与种子载荷校验红线（见 AGENTS.md 领域规则 & 剧本 8）：
@@ -617,7 +609,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
             "违反磁力分集隔离与种子载荷校验红线（见 AGENTS.md 领域规则 & 剧本 8）：\n" + violations.joinToString("\n"),
         )
     }
-
 
     /**
      * 磁力链路「交互与业务逻辑」红线（见 AGENTS.md 领域规则 & 剧本 8）：
@@ -736,7 +727,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
             "违反磁力交互与业务逻辑红线（见 AGENTS.md 领域规则 & 剧本 8）：\n" + violations.joinToString("\n"),
         )
     }
-
 
     /**
      * 磁力实现收敛红线（见 AGENTS.md 领域规则 & 剧本 8）：
@@ -872,7 +862,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * 应用内更新下载的可见性红线（见 AGENTS.md 领域规则 & 剧本 12）：
      * 更新 APK 是数十 MB 的后台大任务，而设置页长期只弹一次固定文案「正在下载新版本… 0%」——
@@ -920,7 +909,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     @Test
     fun core_data_and_feature_subject_sources_must_not_hardcode_proprietary_torrent_domains() {
         val violations = mutableListOf<String>()
@@ -948,7 +936,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
             "违反 P2P 种子协议中立性红线（核心数据层与详情层严禁硬编码特定第三方站点域名）：\n" + violations.joinToString("\n"),
         )
     }
-
 
     @Test
     fun production_sources_must_not_inject_hardcoded_public_trackers() {
@@ -987,7 +974,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * 隐私与安全隔离红线：
      * 开源仓库中严禁硬编码任何开发者个人私有域名、网关端点（如私有反代、私人 DDNS 域名）；
@@ -1024,7 +1010,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     @Test
     fun image_loader_routing_must_fail_open_for_unknown_third_party_hosts() {
         val moduleFile =
@@ -1060,7 +1045,6 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
             "违反第三方图床 Fail-Open 路由红线：\n" + violations.joinToString("\n"),
         )
     }
-
 
     @Test
     fun torrent_resource_card_must_not_expose_technical_dual_source_badges_and_use_lean_actions() {
@@ -1101,5 +1085,4 @@ class TorrentNetworkRulesTest : ArchitectureRuleTestSupport() {
     }
 
     /** 手工构造 ViewModel 的 Koin 块；`{ params -> ... }`、`{ (arg: T) -> ... }` 与单行写法都要覆盖 */
-
 }

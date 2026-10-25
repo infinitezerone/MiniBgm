@@ -1,14 +1,13 @@
 package com.infinitezerone.minibgm.core.testing
 
+import com.infinitezerone.minibgm.core.datastore.UserPreferences
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.fail
-import com.infinitezerone.minibgm.core.datastore.UserPreferences
 
 /** 域规则文件：从 ArchitectureRulesTest 拆出（测试名即规则名，复盘在各测试 KDoc）。 */
 class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
-
     @Test
     fun feature_sources_never_import_network_or_database_packages() {
         val featureDir = File(projectRoot, "feature")
@@ -43,7 +42,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     @Test
     fun feature_sources_never_import_datastore() {
         val featureDir = File(projectRoot, "feature")
@@ -73,7 +71,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
             )
         }
     }
-
 
     @Test
     fun core_model_is_pure_kotlin_without_android_or_ui_dependencies() {
@@ -111,7 +108,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     @Test
     fun viewModels_never_expose_mutable_state_flow() {
         val featureDir = File(projectRoot, "feature")
@@ -140,7 +136,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     @Test
     fun userPreferences_never_stores_sensitive_tokens() {
         // 反射校验 UserPreferences 所有属性名，杜绝凭据泄漏至未加密的 Preferences 中
@@ -163,7 +158,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
             )
         }
     }
-
 
     @Test
     fun feature_sources_never_import_transport_or_storage_frameworks() {
@@ -198,7 +192,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
             )
         }
     }
-
 
     @Test
     fun feature_sources_never_perform_raw_network_or_private_disk_io() {
@@ -247,7 +240,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     @Test
     fun json_instances_have_a_single_home_per_scope() {
         // 每个作用域的 JSON 序列化决策只允许有一个定义处（"家"），其余一律引用：
@@ -294,7 +286,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     @Test
     fun navigation_routes_are_sealed_and_declared_only_in_bgm_routes() {
         val routesFile =
@@ -337,7 +328,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     @Test
     fun only_assistant_feature_may_invoke_the_ai_agent() {
         val featureDir = File(projectRoot, "feature")
@@ -376,7 +366,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     @Test
     fun production_sources_never_import_legacy_date_or_calendar() {
         val violations = mutableListOf<String>()
@@ -410,7 +399,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     @Test
     fun production_sources_never_use_global_scope() {
         val violations = mutableListOf<String>()
@@ -441,7 +429,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
             )
         }
     }
-
 
     @Test
     fun ui_sources_never_import_implementation_classes() {
@@ -476,7 +463,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     @Test
     fun viewModels_never_inline_user_facing_snackbar_text() {
         val featureDir = File(projectRoot, "feature")
@@ -509,7 +495,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
             )
         }
     }
-
 
     @Test
     fun platform_data_module_declares_all_referenced_services() {
@@ -549,7 +534,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
             )
         }
     }
-
 
     /**
      * 定位 [content] 中所有 ShowSnackbar(...) 实参跨度内的中文字符串字面量。
@@ -655,7 +639,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
         return literals
     }
 
-
     /**
      * 构建解耦红线（见 AGENTS.md 构建与验证）：
      * `build-logic` 严禁直接调度 `cargo` 或 `cargo-ndk` 进程。
@@ -685,7 +668,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
             "违反 Gradle/Rust 构建解耦红线（见 AGENTS.md 构建与验证）：\n" + violations.joinToString("\n"),
         )
     }
-
 
     /**
      * Flow 算子副作用收敛红线：`map` / `onEach` / `filter` / `transform` / `mapNotNull`
@@ -732,7 +714,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
             "违反 Flow 算子副作用收敛红线：\n" + violations.joinToString("\n"),
         )
     }
-
 
     /**
      * 仓库契约参数实现闭环红线：`TorrentFeedRepository.getTorrentResources` 的
@@ -794,7 +775,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     @Test
     fun production_sources_never_use_reflection_getIdentifier() {
         val scanRoots =
@@ -824,7 +804,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
             "违反资源体系静态引用红线（严禁反射查找资源）：\n" + violations.joinToString("\n"),
         )
     }
-
 
     @Test
     fun screenshot_test_modules_must_use_shared_unit_test_convention() {
@@ -859,7 +838,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
             "违反单测配置单一真源（build-logic/convention/.../AndroidUnitTest.kt）：\n" + violations.joinToString("\n"),
         )
     }
-
 
     /**
      * 手工 `viewModel { XxxViewModel(...) }` 块必须显式注入**全部**「默认值为 null」的构造器参数。
@@ -985,7 +963,6 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
             .toSet()
     }
 
-
     /**
      * 仓库/抓取层必须把 CPU/IO 工作切出调用方线程。
      *
@@ -1031,5 +1008,4 @@ class ModuleBoundaryRulesTest : ArchitectureRuleTestSupport() {
             fail("调用方线程（可能是 Main）不得承担解析/解码：\n" + violations.joinToString("\n"))
         }
     }
-
 }

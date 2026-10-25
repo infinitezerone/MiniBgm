@@ -7,7 +7,6 @@ import kotlin.test.fail
 
 /** 域规则文件：从 ArchitectureRulesTest 拆出（测试名即规则名，复盘在各测试 KDoc）。 */
 class PlayerRulesTest : ArchitectureRuleTestSupport() {
-
     /**
      * 播放线路面板是**主题化**面板（竖屏底部弹层与横屏右侧抽屉共用同一份内容），
      * 容器色与文字必须全部来自 `MaterialTheme.colorScheme`。
@@ -41,7 +40,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
                 violations.joinToString("\n"),
         )
     }
-
 
     /**
      * 播放线路面板必须复用设计系统现成组件，而不是在 feature 里手搓私有样式：
@@ -81,7 +79,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     @Test
     fun player_sources_interaction_strictly_centralized() {
         val subjectSrcDir = File(projectRoot, "feature/subject/src/main/kotlin")
@@ -109,7 +106,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     @Test
     fun player_media_state_reset_must_preserve_engine_side_preferences() {
         val controllerFile =
@@ -128,7 +124,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
             "PlayerController 禁止用 PlaybackState() 无参整体重置媒体态，必须显式保留 isLooping 等引擎侧偏好",
         )
     }
-
 
     /**
      * 播放页长期偏好必须持久化，且只能有一个真源（设置仓库投影回读）。
@@ -219,7 +214,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * 播放器软字幕图层必须直连 [Player.Listener] 且随 [View.OnAttachStateChangeListener] 挂载/卸载。
      *
@@ -268,7 +262,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * 播放器音视频与字幕轨道快照必须进行防重消歧，且通用语言代码（chi/zho/zh）不得武断硬编码为单一变体。
      *
@@ -297,7 +290,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
             "$sheetPath 严禁将通用宏语言代号 chi/zh/zho 武断硬编码映射为「中文 (简体)」，必须中立标为「中文」并经消歧处理",
         )
     }
-
 
     @Test
     fun comment_sort_order_must_be_a_shared_persisted_preference() {
@@ -347,7 +339,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
                 violations.joinToString("\n"),
         )
     }
-
 
     @Test
     fun danmaku_match_entry_must_be_gated_by_the_danmaku_toggle() {
@@ -403,7 +394,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
                 violations.joinToString("\n"),
         )
     }
-
 
     @Test
     fun danmaku_view_must_use_dynamic_track_allocation_and_not_hash_modulo() {
@@ -522,7 +512,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     @Test
     fun player_view_model_must_filter_out_torrent_rules_from_online_sources() {
         val playerViewModelFile =
@@ -539,7 +528,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
             "PlayerViewModel 必须处理并过滤 PlaybackRuleKind.TORRENT 种子规则",
         )
     }
-
 
     /**
      * 播放器观看记录与断点续播红线：
@@ -577,7 +565,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * 播放源管理与观看记录解耦红线：
      * 1. 观看历史由独立 [HistoryViewModel] 和 [HistoryScreen] 承载，归口个人中心 [UserScreen] 顶栏直达；
@@ -603,7 +590,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
             "违反播放源规则与观看记录解耦架构红线：\n" + violations.joinToString("\n"),
         )
     }
-
 
     @Test
     fun player_gesture_hud_must_not_jitter_and_use_tnum_and_avoid_dual_hud_conflict() {
@@ -646,7 +632,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
             "违反播放器手势 HUD 稳定性与防冲突红线：\n" + violations.joinToString("\n"),
         )
     }
-
 
     /**
      * 播放器拖动进度唯一真源红线。
@@ -713,7 +698,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * 播放器横屏右侧抽屉（PlayerRightDrawerContainer）必须将关闭动效响应绑定至快照流与下树清理，
      * 且 BackHandler 必须按目标显隐状态条件启闭（`enabled = visibleState.targetState`）：
@@ -777,7 +761,6 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     /**
      * 播放器锁定屏规范：
      * 1. PlayerGestureDetector.kt 在 isLocked 时单击必须调用 onSingleTap()，严禁裸 return 吞掉点击导致无法唤出解锁键；
@@ -829,5 +812,4 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
             "PlayerScreen 进入 PiP 模式时必须重置 isScreenLocked = false",
         )
     }
-
 }

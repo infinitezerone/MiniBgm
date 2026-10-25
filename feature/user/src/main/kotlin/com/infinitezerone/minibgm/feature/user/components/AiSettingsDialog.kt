@@ -26,9 +26,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
-import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.AiConfig
 import com.infinitezerone.minibgm.feature.user.R
@@ -221,31 +221,35 @@ internal fun AiSettingsDialog(
         },
         confirmButton = {
             BgmPillButton(onClick = {
-                    val defaultEndpoint =
-                        when (selectedProvider) {
-                            AiConfig.PROVIDER_OLLAMA -> DEFAULT_OLLAMA_ENDPOINT
-                            AiConfig.PROVIDER_GEMINI -> DEFAULT_GEMINI_ENDPOINT
-                            else -> DEFAULT_OPENAI_ENDPOINT
-                        }
-                    val defaultModel =
-                        when (selectedProvider) {
-                            AiConfig.PROVIDER_OLLAMA -> DEFAULT_OLLAMA_MODEL
-                            AiConfig.PROVIDER_GEMINI -> DEFAULT_GEMINI_MODEL
-                            else -> DEFAULT_OPENAI_MODEL
-                        }
-                    onSaveConfig(
-                        AiConfig(
-                            endpoint = endpoint.trim().ifBlank { defaultEndpoint },
-                            apiKey = apiKey.trim(),
-                            model = model.trim().ifBlank { defaultModel },
-                            provider = selectedProvider,
-                        ),
-                    )
-                    onDismiss()
-                }, text = stringResource(DesignSystemR.string.core_designsystem_action_save))
+                val defaultEndpoint =
+                    when (selectedProvider) {
+                        AiConfig.PROVIDER_OLLAMA -> DEFAULT_OLLAMA_ENDPOINT
+                        AiConfig.PROVIDER_GEMINI -> DEFAULT_GEMINI_ENDPOINT
+                        else -> DEFAULT_OPENAI_ENDPOINT
+                    }
+                val defaultModel =
+                    when (selectedProvider) {
+                        AiConfig.PROVIDER_OLLAMA -> DEFAULT_OLLAMA_MODEL
+                        AiConfig.PROVIDER_GEMINI -> DEFAULT_GEMINI_MODEL
+                        else -> DEFAULT_OPENAI_MODEL
+                    }
+                onSaveConfig(
+                    AiConfig(
+                        endpoint = endpoint.trim().ifBlank { defaultEndpoint },
+                        apiKey = apiKey.trim(),
+                        model = model.trim().ifBlank { defaultModel },
+                        provider = selectedProvider,
+                    ),
+                )
+                onDismiss()
+            }, text = stringResource(DesignSystemR.string.core_designsystem_action_save))
         },
         dismissButton = {
-            BgmPillButton(onClick = onDismiss, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), variant = BgmPillVariant.Secondary)
+            BgmPillButton(
+                onClick = onDismiss,
+                text = stringResource(DesignSystemR.string.core_designsystem_action_cancel),
+                variant = BgmPillVariant.Secondary,
+            )
         },
     )
 }

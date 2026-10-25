@@ -7,7 +7,6 @@ import kotlin.test.fail
 
 /** 域规则文件：从 ArchitectureRulesTest 拆出（测试名即规则名，复盘在各测试 KDoc）。 */
 class UiDesignRulesTest : ArchitectureRuleTestSupport() {
-
     @Test
     fun feature_sources_never_hardcode_compose_colors() {
         val featureDir = File(projectRoot, "feature")
@@ -35,7 +34,6 @@ class UiDesignRulesTest : ArchitectureRuleTestSupport() {
             )
         }
     }
-
 
     @Test
     fun ui_sources_only_use_ladder_radius_literals() {
@@ -76,7 +74,6 @@ class UiDesignRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     @Test
     fun feature_content_never_uses_system_chrome_glass() {
         val featureDir = File(projectRoot, "feature")
@@ -104,7 +101,6 @@ class UiDesignRulesTest : ArchitectureRuleTestSupport() {
                 violations.joinToString("\n"),
         )
     }
-
 
     /**
      * 【顶栏双模式范式守卫】
@@ -139,7 +135,6 @@ class UiDesignRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     @Test
     fun feature_and_app_sources_never_import_raw_material_icons() {
         val violations = mutableListOf<String>()
@@ -173,7 +168,6 @@ class UiDesignRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     @Test
     fun feature_screens_never_collect_viewmodel_events_without_observe_as_events() {
         val featureDir = File(projectRoot, "feature")
@@ -206,7 +200,6 @@ class UiDesignRulesTest : ArchitectureRuleTestSupport() {
             )
         }
     }
-
 
     /**
      * 明暗判定统一走当前生效色阶（红线）：
@@ -249,7 +242,6 @@ class UiDesignRulesTest : ArchitectureRuleTestSupport() {
                 violations.joinToString("\n"),
         )
     }
-
 
     /**
      * 触控靶区红线（M3 ≥48dp）：
@@ -306,7 +298,6 @@ class UiDesignRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * Modifier.Node 架构规范（第 1 条）：
      * 继承自 [ModifierNodeElement] 的类必须声明为 data class，或显式 override equals 与 hashCode。
@@ -356,7 +347,6 @@ class UiDesignRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * Modifier.Node 架构规范（第 2 条）：
      * 严禁在生产代码中使用遗留的 [Modifier.composed]。
@@ -389,5 +379,4 @@ class UiDesignRulesTest : ArchitectureRuleTestSupport() {
                 violations.joinToString("\n"),
         )
     }
-
 }

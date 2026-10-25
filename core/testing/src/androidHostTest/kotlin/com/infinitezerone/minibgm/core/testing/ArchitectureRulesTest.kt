@@ -59,7 +59,6 @@ import kotlin.test.assertTrue
  * 注：本测试套件已全面迁移至 [KotlinSourceScanner]，实现词法脱敏与结构化扫描，彻底杜绝注释误伤、字符串干扰与跨行漏判。
  */
 class ArchitectureRulesTest : ArchitectureRuleTestSupport() {
-
     /**
      * `AGENTS.md` 是每轮会话都会被注入上下文的索引文件，失控膨胀会直接吃掉可用上下文。
      *
@@ -138,7 +137,6 @@ class ArchitectureRulesTest : ArchitectureRuleTestSupport() {
         }
         return spans
     }
-
 
     /**
      * 文档只能说「真话」：AGENTS.md 与各 skill 用反引号引用的测试名、仓库路径、reference 文件
@@ -239,7 +237,6 @@ class ArchitectureRulesTest : ArchitectureRuleTestSupport() {
                 violations.joinToString("\n"),
         )
     }
-
 
     /**
      * skill 必须**渐进披露**：SKILL.md 只做路由与铁律，细节进 `references/`，按需读取。
