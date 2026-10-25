@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
+import com.infinitezerone.minibgm.core.designsystem.theme.ratingTextColor
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.UserCollection
@@ -123,7 +124,7 @@ fun SubjectCollectionCard(
                                 text = stringResource(R.string.feature_subject_rating_score_stars, collection.rate.toString()),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = RatingGold,
+                                color = ratingTextColor(),
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }

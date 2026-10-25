@@ -86,13 +86,10 @@ sealed interface SubjectDetailUiEvent {
     ) : SubjectDetailUiEvent
 }
 
-/** 条目详情页二级分栏枚举 */
-enum class SubjectDetailTab(
-    val label: String,
-) {
-    OVERVIEW("概览"),
-    EPISODES("分集"),
-    COMMUNITY("讨论"),
+/** 条目详情页二级分栏按用户意图组织：概览负责判断与理解，讨论负责参考他人观点。 */
+enum class SubjectDetailTab {
+    OVERVIEW,
+    COMMUNITY,
 }
 
 /** 条目详情页 UI 状态 */
@@ -177,7 +174,7 @@ private data class RepoSnapshot(
  *    [RepoSnapshot] 单点投影，经 init 里**唯一**的 `_uiState.update` 收集点回读——替代旧实现
  *    5+ 路离散 collect，各字段合并规则与旧实现逐点等价（subject 只进不清、collection 流只覆盖
  *    type/epStatus 以保住命令层的乐观 rate/comment/tags）。
- * 2. 资料与社区两个懒加载 Tab 改为"意图 → flatMapLatest 换挡"：[loadDetailsTabIfNeeded] /
+ * 2. 概览与讨论两个懒加载 Tab 改为"意图 → flatMapLatest 换挡"：[loadDetailsTabIfNeeded] /
  *    [loadCommunityTabIfNeeded] 只发意图并同步置在途标记（替代旧 detailsJob?.isActive 判定），
  *    换挡与在途取消交给 flatMapLatest，无手动 Job；拉取结果是一次性网络数据而非仓库流，
  *    按规范第 5 条落回 [SubjectDetailUiState] 的会话字段。
@@ -369,7 +366,7 @@ class SubjectDetailViewModel(
         authRepository.isLoggedIn
             .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    /** 资料 Tab 拉取意图：true = 强制重取（flatMapLatest 的换挡判据） */
+    /** 概览 Tab 拉取意图：true = 强制重取（flatMapLatest 的换挡判据） */
     private val detailsIntents =
         MutableSharedFlow<Boolean>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
@@ -593,7 +590,6 @@ class SubjectDetailViewModel(
         _uiState.update { it.copy(selectedTab = tab) }
         when (tab) {
             SubjectDetailTab.OVERVIEW -> loadDetailsTabIfNeeded()
-            SubjectDetailTab.EPISODES -> Unit
             SubjectDetailTab.COMMUNITY -> loadCommunityTabIfNeeded()
         }
     }
@@ -698,19 +694,21 @@ class SubjectDetailViewModel(
     }
 
     /**
-     * 按需懒加载资料与演职员 Tab 数据（角色 -> 人员 -> 关联作品）。
+     * 按需懒加载概览数据（角色 -> 人员 -> 关联作品）。
      *
      * 意图换挡（规范第 2 条）：已加载或在途时跳过；force 触发整条换挡重取，在途旧会话由
-     * flatMapLatest 取消——无手动 Job。仅在用户主动切到「资料与演职员」Tab 时触发，
+     * flatMapLatest 取消——无手动 Job。仅在用户主动切到「概览」Tab 时触发，
      * 已加载过则不再重复请求。
      */
     fun loadDetailsTabIfNeeded(force: Boolean = false) {
         if (!force && (detailsLoaded || detailsInFlight)) return
         detailsInFlight = true
+        // 同步置在途标记：意图流收集是异步的，若等会话内置位，首帧会闪「空态」而非加载态
+        _uiState.update { it.copy(isDetailsLoading = true) }
         detailsIntents.tryEmit(force)
     }
 
-    /** 资料 Tab 拉取会话（flatMapLatest 的内层流）：进入即"加载中"，任一成功即落定加载标记 */
+    /** 概览 Tab 拉取会话（flatMapLatest 的内层流）：进入即"加载中"，任一成功即落定加载标记 */
     private fun detailsSession(force: Boolean): Flow<Unit> =
         flow {
             try {
@@ -751,6 +749,8 @@ class SubjectDetailViewModel(
     fun loadCommunityTabIfNeeded(force: Boolean = false) {
         if (!force && (communityLoaded || communityInFlight)) return
         communityInFlight = true
+        // 同步置在途标记：否则切到讨论 Tab 的首帧是空列表 + 非加载态，误显「暂无短评」
+        _uiState.update { it.copy(isCommunityLoading = true) }
         communityIntents.tryEmit(force)
     }
 

@@ -7,7 +7,6 @@ import kotlin.test.fail
 
 /** 域规则文件：从 ArchitectureRulesTest 拆出（测试名即规则名，复盘在各测试 KDoc）。 */
 class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
-
     /**
      * 排期单一真源红线：时刻表仓库不得再依赖官方日历、bangumi-data 固定窗口或算术预测。
      * 这三者正是历史上“漏番 / 假集数”的来源；AniList 周排期是名单与时间的唯一真源。
@@ -40,7 +39,6 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
         }
     }
 
-
     /**
      * WebView 可观测性红线（见 AGENTS.md 领域规则）：
      * 生产代码中声明 WebChromeClient 必须实现 onConsoleMessage。
@@ -67,7 +65,6 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
             "违反 WebView 可观测性红线（见 AGENTS.md 领域规则）：\n" + violations.joinToString("\n"),
         )
     }
-
 
     /**
      * 按需动态 `.so` 装载与确认红线（见 AGENTS.md 领域规则 & 剧本 8）：
@@ -112,7 +109,6 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
             "违反按需动态 .so 装载安全红线（见 AGENTS.md 领域规则 & 剧本 8）：\n" + violations.joinToString("\n"),
         )
     }
-
 
     /**
      * 开发者面板「开关必须真实生效」红线（见 AGENTS.md 领域规则 & 剧本 8）：
@@ -182,7 +178,6 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * 「已落盘资源」动作诚实性红线（见 AGENTS.md 领域规则 & 剧本 8）：
      *
@@ -222,7 +217,6 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
             "违反「已落盘资源」动作诚实性红线：\n" + violations.joinToString("\n"),
         )
     }
-
 
     /**
      * 播放源底栏必须统一使用设计系统规范卡片（BgmSourceActionCard）：
@@ -272,27 +266,66 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
-     * 详情页分集点击必须直接路由至统一抽屉（SubjectSourcesBottomSheet）：
-     * 严禁退化为「先弹分集微操作、再关弹窗开播放源」的多层嵌套与抽屉跳抽屉反模式。
+     * 条目页分集是播放工具，不是内容阅读分栏：
+     * 1. 主 Pager 只保留资料/评价，禁止把分集重新塞回 SubjectDetailTab；
+     * 2. 分集选择必须经 BgmOverlayHost 的单一 request 进入全集选择；
+     * 3. 选择后在同一个 overlay 内进入 SubjectSourcesBottomSheet，禁止再弹第二层抽屉。
      */
     @Test
     fun subject_detail_episode_click_must_route_to_unified_sources_sheet() {
-        val path =
+        val screenPath =
             "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailScreen.kt"
-        val code = KotlinSourceScanner.sanitize(File(projectRoot, path).readText())
+        val overlayPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodeOverlay.kt"
+        val pickerPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodesBottomSheet.kt"
+        val viewModelPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/SubjectDetailViewModel.kt"
+        val contentPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectDetailContent.kt"
+        val headerActionPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectHeaderActionRow.kt"
+        val screen = KotlinSourceScanner.sanitize(File(projectRoot, screenPath).readText())
+        val overlay = KotlinSourceScanner.sanitize(File(projectRoot, overlayPath).readText())
+        val picker = KotlinSourceScanner.sanitize(File(projectRoot, pickerPath).readText())
+        val viewModel = KotlinSourceScanner.sanitize(File(projectRoot, viewModelPath).readText())
+        val content = KotlinSourceScanner.sanitize(File(projectRoot, contentPath).readText())
+        val headerAction = KotlinSourceScanner.sanitize(File(projectRoot, headerActionPath).readText())
 
-        val unifiedRouteCheck =
+        val overlayRequestCheck =
             Regex(
-                """onEpisodeClickForQuickAction\s*=\s*\{\s*episode\s*->[\s\S]{0,150}?selectedEpisodeForSources\s*=\s*episode[\s\S]{0,100}?showSourcesBottomSheet\s*=\s*true""",
+                """overlayHostState\.await\s*\(\s*SubjectEpisodeOverlayRequest""",
             )
         assertTrue(
-            unifiedRouteCheck.containsMatchIn(code),
-            "$path 的 onEpisodeClickForQuickAction 必须直接打开统一底栏（selectedEpisodeForSources + showSourcesBottomSheet），严禁开孤立抽屉套娃！",
+            overlayRequestCheck.containsMatchIn(screen),
+            "$screenPath 的分集入口必须经 BgmOverlayHost 发起单一 OverlayRequest",
+        )
+        assertTrue(
+            screen.contains("SubjectEpisodeOverlay("),
+            "$screenPath 的 BgmOverlayHost 必须渲染统一分集/来源 Overlay",
+        )
+        assertTrue(
+            picker.contains("BgmSourcesBottomSheet(") && picker.contains("EpisodesTabPage("),
+            "$pickerPath 必须复用统一 Bottom Sheet 容器与分集工作区",
+        )
+        assertTrue(
+            overlay.contains("SubjectSourcesBottomSheet(") && overlay.contains("onOpenEpisodePicker"),
+            "$overlayPath 必须在同一 Overlay 内切换到统一播放源底栏并提供返回选集入口",
+        )
+        assertTrue(
+            headerAction.contains("if (onOpenEpisodePicker != null)"),
+            "$headerActionPath 的章节入口不得只对影视条目显示：书籍卷册、音乐曲目与游戏章节同样需要入口",
+        )
+        assertTrue(
+            overlay.contains("supportsPlaybackSources") && overlay.contains("onOpenEpisodeDetails(episode)"),
+            "$overlayPath 必须区分影视播放源与非影视章节详情，禁止把卷册/曲目误送进播放源面板",
+        )
+        assertTrue(
+            !viewModel.contains("EPISODES") && !content.contains("EpisodesTabPage("),
+            "分集列表不得重新进入 SubjectDetailTab 或主详情 Pager",
         )
     }
-
 
     /**
      * 播放源订阅完整性红线（见 AGENTS.md 领域规则 & 剧本 15）：
@@ -339,7 +372,6 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * TVBox JS 爬虫沙盒硬安全隔离红线（见 AGENTS.md 领域规则 & 剧本 15）：
      * 1. [JsSpiderSandbox] 必须显式配置内存限制（`memoryLimit`）与执行超时保护（`evaluationTimeoutMillis`）；
@@ -368,7 +400,6 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
             "JsSpiderSandbox 网络请求必须通过 PageFetchService 代理，享有统一的白名单与重定向审计",
         )
     }
-
 
     /**
      * TVBox JS Spider 的 ext 必须从站点配置一路传到 `init(ext)`：
@@ -428,7 +459,6 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * TVBox 聚合解析链与嗅探引擎安全提速红线（剧本 15）：
      * 1. [TvBoxParseResolverImpl] 必须配置超时看门狗（PARSE_TIMEOUT_MS / withTimeoutOrNull），防止慢解析服务挂死；
@@ -472,7 +502,6 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * 下载视频外部调用与相册导出安全规范。
      *
@@ -513,7 +542,6 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-
     /**
      * 详情页二级 Tab 结构红线（切 tab 抖动复盘）：
      * 旧实现是「单个共享 LazyColumn 换 items + stickyHeader 假吸顶 + 尾部自适应留白 +
@@ -548,6 +576,9 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
         if (screen.contains("SUBJECT_TABS_ITEM_KEY") || screen.contains("SUBJECT_HEADER_ITEM_KEY")) {
             violations.add("$screenRelPath 仍按列表 key 定位吸顶栏/头部：吸顶已由收合结构承担，禁止回退")
         }
+        if (!screen.contains("widthIn(max = 840.dp)")) {
+            violations.add("$screenRelPath 详情内容缺少 840dp 宽屏上限：平板/折叠屏会被过度拉伸")
+        }
 
         assertTrue(
             violations.isEmpty(),
@@ -556,6 +587,137 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
-    /** [inner] 是否出现在以 [blockToken] 开头、花括号配对的代码块内 */
+    /**
+     * 详情页信息架构必须按用户意图而非数据类型分栏：
+     * 1. 「概览」先用评分、收藏分布与题材标签回答值不值得看，再讲剧情、关联与创作；
+     * 2. 「讨论」只承载短评和讨论帖，禁止重复概览页的评分决策面板；
+     * 3. Tab 文案用「概览/讨论」表达任务，不能退回「资料/评价」的数据分类。
+     */
+    @Test
+    fun subject_detail_intent_tabs_must_keep_decision_context_in_overview() {
+        val overviewPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectOverviewTab.kt"
+        val communityPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectCommunityTab.kt"
+        val stringsPath = "feature/subject/src/main/res/values/strings.xml"
+        val overview = KotlinSourceScanner.sanitize(File(projectRoot, overviewPath).readText())
+        val community = KotlinSourceScanner.sanitize(File(projectRoot, communityPath).readText())
+        val strings = File(projectRoot, stringsPath).readText()
 
+        val decisionIndex = overview.indexOf("RatingDistributionCard(")
+        val summaryIndex = overview.indexOf("SubjectSummarySection(")
+        assertTrue(
+            decisionIndex >= 0 && summaryIndex > decisionIndex,
+            "$overviewPath 必须先呈现评分/收藏/标签决策面板，再展开剧情简介",
+        )
+        assertTrue(
+            !community.contains("RatingDistributionCard("),
+            "$communityPath 不得重复概览页的评分决策面板：讨论页只承载他人观点",
+        )
+        assertTrue(
+            strings.contains("<string name=\"feature_subject_tab_overview\">概览</string>") &&
+                strings.contains("<string name=\"feature_subject_tab_community\">讨论</string>"),
+            "$stringsPath 的二级分栏必须按用户任务命名（概览/讨论），而不是按数据类型命名（资料/评价）",
+        )
+    }
+
+    /**
+     * 概览决策面板必须以自然流坐在页面背景上，禁止退回「每段一个灰盒」的卡片堆叠：
+     * 评分/收藏分布/热门标签是页面级分段内容，用分组标题与留白组织；
+     * 整块容器只留给可独立点击的对象（角色摘要卡、关联摘要列表）。
+     * 历史上方案定为自然流、实现却漂回整块 Surface，故以源码断言锁死。
+     */
+    @Test
+    fun subject_overview_decision_panel_must_flow_on_background_without_card_container() {
+        val path =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectRatingStatsCard.kt"
+        val source = KotlinSourceScanner.sanitize(File(projectRoot, path).readText())
+        val funStart = source.indexOf("fun RatingDistributionCard(")
+        val funEnd = source.indexOf("fun ", funStart + 1)
+        assertTrue(
+            funStart >= 0 && funEnd > funStart,
+            "$path 必须保留 RatingDistributionCard 定义",
+        )
+        // 从函数体首个 `{` 开始扫描，避免函数名里的 `Card(` 子串误伤断言
+        val bodyStart = source.indexOf('{', funStart)
+        val body = source.substring(bodyStart, funEnd)
+        for (container in listOf("Surface(", "Card(")) {
+            assertTrue(
+                !body.contains(container),
+                "$path 的评分/收藏/标签决策面板必须以自然流组织，禁止整块 `$container` 容器包裹；卡片只留给可独立点击的对象",
+            )
+        }
+    }
+
+    /**
+     * 详情页参考信息必须默认紧凑且收起态优先给用户最想要的内容：
+     * 1. 角色默认只展示有限数量的纵向摘要行，展开后才显示完整立绘卡；
+     * 2. 关联作品收起态必须主线（前传/续集）优先，禁止裸 API 顺序截断——
+     *    画集、原声集等边角类别不得挤掉用户最关心的承接关系；
+     * 3. 编号上限必须是显式常量，避免后续把 `take(...)` 改回无限列表。
+     */
+    @Test
+    fun subject_detail_reference_sections_must_default_to_compact_summary() {
+        val path =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectCastSection.kt"
+        val source = KotlinSourceScanner.sanitize(File(projectRoot, path).readText())
+
+        for (
+        required in
+        listOf(
+            "COLLAPSED_CHARACTER_COUNT",
+            "COLLAPSED_RELATION_COUNT",
+            "uniqueCharacters.take(COLLAPSED_CHARACTER_COUNT)",
+            "prioritizedRelations.take(COLLAPSED_RELATION_COUNT)",
+            "CharacterSummaryList(",
+            "RelationSummaryList(",
+            "isMainStoryRelation(",
+        )
+        ) {
+            assertTrue(
+                source.contains(required),
+                "$path 的参考信息首屏必须保留紧凑摘要且主线优先：缺少 `$required`",
+            )
+        }
+    }
+
+    /**
+     * 详情页跨状态连续性：
+     * 1. 选集与来源必须复用同一个 Bottom Sheet 句柄，避免切换时重新弹入；
+     * 2. 讨论分页角标与文案必须统一使用回退后的 reviewCount，禁止再出现「已显示 5 / 共 0」。
+     */
+    @Test
+    fun subject_detail_sheet_switch_and_community_counts_must_use_single_resolved_state() {
+        val overlayPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectEpisodeOverlay.kt"
+        val communityPath =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectCommunitySection.kt"
+        val overlay = KotlinSourceScanner.sanitize(File(projectRoot, overlayPath).readText())
+        val community = KotlinSourceScanner.sanitize(File(projectRoot, communityPath).readText())
+
+        assertTrue(
+            overlay.contains("rememberBgmBottomSheetHandle(") &&
+                overlay.split("sheetHandle = sheetHandle").size - 1 >= 2,
+            "$overlayPath 的选集与来源视图必须复用同一个 Bottom Sheet 句柄",
+        )
+
+        val inconsistentCountPatterns =
+            listOf(
+                "comments.size > 5 || commentTotal > 5",
+                "feature_subject_community_view_more_short_reviews, commentTotal",
+                "comments.size >= commentTotal",
+            )
+        for (pattern in inconsistentCountPatterns) {
+            assertTrue(
+                !community.contains(pattern),
+                "$communityPath 讨论分页仍混用原始 commentTotal（`$pattern`），会显示错误总数",
+            )
+        }
+        assertTrue(
+            community.contains("reviewCount"),
+            "$communityPath 必须使用回退后的 reviewCount 统一角标与分页文案",
+        )
+    }
+
+    /** [inner] 是否出现在以 [blockToken] 开头、花括号配对的代码块内 */
 }

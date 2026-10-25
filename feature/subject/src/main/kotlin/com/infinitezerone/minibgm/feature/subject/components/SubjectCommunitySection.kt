@@ -45,6 +45,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmSegmentedContro
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
+import com.infinitezerone.minibgm.core.designsystem.theme.ratingTextColor
 import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.model.SubjectTopic
 import com.infinitezerone.minibgm.feature.subject.R
@@ -155,10 +156,10 @@ fun SubjectCommunitySection(
                                 }
                             }
 
-                            if (!isExpanded && (comments.size > 5 || commentTotal > 5)) {
+                            if (!isExpanded && (comments.size > 5 || reviewCount > 5)) {
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
                                 ShortReviewsFooterAction(
-                                    text = stringResource(R.string.feature_subject_community_view_more_short_reviews, commentTotal),
+                                    text = stringResource(R.string.feature_subject_community_view_more_short_reviews, reviewCount),
                                     onClick = { isExpanded = true },
                                     icon = BgmIcons.KeyboardArrowDown,
                                 )
@@ -175,19 +176,19 @@ fun SubjectCommunitySection(
                                                 stringResource(
                                                     R.string.feature_subject_community_load_more_short_reviews,
                                                     comments.size,
-                                                    commentTotal,
+                                                    reviewCount,
                                                 )
                                             },
                                         onClick = onLoadMoreComments,
                                         icon = BgmIcons.KeyboardArrowDown,
                                         isLoading = isLoadingMoreComments,
                                     )
-                                } else if (comments.size >= commentTotal && commentTotal > 5) {
+                                } else if (comments.size >= reviewCount && reviewCount > 5) {
                                     ShortReviewsFooterAction(
                                         text =
                                             stringResource(
                                                 R.string.feature_subject_community_all_short_reviews_shown,
-                                                commentTotal,
+                                                reviewCount,
                                             ),
                                         onClick = {},
                                         emphasized = false,
@@ -308,7 +309,7 @@ fun SubjectCommentItem(
                                 text = "${comment.rate}",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = RatingGold,
+                                color = ratingTextColor(),
                             )
                         }
                     }

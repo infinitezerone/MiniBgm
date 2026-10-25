@@ -324,6 +324,7 @@ fun EpisodeGroupFilterChips(
     groupedEpisodes: Map<EpisodeGroup, List<Episode>>,
     selectedGroup: EpisodeGroup,
     onGroupSelected: (EpisodeGroup) -> Unit,
+    showCounts: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     LazyRow(
@@ -337,7 +338,15 @@ fun EpisodeGroupFilterChips(
             FilterChip(
                 selected = isSelected,
                 onClick = { onGroupSelected(group) },
-                label = { Text("${group.label} ($count)") },
+                label = {
+                    Text(
+                        if (showCounts) {
+                            "${group.label} ($count)"
+                        } else {
+                            group.label
+                        },
+                    )
+                },
                 border = null,
                 colors =
                     FilterChipDefaults.filterChipColors(
@@ -780,6 +789,7 @@ fun EpisodeGrid(
     modifier: Modifier = Modifier,
     columns: Int = 6,
     hasProgress: Boolean = true,
+    selectedEpisodeId: Long? = null,
     onEpisodeClick: ((Episode) -> Unit)? = null,
 ) {
     val columnCount = columns.coerceAtLeast(1)
@@ -796,6 +806,7 @@ fun EpisodeGrid(
                     val isWatched = isEpisodeWatched(episode, watchedCount)
                     val isFuture = isEpisodeFutureAir(episode)
                     val isNextToWatch = isEpisodeNextToWatch(episode, watchedCount, hasProgress)
+                    val isSelected = episode.id == selectedEpisodeId
                     val label =
                         if (episode.isMain) {
                             episode.formattedNumber
@@ -812,12 +823,14 @@ fun EpisodeGrid(
                     val cellShape = RoundedCornerShape(8.dp)
                     val cellBorder =
                         when {
+                            isSelected -> BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
                             isNextToWatch -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
                             isFuture -> BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
                             else -> null
                         }
                     val cellBackground =
                         when {
+                            isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
                             isWatched -> MaterialTheme.colorScheme.primaryContainer
                             isNextToWatch -> statusDoingContainerColor()
                             isFuture -> MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.55f)
@@ -825,6 +838,7 @@ fun EpisodeGrid(
                         }
                     val cellContentColor =
                         when {
+                            isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
                             isWatched -> MaterialTheme.colorScheme.onPrimaryContainer
                             isNextToWatch -> onStatusDoingContainerColor()
                             isFuture -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)

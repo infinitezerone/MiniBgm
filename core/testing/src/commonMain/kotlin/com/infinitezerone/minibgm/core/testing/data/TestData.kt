@@ -225,3 +225,71 @@ val sampleRelationList =
             ratingScore = 9.0,
         ),
     )
+
+/** 超过收起态上限（4 位）的角色夹具：覆盖角色纵向摘要列表的默认态。 */
+val sampleLargeCharacterList =
+    sampleCharacterList +
+        listOf(
+            testCharacter(id = 3003L, name = "ヒンメル", roleName = "主角", actorName = "小市眞琴", actorId = 4003L),
+            testCharacter(id = 3004L, name = "ハイター", roleName = "配角", actorName = "東地宏樹", actorId = 4004L),
+            testCharacter(id = 3005L, name = "シュタルク", roleName = "配角", actorName = "小林千晃", actorId = 4005L),
+            testCharacter(id = 3006L, name = "ザイン", roleName = "配角", actorName = "上田燿司", actorId = 4006L),
+        )
+
+private fun testCharacter(
+    id: Long,
+    name: String,
+    roleName: String,
+    actorName: String,
+    actorId: Long,
+) = com.infinitezerone.minibgm.core.model.SubjectCharacter(
+    id = id,
+    name = name,
+    roleName = roleName,
+    images =
+        SubjectImages(
+            large = "https://lain.bgm.tv/pic/crt/l/sample_character_$id.jpg",
+        ),
+    actors =
+        listOf(
+            com.infinitezerone.minibgm.core.model.SubjectPerson(
+                id = actorId,
+                name = actorName,
+                type = 1,
+                relation = "声优",
+            ),
+        ),
+)
+
+/**
+ * 混序关联夹具（6 条）：边角类别（画集/原声集/资料集/其他）排在主线（前传/续作）之前，
+ * 用于锁定收起态摘要的主线优先排序——API 顺序不可信，收起态必须先给承接关系。
+ */
+val sampleMixedRelationList =
+    listOf(
+        testRelation(id = 7001L, name = "公式アートワークス", nameCn = "芙莉莲官方画集", relation = "画集", score = 8.1),
+        testRelation(id = 7002L, name = "Original Soundtrack", nameCn = "芙莉莲原声集", relation = "原声集", score = 8.4),
+        testRelation(id = 7003L, name = "続・葬送のフリーレン", nameCn = "续·葬送的芙莉莲", relation = "续作", score = 9.1),
+        testRelation(id = 7004L, name = "葬送のフリーレン preview", nameCn = "葬送的芙莉莲 先行篇", relation = "前传", score = 8.8),
+        testRelation(id = 7005L, name = "Magic of the Journey", nameCn = "魔法的旅程 短篇集", relation = "资料集", score = 7.5),
+        testRelation(id = 7006L, name = "魔族考察手册", nameCn = "魔族考察手册", relation = "其他", score = 7.0),
+    )
+
+private fun testRelation(
+    id: Long,
+    name: String,
+    nameCn: String,
+    relation: String,
+    score: Double,
+) = com.infinitezerone.minibgm.core.model.SubjectRelation(
+    id = id,
+    type = 2,
+    name = name,
+    nameCn = nameCn,
+    relation = relation,
+    images =
+        SubjectImages(
+            large = "https://lain.bgm.tv/pic/cover/l/sample_relation_$id.jpg",
+        ),
+    ratingScore = score,
+)

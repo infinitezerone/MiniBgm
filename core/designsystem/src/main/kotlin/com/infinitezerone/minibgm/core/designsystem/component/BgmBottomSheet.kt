@@ -14,6 +14,8 @@ import androidx.compose.material3.SheetState
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -147,6 +149,20 @@ fun rememberBgmBottomSheetState(
             ).also { it.applyMaterial3MotionSpecs() }
         }
     return sheetState
+}
+
+/** 稳定句柄：跨组件复用同一个 SheetState，同时不把实验性 Material API 泄漏到调用方。 */
+@Stable
+@OptIn(ExperimentalMaterial3Api::class)
+class BgmBottomSheetHandle internal constructor(
+    internal val sheetState: SheetState,
+)
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+fun rememberBgmBottomSheetHandle(skipPartiallyExpanded: Boolean = true): BgmBottomSheetHandle {
+    val state = rememberBgmBottomSheetState(skipPartiallyExpanded = skipPartiallyExpanded)
+    return remember(state) { BgmBottomSheetHandle(state) }
 }
 
 /**

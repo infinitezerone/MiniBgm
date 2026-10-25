@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,10 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,11 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
-import com.infinitezerone.minibgm.core.designsystem.theme.onStatusCollectContainerColor
-import com.infinitezerone.minibgm.core.designsystem.theme.onStatusDoingContainerColor
-import com.infinitezerone.minibgm.core.designsystem.theme.onStatusDroppedContainerColor
-import com.infinitezerone.minibgm.core.designsystem.theme.onStatusOnHoldContainerColor
-import com.infinitezerone.minibgm.core.designsystem.theme.onStatusWishContainerColor
+import com.infinitezerone.minibgm.core.designsystem.theme.ratingTextColor
 import com.infinitezerone.minibgm.core.designsystem.theme.statusCollectContainerColor
 import com.infinitezerone.minibgm.core.designsystem.theme.statusDoingContainerColor
 import com.infinitezerone.minibgm.core.designsystem.theme.statusDroppedContainerColor
@@ -50,7 +47,10 @@ import com.infinitezerone.minibgm.core.model.Rating
 import com.infinitezerone.minibgm.core.model.Tag
 import com.infinitezerone.minibgm.feature.subject.R
 
-/** 评分分布柱状图、全站收藏分布与热门标签卡片 */
+/**
+ * 评分分布、全站收藏分布与热门标签：决策上下文以自然流坐在页面背景上，
+ * 用分组标题与留白组织，不套整块灰卡——卡片只留给可独立点击的对象。
+ */
 @Composable
 fun RatingDistributionCard(
     rating: Rating?,
@@ -69,51 +69,41 @@ fun RatingDistributionCard(
         return
     }
 
-    Card(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-            ),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+        // a. 评分分布直方图：分数本身就是这一段的视觉锚点
+        if (rating != null && (rating.total > 0 || rating.count.isNotEmpty())) {
+            RatingDistributionSection(rating = rating)
+        }
+
+        // b. 全站收藏状态分布：小节标题到内容统一 8dp，与热门标签小节同构
+        if (collection != null &&
+            (collection.wish > 0 || collection.collect > 0 || collection.doing > 0 || collection.onHold > 0 || collection.dropped > 0)
         ) {
-            // a. 评分分布柱状图
-            if (rating != null && (rating.total > 0 || rating.count.isNotEmpty())) {
-                RatingDistributionSection(rating = rating)
-            }
-
-            // 分割线
-            if (hasRatingData && (hasCollectionData || hasTags)) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-
-            // b. 全站收藏状态分布
-            if (collection != null &&
-                (collection.wish > 0 || collection.collect > 0 || collection.doing > 0 || collection.onHold > 0 || collection.dropped > 0)
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.feature_subject_all_collections_status),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
                 CollectionStatsSection(collection = collection)
             }
+        }
 
-            // 分割线
-            if (hasCollectionData && hasTags) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
-
-            // c. 热门标签
-            if (hasTags) {
-                TagsSection(tags = tags, onTagClick = onTagClick)
-            }
+        // c. 热门标签
+        if (hasTags) {
+            TagsSection(tags = tags, onTagClick = onTagClick)
         }
     }
 }
 
-/** 评分分布仪表条：现代紧凑流体比例条、主众数突出与分数区间比例 */
+/**
+ * 评分分布：紧凑锚点（星标分数 + 人数 + 好评率）与比例直方图。
+ * 头部已展示分数徽章，这里不再放全页最大的数字；众数由直方图的金色分段直接可视化。
+ */
 @Composable
 private fun RatingDistributionSection(
     rating: Rating,
@@ -144,43 +134,38 @@ private fun RatingDistributionSection(
                     imageVector = BgmIcons.Star,
                     contentDescription = null,
                     tint = RatingGold,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(16.dp),
                 )
-                Text(
-                    text = stringResource(R.string.feature_subject_rating_distribution),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-
-            if (rating.score > 0.0) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
+                if (rating.score > 0.0) {
                     Text(
                         text = rating.score.toString(),
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = RatingGold,
+                        fontWeight = FontWeight.Bold,
+                        color = ratingTextColor(),
                     )
-                    Text(
-                        text = stringResource(R.string.feature_subject_score_unit),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = RatingGold,
-                    )
-                    if (totalCount > 0) {
-                        Text(
-                            text = stringResource(R.string.feature_subject_rating_votes_parenthesis, totalCount),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                 }
+                if (totalCount > 0) {
+                    Text(
+                        text = stringResource(R.string.feature_subject_rating_votes_parenthesis, totalCount),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            if (totalCount > 0) {
+                val highScores = counts.filter { it.first >= 8 }.sumOf { it.second }
+                val highScorePercent = ((highScores.toFloat() / totalCount.toFloat()) * 100f).toInt()
+                Text(
+                    text = stringResource(R.string.feature_subject_rating_positive_ratio_format, highScorePercent),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = ratingTextColor(),
+                )
             }
         }
 
-        // 现代流体比例分段条 (8dp 高度，带 4dp 圆角，各分段按比例紧凑拼接)
+        // 比例分段条 (8dp 高度，4dp 圆角，众数分段用纯金高亮)
         if (totalCount > 0) {
             Row(
                 modifier =
@@ -212,131 +197,131 @@ private fun RatingDistributionSection(
                     }
                 }
             }
-
-            // 底部核心统计胶囊：众数与高分率
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (modeScore != null) {
-                    val modePercent = ((maxCount.toFloat() / totalCount.toFloat()) * 100f).toInt()
-                    Text(
-                        text = stringResource(R.string.feature_subject_rating_mode_format, modeScore, modePercent),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                val highScores = counts.filter { it.first >= 8 }.sumOf { it.second }
-                val highScorePercent = ((highScores.toFloat() / totalCount.toFloat()) * 100f).toInt()
-                Text(
-                    text = stringResource(R.string.feature_subject_rating_positive_ratio_format, highScorePercent),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = RatingGold,
-                )
-            }
         }
     }
 }
 
-/** 全站收藏状态分布：想看、在看、看过、搁置、抛弃 */
-@OptIn(ExperimentalLayoutApi::class)
+/** 收藏分布切片：比例条与图例共用同一份数据 */
+private data class CollectionSlice(
+    val label: String,
+    val count: Int,
+    val color: Color,
+)
+
+/** 全站收藏状态分布：一条五段比例条加五列图例，替代易换行的徽章阵列 */
 @Composable
 private fun CollectionStatsSection(
     collection: CollectionCount,
     modifier: Modifier = Modifier,
 ) {
+    val slices =
+        listOf(
+            CollectionSlice(stringResource(R.string.feature_subject_status_wish), collection.wish, statusWishContainerColor()),
+            CollectionSlice(stringResource(R.string.feature_subject_status_doing), collection.doing, statusDoingContainerColor()),
+            CollectionSlice(stringResource(R.string.feature_subject_status_collect), collection.collect, statusCollectContainerColor()),
+            CollectionSlice(stringResource(R.string.feature_subject_status_on_hold), collection.onHold, statusOnHoldContainerColor()),
+            CollectionSlice(stringResource(R.string.feature_subject_status_dropped), collection.dropped, statusDroppedContainerColor()),
+        )
+    val total = slices.sumOf { it.count }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = stringResource(R.string.feature_subject_all_collections_status),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CollectionStatusBadge(
-                label = stringResource(R.string.feature_subject_status_wish),
-                count = collection.wish,
-                containerColor = statusWishContainerColor(),
-                contentColor = onStatusWishContainerColor(),
-            )
-            CollectionStatusBadge(
-                label = stringResource(R.string.feature_subject_status_doing),
-                count = collection.doing,
-                containerColor = statusDoingContainerColor(),
-                contentColor = onStatusDoingContainerColor(),
-            )
-            CollectionStatusBadge(
-                label = stringResource(R.string.feature_subject_status_collect),
-                count = collection.collect,
-                containerColor = statusCollectContainerColor(),
-                contentColor = onStatusCollectContainerColor(),
-            )
-            CollectionStatusBadge(
-                label = stringResource(R.string.feature_subject_status_on_hold),
-                count = collection.onHold,
-                containerColor = statusOnHoldContainerColor(),
-                contentColor = onStatusOnHoldContainerColor(),
-            )
-            CollectionStatusBadge(
-                label = stringResource(R.string.feature_subject_status_dropped),
-                count = collection.dropped,
-                containerColor = statusDroppedContainerColor(),
-                contentColor = onStatusDroppedContainerColor(),
-            )
+        if (total > 0) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                horizontalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                slices
+                    .filter { it.count > 0 }
+                    .forEach { slice ->
+                        Box(
+                            modifier =
+                                Modifier
+                                    .weight(slice.count.toFloat())
+                                    .fillMaxHeight()
+                                    .background(slice.color),
+                        )
+                    }
+            }
         }
-    }
-}
 
-/** 收藏状态小徽章 */
-@Composable
-private fun CollectionStatusBadge(
-    label: String,
-    count: Int,
-    containerColor: Color,
-    contentColor: Color,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = containerColor,
-        modifier = modifier,
-    ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = contentColor.copy(alpha = 0.85f),
-            )
-            Text(
-                text = count.toString(),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = contentColor,
-            )
+            slices.forEach { slice ->
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(slice.color),
+                        )
+                        Text(
+                            text = slice.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
+                    Text(
+                        text = slice.count.toString(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
         }
     }
 }
 
 private const val COLLAPSED_TAGS_LIMIT = 10
 
+/** 概览页热门标签卡片 */
+@Composable
+fun OverviewTagsCard(
+    tags: List<Tag>,
+    onTagClick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (tags.isEmpty()) return
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+    ) {
+        TagsSection(
+            tags = tags,
+            onTagClick = onTagClick,
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
 /** 热门标签芯片流：支持过多时默认折叠（前 10 个），支持平滑展开与收起 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TagsSection(
+internal fun TagsSection(
     tags: List<Tag>,
     onTagClick: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -397,19 +382,24 @@ private fun TagsSection(
             }
         }
 
+        // 标签是紧凑元数据芯片，禁止用 Surface(onClick) 承载：它会无条件应用 48dp 最小
+        // 交互尺寸，21dp 高的芯片布局被撑到 48dp，FlowRow 按布局高度排行会多出约 27dp
+        // 的隐形行距。用 clip+background+clickable 的普通 Box，行距完全交给 FlowRow。
         FlowRow(
             modifier = Modifier.fillMaxWidth().animateContentSize(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             displayedTags.forEach { tag ->
-                Surface(
-                    onClick = { onTagClick(tag.name) },
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                Box(
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .clickable { onTagClick(tag.name) }
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
@@ -431,13 +421,15 @@ private fun TagsSection(
             }
 
             if (!isExpanded && canCollapse) {
-                Surface(
-                    onClick = { isExpanded = true },
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+                Box(
+                    modifier =
+                        Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f))
+                            .clickable { isExpanded = true }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(2.dp),
                     ) {

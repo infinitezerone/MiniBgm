@@ -86,6 +86,8 @@ import com.infinitezerone.minibgm.core.navigation.launchWebUrl
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailContent
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailFullSkeleton
 import com.infinitezerone.minibgm.feature.subject.components.SubjectDetailOverlays
+import com.infinitezerone.minibgm.feature.subject.components.SubjectEpisodeOverlay
+import com.infinitezerone.minibgm.feature.subject.components.SubjectEpisodeOverlayRequest
 import com.infinitezerone.minibgm.feature.subject.components.SubjectHeaderCollapseState
 import com.infinitezerone.minibgm.feature.subject.components.rememberDownloadNotificationPermissionRequester
 import kotlinx.coroutines.launch
@@ -251,7 +253,6 @@ fun SubjectDetailScreen(
     LaunchedEffect(uiState.selectedTab) {
         when (uiState.selectedTab) {
             SubjectDetailTab.OVERVIEW -> viewModel.loadDetailsTabIfNeeded()
-            SubjectDetailTab.EPISODES -> Unit
             SubjectDetailTab.COMMUNITY -> viewModel.loadCommunityTabIfNeeded()
         }
     }
@@ -410,12 +411,27 @@ fun SubjectDetailScreen(
     }
     val activeGroup = if (selectedGroup in availableGroups) selectedGroup else availableGroups.firstOrNull() ?: EpisodeGroup.MAIN
     val currentEpisodes = groupedEpisodes[activeGroup] ?: emptyList()
-    var showSourcesBottomSheet by rememberSaveable { mutableStateOf(false) }
-    var selectedEpisodeForSources by remember { mutableStateOf<Episode?>(null) }
-
-    androidx.compose.runtime.LaunchedEffect(showSourcesBottomSheet, selectedEpisodeForSources) {
-        if (showSourcesBottomSheet) {
-            viewModel.loadTorrentResources(selectedEpisodeForSources)
+    val resolvedTotalEpisodes =
+        displaySubject?.let { maxOf(uiState.totalEpisodes, it.eps, it.totalEpisodes) } ?: 0
+    val toggleEpisodeWatched: (Episode, Boolean) -> Unit = { episode, isWatched ->
+        if (uiState.isLoggedIn) {
+            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+        }
+        viewModel.toggleEpisodeWatched(
+            episodeId = episode.id,
+            isWatched = isWatched,
+            epNumber = episode.episodeInt,
+            episodeType = episode.type,
+        )
+    }
+    val openEpisodeOverlay: (Episode?, Boolean) -> Unit = { episode, startInPicker ->
+        coroutineScope.launch {
+            overlayHostState.await(
+                SubjectEpisodeOverlayRequest(
+                    initialEpisode = episode,
+                    startInPicker = startInPicker,
+                ),
+            )
         }
     }
 
@@ -525,7 +541,6 @@ fun SubjectDetailScreen(
                 viewModel.refresh(isUserPullToRefresh = true)
                 when (uiState.selectedTab) {
                     SubjectDetailTab.OVERVIEW -> viewModel.loadDetailsTabIfNeeded(force = true)
-                    SubjectDetailTab.EPISODES -> Unit
                     SubjectDetailTab.COMMUNITY -> viewModel.loadCommunityTabIfNeeded(force = true)
                 }
             },
@@ -588,22 +603,7 @@ fun SubjectDetailScreen(
                     }
 
                     displaySubject != null -> {
-                        val totalEpisodes =
-                            maxOf(uiState.totalEpisodes, displaySubject.eps, displaySubject.totalEpisodes)
                         val fullSubject = if (isTransitionStabilizing) null else uiState.subject
-
-                        val onToggleEpisodeWatched: (Episode, Boolean) -> Unit = { episode, isWatched ->
-                            if (uiState.isLoggedIn) {
-                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                            }
-                            val epNumber = episode.episodeInt
-                            viewModel.toggleEpisodeWatched(
-                                episodeId = episode.id,
-                                isWatched = isWatched,
-                                epNumber = epNumber,
-                                episodeType = episode.type,
-                            )
-                        }
 
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -615,39 +615,11 @@ fun SubjectDetailScreen(
                                 subjectType = subjectType,
                                 uiState = uiState,
                                 source = source,
-                                totalEpisodes = totalEpisodes,
+                                totalEpisodes = resolvedTotalEpisodes,
                                 selectedTab = uiState.selectedTab,
                                 onSelectTab = viewModel::selectTab,
-                                currentEpisodes = currentEpisodes,
-                                availableGroups = availableGroups,
-                                groupedEpisodes = groupedEpisodes,
-                                activeGroup = activeGroup,
-                                onSelectGroup = { selectedGroup = it },
-                                isGridView = uiState.isEpisodeGridView,
-                                onToggleGridView = { viewModel.setEpisodeGridView(!uiState.isEpisodeGridView) },
-                                episodeSortDescending = uiState.episodeSortDescending,
-                                hasMoreEpisodes = uiState.hasMoreEpisodes,
-                                isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
-                                onToggleEpisodeSort = {
-                                    viewModel.setEpisodeSortDescending(!uiState.episodeSortDescending)
-                                },
-                                onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
                                 onOpenCollectionSheet = { viewModel.setCollectionSheetVisible(true) },
                                 onIncrementWatched = viewModel::incrementWatchedEpisode,
-                                onEpisodeClickForQuickAction = { episode ->
-                                    selectedEpisodeForSources = episode
-                                    showSourcesBottomSheet = true
-                                },
-                                onToggleWatching = {
-                                    val wasWatching = uiState.collection?.type == CollectionType.DOING.value
-                                    viewModel.toggleWatching()
-                                    if (!wasWatching && uiState.isLoggedIn) {
-                                        val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
-                                        if (!systemAllowed && !hasDismissedAiringReminderPrompt) {
-                                            showAiringReminderPrompt = true
-                                        }
-                                    }
-                                },
                                 onUpdateCollectionStatus = { type ->
                                     viewModel.updateCollectionStatus(type)
                                     if (type == CollectionType.DOING && uiState.isLoggedIn) {
@@ -657,8 +629,6 @@ fun SubjectDetailScreen(
                                         }
                                     }
                                 },
-                                onToggleEpisodeWatched = onToggleEpisodeWatched,
-                                onSelectEpisodeForDetail = onSelectEpisodeForDetail,
                                 onSubjectClick = onSubjectClick,
                                 onTagClick = { tag -> activeTagForAction = tag },
                                 onCharacterClick = handleCharacterClick,
@@ -668,14 +638,7 @@ fun SubjectDetailScreen(
                                 onTopicClick = onTopicClick,
                                 onLoadMoreComments = { viewModel.loadMoreSubjectComments() },
                                 isTransitionStabilizing = isTransitionStabilizing,
-                                onBatchMarkEpisode = handleBatchMark,
                                 onCopyComment = handleCopyComment,
-                                onPlayEpisode =
-                                    if (onPlayClick != null) {
-                                        { episode -> onPlayClick(viewModel.buildPlayerRoute(episode)) }
-                                    } else {
-                                        null
-                                    },
                                 onPlayNextEpisode =
                                     if (onPlayClick != null) {
                                         {
@@ -686,17 +649,9 @@ fun SubjectDetailScreen(
                                     } else {
                                         null
                                     },
-                                onOpenSources = {
-                                    selectedEpisodeForSources = viewModel.nextEpisodeToWatch()
-                                    showSourcesBottomSheet = true
-                                },
-                                onOpenEpisodeSources = { episode ->
-                                    selectedEpisodeForSources = episode
-                                    showSourcesBottomSheet = true
-                                },
+                                onOpenEpisodePicker = { openEpisodeOverlay(null, true) },
                                 onDecrementWatched = viewModel::decrementWatchedEpisode,
                                 onPromptLogin = viewModel::promptLogin,
-                                onRetryEpisodes = viewModel::retryLoadEpisodes,
                                 onShare = handleShare,
                                 topPadding = topChromeHeight,
                                 headerCollapse = headerCollapse,
@@ -743,25 +698,6 @@ fun SubjectDetailScreen(
                 }
             }
         },
-        episodes = uiState.episodes,
-        onToggleEpisodeWatched = { episode, isWatched, epNumber, episodeType ->
-            viewModel.toggleEpisodeWatched(
-                episodeId = episode.id,
-                isWatched = isWatched,
-                epNumber = epNumber,
-                episodeType = episodeType,
-            )
-        },
-        onSelectEpisodeForDetail = onSelectEpisodeForDetail,
-        onBuildPlayerRoute = viewModel::buildPlayerRoute,
-        onPlayClick = onPlayClick,
-        onOpenSourcesForEpisode = { episode ->
-            selectedEpisodeForSources = episode
-            showSourcesBottomSheet = true
-        },
-        onBatchMarkRequest = handleBatchMark,
-        isLoggedIn = uiState.isLoggedIn,
-        haptic = haptic,
         previewCharacter = previewCharacter,
         onDismissPreviewCharacter = { previewCharacter = null },
         onViewCharacterDetail = handleCharacterClick,
@@ -794,40 +730,6 @@ fun SubjectDetailScreen(
             showAiringReminderPrompt = false
             hasDismissedAiringReminderPrompt = true
         },
-        showSourcesBottomSheet = showSourcesBottomSheet,
-        displaySubject = displaySubject,
-        selectedEpisodeForSources = selectedEpisodeForSources,
-        onSelectEpisodeForSources = { selectedEpisodeForSources = it },
-        onDismissSourcesSheet = {
-            showSourcesBottomSheet = false
-            selectedEpisodeForSources = null
-        },
-        onStreamingUrlLaunch = handleStreamingUrl,
-        onRequestSourceSearch = onSourceSearch?.let { { ep -> viewModel.requestSourceSearch(ep) } },
-        onManageRules = onManageRules,
-        playbackRules = uiState.playbackRules,
-        failedSourceReasons = uiState.failedSourceReasons,
-        torrentResources = uiState.torrentResources,
-        isTorrentLoading = uiState.isTorrentLoading,
-        onRequestNotificationPermission = requestDownloadNotification,
-        onRefreshTorrent = { viewModel.refreshTorrentResources(selectedEpisodeForSources) },
-        onDownloadStarted = {
-            coroutineScope.launch {
-                val result =
-                    snackbarHostState.showSnackbar(
-                        message = context.resources.getString(R.string.feature_subject_source_torrent_download_started),
-                        actionLabel =
-                            if (onDownloadsClick != null) {
-                                context.resources.getString(R.string.feature_subject_source_torrent_view_downloads)
-                            } else {
-                                null
-                            },
-                    )
-                if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
-                    onDownloadsClick?.invoke()
-                }
-            }
-        },
     )
 
     if (activeTagForAction != null) {
@@ -849,6 +751,56 @@ fun SubjectDetailScreen(
 
     BgmOverlayHost(hostState = overlayHostState) {
         confirmDialog()
+        overlay<SubjectEpisodeOverlayRequest, Unit> { request, onRespond ->
+            val currentSubject = displaySubject
+            if (currentSubject == null) {
+                LaunchedEffect(request) {
+                    onRespond(Unit)
+                }
+                return@overlay
+            }
+            SubjectEpisodeOverlay(
+                request = request,
+                subject = currentSubject,
+                subjectType = subjectType,
+                uiState = uiState,
+                totalEpisodes = resolvedTotalEpisodes,
+                activeGroup = activeGroup,
+                onSelectGroup = { selectedGroup = it },
+                onToggleGridView = { viewModel.setEpisodeGridView(!uiState.isEpisodeGridView) },
+                onToggleEpisodeSort = { viewModel.setEpisodeSortDescending(!uiState.episodeSortDescending) },
+                onLoadMoreEpisodes = viewModel::loadMoreEpisodes,
+                onRetryEpisodes = viewModel::retryLoadEpisodes,
+                onToggleEpisodeWatched = toggleEpisodeWatched,
+                onOpenEpisodeDetails = onSelectEpisodeForDetail,
+                onBatchMarkEpisode = handleBatchMark,
+                onPlay = onPlayClick,
+                onStreamingUrlLaunch = handleStreamingUrl,
+                onAiSourceSearch = onSourceSearch?.let { { episode -> viewModel.requestSourceSearch(episode) } },
+                onManageRules = onManageRules,
+                onRequestNotificationPermission = requestDownloadNotification,
+                onRefreshTorrent = { episode -> viewModel.refreshTorrentResources(episode) },
+                onDownloadStarted = {
+                    coroutineScope.launch {
+                        val result =
+                            snackbarHostState.showSnackbar(
+                                message = context.resources.getString(R.string.feature_subject_source_torrent_download_started),
+                                actionLabel =
+                                    if (onDownloadsClick != null) {
+                                        context.resources.getString(R.string.feature_subject_source_torrent_view_downloads)
+                                    } else {
+                                        null
+                                    },
+                            )
+                        if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                            onDownloadsClick?.invoke()
+                        }
+                    }
+                },
+                onEpisodeChanged = viewModel::loadTorrentResources,
+                onDismissRequest = { onRespond(Unit) },
+            )
+        }
     }
 }
 

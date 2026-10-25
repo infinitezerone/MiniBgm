@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.common.intent.StreamingIntentResolver
 import com.infinitezerone.minibgm.core.data.download.TorrentIntentDispatcher
 import com.infinitezerone.minibgm.core.data.repository.TorrentRepository
+import com.infinitezerone.minibgm.core.designsystem.component.BgmBottomSheetHandle
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSourceActionCard
@@ -112,12 +113,14 @@ fun SubjectSourcesBottomSheet(
     onDismissRequest: () -> Unit,
     onOpenUrl: (String) -> Unit,
     modifier: Modifier = Modifier,
+    sheetHandle: BgmBottomSheetHandle? = null,
     episode: Episode? = null,
     isWatched: Boolean = false,
     isNextToWatch: Boolean = false,
     onToggleWatched: (() -> Unit)? = null,
     onBatchMark: (() -> Unit)? = null,
     onSelectEpisodeForDetail: (() -> Unit)? = null,
+    onOpenEpisodePicker: (() -> Unit)? = null,
     onNavigateToPrevious: (() -> Unit)? = null,
     onNavigateToNext: (() -> Unit)? = null,
     currentIndex: Int = -1,
@@ -211,6 +214,7 @@ fun SubjectSourcesBottomSheet(
         coverUrl = subject.images?.bestImage.orEmpty(),
         subtitle = sheetSubtitle ?: stringResource(R.string.feature_subject_source_choose_source),
         onDismissRequest = onDismissRequest,
+        sheetHandle = sheetHandle,
         modifier = modifier,
     ) { runAfterDismiss ->
         // 0. 🌟 分集原位信息与打卡微操作区（单层扁平化呈现，彻底消灭弹窗跳弹窗）
@@ -241,17 +245,45 @@ fun SubjectSourcesBottomSheet(
                         )
                     }
 
-                    Text(
-                        text =
-                            if (currentIndex >= 0 && totalCount > 0) {
-                                "${currentIndex + 1} / $totalCount"
-                            } else {
-                                epLabel
-                            },
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    val indexLabel =
+                        if (currentIndex >= 0 && totalCount > 0) {
+                            "${currentIndex + 1} / $totalCount"
+                        } else {
+                            epLabel
+                        }
+                    if (onOpenEpisodePicker != null) {
+                        Surface(
+                            onClick = onOpenEpisodePicker,
+                            shape = BgmShapes.small,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.FormatListNumbered,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    text = indexLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = indexLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
 
                     FilledTonalButton(
                         onClick = { onNavigateToNext?.invoke() },

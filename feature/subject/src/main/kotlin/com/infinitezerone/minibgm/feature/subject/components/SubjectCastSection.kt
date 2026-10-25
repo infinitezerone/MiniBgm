@@ -31,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +59,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.formatScore
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
+import com.infinitezerone.minibgm.core.designsystem.theme.ratingTextColor
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectRelation
@@ -145,6 +147,7 @@ fun RelationsSection(
     val uniqueRelations = remember(relations) { relations.distinctBy { "${it.id}_${it.relation}" } }
     var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var isGridView by rememberSaveable { mutableStateOf(false) }
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
     val thisWorkLabel = stringResource(R.string.feature_subject_this_work)
 
     val mainStoryTimelineNodes =
@@ -218,6 +221,15 @@ fun RelationsSection(
                 uniqueRelations.filter { RelationCategory.classify(it).name == selectedCategory }
             }
         }
+    val canExpand =
+        uniqueRelations.size > COLLAPSED_RELATION_COUNT || mainStoryTimelineNodes.size >= 2
+
+    // 收起态优先给主线承接（前传/续集），避免画集、原声集等边角类别挤掉用户最关心的关系
+    val prioritizedRelations =
+        remember(uniqueRelations) {
+            uniqueRelations.filter { isMainStoryRelation(it.relation) } +
+                uniqueRelations.filterNot { isMainStoryRelation(it.relation) }
+        }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -241,160 +253,290 @@ fun RelationsSection(
                 text = titleText,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
             )
 
-            if (uniqueRelations.size > 4) {
-                Surface(
+            if (isExpanded && uniqueRelations.size > COLLAPSED_RELATION_COUNT) {
+                BgmGhostIconButton(
                     onClick = { isGridView = !isGridView },
-                    shape = RoundedCornerShape(16.dp),
-                    color =
+                    icon = if (isGridView) BgmIcons.ViewCarousel else BgmIcons.GridView,
+                    contentDescription =
                         if (isGridView) {
-                            MaterialTheme.colorScheme.primaryContainer
+                            stringResource(R.string.feature_subject_view_mode_scroll_mode)
                         } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
+                            stringResource(R.string.feature_subject_view_mode_grid, uniqueRelations.size)
                         },
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = if (isGridView) BgmIcons.ViewCarousel else BgmIcons.GridView,
-                            contentDescription = null,
-                            modifier = Modifier.size(15.dp),
-                            tint =
-                                if (isGridView) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                        )
-                        Text(
-                            text =
-                                if (isGridView) {
-                                    stringResource(R.string.feature_subject_view_mode_scroll_mode)
-                                } else {
-                                    stringResource(R.string.feature_subject_view_mode_grid, uniqueRelations.size)
-                                },
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color =
-                                if (isGridView) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                        )
-                    }
-                }
+                    iconSize = 19.dp,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+
+            if (canExpand) {
+                SectionExpandAction(
+                    isExpanded = isExpanded,
+                    collapsedText = stringResource(R.string.feature_subject_expand_relations, uniqueRelations.size),
+                    expandedText = stringResource(R.string.feature_subject_collapse_relations),
+                    onToggle = { isExpanded = !isExpanded },
+                )
             }
         }
 
-        // 2. 主线系列观影顺序时间轴（仅在有前传/续集且处于全部分类或正传分类时高亮展示）
-        if ((selectedCategory == null || selectedCategory == RelationCategory.MAIN_STORY.name) && mainStoryTimelineNodes.isNotEmpty()) {
-            MainStoryTimeline(
-                nodes = mainStoryTimelineNodes,
+        if (!isExpanded) {
+            RelationSummaryList(
+                relations = prioritizedRelations.take(COLLAPSED_RELATION_COUNT),
                 onSubjectClick = onSubjectClick,
             )
-        }
-
-        // 3. 细粒度分类过滤 Chips（仅在分类数 >= 2 或条目总数 > 3 时展示）
-        if (availableCategories.size >= 2 || uniqueRelations.size > 3) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                contentPadding = PaddingValues(horizontal = 0.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                item(key = "rel_cat_all") {
-                    FilterChip(
-                        selected = selectedCategory == null,
-                        onClick = { selectedCategory = null },
-                        label = {
-                            Text(
-                                text = stringResource(R.string.feature_subject_relations_all, uniqueRelations.size),
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        },
-                        border = null,
-                        colors =
-                            FilterChipDefaults.filterChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            ),
-                    )
-                }
-                items(items = availableCategories, key = { it.name }) { category ->
-                    val count = categoryCounts[category] ?: 0
-                    val isSelected = selectedCategory == category.name
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            selectedCategory = if (isSelected) null else category.name
-                        },
-                        label = {
-                            Text(
-                                text = "${stringResource(category.labelRes)} ($count)",
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        },
-                        border = null,
-                        colors =
-                            FilterChipDefaults.filterChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            ),
-                    )
-                }
-            }
-        }
-
-        // 3. 内容区：横滑模式 vs 3 列海报墙
-        if (!isGridView) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(horizontal = 0.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                items(items = filteredRelations, key = { "${it.id}_${it.relation}" }) { relation ->
-                    RelationCard(
-                        relation = relation,
-                        onClick = { onSubjectClick(relation.id) },
-                        modifier = Modifier.width(115.dp),
-                    )
-                }
-            }
         } else {
-            val chunked = remember(filteredRelations) { filteredRelations.chunked(3) }
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.fillMaxWidth(),
+            // 展开后才展示系列时间轴、分类筛选与完整海报墙，避免默认首屏重复堆叠关系数据。
+            if ((selectedCategory == null || selectedCategory == RelationCategory.MAIN_STORY.name) &&
+                mainStoryTimelineNodes.isNotEmpty()
             ) {
-                chunked.forEach { rowItems ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        rowItems.forEach { item ->
-                            Box(modifier = Modifier.weight(1f)) {
-                                RelationCard(
-                                    relation = item,
-                                    onClick = { onSubjectClick(item.id) },
-                                    modifier = Modifier.fillMaxWidth(),
+                MainStoryTimeline(
+                    nodes = mainStoryTimelineNodes,
+                    onSubjectClick = onSubjectClick,
+                )
+            }
+
+            if (availableCategories.size >= 2 || uniqueRelations.size > 3) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(horizontal = 0.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    item(key = "rel_cat_all") {
+                        FilterChip(
+                            selected = selectedCategory == null,
+                            onClick = { selectedCategory = null },
+                            label = {
+                                Text(
+                                    text = stringResource(R.string.feature_subject_relations_all, uniqueRelations.size),
+                                    style = MaterialTheme.typography.labelSmall,
                                 )
+                            },
+                            border = null,
+                            colors =
+                                FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                ),
+                        )
+                    }
+                    items(items = availableCategories, key = { it.name }) { category ->
+                        val count = categoryCounts[category] ?: 0
+                        val isSelected = selectedCategory == category.name
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                selectedCategory = if (isSelected) null else category.name
+                            },
+                            label = {
+                                Text(
+                                    text = "${stringResource(category.labelRes)} ($count)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            },
+                            border = null,
+                            colors =
+                                FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                ),
+                        )
+                    }
+                }
+            }
+
+            if (!isGridView) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(horizontal = 0.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    items(items = filteredRelations, key = { "${it.id}_${it.relation}" }) { relation ->
+                        RelationCard(
+                            relation = relation,
+                            onClick = { onSubjectClick(relation.id) },
+                            modifier = Modifier.width(115.dp),
+                        )
+                    }
+                }
+            } else {
+                val chunked = remember(filteredRelations) { filteredRelations.chunked(3) }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    chunked.forEach { rowItems ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            rowItems.forEach { item ->
+                                Box(modifier = Modifier.weight(1f)) {
+                                    RelationCard(
+                                        relation = item,
+                                        onClick = { onSubjectClick(item.id) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                }
                             }
-                        }
-                        repeat(3 - rowItems.size) {
-                            Spacer(modifier = Modifier.weight(1f))
+                            repeat(3 - rowItems.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+private const val COLLAPSED_RELATION_COUNT = 4
+
+/** 主线承接关系（前传/续集家族）：收起态摘要排序与主线时间轴共用同一判定。 */
+private fun isMainStoryRelation(relation: String): Boolean =
+    relation in setOf("前传", "前传原著", "续集", "续作") ||
+        relation.startsWith("前传") ||
+        relation.startsWith("续集") ||
+        relation.startsWith("续作")
+
+/** 关联作品默认摘要：优先呈现关系、标题与评分，展开后再进入时间轴和完整海报墙。 */
+@Composable
+private fun RelationSummaryList(
+    relations: List<SubjectRelation>,
+    onSubjectClick: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // 自然流行列表：与整页节奏一致，不再套灰卡；分隔线承担分组
+    Column(modifier = modifier.fillMaxWidth()) {
+        relations.forEachIndexed { index, relation ->
+            RelationSummaryRow(
+                relation = relation,
+                onClick = { onSubjectClick(relation.id) },
+            )
+            if (index < relations.lastIndex) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 46.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RelationSummaryRow(
+    relation: SubjectRelation,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val category = remember(relation) { RelationCategory.classify(relation) }
+    val (badgeContainerColor, badgeContentColor) = relationBadgeColors(category)
+
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        CoverImage(
+            url = relation.images?.bestImage.orEmpty(),
+            contentDescription = relation.displayName,
+            modifier = Modifier.size(width = 36.dp, height = 48.dp),
+            shape = RoundedCornerShape(8.dp),
+            aspectRatio = BGM_POSTER_ASPECT_RATIO,
+        )
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = relation.displayName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (relation.relation.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = badgeContainerColor.copy(alpha = 0.9f),
+                    ) {
+                        Text(
+                            text = relation.relation,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = badgeContentColor,
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                        )
+                    }
+                }
+
+                if (relation.score > 0.0) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.Star,
+                            contentDescription = null,
+                            tint = RatingGold,
+                            modifier = Modifier.size(11.dp),
+                        )
+                        Text(
+                            text = relation.score.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = ratingTextColor(),
+                        )
+                    }
+                }
+            }
+        }
+
+        Icon(
+            imageVector = BgmIcons.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
+@Composable
+private fun SectionExpandAction(
+    isExpanded: Boolean,
+    collapsedText: String,
+    expandedText: String,
+    onToggle: () -> Unit,
+) {
+    TextButton(
+        onClick = onToggle,
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+    ) {
+        Text(
+            text = if (isExpanded) expandedText else collapsedText,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Icon(
+            imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 
@@ -603,15 +745,7 @@ private fun RelationCard(
     modifier: Modifier = Modifier,
 ) {
     val category = remember(relation) { RelationCategory.classify(relation) }
-    val (badgeContainerColor, badgeContentColor) =
-        when (category) {
-            RelationCategory.MAIN_STORY -> MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.onPrimary
-            RelationCategory.ORIGINAL -> MaterialTheme.colorScheme.tertiary to MaterialTheme.colorScheme.onTertiary
-            RelationCategory.MUSIC -> MaterialTheme.colorScheme.secondary to MaterialTheme.colorScheme.onSecondary
-            RelationCategory.GAME -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
-            RelationCategory.SPINOFF -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
-            else -> MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.onSurfaceVariant
-        }
+    val (badgeContainerColor, badgeContentColor) = relationBadgeColors(category)
 
     Card(
         onClick = onClick,
@@ -676,7 +810,7 @@ private fun RelationCard(
                             text = relation.score.toString(),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = RatingGold,
+                            color = ratingTextColor(),
                         )
                     }
                 }
@@ -684,6 +818,17 @@ private fun RelationCard(
         }
     }
 }
+
+@Composable
+private fun relationBadgeColors(category: RelationCategory): Pair<Color, Color> =
+    when (category) {
+        RelationCategory.MAIN_STORY -> MaterialTheme.colorScheme.primary to MaterialTheme.colorScheme.onPrimary
+        RelationCategory.ORIGINAL -> MaterialTheme.colorScheme.tertiary to MaterialTheme.colorScheme.onTertiary
+        RelationCategory.MUSIC -> MaterialTheme.colorScheme.secondary to MaterialTheme.colorScheme.onSecondary
+        RelationCategory.GAME -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+        RelationCategory.SPINOFF -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
 /** 登场角色与声优区域 */
 @Composable
@@ -694,6 +839,16 @@ fun CharactersSection(
     onPreviewCharacter: (SubjectCharacter) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+    val uniqueCharacters = remember(characters) { characters.distinctBy { it.id } }
+    val canExpand = uniqueCharacters.size > COLLAPSED_CHARACTER_COUNT
+    val visibleCharacters =
+        if (isExpanded || !canExpand) {
+            uniqueCharacters
+        } else {
+            uniqueCharacters.take(COLLAPSED_CHARACTER_COUNT)
+        }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -707,26 +862,140 @@ fun CharactersSection(
                 text = stringResource(R.string.feature_subject_characters_and_actors),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
             )
-            Text(
-                text = stringResource(R.string.feature_subject_characters_count, characters.size),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            if (canExpand) {
+                SectionExpandAction(
+                    isExpanded = isExpanded,
+                    collapsedText = stringResource(R.string.feature_subject_expand_characters, uniqueCharacters.size),
+                    expandedText = stringResource(R.string.feature_subject_collapse_characters),
+                    onToggle = { isExpanded = !isExpanded },
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.feature_subject_characters_count, uniqueCharacters.size),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        // 收起态一律纵向摘要行（与角色数量无关），完整立绘卡只在展开后出现
+        if (isExpanded) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = 0.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                items(items = visibleCharacters, key = { it.id }) { character ->
+                    CharacterCard(
+                        character = character,
+                        onCharacterClick = onCharacterClick,
+                        onActorClick = onActorClick,
+                        onPreviewCharacter = onPreviewCharacter,
+                    )
+                }
+            }
+        } else {
+            CharacterSummaryList(
+                characters = visibleCharacters,
+                onCharacterClick = onCharacterClick,
             )
         }
-        val uniqueCharacters = remember(characters) { characters.distinctBy { it.id } }
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 0.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            items(items = uniqueCharacters, key = { it.id }) { character ->
-                CharacterCard(
-                    character = character,
-                    onCharacterClick = onCharacterClick,
-                    onActorClick = onActorClick,
-                    onPreviewCharacter = onPreviewCharacter,
+    }
+}
+
+private const val COLLAPSED_CHARACTER_COUNT = 4
+
+/** 默认态只给角色、定位与声优摘要行；完整立绘卡在展开后呈现。 */
+@Composable
+private fun CharacterSummaryList(
+    characters: List<SubjectCharacter>,
+    onCharacterClick: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // 自然流行列表：与关联摘要同构，不再套灰卡
+    Column(modifier = modifier.fillMaxWidth()) {
+        characters.forEachIndexed { index, character ->
+            CharacterSummaryRow(
+                character = character,
+                onClick = { onCharacterClick(character.id) },
+            )
+            if (index < characters.lastIndex) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = 48.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CharacterSummaryRow(
+    character: SubjectCharacter,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        CoverImage(
+            url = character.images?.bestImage.orEmpty(),
+            contentDescription = character.name,
+            modifier = Modifier.size(width = 38.dp, height = 50.dp),
+            shape = RoundedCornerShape(8.dp),
+            aspectRatio = 0.76f,
+            alignment = Alignment.TopCenter,
+            placeholder = CoverPlaceholder.Person,
+        )
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = character.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val actorName =
+                character.actors
+                    .firstOrNull()
+                    ?.name
+                    .orEmpty()
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (character.roleName.isNotBlank()) {
+                    Text(
+                        text = character.roleName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (actorName.isNotBlank()) {
+                    Text(
+                        text = "CV: $actorName",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
@@ -857,9 +1126,21 @@ fun StaffSection(
     modifier: Modifier = Modifier,
 ) {
     var isExpanded by rememberSaveable { mutableStateOf(false) }
-    val groupedStaff = persons.groupBy { it.relation }
-    val entries = groupedStaff.entries.toList()
-    val displayEntries = if (isExpanded || entries.size <= 6) entries else entries.take(6)
+    val entries =
+        remember(persons) {
+            persons
+                .groupBy { it.relation }
+                .entries
+                .mapIndexed { index, entry -> Triple(keyStaffPriority(entry.key), index, entry) }
+                .sortedWith(compareBy<Triple<Int, Int, Map.Entry<String, List<SubjectPerson>>>> { it.first }.thenBy { it.second })
+                .map { it.third }
+        }
+    val displayEntries =
+        if (isExpanded || entries.size <= DEFAULT_STAFF_ENTRY_COUNT) {
+            entries
+        } else {
+            entries.take(DEFAULT_STAFF_ENTRY_COUNT)
+        }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -871,105 +1152,116 @@ fun StaffSection(
             fontWeight = FontWeight.Bold,
         )
 
-        Card(
+        // 职位与人员是纯文本参考信息，与简介同构：自然流直坐在背景上，不套灰卡
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors =
-                CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                displayEntries.forEach { (relation, staffMembers) ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top,
+            displayEntries.forEach { (relation, staffMembers) ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Text(
+                        text = relation,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.width(86.dp).padding(vertical = 2.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    FlowRow(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        Text(
-                            text = relation,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.width(86.dp).padding(vertical = 2.dp),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        FlowRow(
-                            modifier = Modifier.weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            staffMembers.forEachIndexed { index, person ->
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(vertical = 2.dp),
-                                ) {
+                        staffMembers.forEachIndexed { index, person ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = person.name,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier =
+                                        Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .clickable { onPersonClick(person.id) }
+                                            .padding(horizontal = 3.dp),
+                                )
+                                if (index < staffMembers.lastIndex) {
                                     Text(
-                                        text = person.name,
+                                        text = "、",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier =
-                                            Modifier
-                                                .clip(RoundedCornerShape(4.dp))
-                                                .clickable { onPersonClick(person.id) }
-                                                .padding(horizontal = 3.dp),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                                     )
-                                    if (index < staffMembers.lastIndex) {
-                                        Text(
-                                            text = "、",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                        )
-                                    }
                                 }
                             }
                         }
                     }
                 }
+            }
 
-                if (entries.size > 6) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+            if (entries.size > DEFAULT_STAFF_ENTRY_COUNT) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                )
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { isExpanded = !isExpanded }
+                            .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text =
+                            if (isExpanded) {
+                                stringResource(R.string.feature_subject_collapse_staff)
+                            } else {
+                                stringResource(R.string.feature_subject_expand_staff, entries.size)
+                            },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
                     )
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(4.dp))
-                                .clickable { isExpanded = !isExpanded }
-                                .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text =
-                                if (isExpanded) {
-                                    stringResource(R.string.feature_subject_collapse_staff)
-                                } else {
-                                    stringResource(R.string.feature_subject_expand_staff, entries.size)
-                                },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Icon(
-                            imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
+                    Icon(
+                        imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
             }
         }
     }
+}
+
+private const val DEFAULT_STAFF_ENTRY_COUNT = 4
+
+private val KeyStaffRelationPriority =
+    listOf(
+        "总导演",
+        "导演",
+        "监督",
+        "系列构成",
+        "脚本",
+        "编剧",
+        "原作",
+        "音乐",
+        "动画制作",
+    )
+
+/** 将真正影响作品判断的关键主创放在 API 返回顺序之前。 */
+private fun keyStaffPriority(relation: String): Int {
+    val normalized = relation.trim()
+    val priority = KeyStaffRelationPriority.indexOfFirst { key -> normalized == key || normalized.startsWith(key) }
+    return if (priority >= 0) priority else Int.MAX_VALUE
 }
 
 /** 角色全身立绘与原图大图预览弹窗 */

@@ -265,25 +265,28 @@ fun BgmSourcesBottomSheet(
     title: String,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
+    sheetHandle: BgmBottomSheetHandle? = null,
     coverUrl: String? = null,
     subtitle: String? = null,
+    contentScrollable: Boolean = true,
     content: @Composable ColumnScope.(runAfterDismiss: (() -> Unit) -> Unit) -> Unit,
 ) {
-    val sheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
+    val defaultSheetState = rememberBgmBottomSheetState(skipPartiallyExpanded = true)
+    val resolvedSheetState = sheetHandle?.sheetState ?: defaultSheetState
     val coroutineScope = rememberCoroutineScope()
     val runAfterDismiss: (() -> Unit) -> Unit = { action ->
-        coroutineScope.hideThenDismiss(sheetState) {
+        coroutineScope.hideThenDismiss(resolvedSheetState) {
             onDismissRequest()
             action()
         }
     }
     val closeAction: () -> Unit = {
-        coroutineScope.hideThenDismiss(sheetState, onDismissRequest)
+        coroutineScope.hideThenDismiss(resolvedSheetState, onDismissRequest)
     }
 
     BgmModalBottomSheet(
         onDismissRequest = onDismissRequest,
-        sheetState = sheetState,
+        sheetState = resolvedSheetState,
         modifier = modifier,
     ) {
         Column(
@@ -308,9 +311,13 @@ fun BgmSourcesBottomSheet(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState())
-                        .padding(bottom = 24.dp),
+                        .then(
+                            if (contentScrollable) {
+                                Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
+                            } else {
+                                Modifier.weight(1f)
+                            },
+                        ).padding(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 content(runAfterDismiss)

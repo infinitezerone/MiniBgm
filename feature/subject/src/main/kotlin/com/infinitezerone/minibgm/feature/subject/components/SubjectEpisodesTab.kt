@@ -22,7 +22,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,7 +43,7 @@ import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailUiState
 
-/** 分集页：头部工具条、分组筛选、列表/网格、加载更多。 */
+/** 分集面板：头部工具条、分组筛选、列表/网格、加载更多，由详情页 Bottom Sheet 承接。 */
 @Composable
 internal fun EpisodesTabPage(
     uiState: SubjectDetailUiState,
@@ -60,7 +64,7 @@ internal fun EpisodesTabPage(
     onRetryEpisodes: () -> Unit,
     onToggleEpisodeWatched: (Episode, Boolean) -> Unit,
     onSelectEpisodeForDetail: (Episode) -> Unit,
-    onEpisodeClickForQuickAction: ((Episode) -> Unit)?,
+    onEpisodeClick: ((Episode) -> Unit)?,
     onBatchMarkEpisode: (Episode) -> Unit,
     onPlayEpisode: ((Episode) -> Unit)?,
     onOpenSources: (() -> Unit)?,
@@ -78,6 +82,19 @@ internal fun EpisodesTabPage(
                 .firstOrNull {
                     isEpisodeNextToWatch(it, uiState.collection?.epStatus ?: 0, hasProgress = uiState.collection != null)
                 }?.episodeNumber
+        }
+
+    var selectedEpisodeId by rememberSaveable(currentEpisodes.firstOrNull()?.id) {
+        val initial =
+            currentEpisodes.firstOrNull {
+                isEpisodeNextToWatch(it, uiState.collection?.epStatus ?: 0, hasProgress = uiState.collection != null)
+            } ?: currentEpisodes.firstOrNull()
+        mutableStateOf(initial?.id)
+    }
+    val selectedEpisode =
+        remember(selectedEpisodeId, currentEpisodes) {
+            currentEpisodes.firstOrNull { it.id == selectedEpisodeId }
+                ?: currentEpisodes.firstOrNull()
         }
 
     // 滚动到「加载更多」脚标可见时自动续拉下一屏分集
@@ -132,6 +149,7 @@ internal fun EpisodesTabPage(
                     groupedEpisodes = groupedEpisodes,
                     selectedGroup = activeGroup,
                     onGroupSelected = onSelectGroup,
+                    showCounts = !hasMoreEpisodes,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
             }
@@ -222,13 +240,11 @@ internal fun EpisodesTabPage(
                         episodes = currentEpisodes,
                         watchedCount = uiState.collection?.epStatus ?: 0,
                         hasProgress = uiState.collection != null,
+                        selectedEpisodeId = selectedEpisode?.id,
                         onToggleWatched = onToggleEpisodeWatched,
                         onEpisodeClick = { episode ->
-                            if (onEpisodeClickForQuickAction != null) {
-                                onEpisodeClickForQuickAction(episode)
-                            } else {
-                                onSelectEpisodeForDetail(episode)
-                            }
+                            selectedEpisodeId = episode.id
+                            onEpisodeClick?.invoke(episode)
                         },
                         onEpisodeLongClick = { episode ->
                             val isWatched = isEpisodeWatched(episode, uiState.collection?.epStatus ?: 0)
@@ -255,8 +271,8 @@ internal fun EpisodesTabPage(
                         isWatched = isWatched,
                         isNextToWatch = isNextToWatch,
                         onClick = {
-                            if (onEpisodeClickForQuickAction != null) {
-                                onEpisodeClickForQuickAction(episode)
+                            if (onEpisodeClick != null) {
+                                onEpisodeClick(episode)
                             } else {
                                 onSelectEpisodeForDetail(episode)
                             }

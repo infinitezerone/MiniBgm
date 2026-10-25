@@ -17,7 +17,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,14 +26,13 @@ import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.UserCollection
-import com.infinitezerone.minibgm.core.model.toEpisodeLabel
 import com.infinitezerone.minibgm.feature.subject.R
 import com.infinitezerone.minibgm.feature.subject.SubjectWatchStatus
 
 /**
  * 条目详情全宽横排操作区：
  * 1. 左侧大播放胶囊（自适应占满，高 thumb reachability）；非剧集类为大收藏按钮；
- * 2. 右侧实体微操作圆盘群（40dp 大靶区，M3 视觉与微光轮廓）；
+ * 2. 右侧实体微操作圆盘群（40dp 大靶区，收藏、章节选择与分享）；
  * 3. 独立全宽横排，在 360dp 窄屏上绝无截断与挤压风险。
  */
 @Composable
@@ -42,19 +40,15 @@ internal fun SubjectHeaderActionRow(
     subjectType: SubjectType,
     isEpisodeLike: Boolean,
     collection: UserCollection?,
-    totalEpisodes: Int,
     isLoggedIn: Boolean,
     watchStatus: SubjectWatchStatus,
-    nextEpSort: Float?,
     onPlayNext: (() -> Unit)?,
-    onOpenSources: (() -> Unit)?,
-    onIncrementWatched: (() -> Unit)?,
+    onOpenEpisodePicker: (() -> Unit)?,
     onOpenCollectionSheet: (() -> Unit)?,
     onPromptLogin: (() -> Unit)?,
     onShare: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val isCollected = collection != null
     val collectLabel =
         if (isCollected) {
@@ -71,21 +65,20 @@ internal fun SubjectHeaderActionRow(
         if (isEpisodeLike) {
             val playLabel =
                 when (watchStatus) {
-                    is SubjectWatchStatus.ContinueWatching ->
-                        stringResource(R.string.feature_subject_resume_watch, watchStatus.nextEpisode.formattedNumber)
+                    is SubjectWatchStatus.ContinueWatching -> stringResource(R.string.feature_subject_continue_watching)
                     is SubjectWatchStatus.Completed ->
                         stringResource(R.string.feature_subject_rewatch_from_start)
                     else ->
-                        if (nextEpSort != null && nextEpSort > 0f) {
-                            stringResource(R.string.feature_subject_play_episode_format, nextEpSort.toEpisodeLabel())
+                        if ((collection?.epStatus ?: 0) > 0) {
+                            stringResource(R.string.feature_subject_continue_watching)
                         } else {
-                            stringResource(R.string.feature_subject_cd_play)
+                            stringResource(R.string.feature_subject_start_watching)
                         }
                 }
 
             Button(
-                onClick = { onPlayNext?.invoke() ?: onOpenSources?.invoke() },
-                enabled = onPlayNext != null || onOpenSources != null,
+                onClick = { onPlayNext?.invoke() },
+                enabled = onPlayNext != null,
                 shape = CircleShape,
                 colors =
                     ButtonDefaults.buttonColors(
@@ -170,61 +163,36 @@ internal fun SubjectHeaderActionRow(
                 containerColor =
                     if (isCollected) {
                         MaterialTheme.colorScheme.primaryContainer
-                    } else if (isDark) {
-                        MaterialTheme.colorScheme.surfaceContainerLow
                     } else {
-                        MaterialTheme.colorScheme.surface
+                        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
                     },
                 contentColor =
                     if (isCollected) {
                         MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
-                        MaterialTheme.colorScheme.onSurface
+                        MaterialTheme.colorScheme.onSurfaceVariant
                     },
             )
         }
 
-        // 打卡 +1
-        if (isEpisodeLike) {
-            val canCheckIn = totalEpisodes > 0 || (collection?.epStatus ?: 0) > 0
+        // 分集选择入口不限定影视：书籍/音乐/游戏同样需要卷册、曲目和章节入口。
+        if (onOpenEpisodePicker != null) {
             BgmCircleActionButton(
-                onClick = {
-                    if (!isLoggedIn) {
-                        onPromptLogin?.invoke() ?: onIncrementWatched?.invoke()
-                    } else {
-                        onIncrementWatched?.invoke()
-                    }
-                },
-                icon = BgmIcons.Check,
-                contentDescription = stringResource(R.string.feature_subject_check_in_next_ep),
-                enabled = canCheckIn && onIncrementWatched != null,
+                onClick = onOpenEpisodePicker,
+                icon = BgmIcons.FormatListNumbered,
+                contentDescription =
+                    stringResource(
+                        when (subjectType) {
+                            SubjectType.BOOK -> R.string.feature_subject_action_pick_volume
+                            SubjectType.MUSIC -> R.string.feature_subject_action_pick_track
+                            SubjectType.GAME -> R.string.feature_subject_action_pick_chapter
+                            SubjectType.ANIME, SubjectType.REAL -> R.string.feature_subject_action_pick_episode
+                        },
+                    ),
                 size = 40.dp,
                 iconSize = 20.dp,
-                containerColor =
-                    if (isDark) {
-                        MaterialTheme.colorScheme.surfaceContainerLow
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            )
-        }
-
-        // 换源
-        if (isEpisodeLike && onOpenSources != null) {
-            BgmCircleActionButton(
-                onClick = onOpenSources,
-                icon = BgmIcons.Tv,
-                contentDescription = stringResource(R.string.feature_subject_ep_sources),
-                size = 40.dp,
-                iconSize = 20.dp,
-                containerColor =
-                    if (isDark) {
-                        MaterialTheme.colorScheme.surfaceContainerLow
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-                contentColor = MaterialTheme.colorScheme.onSurface,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -236,13 +204,8 @@ internal fun SubjectHeaderActionRow(
                 contentDescription = stringResource(R.string.feature_subject_share_title),
                 size = 40.dp,
                 iconSize = 20.dp,
-                containerColor =
-                    if (isDark) {
-                        MaterialTheme.colorScheme.surfaceContainerLow
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-                contentColor = MaterialTheme.colorScheme.onSurface,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

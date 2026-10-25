@@ -161,8 +161,16 @@ val RatingGold = Color(0xFFF59E0B)
 /** 深色遮罩上的高亮评分文字 / 选中态圆点 (Amber-300) */
 val RatingGoldBright = Color(0xFFFCD34D)
 
+/** 亮色主题评分文字：比装饰金更深，确保小字号也达到 AA。 */
+val RatingGoldTextLight = Color(0xFF8A4B00)
+
 /** 金色底上的高对比前景文字（Rank 徽章等） */
 val OnRatingGold = Color(0xFF3E1F00)
+
+/** 评分文字色：装饰金不得直接承载亮色主题正文。 */
+@Composable
+@ReadOnlyComposable
+fun ratingTextColor(): Color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) RatingGoldBright else RatingGoldTextLight
 
 /** 温暖琥珀（向后兼容别名，已校准为柔和琥珀 Warm Amber-400） */
 val WishOrange = StatusOnHold

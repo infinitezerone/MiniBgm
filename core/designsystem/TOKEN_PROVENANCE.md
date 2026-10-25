@@ -27,7 +27,7 @@
 | 品牌锚点 | `theme/Color.kt` | `BgmPink #F09199`、`#FEDFE1`、`#D05A3F` | `BRAND` | Bangumi 经典樱花粉，作为品牌种子色保留。 |
 | M3 颜色角色 | `theme/Color.kt`、`theme/Theme.kt` | primary / secondary / tertiary / error / surface / outline 等完整角色 | `M3` | 采用 M3 角色结构；十六进制值为手工维护，不依赖运行时生成。`dynamicColor=true` 时由系统 Material You 配色接管。 |
 | 收藏状态色 | `theme/SemanticColors.kt` | 主色 Tailwind 400；浅色容器 50/100；前景 700/800；暗色容器自定义 | `TW` + `PROJECT` | indigo / emerald / pink / amber 使用 400 + 50 + 800，slate 使用 400 + 100 + 700；暗色容器为项目校准。原注释写 Radix，已校正为 Tailwind。 |
-| 放送、评分、类型色 | `theme/SemanticColors.kt` | Tailwind 橙/靛蓝/琥珀 + 50/700 阶梯（与状态色同族） | `TW` + `BRAND` + `PROJECT` | 2026-10 全量去 M2 遗留：放送橙迁 Orange-600、经典徽章迁 Indigo-600、类型色板迁 Tailwind 50/700（暗色容器为项目深色档，与状态色同构）；评分金为 Tailwind amber；平台色保留 Bilibili / Mikan 品牌真值（品牌锚点不随体系迁移）。WCAG 全角色对比度由 ThemeTest `theme_colorPairs_meetWcagContrastTiers` 钉住。 |
+| 放送、评分、类型色 | `theme/SemanticColors.kt` | Tailwind 橙/靛蓝/琥珀 + 50/700 阶梯（与状态色同族）；评分文字亮色 `#8A4B00` / 暗色 `#FCD34D` | `TW` + `BRAND` + `PROJECT` | 2026-10 全量去 M2 遗留：放送橙迁 Orange-600、经典徽章迁 Indigo-600、类型色板迁 Tailwind 50/700（暗色容器为项目深色档，与状态色同构）；评分金为 Tailwind amber，仅用于图标和图形，文字走独立高对比语义色；平台色保留 Bilibili / Mikan 品牌真值（品牌锚点不随体系迁移）。WCAG 全角色与评分配对由 ThemeTest 钉住。 |
 | 正文文本层次 | `theme/SemanticColors.kt` | `#18181B` / `#D4D4D8`（亮/暗正文，暗色对齐 ChatGPT 正文柔和档） | `OS` + `PROJECT` | 标题/强调仍用 `onSurface`；长读场景（BBCode 渲染默认色、条目简介、AI 对话）用本档，夜间长阅读不刺眼；暗色档对全部卡片容器 ≥4.5:1、对背景约 10:1，由 ThemeTest 钉住。 |
 | 字体 | `theme/Type.kt` | display 57/45/36，headline 32/28/24，title 20/16/14，body 16/14/12，label 14/12/11 | `M3` + `PROJECT` | 15 级 type scale 来自 M3；`titleLarge` 使用 20/26（M3 默认 22/28），行高、字重和字距按中日文条目密度微调；字体族使用系统默认。 |
 | 圆角 | `theme/Shape.kt` | `4 / 8 / 12 / 16 / 24dp` | `M3` + `PROJECT` | 前四档对齐 M3 Shapes；`extraLarge` 采用 24dp，而 M3 默认是 28dp，用于悬浮导航和底部抽屉。 |

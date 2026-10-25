@@ -1043,16 +1043,8 @@ class SubjectDetailViewModelTest {
                 )
 
             assertEquals(SubjectDetailTab.OVERVIEW, viewModel.uiState.value.selectedTab)
-            assertTrue(
-                viewModel.uiState.value.characters
-                    .isEmpty(),
-            )
-
-            viewModel.selectTab(SubjectDetailTab.EPISODES)
-            assertEquals(SubjectDetailTab.EPISODES, viewModel.uiState.value.selectedTab)
 
             viewModel.selectTab(SubjectDetailTab.OVERVIEW)
-            assertEquals(SubjectDetailTab.OVERVIEW, viewModel.uiState.value.selectedTab)
             testScheduler.advanceUntilIdle()
             assertEquals(sampleCharacterList, viewModel.uiState.value.characters)
             assertEquals(samplePersonList, viewModel.uiState.value.persons)

@@ -2,30 +2,23 @@ package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.hapticfeedback.HapticFeedback
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.res.stringResource
 import com.infinitezerone.minibgm.core.designsystem.component.AiringReminderPermissionDialog
 import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDialog
 import com.infinitezerone.minibgm.core.designsystem.component.CollectionStatusBottomSheet
 import com.infinitezerone.minibgm.core.model.CharacterDetail
 import com.infinitezerone.minibgm.core.model.CollectionType
-import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.PersonDetail
-import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RelatedWork
-import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
 import com.infinitezerone.minibgm.core.model.SubjectPerson
 import com.infinitezerone.minibgm.core.model.SubjectType
 import com.infinitezerone.minibgm.core.model.Tag
 import com.infinitezerone.minibgm.core.model.UserCollection
-import com.infinitezerone.minibgm.core.navigation.PlayerRoute
 import com.infinitezerone.minibgm.feature.subject.R
 
 /**
- * 条目详情页的所有浮层与抽屉（快捷打卡、登录提示、权限弹窗、详情抽屉与播放源抽屉）统一收敛组件。
+ * 条目详情页的资料浮层与抽屉（登录提示、权限弹窗、收藏与人物详情）统一收敛组件。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,18 +33,6 @@ internal fun SubjectDetailOverlays(
     popularTags: List<Tag>,
     onDismissCollectionSheet: () -> Unit,
     onSaveCollection: (CollectionType, Int?, String?, Boolean, Int?, List<String>?) -> Unit,
-    selectedEpisodeForQuickAction: Episode? = null,
-    onDismissQuickAction: () -> Unit = {},
-    episodes: List<Episode> = emptyList(),
-    onSelectEpisodeForQuickAction: ((Episode) -> Unit)? = null,
-    onToggleEpisodeWatched: (episode: Episode, isWatched: Boolean, epNumber: Int, episodeType: Int) -> Unit,
-    onSelectEpisodeForDetail: (Episode) -> Unit,
-    onBuildPlayerRoute: (Episode) -> PlayerRoute,
-    onPlayClick: ((PlayerRoute) -> Unit)?,
-    onOpenSourcesForEpisode: ((Episode) -> Unit)? = null,
-    onBatchMarkRequest: (Episode) -> Unit,
-    isLoggedIn: Boolean,
-    haptic: HapticFeedback,
     previewCharacter: SubjectCharacter?,
     onDismissPreviewCharacter: () -> Unit,
     onViewCharacterDetail: (Long) -> Unit,
@@ -69,21 +50,6 @@ internal fun SubjectDetailOverlays(
     subjectTitle: String?,
     onConfirmAiringReminder: () -> Unit,
     onDismissAiringReminder: () -> Unit,
-    showSourcesBottomSheet: Boolean,
-    displaySubject: Subject?,
-    selectedEpisodeForSources: Episode?,
-    onDismissSourcesSheet: () -> Unit,
-    onStreamingUrlLaunch: (String) -> Unit,
-    onRequestSourceSearch: ((Episode?) -> Unit)? = null,
-    onManageRules: (() -> Unit)?,
-    playbackRules: List<PlaybackSourceRule>,
-    failedSourceReasons: Map<String, String>,
-    torrentResources: List<com.infinitezerone.minibgm.core.model.TorrentMediaResource> = emptyList(),
-    isTorrentLoading: Boolean = false,
-    onRequestNotificationPermission: (() -> Unit)? = null,
-    onSelectEpisodeForSources: ((Episode) -> Unit)? = null,
-    onRefreshTorrent: (() -> Unit)? = null,
-    onDownloadStarted: (() -> Unit)? = null,
 ) {
     if (showLoginPromptDialog) {
         BgmLoginPromptDialog(
@@ -101,58 +67,6 @@ internal fun SubjectDetailOverlays(
             popularTags = popularTags,
             onDismiss = onDismissCollectionSheet,
             onSave = onSaveCollection,
-        )
-    }
-
-    selectedEpisodeForQuickAction?.let { episode ->
-        val watchedCount = currentCollection?.epStatus ?: 0
-        val isWatched = isEpisodeWatched(episode, watchedCount)
-        val isNextToWatch = isEpisodeNextToWatch(episode, watchedCount, hasProgress = currentCollection != null)
-        val sameGroupEpisodes =
-            remember(episodes, episode.type) {
-                episodes.filter { it.type == episode.type }
-            }
-        val currentIdx = sameGroupEpisodes.indexOfFirst { it.id == episode.id }
-        val prevEpisode = if (currentIdx > 0) sameGroupEpisodes[currentIdx - 1] else null
-        val nextEpisode = if (currentIdx in 0 until sameGroupEpisodes.size - 1) sameGroupEpisodes[currentIdx + 1] else null
-
-        EpisodeQuickActionBottomSheet(
-            episode = episode,
-            isWatched = isWatched,
-            isNextToWatch = isNextToWatch,
-            onDismiss = onDismissQuickAction,
-            onToggleWatched = {
-                val epNumber = episode.episodeInt
-                if (isLoggedIn) {
-                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                }
-                onToggleEpisodeWatched(episode, !isWatched, epNumber, episode.type)
-            },
-            onSelectEpisodeForDetail = {
-                onSelectEpisodeForDetail(episode)
-            },
-            onPlayClick =
-                if ((subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL) && onPlayClick != null) {
-                    { onPlayClick(onBuildPlayerRoute(episode)) }
-                } else {
-                    null
-                },
-            onOpenSources =
-                if ((subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL) && onOpenSourcesForEpisode != null) {
-                    { onOpenSourcesForEpisode(episode) }
-                } else {
-                    null
-                },
-            onBatchMark =
-                if (!isWatched && episode.type == 0) {
-                    { onBatchMarkRequest(episode) }
-                } else {
-                    null
-                },
-            onNavigateToPrevious = prevEpisode?.let { prev -> { onSelectEpisodeForQuickAction?.invoke(prev) } },
-            onNavigateToNext = nextEpisode?.let { next -> { onSelectEpisodeForQuickAction?.invoke(next) } },
-            currentIndex = currentIdx,
-            totalCount = sameGroupEpisodes.size,
         )
     }
 
@@ -194,94 +108,6 @@ internal fun SubjectDetailOverlays(
             subjectTitle = subjectTitle,
             onConfirm = onConfirmAiringReminder,
             onDismiss = onDismissAiringReminder,
-        )
-    }
-
-    if (showSourcesBottomSheet && displaySubject != null) {
-        val watchedCount = currentCollection?.epStatus ?: 0
-        val targetType = selectedEpisodeForSources?.type ?: 0
-        val sameGroupEpisodes =
-            remember(episodes, targetType) {
-                episodes.filter { it.type == targetType }
-            }
-        val effectiveEpisode =
-            selectedEpisodeForSources
-                ?: sameGroupEpisodes.firstOrNull { isEpisodeNextToWatch(it, watchedCount, hasProgress = currentCollection != null) }
-                ?: sameGroupEpisodes.firstOrNull()
-                ?: episodes.firstOrNull()
-        val isWatched = effectiveEpisode?.let { isEpisodeWatched(it, watchedCount) } ?: false
-        val isNextToWatch =
-            effectiveEpisode?.let {
-                isEpisodeNextToWatch(it, watchedCount, hasProgress = currentCollection != null)
-            } ?: false
-        val currentIdx =
-            if (effectiveEpisode != null) {
-                sameGroupEpisodes.indexOfFirst { it.id == effectiveEpisode.id }
-            } else {
-                -1
-            }
-        val prevEpisode = if (currentIdx > 0) sameGroupEpisodes[currentIdx - 1] else null
-        val nextEpisode = if (currentIdx in 0 until sameGroupEpisodes.size - 1) sameGroupEpisodes[currentIdx + 1] else null
-
-        SubjectSourcesBottomSheet(
-            subject = displaySubject,
-            episode = effectiveEpisode,
-            isWatched = isWatched,
-            isNextToWatch = isNextToWatch,
-            onToggleWatched =
-                effectiveEpisode?.let { ep ->
-                    {
-                        val epNumber = ep.episodeInt
-                        if (isLoggedIn) {
-                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                        }
-                        onToggleEpisodeWatched(ep, !isWatched, epNumber, ep.type)
-                    }
-                },
-            onBatchMark =
-                if (effectiveEpisode != null && !isWatched && effectiveEpisode.type == 0) {
-                    { onBatchMarkRequest(effectiveEpisode) }
-                } else {
-                    null
-                },
-            onSelectEpisodeForDetail =
-                effectiveEpisode?.let { ep ->
-                    {
-                        onDismissSourcesSheet()
-                        onSelectEpisodeForDetail(ep)
-                    }
-                },
-            onNavigateToPrevious = prevEpisode?.let { prev -> { onSelectEpisodeForSources?.invoke(prev) } },
-            onNavigateToNext = nextEpisode?.let { next -> { onSelectEpisodeForSources?.invoke(next) } },
-            currentIndex = currentIdx,
-            totalCount = sameGroupEpisodes.size,
-            onDismissRequest = onDismissSourcesSheet,
-            onOpenUrl = onStreamingUrlLaunch,
-            onInternalPlayClick =
-                onPlayClick?.let { play ->
-                    { route ->
-                        onDismissSourcesSheet()
-                        play(route)
-                    }
-                },
-            onAiSourceSearch =
-                onRequestSourceSearch?.let { search ->
-                    { search(selectedEpisodeForSources) }
-                },
-            onManageRules =
-                onManageRules?.let { manage ->
-                    {
-                        onDismissSourcesSheet()
-                        manage()
-                    }
-                },
-            playbackRules = playbackRules,
-            failedSourceReasons = failedSourceReasons,
-            torrentResources = torrentResources,
-            isTorrentLoading = isTorrentLoading,
-            onRequestNotificationPermission = onRequestNotificationPermission,
-            onRefreshTorrent = onRefreshTorrent,
-            onDownloadStarted = onDownloadStarted,
         )
     }
 }

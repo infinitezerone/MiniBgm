@@ -138,6 +138,7 @@ class ThemeTest {
         // Rating
         assertEquals(Color(0xFFF59E0B), RatingGold)
         assertEquals(Color(0xFFFCD34D), RatingGoldBright)
+        assertEquals(Color(0xFF8A4B00), RatingGoldTextLight)
 
         // Platform brand colors
         assertEquals(Color(0xFFFB7299), BrandBilibili)
@@ -226,6 +227,14 @@ class ThemeTest {
         assertTrue(contrastRatio(OnSurfaceBodyLight, SurfaceContainerLowLight) >= 4.5f)
         // 柔和不等于过暗：暗色正文对背景的对比必须明显高于 4.5 下限（目标档约 10:1）
         assertTrue(contrastRatio(OnSurfaceBodyDark, SurfaceDark) >= 8f)
+    }
+
+    @Test
+    fun ratingTextColors_meetWcagContrastOnThemeSurfaces() {
+        assertTrue(contrastRatio(RatingGoldTextLight, SurfaceLight) >= 4.5f)
+        assertTrue(contrastRatio(RatingGoldTextLight, SurfaceContainerHighLight) >= 4.5f)
+        assertTrue(contrastRatio(RatingGoldBright, SurfaceDark) >= 4.5f)
+        assertTrue(contrastRatio(RatingGoldBright, SurfaceContainerHighDark) >= 4.5f)
     }
 
     private fun contrastRatio(

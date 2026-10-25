@@ -1,6 +1,5 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -24,9 +22,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,11 +37,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BGM_POSTER_ASPECT_RATIO
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
-import com.infinitezerone.minibgm.core.designsystem.theme.onSurfaceBodyColor
+import com.infinitezerone.minibgm.core.designsystem.theme.ratingTextColor
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectType
@@ -76,17 +72,15 @@ fun SubjectHeaderCard(
     onOpenCollectionSheet: (() -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
     onPlayNext: (() -> Unit)? = null,
-    onOpenSources: (() -> Unit)? = null,
+    onOpenEpisodePicker: (() -> Unit)? = null,
     onIncrementWatched: (() -> Unit)? = null,
     onDecrementWatched: (() -> Unit)? = null,
     onPromptLogin: (() -> Unit)? = null,
     onUpdateCollectionStatus: ((CollectionType) -> Unit)? = null,
-    nextEpSort: Float? = null,
     watchStatus: SubjectWatchStatus = SubjectWatchStatus.None,
     onShare: (() -> Unit)? = null,
     onTitleBoundsChanged: (Rect) -> Unit = {},
 ) {
-    var isSummaryExpanded by rememberSaveable { mutableStateOf(false) }
     val isEpisodeLike = subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL
     // 明暗判定走当前生效色阶：应用支持强制亮/暗主题覆盖，isSystemInDarkTheme() 会与之相悖
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
@@ -204,7 +198,7 @@ fun SubjectHeaderCard(
                                     text = rating.score.toString(),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = RatingGold,
+                                    color = ratingTextColor(),
                                 )
                             }
                         }
@@ -299,19 +293,16 @@ fun SubjectHeaderCard(
             subjectType = subjectType,
             isEpisodeLike = isEpisodeLike,
             collection = collection,
-            totalEpisodes = totalEpisodes,
             isLoggedIn = isLoggedIn,
             watchStatus = watchStatus,
-            nextEpSort = nextEpSort,
             onPlayNext = onPlayNext,
-            onOpenSources = onOpenSources,
-            onIncrementWatched = onIncrementWatched,
+            onOpenEpisodePicker = onOpenEpisodePicker.takeIf { totalEpisodes > 0 },
             onOpenCollectionSheet = onOpenCollectionSheet,
             onPromptLogin = onPromptLogin,
             onShare = onShare,
         )
 
-        // 2. 个人追番进度条与 -1/+1 快捷微调
+        // 2. 个人追番进度自然流（无多余灰框，极简呼吸感）
         if (isLoggedIn && (collection != null || totalEpisodes > 0)) {
             val currentEp = collection?.epStatus ?: 0
             val progressFraction =
@@ -324,187 +315,94 @@ fun SubjectHeaderCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
-                modifier = Modifier.fillMaxWidth(),
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val progressLabel =
-                            when (watchStatus) {
-                                is SubjectWatchStatus.Upcoming ->
-                                    if (watchStatus.airDate.isNotBlank()) {
-                                        stringResource(R.string.feature_subject_status_upcoming_format, watchStatus.airDate)
-                                    } else {
-                                        stringResource(R.string.feature_subject_status_upcoming)
-                                    }
-                                is SubjectWatchStatus.CaughtUp ->
-                                    if (watchStatus.nextAirDate != null) {
-                                        stringResource(R.string.feature_subject_status_caught_up_with_next, watchStatus.nextAirDate)
-                                    } else {
-                                        stringResource(R.string.feature_subject_status_caught_up)
-                                    }
-                                is SubjectWatchStatus.Completed ->
-                                    stringResource(R.string.feature_subject_status_completed)
-                                else ->
-                                    if (totalEpisodes > 0) {
-                                        stringResource(
-                                            R.string.feature_subject_progress_watched_with_total,
-                                            currentEp,
-                                            totalEpisodes,
-                                            progressPercent,
-                                        )
-                                    } else if (currentEp > 0) {
-                                        stringResource(R.string.feature_subject_progress_watched_only, currentEp)
-                                    } else {
-                                        stringResource(R.string.feature_subject_progress_not_started)
-                                    }
-                            }
-
-                        Text(
-                            text = progressLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-
-                        if (isEpisodeLike && onDecrementWatched != null) {
-                            Surface(
-                                onClick = onDecrementWatched,
-                                enabled = currentEp > 0,
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                modifier = Modifier.height(24.dp),
-                            ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.padding(horizontal = 8.dp),
-                                ) {
-                                    Text(
-                                        text = "-1",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color =
-                                            if (currentEp > 0) {
-                                                MaterialTheme.colorScheme.onSurface
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                            },
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (totalEpisodes > 0) {
-                        LinearProgressIndicator(
-                            progress = { progressFraction },
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(3.dp)
-                                    .clip(CircleShape),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        )
-                    }
-                }
-            }
-        }
-
-        // 3. 核心制作人员
-        val staffHighlights = subject.keyStaff.take(2)
-        if (staffHighlights.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            val staffText = staffHighlights.joinToString(separator = "  ·  ") { (role, name) -> "$role: $name" }
-            Text(
-                text = staffText,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        // 4. 智能段落折叠简介
-        val trimmedSummary = remember(subject.summary) { subject.summary.trim() }
-        if (trimmedSummary.isNotBlank()) {
-            HorizontalDivider(
-                modifier = Modifier.padding(top = 8.dp, bottom = 6.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
-            )
-
-            val summaryBlocks =
-                remember(trimmedSummary) {
-                    trimmedSummary.split(Regex("(?:\r?\n){2,}")).map { it.trim() }.filter { it.isNotEmpty() }
-                }
-            val hasMultiParagraphs = summaryBlocks.size > 1
-            val firstParagraph = summaryBlocks.firstOrNull().orEmpty()
-            val isSingleLongBlock =
-                !hasMultiParagraphs &&
-                    (trimmedSummary.length > 100 || trimmedSummary.count { it == '\n' } >= 2)
-            val canExpand = hasMultiParagraphs || isSingleLongBlock
-
-            val displayText =
-                when {
-                    !canExpand -> trimmedSummary
-                    isSummaryExpanded -> trimmedSummary
-                    hasMultiParagraphs -> firstParagraph
-                    else -> trimmedSummary
-                }
-
-            val maxLines =
-                if (isSummaryExpanded || !canExpand || hasMultiParagraphs) {
-                    Int.MAX_VALUE
-                } else {
-                    2
-                }
-
-            Text(
-                text = displayText,
-                style = MaterialTheme.typography.bodySmall,
-                color = onSurfaceBodyColor(),
-                maxLines = maxLines,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().animateContentSize(),
-            )
-
-            if (canExpand) {
-                val expandLabel =
-                    when {
-                        isSummaryExpanded -> stringResource(R.string.feature_subject_collapse_summary)
-                        hasMultiParagraphs -> stringResource(R.string.feature_subject_expand_summary_with_original)
-                        else -> stringResource(R.string.feature_subject_expand_summary)
-                    }
                 Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { isSummaryExpanded = !isSummaryExpanded }
-                            .padding(vertical = 2.dp),
-                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    val progressLabel =
+                        when (watchStatus) {
+                            is SubjectWatchStatus.Upcoming ->
+                                if (watchStatus.airDate.isNotBlank()) {
+                                    stringResource(R.string.feature_subject_status_upcoming_format, watchStatus.airDate)
+                                } else {
+                                    stringResource(R.string.feature_subject_status_upcoming)
+                                }
+                            is SubjectWatchStatus.CaughtUp ->
+                                if (watchStatus.nextAirDate != null) {
+                                    stringResource(R.string.feature_subject_status_caught_up_with_next, watchStatus.nextAirDate)
+                                } else {
+                                    stringResource(R.string.feature_subject_status_caught_up)
+                                }
+                            is SubjectWatchStatus.Completed ->
+                                stringResource(R.string.feature_subject_status_completed)
+                            else ->
+                                if (totalEpisodes > 0) {
+                                    stringResource(
+                                        R.string.feature_subject_progress_watched_with_total,
+                                        currentEp,
+                                        totalEpisodes,
+                                        progressPercent,
+                                    )
+                                } else if (currentEp > 0) {
+                                    stringResource(R.string.feature_subject_progress_watched_only, currentEp)
+                                } else {
+                                    stringResource(R.string.feature_subject_progress_not_started)
+                                }
+                        }
+
                     Text(
-                        text = expandLabel,
+                        text = progressLabel,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Icon(
-                        imageVector = if (isSummaryExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp),
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        if (isEpisodeLike && onDecrementWatched != null && currentEp > 0) {
+                            Text(
+                                text = "-1",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier =
+                                    Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable(onClick = onDecrementWatched)
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+
+                        if (isEpisodeLike && onIncrementWatched != null) {
+                            BgmCircleActionButton(
+                                onClick = onIncrementWatched,
+                                icon = BgmIcons.Check,
+                                contentDescription = stringResource(R.string.feature_subject_check_in_next_ep),
+                                size = 28.dp,
+                                iconSize = 16.dp,
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                    }
+                }
+
+                if (totalEpisodes > 0) {
+                    LinearProgressIndicator(
+                        progress = { progressFraction },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(2.5.dp)
+                                .clip(CircleShape),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
                     )
                 }
             }
