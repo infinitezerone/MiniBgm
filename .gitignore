@@ -43,3 +43,6 @@ target/
 
 # jgate 转速表：本地运行历史（JSONL），机器本地数据不入库
 .jgate/
+
+# 本地 Agent 评审截图与布局快照
+.codex-artifacts/
