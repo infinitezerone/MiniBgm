@@ -71,6 +71,8 @@ androidApplication {
         buildConfigField("String", "BUILD_TIER", "\"$tier\"")
         buildConfigField("String", "OAUTH_TOKEN_PROXY_URL", "\"$oauthProxyUrl\"")
         buildConfigField("String", "DANMAKU_DEFAULT_ENDPOINT", "\"$danmakuEndpoint\"")
+        // 应用操作型评估器（connectedDebugAndroidTest）的 JUnit4 入口
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters.addAll(nativeLibAbis)
         }
@@ -182,6 +184,11 @@ dependencies {
     testImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     testImplementation(project(":core:testing"))
+
+    // 应用操作型评估器：UIAutomator 驱动 + 逐步证据采集，由 .github/workflows/eval.yml 在 CI 模拟器上执行
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.uiautomator)
 }
 
 configureAndroidUnitTests()
