@@ -1,9 +1,10 @@
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+use std::sync::Mutex;
 use std::time::Instant;
 
 mod native;
@@ -30,6 +31,169 @@ struct Diagnostic {
     #[serde(skip_serializing_if = "Option::is_none")]
     remediation: Option<String>,
     timestamp: String,
+}
+
+/// 单次门禁运行的落账记录（转速表）：`.jgate/history.jsonl` 每行一条。
+///
+/// 为什么必须持久化：diagnostic.json 是单次覆盖、clean 即失，没有任何数据能回答
+/// 「门禁一次通过率是多少」「哪些阶段最爱失败」「哪些红线从未触发」——飞轮没有转速表，
+/// 规则只增不减的死积累就无法被度量。
+#[derive(Debug, Serialize, Deserialize)]
+struct RunRecord {
+    timestamp: String,
+    /// quick / fast / full
+    mode: String,
+    ok: bool,
+    duration_secs: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    failed_stage: Option<String>,
+    #[serde(default)]
+    module_count: usize,
+}
+
+/// 当前运行上下文：失败路径经 record_diagnostic 钩子落账时需要 mode/耗时/模块数
+struct RunCtx {
+    mode: String,
+    start: Instant,
+    module_count: usize,
+}
+
+static RUN_CTX: Mutex<Option<RunCtx>> = Mutex::new(None);
+
+fn set_run_ctx(mode: &str) {
+    if let Ok(mut guard) = RUN_CTX.lock() {
+        *guard = Some(RunCtx {
+            mode: mode.to_string(),
+            start: Instant::now(),
+            module_count: 0,
+        });
+    }
+}
+
+fn update_run_ctx_modules(count: usize) {
+    if let Ok(mut guard) = RUN_CTX.lock() {
+        if let Some(ctx) = guard.as_mut() {
+            ctx.module_count = count;
+        }
+    }
+}
+
+fn history_path(root: &Path) -> PathBuf {
+    root.join(".jgate/history.jsonl")
+}
+
+fn append_run_history(root: &Path, ok: bool, failed_stage: Option<&str>) {
+    let Some(ctx) = RUN_CTX.lock().ok().and_then(|mut g| g.take()) else {
+        return;
+    };
+    let record = RunRecord {
+        timestamp: utc_now_iso(),
+        mode: ctx.mode,
+        ok,
+        duration_secs: ctx.start.elapsed().as_secs(),
+        failed_stage: failed_stage.map(|s| s.to_string()),
+        module_count: ctx.module_count,
+    };
+    if let Some(dir) = history_path(root).parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    if let Ok(mut line) = serde_json::to_string(&record) {
+        line.push('\n');
+        use std::io::Write;
+        if let Ok(mut file) = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(history_path(root))
+        {
+            let _ = file.write_all(line.as_bytes());
+        }
+    }
+}
+
+fn load_run_history(root: &Path) -> Vec<RunRecord> {
+    fs::read_to_string(history_path(root))
+        .map(|content| {
+            content
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .filter_map(|l| serde_json::from_str(l).ok())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[derive(Debug, Default)]
+struct StatsSummary {
+    total: usize,
+    passed: usize,
+    by_mode: Vec<(String, usize, usize)>, // mode, total, passed
+    failed_stages: Vec<(String, usize)>,
+}
+
+fn compute_stats(records: &[RunRecord]) -> StatsSummary {
+    let mut summary = StatsSummary {
+        total: records.len(),
+        passed: records.iter().filter(|r| r.ok).count(),
+        ..Default::default()
+    };
+
+    let mut modes: Vec<(String, usize, usize)> = Vec::new();
+    let mut stages: Vec<(String, usize)> = Vec::new();
+    for r in records {
+        if !modes.iter().any(|(m, _, _)| m == &r.mode) {
+            modes.push((r.mode.clone(), 0, 0));
+        }
+        let entry = modes
+            .iter_mut()
+            .find(|(m, _, _)| m == &r.mode)
+            .expect("mode entry inserted above");
+        entry.1 += 1;
+        if r.ok {
+            entry.2 += 1;
+        } else if let Some(stage) = &r.failed_stage {
+            match stages.iter_mut().find(|(s, _)| s == stage) {
+                Some(entry) => entry.1 += 1,
+                None => stages.push((stage.clone(), 1)),
+            }
+        }
+    }
+    modes.sort_by(|a, b| a.0.cmp(&b.0));
+    stages.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    summary.by_mode = modes;
+    summary.failed_stages = stages;
+    summary
+}
+
+fn handle_stats(root: &Path) {
+    let records = load_run_history(root);
+    if records.is_empty() {
+        println!("[jgate stats] 暂无运行历史（.jgate/history.jsonl 不存在或为空）");
+        return;
+    }
+    let summary = compute_stats(&records);
+    let rate = if summary.total > 0 {
+        (summary.passed as f64) * 100.0 / (summary.total as f64)
+    } else {
+        0.0
+    };
+    println!("[jgate stats] 转速表（{}）", history_path(root).display());
+    println!(
+        "  总运行 {} 次，通过 {} 次，一次通过率 {:.1}%",
+        summary.total, summary.passed, rate
+    );
+    println!("  按模式：");
+    for (mode, total, passed) in &summary.by_mode {
+        let mode_rate = (*passed as f64) * 100.0 / (*total as f64);
+        println!("    {:<8} {:>4} 次，通过率 {:.1}%", mode, total, mode_rate);
+    }
+    if summary.failed_stages.is_empty() {
+        println!("  失败阶段直方图：（无失败记录）");
+    } else {
+        println!("  失败阶段直方图：");
+        for (stage, count) in &summary.failed_stages {
+            println!("    {:<16} {} 次", stage, count);
+        }
+    }
 }
 
 fn utc_now_iso() -> String {
@@ -97,6 +261,8 @@ fn is_leap_year(y: u64) -> bool {
 }
 
 fn record_diagnostic(root: &Path, stage: &str, summary: &str, remediation: &str) {
+    // 转速表落账：所有失败路径都经过这里，顺带记录失败阶段
+    append_run_history(root, false, Some(stage));
     let dir = root.join("build/reports/jgate");
     let _ = fs::create_dir_all(&dir);
     let diag = Diagnostic {
@@ -213,6 +379,7 @@ fn print_usage() {
 子命令 / 模式：
   quick         快速自检模式（秒级执行架构红线，可附加模块微验证）
   native        原生库编译与指纹校验模式（编译 libminibgm_ech / libminibgm_torrent）
+  stats         转速表：历史一次通过率、分模式统计与失败阶段直方图（数据在 .jgate/history.jsonl）
 
 门禁做什么（默认模式）：
   Rust 门禁（仅触及 crates/ 时）→ spotlessApply → 架构红线
@@ -238,6 +405,7 @@ fn print_usage() {
   jgate --fast                   # 跳过截图测试的轻量门禁
   jgate quick                    # 秒级架构红线自查（代替 quick-check）
   jgate quick core/network       # 红线 + network 模块单测微验证
+  jgate stats                    # 查看门禁一次通过率与失败阶段直方图
   jgate native                   # 编译/更新全部 Rust 原生库（支持指纹增量短路）
   jgate native --check           # 校验原生库产物是否齐全且与源码一致
 "#
@@ -346,9 +514,22 @@ fn main() {
         handle_native_mode(&root, &raw_args[1..]);
         return;
     }
+    if !raw_args.is_empty() && raw_args[0] == "stats" {
+        handle_stats(&root);
+        return;
+    }
 
     let start_time = Instant::now();
     let opts = parse_args();
+
+    // 转速表上下文：quick/fast/full 模式统一落账（失败经 record_diagnostic 钩子）
+    set_run_ctx(if opts.quick_mode {
+        "quick"
+    } else if opts.fast_mode {
+        "fast"
+    } else {
+        "full"
+    });
 
     // 自愈接线 git 钩子
     check_git_hooks();
@@ -596,6 +777,7 @@ fn main() {
     }
     println!("[jgate] 模块 {} 个：{}", modules.len(), modules.join(" "));
     println!("[jgate] 将执行：{}", gradle_tasks.join(" "));
+    update_run_ctx_modules(modules.len());
 
     if opts.plan_only {
         println!("[jgate] --plan：以上仅为计划，未执行任何命令");
@@ -670,6 +852,7 @@ fn main() {
     verify_test_results(&root, &modules, stamp_time, opts.fast_mode);
 
     clear_diagnostic(&root);
+    append_run_history(&root, true, None);
     let elapsed = start_time.elapsed().as_secs();
     println!(
         "[jgate] ✅ 验证门通过（耗时 {}s，{} 个模块测试通过）",
@@ -961,8 +1144,10 @@ fn handle_quick_mode(root: &Path, opts: &CliOptions) {
 
     let status = run_gradle(root, &tasks, opts.fast_mode);
     if status.success() {
+        append_run_history(root, true, None);
         println!("[jgate] ✅ 快速验证全绿！");
     } else {
+        append_run_history(root, false, Some("QUICK"));
         eprintln!("[jgate] ❌ 快速验证未通过");
         std::process::exit(1);
     }
@@ -1045,5 +1230,46 @@ D deleted/file.txt
         assert_eq!(normalize_module(":core:data"), "core/data");
         assert_eq!(normalize_module("feature:search"), "feature/search");
         assert_eq!(normalize_module("app"), "app");
+    }
+
+    fn record(mode: &str, ok: bool, stage: Option<&str>) -> RunRecord {
+        RunRecord {
+            timestamp: "2026-10-25T00:00:00Z".to_string(),
+            mode: mode.to_string(),
+            ok,
+            duration_secs: 60,
+            failed_stage: stage.map(|s| s.to_string()),
+            module_count: 2,
+        }
+    }
+
+    #[test]
+    fn test_compute_stats_rate_and_histogram() {
+        let records = vec![
+            record("full", true, None),
+            record("full", false, Some("GRADLE_BUILD")),
+            record("full", false, Some("GRADLE_BUILD")),
+            record("quick", true, None),
+            record("quick", true, None),
+            record("quick", false, Some("QUICK")),
+        ];
+        let s = compute_stats(&records);
+        assert_eq!(s.total, 6);
+        assert_eq!(s.passed, 3);
+        let full = s.by_mode.iter().find(|(m, _, _)| m == "full").unwrap();
+        assert_eq!((full.1, full.2), (3, 1));
+        let quick = s.by_mode.iter().find(|(m, _, _)| m == "quick").unwrap();
+        assert_eq!((quick.1, quick.2), (3, 2));
+        // 直方图按次数降序
+        assert_eq!(s.failed_stages[0], ("GRADLE_BUILD".to_string(), 2));
+        assert_eq!(s.failed_stages[1], ("QUICK".to_string(), 1));
+    }
+
+    #[test]
+    fn test_compute_stats_empty() {
+        let s = compute_stats(&[]);
+        assert_eq!(s.total, 0);
+        assert!(s.by_mode.is_empty());
+        assert!(s.failed_stages.is_empty());
     }
 }
