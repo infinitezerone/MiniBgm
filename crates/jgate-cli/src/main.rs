@@ -204,8 +204,8 @@ fn print_usage() {
 选项：
   -s, --stack   验证当前本地变更栈（trunk()..@ 逐个提交格式与全栈改动汇总）
   -a, --all     强制验证全部模块（跨切面改动、PR 前）
-  -f, --fast    仅为本机减负：跳过截图测试（等价 -Pminibgm.skipScreenshots=true）。
-                本机绿 != CI 绿——提交前必须再跑一次不带 --fast 的
+  -f, --fast    仅为本机减负：跳过截图测试与触及模块的增量 lint（等价
+                -Pminibgm.skipScreenshots=true）。本机绿 != CI 绿——提交前必须再跑一次不带 --fast 的
   -n, --plan    只打印本次验证目标与将要执行的 gradle 任务，不执行命令（别名 --dry-run）
   -o, --only    在 quick 模式下仅执行目标模块测试，跳过架构红线
   -h, --help    显示本帮助
@@ -216,7 +216,8 @@ fn print_usage() {
 
 门禁做什么（默认模式）：
   Rust 门禁（仅触及 crates/ 时）→ spotlessApply → 架构红线
-  → 触及模块测试 + :app:testDebugUnitTest + :app:assembleDebug → 结果真实性校验 → 结构化诊断
+  → 触及模块测试 + :app:testDebugUnitTest + 触及 Android 模块 lintDebug
+  → :app:assembleDebug → 结果真实性校验 → 结构化诊断
 
   目标推断：工作副本 @ → 最近提交 @-，按改动路径推导模块；触及
   :core:model/common/data/network/database/datastore/designsystem/navigation、
@@ -565,6 +566,20 @@ fn main() {
     if opts.explicit_all {
         gradle_tasks.push(":app:assembleRelease".to_string());
         gradle_tasks.push(":core:testing:crapCheck".to_string());
+    }
+
+    // 触及 Android 模块的增量 lint：此前 lint 只在 CI 跑，本地门禁绿灯也可能带着新增
+    // lint 违规直接推送。只对声明了 Android 应用/库约定插件的模块附加 lintDebug——
+    // 实证 KMP 库模块（minibgm.kmp.library）没有 lintDebug 任务，误加会让整个门禁失败；
+    // --fast 本机减负时跳过。
+    if !docs_only && !opts.fast_mode {
+        for m in &modules {
+            let build_file = root.join(m).join("build.gradle.kts");
+            let content = fs::read_to_string(&build_file).unwrap_or_default();
+            if content.contains("minibgm.android") {
+                gradle_tasks.push(format!(":{}:lintDebug", m.replace('/', ":")));
+            }
+        }
     }
 
     println!("[jgate] 验证目标：{}", target_desc);
