@@ -24,8 +24,18 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 机械执行：源语义由 `:core:testing` 的 ArchitectureRulesTest，依赖图由 build-logic 的 ModuleBoundaryConventionPlugin（配置期断言）。**本文件自身也受机械预算约束**（总字数与单行长度，见 `agents_doc_must_stay_an_index_under_context_budget`）：新行为约束的落点永远是测试，这里只留一句索引，要加文字必须先删等量文字（确需扩写须显式上调常量并说明理由）。
 
-1. feature 互不依赖；UI 只经 `:core:data` 仓库；`:core:model` 纯 Kotlin；feature 无原始 IO、无颜色字面量、不外露可变状态（MutableStateFlow 一律禁止；对外只暴露只读 StateFlow，或 Compose State 持有者的只读类型——多字段原子更新用 `Snapshot.withMutableSnapshot`，不用 `update { it.copy(…) }`）；Flow 算子（`map` / `onEach` / `filter` / `transform` 等）lambda 内严禁 `launch` 副作用协程——任务流在下载期间每秒发射，在 lambda 内 launch 会堆积无界协程，持续刷新必须改用单条收集协程串行执行（StateFlow 自带 conflate 背压；ArchitectureRulesTest 拦截）；路由密封于 `BgmRoute` 并声明堆叠层；修饰符严禁 `Modifier.composed`，微交互基于 `Modifier.Node` 且 Element 必须为 data class（`custom_modifiers_must_never_use_legacy_modifier_composed`、`modifier_node_elements_must_be_data_classes_or_implement_value_equality`）。
-2. 瞬态交互收敛：UI 浮层统一由 `BgmOverlayHost` + `overlayHostState.await(...)` 挂起承接，严禁散落 `var showDialog`；通用登录提示收口 `BgmLoginPromptDialog`；一次性事件严禁裸 `collect`，须 `ObserveAsEvents`（STARTED）；事件文案一律 `@StringRes` + 格式化参数下发、UI 解析（服务端消息经 message 透传），严禁 VM 内联文案；Composable 内禁止 `LocalContext.current.getString(...)`，静态文案用 `stringResource`，非 Composable 上下文经 `resources.getString`；线路选择只走 `PlayerSourcesBottomSheet`（复用 `BgmSourcesBottomSheet`，横竖屏抽屉同源主题 token——禁硬编码黑底，卡片行/空态一律 `BgmSourceActionCard` / `SourceEmptyStateCard`，红线 `player_sources_panel_*`），选集抽屉专注选集；分集微操作与播放源收敛于 `SubjectSourcesBottomSheet`（支持原位切集，禁抽屉套抽屉）；多按钮横排显式 `contentPadding`（禁裸 Button 48dp 内边距截断）；底栏空态与跳转真源 `BgmSourceActionCard`，跳外部界面经 `runAfterDismiss` / `onDismissAndRun`；横屏抽屉动效与关闭走 snapshotFlow 且 BackHandler 条件启闭（`player_right_drawer_must_bind_lifecycle_and_conditional_back_handler`）。
+1. feature 互不依赖；UI 只经 `:core:data` 仓库；`:core:model` 纯 Kotlin。
+   - feature 无原始 IO、无颜色字面量；不外露可变状态（MutableStateFlow 一律禁止；对外只暴露只读 StateFlow，或 Compose State 持有者的只读类型；多字段原子更新用 `Snapshot.withMutableSnapshot`，不用 `update { it.copy(…) }`）。
+   - Flow 算子（`map` / `onEach` / `filter` / `transform` 等）lambda 内严禁 `launch` 副作用协程（会堆积无界协程）；持续刷新改用单条收集协程串行执行（StateFlow 自带 conflate 背压）。
+   - 路由密封于 `BgmRoute` 并声明堆叠层。
+   - 修饰符严禁 `Modifier.composed`，微交互基于 `Modifier.Node` 且 Element 必须为 data class（`custom_modifiers_must_never_use_legacy_modifier_composed`、`modifier_node_elements_must_be_data_classes_or_implement_value_equality`）。
+2. 瞬态交互收敛：
+   - UI 浮层统一由 `BgmOverlayHost` + `overlayHostState.await(...)` 挂起承接，严禁散落 `var showDialog`；通用登录提示收口 `BgmLoginPromptDialog`。
+   - 一次性事件严禁裸 `collect`，须 `ObserveAsEvents`（STARTED）；事件文案一律 `@StringRes` + 格式化参数下发、UI 解析（服务端消息经 message 透传），严禁 VM 内联文案。
+   - Composable 内禁止 `LocalContext.current.getString(...)`：静态文案用 `stringResource`，非 Composable 上下文经 `resources.getString`。
+   - 线路选择只走 `PlayerSourcesBottomSheet`（复用 `BgmSourcesBottomSheet`，横竖屏抽屉同源主题 token，禁硬编码黑底；卡片行/空态一律 `BgmSourceActionCard` / `SourceEmptyStateCard`，红线 `player_sources_panel_*`）；选集抽屉专注选集。
+   - 分集微操作与播放源收敛于 `SubjectSourcesBottomSheet`（支持原位切集，禁抽屉套抽屉）；多按钮横排显式 `contentPadding`；底栏空态与跳转真源 `BgmSourceActionCard`，跳外部界面经 `runAfterDismiss` / `onDismissAndRun`。
+   - 横屏抽屉动效与关闭走 snapshotFlow 且 BackHandler 条件启闭（`player_right_drawer_must_bind_lifecycle_and_conditional_back_handler`）。
 3. 可播地址只来自 `findPlayableSources`；一切写操作止于 PENDING_CONFIRMATION 提案卡，用户确认才落库。
 4. 凭据只存在于 `AuthTokensDataSource`；不绕过/削弱 `BgmPkce`；不剥离或覆盖 `User-Agent`；关键写操作包 `withContext(NonCancellable)`。
 5. DI 真实性与契约闭环：底层平台模块与 feature ViewModel 保持定义闭环；经 AppModuleTest 断言全量可解析，禁构造器新增依赖后漏注册引发运行时 NoDefinitionFoundException。手工 `viewModel { XxxViewModel(...) }` 块必须把目标类**全部带 `= null` 默认值的可选依赖**显式传上，避免漏传在真机上静默退化（红线 `manual_view_model_blocks_must_inject_every_optional_dependency` 把关）。
@@ -45,7 +55,9 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
   - 弹幕关闭即零请求（拉取去重、分集纠正随开关收起；`danmaku_match_entry_must_be_gated_by_the_danmaku_toggle`）；动态弹道排版与防追尾防重叠，底部保留字幕避让，禁 hashCode 盲取模与每帧 measureText（`danmaku_view_must_use_dynamic_track_allocation_and_not_hash_modulo`）。
   - 三处评论区共用排序偏好（`SettingsRepository.setCommentSortOrder` + `CommentSortOrder.fromKey`；`comment_sort_order_must_be_a_shared_persisted_preference`）。
   - `DefaultMediaSourceFactory` 包 `DefaultDataSource.Factory` 支持 `file://`（`exoplayer_engine_media_source_factory_must_wrap_default_data_source`）；线路生成剔除 `TORRENT`（`player_view_model_must_filter_out_torrent_rules_from_online_sources`）；结构化 API 禁当直链（`isLikelyMediaStream` 断言接口型 URL）；播放错误浮层同时给 `onNextSource` 与 `onOpenSourcesPanel`。
-- 手势与进度条：屏幕横向手势必须把实时进度透传 `onScrubbing` 并联动底边进度线；进度条统一 `awaitEachGesture` 单手势循环，Thumb 行程按两端半径对齐，触摸靶区 ≥44dp；双击累加 + 650ms 防抖收敛为单次 Seek，侧边药丸承接、严禁中央 Seek HUD；动态数值用 `tnum` 且容器定宽（`player_gesture_hud_must_not_jitter_and_use_tnum_and_avoid_dual_hud_conflict`）；锁屏禁转屏与返回破锁且单击必唤出解锁键（`player_screen_lock_must_prevent_exit_and_allow_tap_wake`）；明暗判定走生效色阶禁 `isSystemInDarkTheme`，40dp 圆盘靶区扩至 48dp。
+- 手势与进度条：屏幕横向手势必须把实时进度透传 `onScrubbing` 并联动底边进度线；进度条统一 `awaitEachGesture` 单手势循环，Thumb 行程按两端半径对齐，触摸靶区 ≥44dp。
+- 手势 HUD 稳定：双击累加 + 650ms 防抖收敛为单次 Seek，侧边药丸承接、严禁中央 Seek HUD；动态数值用 `tnum` 且容器定宽（`player_gesture_hud_must_not_jitter_and_use_tnum_and_avoid_dual_hud_conflict`）。
+- 锁屏禁转屏与返回破锁且单击必唤出解锁键（`player_screen_lock_must_prevent_exit_and_allow_tap_wake`）；明暗判定走生效色阶禁 `isSystemInDarkTheme`，40dp 圆盘靶区扩至 48dp。
 - 图床与富文本：未知图床 Fail-Open 直连（后台异步探 ECH），BBCode 图片块必须有加载占位；带链接图片与畸形嵌套必须归一化并提取纯净直链（`image_loader_routing_must_fail_open_for_unknown_third_party_hosts`）。
 - 原生插件：严禁派发未就绪 Socket；扩展下载与后台大任务必须经 `BgmOverlayHost` 确认；动态 `.so` 按版本隔离 + `Mutex` + `setReadOnly`（`dynamic_so_loading_enforces_wx_version_isolation_and_no_silent_install`、`stream_engines_never_use_fake_placeholders_or_unbound_sockets`）。
 - JNI：`companion object` 内 `external fun` 必须逐个 `@JvmStatic`（否则符号落进 `$Companion`，真机闪退）；边界禁 `unwrap()`/裸锁；无会话统计必须返回长度不足 4 的数组（`jni_symbol_binding_and_stats_failure_signal_keep_kotlin_and_rust_in_lockstep`）。

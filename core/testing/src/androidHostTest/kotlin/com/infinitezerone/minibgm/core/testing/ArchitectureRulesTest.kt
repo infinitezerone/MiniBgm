@@ -287,8 +287,8 @@ class ArchitectureRulesTest : ArchitectureRuleTestSupport() {
          */
         const val AGENTS_MD_CHAR_BUDGET = 9_800
 
-        /** `AGENTS.md` 单行字符上限：巨型 bullet 既没人读，也拆不出可评审的 diff */
-        const val AGENTS_MD_MAX_LINE_CHARS = 900
+        /** `AGENTS.md` 单行字符上限：巨型 bullet 既没人读，也拆不出可评审的 diff（收紧自 900） */
+        const val AGENTS_MD_MAX_LINE_CHARS = 400
 
         /** 单个 `SKILL.md` 的上限：路由 + 铁律够用，细节必须进 references/ */
         const val SKILL_MAX_CHARS = 6_000
