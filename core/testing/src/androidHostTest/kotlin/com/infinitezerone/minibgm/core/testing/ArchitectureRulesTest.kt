@@ -278,6 +278,43 @@ class ArchitectureRulesTest : ArchitectureRuleTestSupport() {
         )
     }
 
+    /**
+     * 红线引用的目标文件必须真实存在：大量域规则以 `if (!file.isFile) return` 对
+     * 「目标被移动/重命名」静默跳过——红线会无声死亡且没有任何红灯
+     * （`docs_must_only_reference_things_that_exist` 只校验文档里的路径，不校验红线自己
+     * 硬编码的目标路径）。本元规则把字面路径钉死：挪走文件必须同步改红线路径；
+     * 含 `$` 插值的路径（共享目录常量拼接）无法静态解析，不在校验范围。
+     */
+    @Test
+    fun rule_test_target_files_must_exist() {
+        val rulesDir =
+            File(
+                projectRoot,
+                "core/testing/src/androidHostTest/kotlin/com/infinitezerone/minibgm/core/testing",
+            )
+        val violations = mutableListOf<String>()
+        rulesDir
+            .listFiles()
+            .orEmpty()
+            .filter { it.isFile && it.name.endsWith("RulesTest.kt") }
+            .forEach { rulesFile ->
+                val rel = rulesFile.relativeTo(projectRoot).path
+                Regex("\"([a-z][a-zA-Z0-9/_.]*\\.kt)\"").findAll(rulesFile.readText()).forEach { match ->
+                    val path = match.groupValues[1]
+                    if (!File(projectRoot, path).isFile) {
+                        violations.add("$rel -> 引用的目标文件不存在: $path")
+                    }
+                }
+            }
+
+        assertTrue(
+            violations.isEmpty(),
+            "红线测试引用的目标文件不存在——该红线已随文件移动/重命名静默失效，" +
+                "请同步更新红线路径（或在目标确实可缺席时改用显式 assume）：\n" +
+                violations.joinToString("\n"),
+        )
+    }
+
     private companion object {
         /**
          * `AGENTS.md` 上下文预算（字符数，按 LF 归一后计量）。
