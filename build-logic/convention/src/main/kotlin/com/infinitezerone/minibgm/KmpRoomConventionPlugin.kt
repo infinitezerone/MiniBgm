@@ -23,5 +23,13 @@ class KmpRoomConventionPlugin : Plugin<Project> {
             add("kspAndroid", roomCompiler)
             // add("kspJvm", roomCompiler) // 桌面端暂未启用
         }
+
+        // AGP 的 host-test lint 任务会读取 KSP 生成目录，但当前插件组合未自动建立任务边。
+        val kspAndroidHostTest = tasks.matching { it.name == "kspAndroidHostTest" }
+        tasks.matching {
+            it.name == "generateAndroidHostTestLintModel" || it.name == "lintAnalyzeAndroidHostTest"
+        }.configureEach {
+            dependsOn(kspAndroidHostTest)
+        }
     }
 }
