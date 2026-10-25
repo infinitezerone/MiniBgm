@@ -81,7 +81,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 
 AI 协同流水线（机械执行，严禁甩锅排错）：
 
-1. **前置反诘（Spec 对齐与发射架）**：编码前反查硬红线与先例，输出 Mini-Spec 与改动栈；多 Agent 接力或跨切面任务暂存根目录 `.task.md`（发射架：受 .gitignore 保护不入库，完工过门禁即删），用户确认后开工。
+1. **前置反诘（Spec 对齐与发射架）**：编码前反查硬红线与先例，输出 Mini-Spec 与改动栈；多 Agent 接力或跨切面任务暂存根目录 `.task.md`（发射架，结构模板与验收契约见 `.agents/templates/task-launchpad.md`；受 .gitignore 保护不入库，完工过门禁即删），用户确认后开工。
 2. **原子切片（Task Stacks）**：自底向上分层实现（model/data → ViewModel → UI），单次提交单一目的；中间态用 `.\tools\quick-check.ps1` 自查红线。
 3. **经验固化（Flywheel 飞轮，跑 `jgate` 前前置必检）**：凡完成缺陷修复、审查整改或架构重构，跑 `jgate` 终验前必须主动执行《MiniBgm 飞轮协议》（固化入 `ArchitectureRulesTest`、`AGENTS.md` 与 `.agents/skills/minibgm-playbooks`，不留纯文本日记，详见 `.agents/skills/minibgm-flywheel/SKILL.md`），严禁等用户提醒才补跑飞轮。
 4. **自愈验证（Autonomous Loop）**：连同飞轮新增的红线单测一起自主运行 `.\tools\jgate.ps1`（或 `bash tools/jgate`），若未通过必须自行抓取日志修复直至全绿，严禁让用户试跑。
