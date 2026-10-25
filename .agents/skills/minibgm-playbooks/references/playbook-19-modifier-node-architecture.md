@@ -3,7 +3,7 @@
 * **规范先例**：
   * 实现：`core/designsystem/src/main/kotlin/com/infinitezerone/minibgm/core/designsystem/component/ExpressiveMotion.kt`（`AquamorphicPressNodeElement`、`AquamorphicPressNode`、`Modifier.aquamorphicPress`）
   * 单测：`core/designsystem/src/test/kotlin/com/infinitezerone/minibgm/core/designsystem/component/AquamorphicPressTest.kt`
-  * 红线测试：`core/testing/src/androidHostTest/kotlin/com/infinitezerone/minibgm/core/testing/ArchitectureRulesTest.kt`
+  * 红线测试：`core/testing/src/androidHostTest/kotlin/com/infinitezerone/minibgm/core/testing/` 下的 `*RulesTest.kt` 域文件
 
 * **根因警示（来自遗留 `composed` 性能退化、节点意外销毁与按压闪烁复盘）**：
   1. **`Modifier.composed` 的性能暗礁**：
