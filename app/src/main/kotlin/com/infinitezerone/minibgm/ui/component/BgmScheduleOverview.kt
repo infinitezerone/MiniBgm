@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -81,7 +82,7 @@ fun BgmScheduleOverview(
         }
     val gradientEndY = with(LocalDensity.current) { 460.dp.toPx() }
     val dateText = stringResource(R.string.app_overview_today_date_format, today.monthValue, today.dayOfMonth)
-    val weekdayText = today.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
+    val weekdayText = today.dayOfWeek.getDisplayName(TextStyle.FULL, LocalLocale.current.platformLocale)
     val dateLabel = "$dateText · $weekdayText"
 
     Box(
