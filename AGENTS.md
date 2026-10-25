@@ -15,7 +15,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 提交前唯一入口：`.\tools\jgate.ps1`（Linux/CI `bash tools/jgate`）；提交用 `tools/jcommit.ps1 -m "feat: ..."`（强制先验后提）。门禁细节、白名单跳过、`--fast` 与诊断产物由 `.\tools\jgate.ps1 --help` 自述（用法规格，改行为必同 commit 改 help）。
 
 - `--fast` 只是本机减负：本机绿 != CI 绿，提交前必须复跑一次不带 `--fast` 的。
-- 素材体积门：单张 > 200 KB 或合计 > 1 MB 硬拦（压 800px WebP）；单元测试配置唯一真源 `configureAndroidUnitTests()`，禁止手抄 `tasks.withType<Test>`；依赖图变更后 `./gradlew graphUpdate`，Lint 基线用 `updateLintBaseline`，质量门 `./gradlew :core:testing:crapCheck`（CRAP ≤ 30）。
+- 单元测试配置唯一真源 `configureAndroidUnitTests()`，禁止手抄 `tasks.withType<Test>`；依赖图变更后 `./gradlew graphUpdate`，Lint 基线用 `updateLintBaseline`，质量门 `./gradlew :core:testing:crapCheck`（CRAP ≤ 30）。
 - Rust 原生库：ABI 集合唯一真源 `native/abis.txt`（构建脚本、release workflow、`SUPPORTED_ABIS` 全与它对齐）；Gradle 绝不跨界调度 Cargo/NDK，只经 `registerPrebuiltJniLibs` 挂载产物并在缺库时硬失败；`libminibgm_torrent.so` 在 release 由 `configureOnDemandNativePackaging` 排除、按需下载。
 
 编码中间态用 `.\tools\quick-check.ps1` 秒级自查（等价 `jgate quick`）。

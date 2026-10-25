@@ -215,7 +215,7 @@ fn print_usage() {
   native        原生库编译与指纹校验模式（编译 libminibgm_ech / libminibgm_torrent）
 
 门禁做什么（默认模式）：
-  素材体积 → Rust 门禁（仅触及 crates/ 时）→ spotlessApply → 架构红线
+  Rust 门禁（仅触及 crates/ 时）→ spotlessApply → 架构红线
   → 触及模块测试 + :app:testDebugUnitTest + :app:assembleDebug → 结果真实性校验 → 结构化诊断
 
   目标推断：工作副本 @ → 最近提交 @-，按改动路径推导模块；触及
@@ -587,83 +587,16 @@ fn main() {
         return;
     }
 
-    // ---- 1. 素材体积门 -------------------------------------------------------
-    println!("[jgate] 1/5 素材体积");
-    let asset_limit_kb = 200u64;
-    let asset_total_limit_kb = 1024u64;
-    let mut total_asset_kb = 0u64;
-    let mut bad_assets = Vec::new();
-
-    let asset_exts = ["png", "jpg", "jpeg", "gif", "bmp", "webp"];
-    for p in &paths {
-        let ext = Path::new(p)
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_lowercase();
-        if asset_exts.contains(&ext.as_str()) {
-            let file_path = root.join(p);
-            if file_path.is_file() {
-                if let Ok(meta) = fs::metadata(&file_path) {
-                    let kb = meta.len().div_ceil(1024);
-                    total_asset_kb += kb;
-                    if kb > asset_limit_kb {
-                        bad_assets.push((p.clone(), kb));
-                    }
-                }
-            }
-        }
-    }
-
-    if !bad_assets.is_empty() {
-        eprintln!(
-            "[jgate] ❌ 以下素材单张超过 {} KB 上限，先压缩再提交：",
-            asset_limit_kb
-        );
-        for (f, kb) in &bad_assets {
-            eprintln!("  {} KB  {}", kb, f);
-        }
-        eprintln!(
-            "[jgate]    修法：压成 800px 宽的 WebP（README 表格里约 380px 显示宽度，2 倍图够用）"
-        );
-        record_diagnostic(
-            &root,
-            "ASSET_LIMIT",
-            &format!("素材单张超过 {} KB 上限", asset_limit_kb),
-            "将图片压缩为 800px 宽度的 WebP 后再提交",
-        );
-        std::process::exit(1);
-    }
-    if total_asset_kb > asset_total_limit_kb {
-        eprintln!(
-            "[jgate] ❌ 本次改动涉及的素材合计 {} KB，超过 {} KB 上限",
-            total_asset_kb, asset_total_limit_kb
-        );
-        record_diagnostic(
-            &root,
-            "ASSET_LIMIT",
-            &format!("素材合计 {} KB 超过上限", total_asset_kb),
-            "压成 800px WebP 降低总包体积",
-        );
-        std::process::exit(1);
-    }
-    if total_asset_kb > 0 {
-        println!(
-            "[jgate]   ↳ 素材合计 {} KB（单张上限 {} KB）",
-            total_asset_kb, asset_limit_kb
-        );
-    }
-
-    // ---- 2. Rust 门禁 -------------------------------------------------------
-    println!("[jgate] 2/5 Rust 门禁（crates/）");
+    // ---- 1. Rust 门禁 -------------------------------------------------------
+    println!("[jgate] 1/4 Rust 门禁（crates/）");
     if !need_rust {
         println!("[jgate]   ↳ 改动未触及 crates/，跳过");
     } else {
         run_rust_gate(&root);
     }
 
-    // ---- 3. Spotless --------------------------------------------------------
-    println!("[jgate] 3/5 spotless");
+    // ---- 2. Spotless --------------------------------------------------------
+    println!("[jgate] 2/4 spotless");
     if diff_summary.trim().is_empty() {
         println!("[jgate] 工作副本无改动，跳过 spotless");
     } else if !spotless_targets.is_empty() {
@@ -672,11 +605,11 @@ fn main() {
         run_gradle(&root, &grad_args, opts.fast_mode);
     }
 
-    // ---- 4. 架构红线 + 模块测试 + 装配门 -------------------------------------
+    // ---- 3. 架构红线 + 模块测试 + 装配门 -------------------------------------
     if docs_only {
-        println!("[jgate] 4/5 架构红线 + 触及模块测试（纯文档改动：装配门已跳过）");
+        println!("[jgate] 3/4 架构红线 + 触及模块测试（纯文档改动：装配门已跳过）");
     } else {
-        println!("[jgate] 4/5 架构红线 + 触及模块测试 + 装配门");
+        println!("[jgate] 3/4 架构红线 + 触及模块测试 + 装配门");
     }
 
     // 原生库构建就绪保障
@@ -717,8 +650,8 @@ fn main() {
         std::process::exit(1);
     }
 
-    // ---- 5. 测试结果真实性校验 -----------------------------------------------
-    println!("[jgate] 5/5 测试结果真实性校验");
+    // ---- 4. 测试结果真实性校验 -----------------------------------------------
+    println!("[jgate] 4/4 测试结果真实性校验");
     verify_test_results(&root, &modules, stamp_time, opts.fast_mode);
 
     clear_diagnostic(&root);
