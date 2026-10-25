@@ -22,9 +22,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
-import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.designsystem.theme.ThemePreviews
@@ -127,25 +127,29 @@ internal fun DanmakuSettingsDialog(
 
                 Row(modifier = Modifier.fillMaxWidth()) {
                     BgmPillButton(onClick = {
-                            endpoint = ""
-                        }, text = stringResource(R.string.feature_user_danmaku_reset_default), variant = BgmPillVariant.Secondary)
+                        endpoint = ""
+                    }, text = stringResource(R.string.feature_user_danmaku_reset_default), variant = BgmPillVariant.Secondary)
                 }
             }
         },
         confirmButton = {
             BgmPillButton(onClick = {
-                    onSaveConfig(
-                        DanmakuConfig(
-                            endpoint = endpoint.trim(),
-                            appId = appId.trim(),
-                            appSecret = appSecret.trim(),
-                        ),
-                    )
-                    onDismiss()
-                }, text = stringResource(DesignSystemR.string.core_designsystem_action_save))
+                onSaveConfig(
+                    DanmakuConfig(
+                        endpoint = endpoint.trim(),
+                        appId = appId.trim(),
+                        appSecret = appSecret.trim(),
+                    ),
+                )
+                onDismiss()
+            }, text = stringResource(DesignSystemR.string.core_designsystem_action_save))
         },
         dismissButton = {
-            BgmPillButton(onClick = onDismiss, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), variant = BgmPillVariant.Secondary)
+            BgmPillButton(
+                onClick = onDismiss,
+                text = stringResource(DesignSystemR.string.core_designsystem_action_cancel),
+                variant = BgmPillVariant.Secondary,
+            )
         },
     )
 }

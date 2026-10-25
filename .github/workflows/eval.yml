@@ -81,7 +81,7 @@ jobs:
           ls -l /dev/kvm
 
       - name: Run evaluator on emulator
-        uses: reactivecircus/android-emulator-roller@v2
+        uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
           arch: x86_64
@@ -91,8 +91,8 @@ jobs:
           script: |
             SCENARIO="${{ github.event.inputs.scenario || 'all' }}"
             set +e
-            ./gradlew :app:connectedDebugAndroidTest --stacktrace \
-              -Pandroid.testInstrumentationRunnerArguments.scenario="$SCENARIO"
+            # 注意：此 action 的 script 经二次 shell 包装，反斜杠续行会被吞成独立参数——gradle 命令必须单行
+            ./gradlew :app:connectedDebugAndroidTest --stacktrace -Pandroid.testInstrumentationRunnerArguments.scenario="$SCENARIO"
             TEST_RC=$?
             # 测试失败也要拉证据（失败诊断的第一现场）；目录不存在（装包都没成）时静默放过
             adb pull /sdcard/Android/data/com.infinitezerone.minibgm.debug/files/eval-evidence eval-evidence || true

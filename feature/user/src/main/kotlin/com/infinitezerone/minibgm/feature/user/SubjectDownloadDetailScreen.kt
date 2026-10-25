@@ -56,11 +56,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
-import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
@@ -237,15 +237,20 @@ internal fun SubjectDownloadDetailContent(
                 actions = {
                     if (isBatchMode) {
                         val allSelected = tasks.isNotEmpty() && selectedTaskIds.size == tasks.size
-                        BgmPillButton(onClick = {
+                        BgmPillButton(
+                            onClick = {
                                 selectedTaskIds = if (allSelected) emptySet() else tasks.map { it.id }.toSet()
-                            }, text = stringResource(
+                            },
+                            text =
+                                stringResource(
                                     if (allSelected) {
                                         R.string.feature_user_downloads_deselect_all
                                     } else {
                                         R.string.feature_user_downloads_select_all
                                     },
-                                ), variant = BgmPillVariant.Secondary)
+                                ),
+                            variant = BgmPillVariant.Secondary,
+                        )
                     } else {
                         if (hasActive) {
                             BgmCircleActionButton(

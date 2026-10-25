@@ -56,10 +56,10 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
-import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
-import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
@@ -690,17 +690,23 @@ private fun CrashLogDialog(
         },
         confirmButton = {
             BgmPillButton(onClick = {
-                    coroutineScope.launch {
-                        val clipEntry = ClipEntry(ClipData.newPlainText("crash_log", content))
-                        clipboard.setClipEntry(clipEntry)
-                    }
-                    onDismiss()
-                }, text = stringResource(R.string.feature_user_action_copy), variant = BgmPillVariant.Secondary)
+                coroutineScope.launch {
+                    val clipEntry = ClipEntry(ClipData.newPlainText("crash_log", content))
+                    clipboard.setClipEntry(clipEntry)
+                }
+                onDismiss()
+            }, text = stringResource(R.string.feature_user_action_copy), variant = BgmPillVariant.Secondary)
         },
         dismissButton = {
             Row {
-                BgmPillButton(onClick = { shareCrashLog(context, content) }, text = stringResource(R.string.feature_user_action_share), variant = BgmPillVariant.Secondary)
-                BgmPillButton(onClick = onClear, text = stringResource(R.string.feature_user_action_clear), variant = BgmPillVariant.Secondary)
+                BgmPillButton(onClick = {
+                    shareCrashLog(context, content)
+                }, text = stringResource(R.string.feature_user_action_share), variant = BgmPillVariant.Secondary)
+                BgmPillButton(
+                    onClick = onClear,
+                    text = stringResource(R.string.feature_user_action_clear),
+                    variant = BgmPillVariant.Secondary,
+                )
             }
         },
     )

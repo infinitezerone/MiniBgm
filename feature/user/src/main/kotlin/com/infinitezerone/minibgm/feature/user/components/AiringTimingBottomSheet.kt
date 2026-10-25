@@ -65,10 +65,10 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
-import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.user.R
@@ -618,18 +618,22 @@ private fun DirectNumberInputDialog(
         },
         confirmButton = {
             BgmPillButton(onClick = {
-                    val rawMinutes = inputString.toIntOrNull() ?: 0
-                    val finalOffset =
-                        if (isEarly) {
-                            (-rawMinutes).coerceIn(minOffset, maxOffset)
-                        } else {
-                            rawMinutes.coerceIn(minOffset, maxOffset)
-                        }
-                    onConfirm(finalOffset)
-                }, text = stringResource(DesignSystemR.string.core_designsystem_action_confirm))
+                val rawMinutes = inputString.toIntOrNull() ?: 0
+                val finalOffset =
+                    if (isEarly) {
+                        (-rawMinutes).coerceIn(minOffset, maxOffset)
+                    } else {
+                        rawMinutes.coerceIn(minOffset, maxOffset)
+                    }
+                onConfirm(finalOffset)
+            }, text = stringResource(DesignSystemR.string.core_designsystem_action_confirm))
         },
         dismissButton = {
-            BgmPillButton(onClick = onDismiss, text = stringResource(DesignSystemR.string.core_designsystem_action_cancel), variant = BgmPillVariant.Secondary)
+            BgmPillButton(
+                onClick = onDismiss,
+                text = stringResource(DesignSystemR.string.core_designsystem_action_cancel),
+                variant = BgmPillVariant.Secondary,
+            )
         },
     )
 }
