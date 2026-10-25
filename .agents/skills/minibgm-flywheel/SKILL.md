@@ -31,7 +31,7 @@ description: >-
 3. **运行时检查**：断言、显式失败态、状态机守卫；
 4. **元数据标记**：`@StringRes`、`@VisibleForTesting`、注解、`native/abis.txt` 这类单一真源文件；
 5. **可执行自述**：`--help` / `--plan` / 自愈诊断卡；
-6. **文字**（最后手段）：只允许一句索引 + 指向上面某个执行体，且受 `AGENTS.md` 预算约束（当前 9,600 字符，加字必须先删等量）。
+6. **文字**（最后手段）：只允许一句索引 + 指向上面某个执行体，且受 `AGENTS.md` 预算约束（预算常量见 `agents_doc_must_stay_an_index_under_context_budget`，加字必须先删等量）。
 
 ## 三、落地位置
 
