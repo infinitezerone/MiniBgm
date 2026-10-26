@@ -650,6 +650,7 @@ fun SubjectDetailScreen(
                                         null
                                     },
                                 onOpenEpisodePicker = { openEpisodeOverlay(null, true) },
+                                onSelectEpisode = { episode -> openEpisodeOverlay(episode, false) },
                                 onDecrementWatched = viewModel::decrementWatchedEpisode,
                                 onPromptLogin = viewModel::promptLogin,
                                 onShare = handleShare,

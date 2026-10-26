@@ -907,85 +907,82 @@ fun CharactersSection(
 
 private const val COLLAPSED_CHARACTER_COUNT = 4
 
-/** 默认态只给角色、定位与声优摘要行；完整立绘卡在展开后呈现。 */
+/** 默认态以规整双列微卡片呈现核心角色与声优；完整立绘卡在展开后呈现。 */
 @Composable
 private fun CharacterSummaryList(
     characters: List<SubjectCharacter>,
     onCharacterClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // 自然流行列表：与关联摘要同构，不再套灰卡
-    Column(modifier = modifier.fillMaxWidth()) {
-        characters.forEachIndexed { index, character ->
-            CharacterSummaryRow(
-                character = character,
-                onClick = { onCharacterClick(character.id) },
-            )
-            if (index < characters.lastIndex) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(start = 48.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f),
-                )
+    val chunked = remember(characters) { characters.chunked(2) }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        chunked.forEach { rowCharacters ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                rowCharacters.forEach { character ->
+                    Box(modifier = Modifier.weight(1f)) {
+                        CharacterSummaryTile(
+                            character = character,
+                            onClick = { onCharacterClick(character.id) },
+                        )
+                    }
+                }
+                if (rowCharacters.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CharacterSummaryRow(
+private fun CharacterSummaryTile(
     character: SubjectCharacter,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.35f),
+        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick),
     ) {
-        CoverImage(
-            url = character.images?.bestImage.orEmpty(),
-            contentDescription = character.name,
-            modifier = Modifier.size(width = 38.dp, height = 50.dp),
-            shape = RoundedCornerShape(8.dp),
-            aspectRatio = 0.76f,
-            alignment = Alignment.TopCenter,
-            placeholder = CoverPlaceholder.Person,
-        )
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(3.dp),
+        Row(
+            modifier = Modifier.padding(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(
-                text = character.name,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            CoverImage(
+                url = character.images?.bestImage.orEmpty(),
+                contentDescription = character.name,
+                modifier = Modifier.size(width = 38.dp, height = 48.dp),
+                shape = RoundedCornerShape(4.dp),
+                aspectRatio = 0.76f,
+                alignment = Alignment.TopCenter,
+                placeholder = CoverPlaceholder.Person,
             )
-            val actorName =
-                character.actors
-                    .firstOrNull()
-                    ?.name
-                    .orEmpty()
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                if (character.roleName.isNotBlank()) {
-                    Text(
-                        text = character.roleName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
+                Text(
+                    text = character.name,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
+                val actorName =
+                    character.actors
+                        .firstOrNull()
+                        ?.name
+                        .orEmpty()
                 if (actorName.isNotBlank()) {
                     Text(
                         text = "CV: $actorName",
@@ -993,7 +990,14 @@ private fun CharacterSummaryRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
+                    )
+                } else if (character.roleName.isNotBlank()) {
+                    Text(
+                        text = character.roleName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -1152,91 +1156,148 @@ fun StaffSection(
             fontWeight = FontWeight.Bold,
         )
 
-        // 职位与人员是纯文本参考信息，与简介同构：自然流直坐在背景上，不套灰卡
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            displayEntries.forEach { (relation, staffMembers) ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top,
-                ) {
-                    Text(
-                        text = relation,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.width(86.dp).padding(vertical = 2.dp),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    FlowRow(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
+        if (!isExpanded) {
+            // 收起态：2×2 精致职人铭牌网格，突出灵魂主创席位
+            val chunkedStaff = remember(displayEntries) { displayEntries.take(DEFAULT_STAFF_ENTRY_COUNT).chunked(2) }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                chunkedStaff.forEach { rowStaff ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        staffMembers.forEachIndexed { index, person ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(vertical = 2.dp),
+                        rowStaff.forEach { (relation, staffMembers) ->
+                            val firstPerson = staffMembers.firstOrNull()
+                            val names = staffMembers.joinToString("、") { it.name }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f),
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            if (firstPerson != null) onPersonClick(firstPerson.id)
+                                        },
                             ) {
-                                Text(
-                                    text = person.name,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier =
-                                        Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .clickable { onPersonClick(person.id) }
-                                            .padding(horizontal = 3.dp),
-                                )
-                                if (index < staffMembers.lastIndex) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
                                     Text(
-                                        text = "、",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                        text = relation,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                     )
+                                    Text(
+                                        text = names,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                        if (rowStaff.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        } else {
+            // 展开态：完整演职制作人员列表
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                displayEntries.forEach { (relation, staffMembers) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Text(
+                            text = relation,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(86.dp).padding(vertical = 2.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        FlowRow(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            staffMembers.forEachIndexed { index, person ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(vertical = 2.dp),
+                                ) {
+                                    Text(
+                                        text = person.name,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier =
+                                            Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .clickable { onPersonClick(person.id) }
+                                                .padding(horizontal = 3.dp),
+                                    )
+                                    if (index < staffMembers.lastIndex) {
+                                        Text(
+                                            text = "、",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+        }
 
-            if (entries.size > DEFAULT_STAFF_ENTRY_COUNT) {
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 4.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+        if (entries.size > DEFAULT_STAFF_ENTRY_COUNT) {
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 4.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+            )
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { isExpanded = !isExpanded }
+                        .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text =
+                        if (isExpanded) {
+                            stringResource(R.string.feature_subject_collapse_staff)
+                        } else {
+                            stringResource(R.string.feature_subject_expand_staff, entries.size)
+                        },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
                 )
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { isExpanded = !isExpanded }
-                            .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text =
-                            if (isExpanded) {
-                                stringResource(R.string.feature_subject_collapse_staff)
-                            } else {
-                                stringResource(R.string.feature_subject_expand_staff, entries.size)
-                            },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Icon(
-                        imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
+                Icon(
+                    imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp),
+                )
             }
         }
     }

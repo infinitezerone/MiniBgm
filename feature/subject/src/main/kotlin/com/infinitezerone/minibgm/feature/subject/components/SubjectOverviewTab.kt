@@ -89,22 +89,7 @@ internal fun OverviewTabPage(
             }
         }
 
-        // 3. 关联作品与系列番剧：比完整演职员表更接近「接下来看什么」的意图
-        if (uiState.relations.isNotEmpty()) {
-            item(key = "relations_section") {
-                RelationsSection(
-                    relations = uiState.relations,
-                    onSubjectClick = onSubjectClick,
-                    currentSubjectId = displaySubject.id,
-                    currentSubjectName = displaySubject.nameCn.ifBlank { displaySubject.name },
-                    currentSubjectCover = displaySubject.images?.bestImage ?: displaySubject.images?.large,
-                    currentSubjectScore = displaySubject.rating?.score ?: 0.0,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
-        }
-
-        // 4. 登场角色与声优
+        // 3. 登场角色与声优
         if (uiState.characters.isNotEmpty()) {
             item(key = "characters_section") {
                 CharactersSection(
@@ -117,12 +102,27 @@ internal fun OverviewTabPage(
             }
         }
 
-        // 5. 演职制作团队 Staff
+        // 4. 演职制作团队 Staff
         if (uiState.persons.isNotEmpty() || displaySubject.keyStaff.isNotEmpty()) {
             item(key = "staff_section") {
                 StaffSection(
                     persons = uiState.persons,
                     onPersonClick = onPersonClick,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+        }
+
+        // 5. 关联作品与系列番剧
+        if (uiState.relations.isNotEmpty()) {
+            item(key = "relations_section") {
+                RelationsSection(
+                    relations = uiState.relations,
+                    onSubjectClick = onSubjectClick,
+                    currentSubjectId = displaySubject.id,
+                    currentSubjectName = displaySubject.nameCn.ifBlank { displaySubject.name },
+                    currentSubjectCover = displaySubject.images?.bestImage ?: displaySubject.images?.large,
+                    currentSubjectScore = displaySubject.rating?.score ?: 0.0,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
             }
@@ -169,7 +169,7 @@ private fun SubjectSummarySection(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            text = "简介",
+            text = stringResource(R.string.feature_subject_summary_heading),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
@@ -181,7 +181,7 @@ private fun SubjectSummarySection(
             color = onSurfaceBodyColor(),
             maxLines = if (isExpanded || !canExpand) Int.MAX_VALUE else 4,
             overflow = TextOverflow.Ellipsis,
-            lineHeight = 22.sp,
+            lineHeight = 24.sp,
             modifier = Modifier.fillMaxWidth().animateContentSize(),
         )
 
@@ -191,7 +191,7 @@ private fun SubjectSummarySection(
                     Modifier
                         .clip(RoundedCornerShape(4.dp))
                         .clickable { isExpanded = !isExpanded }
-                        .padding(vertical = 4.dp),
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {

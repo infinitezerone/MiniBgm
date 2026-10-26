@@ -160,17 +160,11 @@ internal fun SubjectHeaderActionRow(
                 contentDescription = collectLabel,
                 size = 40.dp,
                 iconSize = 20.dp,
-                containerColor =
-                    if (isCollected) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f)
-                    },
                 contentColor =
                     if (isCollected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
+                        MaterialTheme.colorScheme.primary
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        MaterialTheme.colorScheme.onSurface
                     },
             )
         }
@@ -191,8 +185,6 @@ internal fun SubjectHeaderActionRow(
                     ),
                 size = 40.dp,
                 iconSize = 20.dp,
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f),
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -204,8 +196,6 @@ internal fun SubjectHeaderActionRow(
                 contentDescription = stringResource(R.string.feature_subject_share_title),
                 size = 40.dp,
                 iconSize = 20.dp,
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f),
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
