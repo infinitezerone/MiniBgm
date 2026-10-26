@@ -35,6 +35,7 @@
     <!-- 2. 条目头部与简介 -->
     <string name="feature_subject_total_episodes_format">全%1$d%2$s</string>
     <string name="feature_subject_rating_votes_count">%1$d人</string>
+    <string name="feature_subject_rating_score_detail">%1$d分 · %2$d人 (%3$.1f%%)</string>
     <string name="feature_subject_summary_heading">简介</string>
     <string name="feature_subject_collapse_summary">收起简介</string>
     <string name="feature_subject_expand_summary_with_original">展开完整简介及原文</string>

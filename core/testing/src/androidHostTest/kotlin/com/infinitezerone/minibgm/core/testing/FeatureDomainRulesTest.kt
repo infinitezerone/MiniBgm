@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.core.testing
 
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -716,6 +717,30 @@ class FeatureDomainRulesTest : ArchitectureRuleTestSupport() {
         assertTrue(
             community.contains("reviewCount"),
             "$communityPath 必须使用回退后的 reviewCount 统一角标与分页文案",
+        )
+    }
+
+    /**
+     * 评分直方图数据可视化诚实性红线：
+     * 严禁无条件给 0 票分段赋予最小正向高度（如 `coerceIn(0.08f, ...)`），
+     * 柱体绘制必须受真实投票数守卫，确保 0 票客观归零（只留刻度基线，无立柱）。
+     */
+    @Test
+    fun rating_histogram_must_not_render_bars_for_zero_votes() {
+        val path =
+            "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/components/SubjectRatingStatsCard.kt"
+        val source = KotlinSourceScanner.sanitize(File(projectRoot, path).readText())
+        val funStart = source.indexOf("fun RatingDistributionSection(")
+        assertTrue(funStart >= 0, "$path 必须包含 RatingDistributionSection 实现")
+        val sectionBody = source.substring(funStart)
+
+        assertFalse(
+            sectionBody.contains("coerceIn(0.08f") || sectionBody.contains("coerceIn(0.1f"),
+            "$path 严禁给直方图高度使用包含正数下限的无条件 coerceIn，0 票分段不得伪造高度",
+        )
+        assertTrue(
+            sectionBody.contains("count > 0") || sectionBody.contains("!isZero"),
+            "$path 柱体绘制必须受真实投票数守卫（`count > 0` 或 `!isZero`），确保 0 票客观归零",
         )
     }
 

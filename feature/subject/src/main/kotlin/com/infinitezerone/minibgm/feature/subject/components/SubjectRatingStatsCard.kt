@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.RatingGold
 import com.infinitezerone.minibgm.core.designsystem.theme.StatusCollect
@@ -102,11 +103,11 @@ fun RatingDistributionCard(
 }
 
 /**
- * 评分分布：影评级口碑总览卡，左侧为大号评分与好评率，右侧为 10 档经典垂直波峰柱状图。
- * 清晰可视化众数与受众口碑走势，自然流排版，不套整块灰盒。
+ * 评分分布：影评级口碑总览卡，左侧为大号评分与口碑指标，右侧为 10 档经典垂直波峰柱状图。
+ * 清晰可视化众数与受众口碑走势，0 票客观归零（仅底线无柱体），支持点击柱体即时下钻票数。
  */
 @Composable
-private fun RatingDistributionSection(
+internal fun RatingDistributionSection(
     rating: Rating,
     modifier: Modifier = Modifier,
 ) {
@@ -118,13 +119,16 @@ private fun RatingDistributionSection(
     val maxCount = (counts.maxOfOrNull { it.second } ?: 0).coerceAtLeast(1)
     val modeScore = if (maxCount > 1) counts.maxByOrNull { it.second }?.first else null
 
+    var selectedScore by rememberSaveable { mutableStateOf<Int?>(null) }
+
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 左侧：大号评分与口碑统计指标
+        // 左侧：大号评分与口碑指标（点击柱子可下钻具体票数）
         Column(
+            modifier = Modifier.widthIn(min = 110.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Row(
@@ -146,76 +150,145 @@ private fun RatingDistributionSection(
             }
 
             if (totalCount > 0) {
-                val highScores = counts.filter { it.first >= 8 }.sumOf { it.second }
-                val highScorePercent = ((highScores.toFloat() / totalCount.toFloat()) * 100f).toInt()
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.feature_subject_rating_votes_parenthesis, totalCount),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                val currentSelected = selectedScore
+                if (currentSelected != null) {
+                    val selCount = counts.firstOrNull { it.first == currentSelected }?.second ?: 0
+                    val selPercent = if (totalCount > 0) (selCount.toFloat() / totalCount.toFloat()) * 100f else 0f
                     Surface(
                         shape = RoundedCornerShape(4.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
                     ) {
                         Text(
-                            text = stringResource(R.string.feature_subject_rating_positive_ratio_format, highScorePercent),
+                            text =
+                                stringResource(
+                                    R.string.feature_subject_rating_score_detail,
+                                    currentSelected,
+                                    selCount,
+                                    selPercent,
+                                ),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
+                    }
+                } else {
+                    val highScores = counts.filter { it.first >= 8 }.sumOf { it.second }
+                    val highScorePercent = ((highScores.toFloat() / totalCount.toFloat()) * 100f).toInt()
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.feature_subject_rating_votes_parenthesis, totalCount),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.feature_subject_rating_positive_ratio_format, highScorePercent),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // 右侧：10 档经典垂直波峰柱状图（高度 44dp）
+        // 右侧：10 档经典垂直波峰柱状图（自适应等宽分布，0 票真实归零，支持点击下钻）
         if (totalCount > 0) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.Bottom,
-                modifier = Modifier.height(48.dp).padding(vertical = 2.dp),
             ) {
                 counts.forEach { (score, count) ->
                     val isMode = score == modeScore
-                    val heightFraction = if (maxCount > 0) (count.toFloat() / maxCount.toFloat()).coerceIn(0.08f, 1f) else 0.08f
-                    val barColor =
-                        when {
-                            isMode -> RatingGold
-                            score >= 8 -> RatingGold.copy(alpha = 0.65f)
-                            score >= 6 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-                            else -> MaterialTheme.colorScheme.surfaceContainerHighest
-                        }
+                    val isSelected = score == selectedScore
+                    val isZero = count == 0
 
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Bottom,
-                        modifier = Modifier.fillMaxHeight(),
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable {
+                                    selectedScore = if (selectedScore == score) null else score
+                                },
                     ) {
+                        // 柱体可视区：固定 36dp 高度，底部对齐
                         Box(
                             modifier =
                                 Modifier
-                                    .width(7.dp)
-                                    .height((40.dp * heightFraction).coerceAtLeast(3.dp))
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(barColor),
-                        )
+                                    .fillMaxWidth()
+                                    .height(36.dp),
+                            contentAlignment = Alignment.BottomCenter,
+                        ) {
+                            // 0 票刻度基线：客观标示刻度底线，高度 1.5dp
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth(0.85f)
+                                        .height(1.5.dp)
+                                        .background(
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                                            shape = RoundedCornerShape(0.dp),
+                                        ),
+                            )
+
+                            // 真实柱体：仅当 count > 0 时才绘制有效高度，绝不伪造 0 票柱体
+                            if (!isZero) {
+                                val heightFraction = (count.toFloat() / maxCount.toFloat()).coerceIn(0f, 1f)
+                                val barHeight = (36.dp * heightFraction).coerceIn(4.dp, 36.dp)
+                                val barColor =
+                                    when {
+                                        isSelected -> RatingGold
+                                        selectedScore != null -> MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)
+                                        isMode -> RatingGold
+                                        score >= 8 -> RatingGold.copy(alpha = 0.7f)
+                                        score >= 6 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                        else -> MaterialTheme.colorScheme.surfaceContainerHighest
+                                    }
+
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth(0.7f)
+                                            .height(barHeight)
+                                            .background(
+                                                color = barColor,
+                                                shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp),
+                                            ),
+                                )
+                            }
+                        }
+
+                        // 标尺文字 (1..10)
                         Text(
                             text = score.toString(),
                             style = MaterialTheme.typography.labelSmall,
-                            fontSize = MaterialTheme.typography.labelSmall.fontSize * 0.72f,
+                            fontSize = 9.sp,
+                            lineHeight = 12.sp,
                             color =
-                                if (isMode) {
-                                    RatingGold
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                when {
+                                    isSelected -> RatingGold
+                                    selectedScore == null && isMode -> RatingGold
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 },
-                            fontWeight = if (isMode) FontWeight.Bold else FontWeight.Normal,
+                            fontWeight =
+                                if (isSelected || (selectedScore == null && isMode)) {
+                                    FontWeight.Bold
+                                } else {
+                                    FontWeight.Normal
+                                },
                             modifier = Modifier.padding(top = 2.dp),
                         )
                     }
