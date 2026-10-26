@@ -10,12 +10,15 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.infinitezerone.minibgm.core.data.playback.M3u8AdSanitizer
 import com.infinitezerone.minibgm.feature.subject.R
+import java.io.ByteArrayOutputStream
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -39,10 +42,13 @@ class ExoPlayerEngine(
                     .setConnectTimeoutMs(CONNECT_TIMEOUT_MS)
                     .setReadTimeoutMs(READ_TIMEOUT_MS)
 
-            override fun createDataSource(): HttpDataSource =
-                base.createDataSource().apply {
-                    requestHeaders.get().forEach { (key, value) -> setRequestProperty(key, value) }
-                }
+            override fun createDataSource(): HttpDataSource {
+                val rawSource =
+                    base.createDataSource().apply {
+                        requestHeaders.get().forEach { (key, value) -> setRequestProperty(key, value) }
+                    }
+                return AdSanitizingHttpDataSource(rawSource)
+            }
 
             override fun setDefaultRequestProperties(defaultRequestProperties: Map<String, String>): HttpDataSource.Factory = this
         }
@@ -220,3 +226,76 @@ internal fun classifyPlaybackError(
 
 private const val CONNECT_TIMEOUT_MS = 15_000
 private const val READ_TIMEOUT_MS = 45_000
+
+/**
+ * 包装底层 [HttpDataSource]，对 HLS 播放列表（.m3u8）透明执行广告切片清洗。
+ *
+ * 遵循 Fail-Open 准则：
+ * 仅对以 .m3u8 结尾或包含 m3u8 的请求拦截，非 m3u8（如 .ts 媒体切片）完全 0 拷贝透传直读；
+ * 若解析清洗发生任何异常，安全退化为原样透传。
+ */
+private class AdSanitizingHttpDataSource(
+    private val upstream: HttpDataSource,
+) : HttpDataSource by upstream {
+    private var sanitizedBytes: ByteArray? = null
+    private var bytesReadFromSanitized: Int = 0
+
+    override fun open(dataSpec: DataSpec): Long {
+        sanitizedBytes = null
+        bytesReadFromSanitized = 0
+
+        val uriString = dataSpec.uri.toString()
+        val path = dataSpec.uri.path.orEmpty()
+        val isM3u8Request = path.endsWith(".m3u8", ignoreCase = true) || uriString.contains(".m3u8", ignoreCase = true)
+
+        if (!isM3u8Request) {
+            return upstream.open(dataSpec)
+        }
+
+        // m3u8 播放列表请求：拉取并执行广告切片清洗
+        return runCatching {
+            upstream.open(dataSpec)
+            val buffer = ByteArrayOutputStream()
+            val temp = ByteArray(4096)
+            var read: Int
+            while (upstream.read(temp, 0, temp.size).also { read = it } != -1) {
+                buffer.write(temp, 0, read)
+            }
+            val rawText = buffer.toString(Charsets.UTF_8.name())
+            if (rawText.startsWith("#EXTM3U")) {
+                val cleaned = M3u8AdSanitizer.sanitize(rawText)
+                val bytes = cleaned.toByteArray(Charsets.UTF_8)
+                sanitizedBytes = bytes
+                bytes.size.toLong()
+            } else {
+                val bytes = buffer.toByteArray()
+                sanitizedBytes = bytes
+                bytes.size.toLong()
+            }
+        }.getOrElse {
+            sanitizedBytes = null
+            runCatching { upstream.close() }
+            upstream.open(dataSpec)
+        }
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        val memoryData = sanitizedBytes
+        if (memoryData != null) {
+            if (bytesReadFromSanitized >= memoryData.size) {
+                return C.RESULT_END_OF_INPUT
+            }
+            val bytesToRead = minOf(length, memoryData.size - bytesReadFromSanitized)
+            System.arraycopy(memoryData, bytesReadFromSanitized, buffer, offset, bytesToRead)
+            bytesReadFromSanitized += bytesToRead
+            return bytesToRead
+        }
+        return upstream.read(buffer, offset, length)
+    }
+
+    override fun close() {
+        sanitizedBytes = null
+        bytesReadFromSanitized = 0
+        upstream.close()
+    }
+}
