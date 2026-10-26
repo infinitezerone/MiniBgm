@@ -94,6 +94,7 @@
     <string name="feature_subject_popular_tags">热门标签 (%1$d)</string>
     <string name="feature_subject_collapse">收起</string>
     <string name="feature_subject_expand_all">展开全部</string>
+    <string name="feature_subject_view_all_count">全部 (%1$d)</string>
     <string name="feature_subject_more_tags_count">+%1$d 更多</string>
 
     <!-- 5. 分集列表与网格 -->

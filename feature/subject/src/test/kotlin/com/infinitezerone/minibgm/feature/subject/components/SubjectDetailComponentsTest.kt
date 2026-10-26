@@ -194,4 +194,35 @@ class SubjectDetailComponentsTest {
         composeTestRule.onNodeWithContentDescription("打卡下一集").assertIsDisplayed().performClick()
         assertTrue(incrementWatchedCalled)
     }
+
+    @Test
+    fun tags_section_unifies_section_toggle_and_removes_end_fake_chip() {
+        val testTags =
+            (1..15).map {
+                com.infinitezerone.minibgm.core.model
+                    .Tag(name = "标签$it", count = it * 10)
+            }
+
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                Surface {
+                    TagsSection(
+                        tags = testTags,
+                        onTagClick = {},
+                    )
+                }
+            }
+        }
+
+        // 1. 验证标题栏右侧存在统一的小节展开操作全部 (15)
+        composeTestRule.onNodeWithText("全部 (15)").assertIsDisplayed().performClick()
+
+        // 2. 展开后收起操作显示，且第 15 个标签可见
+        composeTestRule.onNodeWithText("收起").assertIsDisplayed()
+        composeTestRule.onNodeWithText("#标签15").assertIsDisplayed()
+
+        // 3. 再次点击收起
+        composeTestRule.onNodeWithText("收起").performClick()
+        composeTestRule.onNodeWithText("全部 (15)").assertIsDisplayed()
+    }
 }

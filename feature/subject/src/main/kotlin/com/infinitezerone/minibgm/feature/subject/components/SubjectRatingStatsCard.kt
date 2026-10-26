@@ -415,7 +415,7 @@ fun OverviewTagsCard(
     }
 }
 
-/** 热门标签芯片流：支持过多时默认折叠（前 10 个），支持平滑展开与收起 */
+/** 热门标签芯片流：标题栏右侧统领展开收起，流内统一等高规整排版（8dp呼吸间距） */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TagsSection(
@@ -426,11 +426,10 @@ internal fun TagsSection(
     var isExpanded by rememberSaveable { mutableStateOf(false) }
     val canCollapse = tags.size > COLLAPSED_TAGS_LIMIT
     val displayedTags = if (isExpanded || !canCollapse) tags else tags.take(COLLAPSED_TAGS_LIMIT)
-    val hiddenCount = tags.size - COLLAPSED_TAGS_LIMIT
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -439,53 +438,25 @@ internal fun TagsSection(
         ) {
             Text(
                 text = stringResource(R.string.feature_subject_popular_tags, tags.size),
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
 
             if (canCollapse) {
-                Surface(
-                    onClick = { isExpanded = !isExpanded },
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            text =
-                                if (isExpanded) {
-                                    stringResource(
-                                        R.string.feature_subject_collapse,
-                                    )
-                                } else {
-                                    stringResource(R.string.feature_subject_expand_all)
-                                },
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Icon(
-                            imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
+                SubjectSectionToggleAction(
+                    isExpanded = isExpanded,
+                    onToggle = { isExpanded = !isExpanded },
+                    totalCount = tags.size,
+                )
             }
         }
 
-        // 标签是紧凑元数据芯片，禁止用 Surface(onClick) 承载：它会无条件应用 48dp 最小
-        // 交互尺寸，21dp 高的芯片布局被撑到 48dp，FlowRow 按布局高度排行会多出约 27dp
-        // 的隐形行距。用 clip+background+clickable 的普通 Box，行距完全交给 FlowRow。
+        // 标签是紧凑元数据芯片，使用 8dp 规整间距与 10dp/4dp 饱满内边距，统一高度与基线
         FlowRow(
             modifier = Modifier.fillMaxWidth().animateContentSize(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             displayedTags.forEach { tag ->
                 Box(
@@ -494,7 +465,7 @@ internal fun TagsSection(
                             .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                             .clickable { onTagClick(tag.name) }
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -513,35 +484,6 @@ internal fun TagsSection(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                    }
-                }
-            }
-
-            if (!isExpanded && canCollapse) {
-                Box(
-                    modifier =
-                        Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f))
-                            .clickable { isExpanded = true }
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.feature_subject_more_tags_count, hiddenCount),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        Icon(
-                            imageVector = BgmIcons.KeyboardArrowDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(12.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
                     }
                 }
             }

@@ -31,7 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -272,11 +271,12 @@ fun RelationsSection(
             }
 
             if (canExpand) {
-                SectionExpandAction(
+                SubjectSectionToggleAction(
                     isExpanded = isExpanded,
+                    onToggle = { isExpanded = !isExpanded },
+                    totalCount = uniqueRelations.size,
                     collapsedText = stringResource(R.string.feature_subject_expand_relations, uniqueRelations.size),
                     expandedText = stringResource(R.string.feature_subject_collapse_relations),
-                    onToggle = { isExpanded = !isExpanded },
                 )
             }
         }
@@ -511,30 +511,6 @@ private fun RelationSummaryRow(
             imageVector = BgmIcons.KeyboardArrowRight,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.size(16.dp),
-        )
-    }
-}
-
-@Composable
-private fun SectionExpandAction(
-    isExpanded: Boolean,
-    collapsedText: String,
-    expandedText: String,
-    onToggle: () -> Unit,
-) {
-    TextButton(
-        onClick = onToggle,
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-    ) {
-        Text(
-            text = if (isExpanded) expandedText else collapsedText,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Icon(
-            imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
-            contentDescription = null,
             modifier = Modifier.size(16.dp),
         )
     }
@@ -865,11 +841,12 @@ fun CharactersSection(
                 modifier = Modifier.weight(1f),
             )
             if (canExpand) {
-                SectionExpandAction(
+                SubjectSectionToggleAction(
                     isExpanded = isExpanded,
+                    onToggle = { isExpanded = !isExpanded },
+                    totalCount = uniqueCharacters.size,
                     collapsedText = stringResource(R.string.feature_subject_expand_characters, uniqueCharacters.size),
                     expandedText = stringResource(R.string.feature_subject_collapse_characters),
-                    onToggle = { isExpanded = !isExpanded },
                 )
             } else {
                 Text(
@@ -1185,11 +1162,26 @@ fun StaffSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(
-            text = stringResource(R.string.feature_subject_production_staff),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.feature_subject_production_staff),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            if (entries.size > DEFAULT_STAFF_ENTRY_COUNT) {
+                SubjectSectionToggleAction(
+                    isExpanded = isExpanded,
+                    onToggle = { isExpanded = !isExpanded },
+                    totalCount = entries.size,
+                    collapsedText = stringResource(R.string.feature_subject_expand_staff, entries.size),
+                    expandedText = stringResource(R.string.feature_subject_collapse_staff),
+                )
+            }
+        }
 
         if (!isExpanded) {
             // 收起态：2×2 精致职人铭牌网格，突出灵魂主创席位
@@ -1349,41 +1341,6 @@ fun StaffSection(
                         }
                     }
                 }
-            }
-        }
-
-        if (entries.size > DEFAULT_STAFF_ENTRY_COUNT) {
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 4.dp),
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-            )
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable { isExpanded = !isExpanded }
-                        .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text =
-                        if (isExpanded) {
-                            stringResource(R.string.feature_subject_collapse_staff)
-                        } else {
-                            stringResource(R.string.feature_subject_expand_staff, entries.size)
-                        },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Icon(
-                    imageVector = if (isExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp),
-                )
             }
         }
     }
