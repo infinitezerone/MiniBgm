@@ -408,14 +408,23 @@ fun PlayerScreen(
     // 换集时重置续播提示状态
     LaunchedEffect(uiState.episodeId) {
         resumeOverlayPosition = null
+        lastResumedEpisodeId = 0L
     }
 
-    // 续播断点恢复与内置浮层触发：仅对新分集且有此前记录时触发一次（同分集换线无缝继承进度，不重复提示）
-    LaunchedEffect(uiState.episodeId, uiState.streamUrl, playerReady, uiState.resumePositionMs) {
+    // 切源或进入解析中状态时，立即暂停旧音画，避免旧声音在后台继续播放，同时确保不弹续播气泡
+    LaunchedEffect(uiState.isResolvingSource) {
+        if (uiState.isResolvingSource) {
+            controller.pause()
+            resumeOverlayPosition = null
+        }
+    }
+
+    // 续播断点恢复与内置浮层触发：仅对新分集首次起播且有此前记录时触发一次（同分集换线无缝继承进度，不重复提示）
+    LaunchedEffect(uiState.episodeId, playerReady) {
         if (playerReady && lastResumedEpisodeId != uiState.episodeId) {
+            lastResumedEpisodeId = uiState.episodeId
             val resume = uiState.resumePositionMs
             if (resume >= MIN_RESUME_POSITION_MS) {
-                lastResumedEpisodeId = uiState.episodeId
                 val duration = playback.durationMs
                 if (duration <= 0L || resume < duration * 0.95) {
                     if (position.value < MIN_RESUME_POSITION_MS) {
@@ -423,9 +432,6 @@ fun PlayerScreen(
                     }
                     resumeOverlayPosition = resume
                 }
-            } else if (position.value >= MIN_RESUME_POSITION_MS) {
-                // 当前分集已经从头播放超过了阈值，确认本集是从头播放的，直接锁定，后续决不弹窗
-                lastResumedEpisodeId = uiState.episodeId
             }
         }
     }
@@ -1010,6 +1016,15 @@ private fun PlayerVideoStage(
             onScrubCancel = onScrubCancel,
         ) {
             when {
+                // 1. 正在解析/切换线路：优先展示纯净居中解析视图（旧画面与旧声音已暂停，不展示旧画面）
+                isResolvingSource ->
+                    PlayerResolvingView(
+                        sourceName = resolvingSourceName,
+                        attempt = resolveAttempt,
+                        attemptTotal = resolveAttemptTotal,
+                    )
+
+                // 2. 有播放地址且正常播放
                 streamUrl.isNotBlank() -> {
                     Box(modifier = Modifier.fillMaxSize()) {
                         videoContent()
@@ -1028,13 +1043,6 @@ private fun PlayerVideoStage(
                     }
                 }
 
-                isResolvingSource ->
-                    PlayerResolvingView(
-                        sourceName = resolvingSourceName,
-                        attempt = resolveAttempt,
-                        attemptTotal = resolveAttemptTotal,
-                    )
-
                 // 错误态由控制层统一渲染，这里不再重复一块错误占位
                 errorMessage != null -> Unit
 
@@ -1049,15 +1057,6 @@ private fun PlayerVideoStage(
                         onRequestOpenSources = onRequestOpenSources,
                     )
             }
-        }
-
-        // 切源/切集时叠半透明遮罩（旧画面仍在播），而不是整块黑
-        if (streamUrl.isNotBlank() && isResolvingSource) {
-            PlayerResolvingOverlay(
-                sourceName = resolvingSourceName,
-                attempt = resolveAttempt,
-                attemptTotal = resolveAttemptTotal,
-            )
         }
 
         // 控制栏收起且正常播放时常驻在视频最底边的极简进度线

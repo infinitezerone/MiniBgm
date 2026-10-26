@@ -463,6 +463,7 @@
     <string name="feature_subject_player_err_unknown">播放异常</string>
     <string name="feature_subject_player_current_source_label">当前线路</string>
     <string name="feature_subject_player_current_source_format">当前线路：%1$s</string>
+    <string name="feature_subject_player_connecting_source_format">正在连接：%1$s</string>
     <string name="feature_subject_player_switch_source">切换线路</string>
     <string name="feature_subject_player_sources_sheet_desc">切换不同线路获取最佳播放效果</string>
     <string name="feature_subject_player_source_direct_badge">直链</string>

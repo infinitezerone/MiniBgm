@@ -324,8 +324,14 @@ internal fun PlayerCurrentSourceCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    val titleText =
+                        if (isResolvingSource) {
+                            stringResource(R.string.feature_subject_player_connecting_source_format, displayLabel)
+                        } else {
+                            stringResource(R.string.feature_subject_player_current_source_format, displayLabel)
+                        }
                     Text(
-                        text = stringResource(R.string.feature_subject_player_current_source_format, displayLabel),
+                        text = titleText,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,

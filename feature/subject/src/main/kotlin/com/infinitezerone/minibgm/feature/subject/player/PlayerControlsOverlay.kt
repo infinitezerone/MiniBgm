@@ -710,49 +710,121 @@ private fun BoxScope.PlayerErrorState(
     )
 
     Column(
-        modifier = Modifier.align(Alignment.Center).padding(horizontal = 24.dp),
+        modifier =
+            Modifier
+                .align(Alignment.Center)
+                .widthIn(max = 420.dp)
+                .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(if (isLandscape) 10.dp else 6.dp),
     ) {
-        Icon(
-            imageVector = BgmIcons.Warning,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.85f),
-            modifier = Modifier.size(40.dp),
-        )
-        Text(
-            text = errorMessage,
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White,
-            textAlign = TextAlign.Center,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (onOpenSourcesPanel != null) {
-                OutlinedButton(
-                    onClick = onOpenSourcesPanel,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                ) {
-                    Text(stringResource(R.string.feature_subject_player_switch_source), color = Color.White)
-                }
-            }
-            if (onNextSource != null) {
-                OutlinedButton(
-                    onClick = onNextSource,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                ) {
-                    Text(stringResource(R.string.feature_subject_player_switch_next_source), color = Color.White)
-                }
-            }
-            Button(
-                onClick = onRetry,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-            ) {
-                Text(stringResource(R.string.feature_subject_player_retry_play))
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.error.copy(alpha = 0.16f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.28f)),
+            modifier = Modifier.size(if (isLandscape) 44.dp else 36.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = BgmIcons.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(if (isLandscape) 22.dp else 18.dp),
+                )
             }
         }
+
+        Text(
+            text = stringResource(R.string.feature_subject_player_source_error_hint),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+        )
+
+        Text(
+            text = errorMessage,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.White.copy(alpha = 0.75f),
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+
+        Spacer(modifier = Modifier.height(2.dp))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (onNextSource != null) {
+                Button(
+                    onClick = onNextSource,
+                    shape = RoundedCornerShape(percent = 50),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                    modifier = Modifier.height(32.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.feature_subject_player_switch_next_source),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            } else if (onOpenSourcesPanel != null) {
+                Button(
+                    onClick = onOpenSourcesPanel,
+                    shape = RoundedCornerShape(percent = 50),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                    modifier = Modifier.height(32.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.feature_subject_player_switch_source),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+
+            if (onOpenSourcesPanel != null && onNextSource != null) {
+                OutlinedButton(
+                    onClick = onOpenSourcesPanel,
+                    shape = RoundedCornerShape(percent = 50),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    modifier = Modifier.height(32.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.feature_subject_player_switch_source),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                    )
+                }
+            }
+
+            OutlinedButton(
+                onClick = onRetry,
+                shape = RoundedCornerShape(percent = 50),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                modifier = Modifier.height(32.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.feature_subject_player_retry_play),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White,
+                )
+            }
+        }
+
         if (onRequestOpenSources != null) {
-            TextButton(onClick = onRequestOpenSources) {
-                Text(stringResource(R.string.feature_subject_source_ai_search), color = Color.White.copy(alpha = 0.8f))
+            TextButton(
+                onClick = onRequestOpenSources,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                modifier = Modifier.height(28.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.feature_subject_source_ai_search),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
         }
     }
