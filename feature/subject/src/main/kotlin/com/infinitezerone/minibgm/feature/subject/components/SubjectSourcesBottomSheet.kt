@@ -2,6 +2,7 @@ package com.infinitezerone.minibgm.feature.subject.components
 
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -695,6 +697,7 @@ fun SubjectSourcesBottomSheet(
                 onTabSelected = { selectedTab = it },
                 onlineCount = onlineRules.size,
                 torrentCount = torrentResources.size,
+                isTorrentLoading = isTorrentLoading,
             )
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -1012,6 +1015,7 @@ private fun SourceTabsRow(
     onTabSelected: (SourceSheetTab) -> Unit,
     onlineCount: Int,
     torrentCount: Int,
+    isTorrentLoading: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -1027,6 +1031,7 @@ private fun SourceTabsRow(
                     SourceSheetTab.TORRENT -> torrentCount.takeIf { it > 0 }
                     SourceSheetTab.EXTERNAL -> null
                 }
+            val isTorrentTabLoading = tab == SourceSheetTab.TORRENT && isTorrentLoading
             Surface(
                 onClick = { onTabSelected(tab) },
                 shape = CircleShape,
@@ -1054,7 +1059,47 @@ private fun SourceTabsRow(
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                     )
-                    if (count != null) {
+                    if (isTorrentTabLoading) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isSelected) {
+                                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.22f)
+                                        } else {
+                                            MaterialTheme.colorScheme.surfaceContainerHighest
+                                        },
+                                    ).padding(horizontal = 6.dp, vertical = 2.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(10.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color =
+                                        if (isSelected) {
+                                            MaterialTheme.colorScheme.onPrimary
+                                        } else {
+                                            MaterialTheme.colorScheme.primary
+                                        },
+                                )
+                                Text(
+                                    text = count?.toString() ?: stringResource(R.string.feature_subject_source_tab_loading),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color =
+                                        if (isSelected) {
+                                            MaterialTheme.colorScheme.onPrimary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                )
+                            }
+                        }
+                    } else if (count != null) {
                         Box(
                             modifier =
                                 Modifier
@@ -1494,6 +1539,31 @@ fun TorrentMediaResourcesSection(
         }
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (isTorrentLoading) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                    modifier = Modifier.padding(bottom = 2.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(12.dp),
+                            strokeWidth = 1.5.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = stringResource(R.string.feature_subject_source_refreshing_resources),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                    }
+                }
+            }
             if (isTorrentEpisodeFilterIgnored && onRestoreEpisodeFilter != null) {
                 BgmSourceActionCard(
                     title = stringResource(R.string.feature_subject_source_torrent_filter_current_ep),
@@ -2118,21 +2188,21 @@ private fun TorrentStreamProgress(
     state: TorrentStreamState?,
     onStop: () -> Unit,
 ) {
-    val label =
+    val isError = state is TorrentStreamState.Error
+    val title =
         when (state) {
             is TorrentStreamState.InstallingPlugin ->
-                stringResource(R.string.feature_subject_source_torrent_progress_installing, (state.progress * 100).toInt())
-            is TorrentStreamState.Resolving -> stringResource(R.string.feature_subject_source_torrent_progress_resolving)
+                stringResource(R.string.feature_subject_source_torrent_progress_installing_title)
+            is TorrentStreamState.Resolving ->
+                stringResource(R.string.feature_subject_source_torrent_progress_resolving_title)
             is TorrentStreamState.Buffering ->
-                stringResource(
-                    R.string.feature_subject_source_torrent_progress_buffering,
-                    (state.progress * 100).toInt(),
-                    formatTransferSpeed(state.speedBytesPerSec),
-                    state.connectedPeers,
-                )
-            is TorrentStreamState.Error -> stringResource(R.string.feature_subject_source_torrent_progress_failed, state.message)
-            else -> stringResource(R.string.feature_subject_source_torrent_stream_buffering)
+                stringResource(R.string.feature_subject_source_torrent_progress_buffering_title)
+            is TorrentStreamState.Error ->
+                stringResource(R.string.feature_subject_source_torrent_progress_failed_title)
+            else ->
+                stringResource(R.string.feature_subject_source_torrent_stream_buffering)
         }
+
     val fraction =
         when (state) {
             is TorrentStreamState.InstallingPlugin -> state.progress
@@ -2140,53 +2210,173 @@ private fun TorrentStreamProgress(
             else -> null
         }
 
+    val containerColor =
+        if (isError) {
+            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        }
+
+    val borderColor =
+        if (isError) {
+            MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+        } else {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+        }
+
     Surface(
-        shape = BgmShapes.small,
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = RoundedCornerShape(12.dp),
+        color = containerColor,
+        border = BorderStroke(1.dp, borderColor),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (fraction == null) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(14.dp),
-                        strokeWidth = 2.dp,
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            // 顶栏：微光指示器 + 阶段标题 + 停止按钮
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    if (isError) {
+                        Icon(
+                            imageVector = BgmIcons.ErrorOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    } else {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color =
-                        if (state is TorrentStreamState.Error) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = stringResource(R.string.feature_subject_source_torrent_progress_stop),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier =
-                        Modifier
-                            .clickable(onClick = onStop)
-                            .padding(start = 8.dp),
-                )
+
+                Surface(
+                    onClick = onStop,
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.Close,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.feature_subject_source_torrent_progress_stop),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
+
+            // 进度条
             if (fraction != null) {
-                Spacer(modifier = Modifier.height(6.dp))
                 LinearProgressIndicator(
                     progress = { fraction },
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(3.dp),
+                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 )
+            } else if (!isError) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(CircleShape),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                )
+            }
+
+            // 统计指标行（固定宽度字形 tnum 防止抖动）
+            when (state) {
+                is TorrentStreamState.Buffering -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "${(state.progress * 100).toInt()}%",
+                            style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = formatTransferSpeed(state.speedBytesPerSec),
+                                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = "·",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
+                            Text(
+                                text = "${state.connectedPeers} 节点",
+                                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            )
+                        }
+                    }
+                }
+                is TorrentStreamState.InstallingPlugin -> {
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.feature_subject_source_torrent_progress_installing,
+                                (state.progress * 100).toInt(),
+                            ),
+                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                is TorrentStreamState.Resolving -> {
+                    Text(
+                        text = stringResource(R.string.feature_subject_source_torrent_progress_resolving),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                    )
+                }
+                is TorrentStreamState.Error -> {
+                    Text(
+                        text = state.message,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                else -> Unit
             }
         }
     }

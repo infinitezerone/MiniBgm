@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -22,12 +24,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
+import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
+import com.infinitezerone.minibgm.feature.subject.R
 
 /**
  * 播放源统一骨架加载卡片。
@@ -37,11 +42,48 @@ import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
 fun SourceLoadingSkeleton(
     modifier: Modifier = Modifier,
     count: Int = 3,
+    showHeader: Boolean = true,
+    headerTitle: String? = null,
+    headerSubtitle: String? = null,
 ) {
+    val skeletonState = rememberSkeletonState()
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (showHeader) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = headerTitle ?: stringResource(R.string.feature_subject_source_loading_resources),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = headerSubtitle ?: stringResource(R.string.feature_subject_source_loading_resources_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                        )
+                    }
+                }
+            }
+        }
+
         repeat(count) {
             Surface(
                 shape = BgmShapes.medium,
@@ -52,39 +94,91 @@ fun SourceLoadingSkeleton(
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    // 顶部徽章行（字幕组 + 规格标签占位）
+                    // 顶栏：分集标识 + 字幕组 + 体积占位（与真实卡片 1:1 对齐）
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            SkeletonBox(
+                                modifier = Modifier.size(width = 44.dp, height = 18.dp),
+                                shape = RoundedCornerShape(4.dp),
+                                state = skeletonState,
+                            )
+                            SkeletonBox(
+                                modifier = Modifier.size(width = 96.dp, height = 18.dp),
+                                shape = RoundedCornerShape(4.dp),
+                                state = skeletonState,
+                            )
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            SkeletonBox(
+                                modifier = Modifier.size(width = 46.dp, height = 14.dp),
+                                shape = RoundedCornerShape(4.dp),
+                                state = skeletonState,
+                            )
+                        }
+                    }
+
+                    // 标题文本占位（两行层次）
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        SkeletonBox(
+                            modifier = Modifier.fillMaxWidth(0.92f).height(14.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
+                        )
+                        SkeletonBox(
+                            modifier = Modifier.fillMaxWidth(0.58f).height(14.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
+                        )
+                    }
+
+                    // 规格标签占位
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         SkeletonBox(
-                            modifier = Modifier.size(width = 64.dp, height = 18.dp),
+                            modifier = Modifier.size(width = 44.dp, height = 16.dp),
                             shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
                         )
                         SkeletonBox(
-                            modifier = Modifier.size(width = 44.dp, height = 18.dp),
+                            modifier = Modifier.size(width = 40.dp, height = 16.dp),
                             shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
                         )
                     }
 
-                    // 标题文本占位
-                    SkeletonBox(
-                        modifier = Modifier.fillMaxWidth(0.9f).height(16.dp),
-                        shape = RoundedCornerShape(4.dp),
-                    )
-
-                    // 底部操作按钮行占位
+                    // 底部操作按钮行占位：[ ▶ 边播 ] (weight 1) + [ 下载 ] + [ ⋮ ]
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         SkeletonBox(
-                            modifier = Modifier.size(width = 96.dp, height = 30.dp),
+                            modifier = Modifier.weight(1f).height(34.dp),
                             shape = BgmShapes.small,
+                            state = skeletonState,
                         )
                         SkeletonBox(
-                            modifier = Modifier.size(width = 84.dp, height = 30.dp),
+                            modifier = Modifier.width(84.dp).height(34.dp),
                             shape = BgmShapes.small,
+                            state = skeletonState,
+                        )
+                        SkeletonBox(
+                            modifier = Modifier.size(34.dp),
+                            shape = BgmShapes.small,
+                            state = skeletonState,
                         )
                     }
                 }

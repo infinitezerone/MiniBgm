@@ -295,6 +295,14 @@
     <string name="feature_subject_source_torrent_progress_failed">起播失败：%1$s</string>
     <string name="feature_subject_source_torrent_progress_stop">停止</string>
     <string name="feature_subject_source_torrent_stream_stopped">已停止起播；任务已暂停，可在下载页恢复</string>
+    <string name="feature_subject_source_loading_resources">正在检索播放源与磁力…</string>
+    <string name="feature_subject_source_loading_resources_desc">已连接订阅规则 · 自动去重与健康度校验</string>
+    <string name="feature_subject_source_refreshing_resources">正在同步最新节点与可用源…</string>
+    <string name="feature_subject_source_tab_loading">检索中</string>
+    <string name="feature_subject_source_torrent_progress_buffering_title">正在缓冲媒体数据</string>
+    <string name="feature_subject_source_torrent_progress_resolving_title">正在解析种子元数据</string>
+    <string name="feature_subject_source_torrent_progress_installing_title">正在安装流播组件</string>
+    <string name="feature_subject_source_torrent_progress_failed_title">起播遇到问题</string>
     <string name="feature_subject_source_torrent_downloaded_badge">已下载</string>
     <string name="feature_subject_source_torrent_play_downloaded">播放已下载</string>
     <string name="feature_subject_source_torrent_channel_dual">双源极速</string>
@@ -460,6 +468,7 @@
     <string name="feature_subject_player_source_direct_badge">直链</string>
     <string name="feature_subject_player_source_rule_badge">规则源</string>
     <string name="feature_subject_player_source_in_use">正在使用当前线路</string>
+    <string name="feature_subject_player_source_resolving_tag">解析中…</string>
     <string name="feature_subject_player_source_selected_pending">已选中，等待生效…</string>
     <string name="feature_subject_player_source_matched_format">已匹配：%1$s · 正在播放</string>
     <string name="feature_subject_player_source_resolving_format">正在解析线路 (第 %1$d/%2$d 次)…</string>
