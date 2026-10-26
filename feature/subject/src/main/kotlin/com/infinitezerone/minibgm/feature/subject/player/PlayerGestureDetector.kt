@@ -716,6 +716,8 @@ internal fun PlayerGestureDetector(
     }
 }
 
+private val GESTURE_HUD_TOP_PADDING = 16.dp
+
 /**
  * 屏幕顶部正上方横向灵动微胶囊指示器（防大拇指遮挡、视线居中自然、不挡字幕）
  */
@@ -730,7 +732,7 @@ private fun TopCapsuleIndicator(
         color = Color.Black.copy(alpha = 0.82f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
         contentColor = Color.White,
-        modifier = modifier.padding(top = 16.dp),
+        modifier = modifier.padding(top = GESTURE_HUD_TOP_PADDING),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -835,7 +837,7 @@ private fun SeekFeedbackCard(
 }
 
 /**
- * 长按倍速微胶囊指示器（置于顶部中央，避免遮挡字幕）
+ * 长按倍速微胶囊指示器（置于顶部中央，规格与音量/亮度指示器对齐，避免遮挡字幕）
  */
 @Composable
 private fun FastForwardChip(
@@ -843,15 +845,16 @@ private fun FastForwardChip(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(percent = 50),
         color = Color.Black.copy(alpha = 0.82f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
         contentColor = Color.White,
-        modifier = modifier.padding(top = 44.dp),
+        modifier = modifier.padding(top = GESTURE_HUD_TOP_PADDING),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
         ) {
             Icon(
                 imageVector = BgmIcons.FastForward,
@@ -859,11 +862,10 @@ private fun FastForwardChip(
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp),
             )
-            Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = stringResource(R.string.feature_subject_player_speed_fast_forward, speed),
                 style =
-                    MaterialTheme.typography.labelMedium.copy(
+                    MaterialTheme.typography.labelSmall.copy(
                         fontFeatureSettings = "tnum",
                     ),
                 fontWeight = FontWeight.Bold,
