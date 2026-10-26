@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -57,7 +58,7 @@ internal fun formatDuration(
 }
 
 /**
- * 嗅探加载中视图
+ * 线路解析中加载视图
  */
 @Composable
 internal fun PlayerResolvingView(
@@ -70,13 +71,18 @@ internal fun PlayerResolvingView(
         modifier = modifier.fillMaxSize().background(Color.Black),
         contentAlignment = Alignment.Center,
     ) {
-        ResolvingIndicator(sourceName = sourceName, attempt = attempt, attemptTotal = attemptTotal)
+        ResolvingIndicator(
+            sourceName = sourceName,
+            attempt = attempt,
+            attemptTotal = attemptTotal,
+            isSwitching = false,
+        )
     }
 }
 
 /**
- * 切换源/切集时的半透明嗅探遮罩：叠在**仍在播放**的旧画面上，而不是整块黑，
- * 让用户看得到“正在换源”而不只是“卡住”。
+ * 切换源/切集时的半透明解析遮罩：叠在**仍在播放**的旧画面上，而不是整块黑，
+ * 呈现无干扰的极简轻量胶囊。
  */
 @Composable
 internal fun PlayerResolvingOverlay(
@@ -96,7 +102,7 @@ internal fun PlayerResolvingOverlay(
             sourceName = sourceName,
             attempt = attempt,
             attemptTotal = attemptTotal,
-            prefix = stringResource(R.string.feature_subject_player_switching_source),
+            isSwitching = true,
         )
     }
 }
@@ -106,29 +112,60 @@ private fun ResolvingIndicator(
     sourceName: String,
     attempt: Int,
     attemptTotal: Int,
-    prefix: String = stringResource(R.string.feature_subject_player_sniffing_from_prefix),
+    isSwitching: Boolean,
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.padding(16.dp),
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = Color.Black.copy(alpha = 0.82f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
     ) {
-        CircularProgressIndicator(
-            color = MaterialTheme.colorScheme.primary,
-            strokeWidth = 3.dp,
-            modifier = Modifier.size(40.dp),
-        )
-        val sniffing =
-            if (attemptTotal > 0) {
-                stringResource(R.string.feature_subject_player_sniffing_stream_with_attempt, attempt, attemptTotal)
-            } else {
-                stringResource(R.string.feature_subject_player_sniffing_stream)
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            CircularProgressIndicator(
+                color = MaterialTheme.colorScheme.primary,
+                strokeWidth = 2.dp,
+                modifier = Modifier.size(16.dp),
+            )
+            val stateText =
+                if (isSwitching) {
+                    stringResource(R.string.feature_subject_player_switching_source)
+                } else if (attemptTotal > 0) {
+                    stringResource(R.string.feature_subject_player_sniffing_stream_with_attempt, attempt, attemptTotal)
+                } else {
+                    stringResource(R.string.feature_subject_player_sniffing_stream)
+                }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (sourceName.isNotBlank()) {
+                    Text(
+                        text = sourceName,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = "·",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.5f),
+                    )
+                }
+                Text(
+                    text = stateText,
+                    style =
+                        MaterialTheme.typography.labelMedium.copy(
+                            fontFeatureSettings = "tnum",
+                        ),
+                    color = Color.White.copy(alpha = 0.85f),
+                )
             }
-        Text(
-            text = "$prefix【$sourceName】$sniffing",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White,
-        )
+        }
     }
 }
 

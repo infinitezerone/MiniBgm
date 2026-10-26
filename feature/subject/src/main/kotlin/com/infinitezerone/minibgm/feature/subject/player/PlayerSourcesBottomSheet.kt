@@ -201,11 +201,6 @@ internal fun PlayerSourcesListContent(
                 iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            Text(
-                text = stringResource(R.string.feature_subject_player_sources_sheet_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             sources.forEachIndexed { index, source ->
                 PlayerSourceActionRow(
                     source = source,
