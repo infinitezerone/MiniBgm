@@ -999,7 +999,7 @@ fun CharactersSection(
                 )
             } else {
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(horizontal = 0.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -1023,7 +1023,7 @@ fun CharactersSection(
     }
 }
 
-/** 角色网格海报墙：双列排布，完整立绘与声优信息 */
+/** 角色网格海报墙：3 列紧凑排布，兼顾立绘赏析与高信息密度 */
 @Composable
 private fun CharacterGrid(
     characters: List<SubjectCharacter>,
@@ -1032,15 +1032,15 @@ private fun CharacterGrid(
     onPreviewCharacter: (SubjectCharacter) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val chunked = remember(characters) { characters.chunked(2) }
+    val chunked = remember(characters) { characters.chunked(3) }
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         chunked.forEach { rowCharacters ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 rowCharacters.forEach { character ->
                     Box(modifier = Modifier.weight(1f)) {
@@ -1053,7 +1053,7 @@ private fun CharacterGrid(
                         )
                     }
                 }
-                if (rowCharacters.size == 1) {
+                repeat(3 - rowCharacters.size) {
                     Spacer(modifier = Modifier.weight(1f))
                 }
             }
@@ -1191,8 +1191,8 @@ private fun CharacterCard(
 ) {
     Card(
         onClick = { onCharacterClick(character.id) },
-        modifier = modifier.width(136.dp),
-        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.width(106.dp),
+        shape = RoundedCornerShape(8.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -1204,15 +1204,15 @@ private fun CharacterCard(
                     url = character.images?.bestImage.orEmpty(),
                     contentDescription = character.name,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
-                    aspectRatio = 0.85f,
+                    shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
+                    aspectRatio = 0.82f,
                     alignment = Alignment.TopCenter,
                     placeholder = CoverPlaceholder.Person,
                 )
 
                 if (character.resolvedRoleName.isNotBlank()) {
                     Surface(
-                        shape = RoundedCornerShape(topStart = 12.dp, bottomEnd = 8.dp),
+                        shape = RoundedCornerShape(topStart = 8.dp, bottomEnd = 8.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.92f),
                         modifier = Modifier.align(Alignment.TopStart),
                     ) {
@@ -1221,7 +1221,7 @@ private fun CharacterCard(
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                         )
                     }
                 }
@@ -1230,26 +1230,26 @@ private fun CharacterCard(
                     onClick = { onPreviewCharacter(character) },
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).size(24.dp),
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(3.dp).size(20.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = BgmIcons.ZoomIn,
                             contentDescription = stringResource(R.string.feature_subject_view_full_character_image),
                             tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(15.dp),
+                            modifier = Modifier.size(13.dp),
                         )
                     }
                 }
             }
 
             Column(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 Text(
                     text = character.name,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1260,20 +1260,20 @@ private fun CharacterCard(
                 if (actor != null && actor.name.isNotBlank()) {
                     Surface(
                         onClick = { onActorClick(actor.id) },
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(4.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.75f),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                         ) {
                             val actorImage = actor.images?.bestImage.orEmpty()
                             CoverImage(
                                 url = actorImage,
                                 contentDescription = actor.name,
-                                modifier = Modifier.size(18.dp),
+                                modifier = Modifier.size(15.dp),
                                 shape = CircleShape,
                                 aspectRatio = 1f,
                                 alignment = Alignment.TopCenter,
@@ -1283,7 +1283,7 @@ private fun CharacterCard(
                                 text = "CV: ${actor.name}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Medium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
