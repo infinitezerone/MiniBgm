@@ -81,6 +81,7 @@ fun SubjectHeaderCard(
     watchStatus: SubjectWatchStatus = SubjectWatchStatus.None,
     onShare: (() -> Unit)? = null,
     onTitleBoundsChanged: (Rect) -> Unit = {},
+    onPlayNextLongClick: (() -> Unit)? = null,
 ) {
     val isEpisodeLike = subjectType == SubjectType.ANIME || subjectType == SubjectType.REAL
     // 明暗判定走当前生效色阶：应用支持强制亮/暗主题覆盖，isSystemInDarkTheme() 会与之相悖
@@ -321,6 +322,7 @@ fun SubjectHeaderCard(
             onOpenCollectionSheet = onOpenCollectionSheet,
             onPromptLogin = onPromptLogin,
             onShare = onShare,
+            onPlayNextLongClick = onPlayNextLongClick,
         )
 
         // 2. 个人追番进度自然流（无多余灰框，极简呼吸感）

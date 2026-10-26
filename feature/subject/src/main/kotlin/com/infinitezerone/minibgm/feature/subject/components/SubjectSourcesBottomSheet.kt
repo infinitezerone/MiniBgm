@@ -434,9 +434,7 @@ fun SubjectSourcesBottomSheet(
                             Modifier
                                 .clip(BgmShapes.small)
                                 .clickable {
-                                    runAfterDismiss {
-                                        onSelectEpisodeForDetail?.invoke()
-                                    }
+                                    onSelectEpisodeForDetail?.invoke()
                                 }.padding(horizontal = 4.dp, vertical = 2.dp),
                     ) {
                         Icon(

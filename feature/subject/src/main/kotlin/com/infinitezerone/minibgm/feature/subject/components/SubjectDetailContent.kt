@@ -122,6 +122,7 @@ internal fun SubjectDetailContent(
     onDecrementWatched: (() -> Unit)? = null,
     onPromptLogin: (() -> Unit)? = null,
     onShare: (() -> Unit)? = null,
+    onPlayNextLongClick: (() -> Unit)? = null,
     topPadding: Dp = 12.dp,
     headerCollapse: SubjectHeaderCollapseState,
     onTitleBoundsChanged: (Rect) -> Unit = {},
@@ -260,6 +261,7 @@ internal fun SubjectDetailContent(
                         onPromptLogin = onPromptLogin,
                         onShare = onShare,
                         onTitleBoundsChanged = onTitleBoundsChanged,
+                        onPlayNextLongClick = onPlayNextLongClick,
                     )
                 }
                 if (uiState.isLoading || isTransitionStabilizing) {
@@ -315,6 +317,7 @@ internal fun SubjectDetailContent(
                             onPromptLogin = onPromptLogin,
                             onShare = onShare,
                             onTitleBoundsChanged = onTitleBoundsChanged,
+                            onPlayNextLongClick = onPlayNextLongClick,
                         )
                         Spacer(Modifier.height(SubjectHeaderTabGap))
                     }
@@ -424,6 +427,7 @@ private fun SubjectHeader(
     onPromptLogin: (() -> Unit)?,
     onShare: (() -> Unit)?,
     onTitleBoundsChanged: (Rect) -> Unit,
+    onPlayNextLongClick: (() -> Unit)? = null,
 ) {
     val watchStatus =
         remember(uiState.episodes, uiState.collection) {
@@ -449,6 +453,7 @@ private fun SubjectHeader(
         onShare = onShare,
         onOpenEpisodePicker = onOpenEpisodePicker,
         onTitleBoundsChanged = onTitleBoundsChanged,
+        onPlayNextLongClick = onPlayNextLongClick,
         modifier = Modifier.padding(horizontal = 16.dp),
     )
 }

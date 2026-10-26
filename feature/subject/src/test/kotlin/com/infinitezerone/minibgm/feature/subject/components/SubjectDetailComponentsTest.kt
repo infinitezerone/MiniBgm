@@ -6,11 +6,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.model.SubjectPerson
@@ -436,5 +438,36 @@ class SubjectDetailComponentsTest {
         }
         composeTestRule.onNodeWithText("从头重温").assertIsDisplayed().performClick()
         assertTrue(completedPlayClicked)
+    }
+
+    @Test
+    fun subject_header_action_row_handles_long_click_to_open_sources() {
+        val sampleEp1 =
+            com.infinitezerone.minibgm.core.model
+                .Episode(id = 1L, sort = 1f, ep = 1f)
+        var playNextLongClicked = false
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                SubjectHeaderActionRow(
+                    subjectType = SubjectType.ANIME,
+                    isEpisodeLike = true,
+                    collection = null,
+                    isLoggedIn = true,
+                    watchStatus =
+                        com.infinitezerone.minibgm.feature.subject.SubjectWatchStatus.ContinueWatching(
+                            nextEpisode = sampleEp1,
+                            remainingAiredEpisodes = 12,
+                        ),
+                    onPlayNext = {},
+                    onOpenEpisodePicker = {},
+                    onOpenCollectionSheet = {},
+                    onPromptLogin = {},
+                    onShare = {},
+                    onPlayNextLongClick = { playNextLongClicked = true },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("开始观看 第 1 话").assertIsDisplayed().performTouchInput { longClick() }
+        assertTrue(playNextLongClicked)
     }
 }

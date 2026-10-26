@@ -117,12 +117,10 @@ internal fun SubjectEpisodeOverlay(
                     selectedEpisode = episode
                     showPicker = false
                 } else {
-                    onDismissRequest()
                     onOpenEpisodeDetails(episode)
                 }
             },
             onOpenEpisodeDetails = { episode ->
-                onDismissRequest()
                 onOpenEpisodeDetails(episode)
             },
             onBatchMarkEpisode = onBatchMarkEpisode,
@@ -176,7 +174,6 @@ internal fun SubjectEpisodeOverlay(
         onSelectEpisodeForDetail =
             effectiveEpisode?.let { episode ->
                 {
-                    onDismissRequest()
                     onOpenEpisodeDetails(episode)
                 }
             },

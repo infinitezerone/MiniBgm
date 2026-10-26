@@ -649,6 +649,11 @@ fun SubjectDetailScreen(
                                     } else {
                                         null
                                     },
+                                onPlayNextLongClick = {
+                                    viewModel.nextEpisodeToWatch()?.let { nextEp ->
+                                        openEpisodeOverlay(nextEp, false)
+                                    }
+                                },
                                 onOpenEpisodePicker = { openEpisodeOverlay(null, true) },
                                 onSelectEpisode = { episode -> openEpisodeOverlay(episode, false) },
                                 onDecrementWatched = viewModel::decrementWatchedEpisode,

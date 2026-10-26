@@ -1,12 +1,14 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -14,11 +16,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,6 +56,7 @@ internal fun SubjectHeaderActionRow(
     onPromptLogin: (() -> Unit)?,
     onShare: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    onPlayNextLongClick: (() -> Unit)? = null,
 ) {
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val actionBorder = if (isDark) BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)) else null
@@ -139,33 +146,47 @@ internal fun SubjectHeaderActionRow(
                             MaterialTheme.colorScheme.onPrimary
                 }
 
-            Button(
-                onClick = { onPlayNext?.invoke() },
-                enabled = isPlayEnabled,
+            val haptic = LocalHapticFeedback.current
+            Surface(
                 shape = CircleShape,
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = containerColor,
-                        contentColor = contentColor,
-                        disabledContainerColor = containerColor,
-                        disabledContentColor = contentColor,
-                    ),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                modifier = Modifier.weight(1f).height(40.dp),
+                color = containerColor,
+                contentColor = contentColor,
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(40.dp)
+                        .clip(CircleShape)
+                        .combinedClickable(
+                            enabled = isPlayEnabled,
+                            onClick = { onPlayNext?.invoke() },
+                            onLongClick =
+                                onPlayNextLongClick?.let { longClick ->
+                                    {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        longClick()
+                                    }
+                                },
+                        ),
             ) {
-                Icon(
-                    imageVector = playIcon,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = playLabel,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        imageVector = playIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = playLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
 
