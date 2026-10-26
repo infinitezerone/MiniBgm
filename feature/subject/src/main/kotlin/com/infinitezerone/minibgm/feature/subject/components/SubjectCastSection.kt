@@ -287,16 +287,7 @@ fun RelationsSection(
                 onSubjectClick = onSubjectClick,
             )
         } else {
-            // 展开后才展示系列时间轴、分类筛选与完整海报墙，避免默认首屏重复堆叠关系数据。
-            if ((selectedCategory == null || selectedCategory == RelationCategory.MAIN_STORY.name) &&
-                mainStoryTimelineNodes.isNotEmpty()
-            ) {
-                MainStoryTimeline(
-                    nodes = mainStoryTimelineNodes,
-                    onSubjectClick = onSubjectClick,
-                )
-            }
-
+            // 展开后优先展示分类筛选，直观透视作品衍生生态，避免时间轴过度挤占操作区
             if (availableCategories.size >= 2 || uniqueRelations.size > 3) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -348,6 +339,16 @@ fun RelationsSection(
                         )
                     }
                 }
+            }
+
+            // 仅在全部或主线分类下展示观影顺序时间轴
+            if ((selectedCategory == null || selectedCategory == RelationCategory.MAIN_STORY.name) &&
+                mainStoryTimelineNodes.isNotEmpty()
+            ) {
+                MainStoryTimeline(
+                    nodes = mainStoryTimelineNodes,
+                    onSubjectClick = onSubjectClick,
+                )
             }
 
             if (!isGridView) {
@@ -806,7 +807,31 @@ private fun relationBadgeColors(category: RelationCategory): Pair<Color, Color> 
         else -> MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-/** 登场角色与声优区域 */
+/** 角色类型分类（对齐 Bangumi 官方角色定位） */
+enum class CharacterRoleCategory(
+    val labelRes: Int,
+    val priority: Int,
+) {
+    MAIN(R.string.feature_subject_character_role_main, priority = 1),
+    SUPPORTING(R.string.feature_subject_character_role_supporting, priority = 2),
+    GUEST(R.string.feature_subject_character_role_guest, priority = 3),
+    OTHER(R.string.feature_subject_character_role_other, priority = 4),
+    ;
+
+    companion object {
+        fun classify(character: SubjectCharacter): CharacterRoleCategory {
+            val role = character.roleName.trim()
+            return when {
+                role.contains("主角") || role.equals("Main", ignoreCase = true) -> MAIN
+                role.contains("配角") || role.equals("Supporting", ignoreCase = true) -> SUPPORTING
+                role.contains("客串") || role.equals("Guest", ignoreCase = true) -> GUEST
+                else -> OTHER
+            }
+        }
+    }
+}
+
+/** 登场角色与声优区域：支持角色定位分类筛选（主角/配角/客串）与横滑/海报墙视图切换 */
 @Composable
 fun CharactersSection(
     characters: List<SubjectCharacter>,
@@ -816,14 +841,43 @@ fun CharactersSection(
     modifier: Modifier = Modifier,
 ) {
     var isExpanded by rememberSaveable { mutableStateOf(false) }
+    var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    var isGridView by rememberSaveable { mutableStateOf(false) }
+
     val uniqueCharacters = remember(characters) { characters.distinctBy { it.id } }
-    val canExpand = uniqueCharacters.size > COLLAPSED_CHARACTER_COUNT
-    val visibleCharacters =
-        if (isExpanded || !canExpand) {
-            uniqueCharacters
-        } else {
-            uniqueCharacters.take(COLLAPSED_CHARACTER_COUNT)
+
+    val categoryCounts =
+        remember(uniqueCharacters) {
+            uniqueCharacters.groupingBy { CharacterRoleCategory.classify(it) }.eachCount()
         }
+    val availableCategories =
+        remember(categoryCounts) {
+            CharacterRoleCategory.entries.filter { (categoryCounts[it] ?: 0) > 0 }
+        }
+
+    val filteredCharacters =
+        remember(uniqueCharacters, selectedCategory) {
+            if (selectedCategory == null) {
+                uniqueCharacters
+            } else {
+                uniqueCharacters.filter { CharacterRoleCategory.classify(it).name == selectedCategory }
+            }
+        }
+
+    // 角色首屏收起态智能权重：主角优先，避免机械截断漏掉核心主角
+    val prioritizedCharacters =
+        remember(uniqueCharacters) {
+            uniqueCharacters.sortedBy { CharacterRoleCategory.classify(it).priority }
+        }
+    val collapsedCharacters =
+        remember(prioritizedCharacters, uniqueCharacters) {
+            // 保留契约并注入主角优先排序
+            prioritizedCharacters
+                .ifEmpty { uniqueCharacters.take(COLLAPSED_CHARACTER_COUNT) }
+                .take(COLLAPSED_CHARACTER_COUNT)
+        }
+
+    val canExpand = uniqueCharacters.size > COLLAPSED_CHARACTER_COUNT
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -834,12 +888,36 @@ fun CharactersSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val titleText =
+                if (isExpanded && selectedCategory != null) {
+                    val catLabel = stringResource(CharacterRoleCategory.valueOf(selectedCategory!!).labelRes)
+                    stringResource(R.string.feature_subject_characters_title_with_category, catLabel, filteredCharacters.size)
+                } else {
+                    stringResource(R.string.feature_subject_characters_and_actors)
+                }
+
             Text(
-                text = stringResource(R.string.feature_subject_characters_and_actors),
+                text = titleText,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
             )
+
+            if (isExpanded && uniqueCharacters.size > COLLAPSED_CHARACTER_COUNT) {
+                BgmGhostIconButton(
+                    onClick = { isGridView = !isGridView },
+                    icon = if (isGridView) BgmIcons.ViewCarousel else BgmIcons.GridView,
+                    contentDescription =
+                        if (isGridView) {
+                            stringResource(R.string.feature_subject_view_mode_scroll_mode)
+                        } else {
+                            stringResource(R.string.feature_subject_character_view_mode_grid, filteredCharacters.size)
+                        },
+                    iconSize = 19.dp,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+
             if (canExpand) {
                 SubjectSectionToggleAction(
                     isExpanded = isExpanded,
@@ -857,28 +935,128 @@ fun CharactersSection(
             }
         }
 
-        // 收起态一律纵向摘要行（与角色数量无关），完整立绘卡只在展开后出现
+        // 收起态一律纵向摘要行（首屏主角优先）；展开后展示分类筛选芯片与完整立绘卡（支持横滑/网格）
         if (isExpanded) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(horizontal = 0.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                items(items = visibleCharacters, key = { it.id }) { character ->
-                    CharacterCard(
-                        character = character,
-                        onCharacterClick = onCharacterClick,
-                        onActorClick = onActorClick,
-                        onPreviewCharacter = onPreviewCharacter,
-                    )
+            if (availableCategories.size >= 2 || uniqueCharacters.size > COLLAPSED_CHARACTER_COUNT) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(horizontal = 0.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    item(key = "char_cat_all") {
+                        FilterChip(
+                            selected = selectedCategory == null,
+                            onClick = { selectedCategory = null },
+                            label = {
+                                Text(
+                                    text = stringResource(R.string.feature_subject_character_cat_all, uniqueCharacters.size),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            },
+                            border = null,
+                            colors =
+                                FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                ),
+                        )
+                    }
+                    items(items = availableCategories, key = { it.name }) { category ->
+                        val count = categoryCounts[category] ?: 0
+                        val isSelected = selectedCategory == category.name
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                selectedCategory = if (isSelected) null else category.name
+                            },
+                            label = {
+                                Text(
+                                    text = "${stringResource(category.labelRes)} ($count)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            },
+                            border = null,
+                            colors =
+                                FilterChipDefaults.filterChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                ),
+                        )
+                    }
+                }
+            }
+
+            if (isGridView) {
+                CharacterGrid(
+                    characters = filteredCharacters,
+                    onCharacterClick = onCharacterClick,
+                    onActorClick = onActorClick,
+                    onPreviewCharacter = onPreviewCharacter,
+                )
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(horizontal = 0.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    items(items = filteredCharacters, key = { it.id }) { character ->
+                        CharacterCard(
+                            character = character,
+                            onCharacterClick = onCharacterClick,
+                            onActorClick = onActorClick,
+                            onPreviewCharacter = onPreviewCharacter,
+                        )
+                    }
                 }
             }
         } else {
             CharacterSummaryList(
-                characters = visibleCharacters,
+                characters = collapsedCharacters,
                 onCharacterClick = onCharacterClick,
                 onActorClick = onActorClick,
             )
+        }
+    }
+}
+
+/** 角色网格海报墙：双列排布，完整立绘与声优信息 */
+@Composable
+private fun CharacterGrid(
+    characters: List<SubjectCharacter>,
+    onCharacterClick: (Long) -> Unit,
+    onActorClick: (Long) -> Unit,
+    onPreviewCharacter: (SubjectCharacter) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val chunked = remember(characters) { characters.chunked(2) }
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        chunked.forEach { rowCharacters ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                rowCharacters.forEach { character ->
+                    Box(modifier = Modifier.weight(1f)) {
+                        CharacterCard(
+                            character = character,
+                            onCharacterClick = onCharacterClick,
+                            onActorClick = onActorClick,
+                            onPreviewCharacter = onPreviewCharacter,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+                if (rowCharacters.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
         }
     }
 }

@@ -140,9 +140,20 @@
 
     <!-- 6. 角色与制作人员 -->
     <string name="feature_subject_characters_and_actors">登场角色与声优</string>
+    <string name="feature_subject_characters_title_with_category">登场角色 · %1$s (%2$d)</string>
     <string name="feature_subject_characters_count">%1$d 位角色</string>
     <string name="feature_subject_expand_characters">全部 %1$d 位</string>
     <string name="feature_subject_collapse_characters">收起角色</string>
+    <string name="feature_subject_character_cat_all">全部 (%1$d)</string>
+    <string name="feature_subject_character_cat_main">主角 (%1$d)</string>
+    <string name="feature_subject_character_cat_supporting">配角 (%1$d)</string>
+    <string name="feature_subject_character_cat_guest">客串 (%1$d)</string>
+    <string name="feature_subject_character_cat_other">其他 (%1$d)</string>
+    <string name="feature_subject_character_role_main">主角</string>
+    <string name="feature_subject_character_role_supporting">配角</string>
+    <string name="feature_subject_character_role_guest">客串</string>
+    <string name="feature_subject_character_role_other">其他</string>
+    <string name="feature_subject_character_view_mode_grid">立绘墙 (%1$d)</string>
     <string name="feature_subject_view_full_character_image">查看全身立绘</string>
     <string name="feature_subject_production_staff">制作团队</string>
     <string name="feature_subject_collapse_staff">收起制作团队</string>

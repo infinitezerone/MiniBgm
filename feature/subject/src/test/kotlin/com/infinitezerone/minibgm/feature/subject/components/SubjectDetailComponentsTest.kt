@@ -225,4 +225,57 @@ class SubjectDetailComponentsTest {
         composeTestRule.onNodeWithText("收起").performClick()
         composeTestRule.onNodeWithText("全部 (15)").assertIsDisplayed()
     }
+
+    @Test
+    fun characters_section_supports_role_category_filtering_and_priority_sorting() {
+        val testCharacters =
+            listOf(
+                com.infinitezerone.minibgm.core.model
+                    .SubjectCharacter(id = 1L, name = "配角前置", roleName = "配角"),
+                com.infinitezerone.minibgm.core.model
+                    .SubjectCharacter(id = 2L, name = "主角A", roleName = "主角"),
+                com.infinitezerone.minibgm.core.model
+                    .SubjectCharacter(id = 3L, name = "客串C", roleName = "客串"),
+                com.infinitezerone.minibgm.core.model
+                    .SubjectCharacter(id = 4L, name = "主角B", roleName = "主角"),
+                com.infinitezerone.minibgm.core.model
+                    .SubjectCharacter(id = 5L, name = "配角后置", roleName = "配角"),
+            )
+
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                Surface {
+                    CharactersSection(
+                        characters = testCharacters,
+                        onCharacterClick = {},
+                        onActorClick = {},
+                        onPreviewCharacter = {},
+                    )
+                }
+            }
+        }
+
+        // 1. 首屏收起态断言：核心主角必须优先被排序展示（主角A 和 主角B），即使原数据流中配角排在前面
+        composeTestRule.onNodeWithText("主角A").assertIsDisplayed()
+        composeTestRule.onNodeWithText("主角B").assertIsDisplayed()
+
+        // 2. 点击统一展开全部控制器
+        composeTestRule.onNodeWithText("全部 5 位").performClick()
+
+        // 3. 展开后应显示各角色类型分类 FilterChip
+        composeTestRule.onNodeWithText("主角 (2)").assertIsDisplayed()
+        composeTestRule.onNodeWithText("配角 (2)").assertIsDisplayed()
+        composeTestRule.onNodeWithText("客串 (1)").assertIsDisplayed()
+
+        // 4. 切换至主角分类
+        composeTestRule.onNodeWithText("主角 (2)").performClick()
+        composeTestRule.onNodeWithText("主角A").assertIsDisplayed()
+        composeTestRule.onNodeWithText("主角B").assertIsDisplayed()
+        composeTestRule.onNodeWithText("客串C").assertDoesNotExist()
+
+        // 5. 切换至客串分类
+        composeTestRule.onNodeWithText("客串 (1)").performClick()
+        composeTestRule.onNodeWithText("客串C").assertIsDisplayed()
+        composeTestRule.onNodeWithText("主角A").assertDoesNotExist()
+    }
 }
