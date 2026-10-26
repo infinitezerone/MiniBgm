@@ -78,6 +78,7 @@ data class EpisodeDetailUiState(
     val failedSourceReasons: Map<String, String> = emptyMap(),
     val torrentResources: List<TorrentMediaResource> = emptyList(),
     val isTorrentLoading: Boolean = false,
+    val isTorrentEpisodeFilterIgnored: Boolean = false,
 )
 
 /** 单集详情页一次性单发事件 */
@@ -140,6 +141,13 @@ private data class CommentsRefreshIntent(
     val shouldFetchSubject: Boolean,
 )
 
+/** 种子/磁力 BT 资源状态（私有于 [EpisodeDetailViewModel]） */
+private data class TorrentSessionState(
+    val resources: List<TorrentMediaResource> = emptyList(),
+    val isLoading: Boolean = false,
+    val isEpisodeFilterIgnored: Boolean = false,
+)
+
 /** 会话侧提示位（评论状态 + 排序模式 + 登录提示 + 命令层错误位）的合流中间态 */
 private data class SessionData(
     val comments: CommentsUi,
@@ -148,6 +156,7 @@ private data class SessionData(
     val actionError: String?,
     val torrentResources: List<TorrentMediaResource> = emptyList(),
     val isTorrentLoading: Boolean = false,
+    val isTorrentEpisodeFilterIgnored: Boolean = false,
 )
 
 /**
@@ -198,8 +207,8 @@ class EpisodeDetailViewModel(
     /** 评论刷新会话与表态命令共用的落位容器（见 [CommentsUi]） */
     private val commentsUi = MutableStateFlow(CommentsUi())
 
-    /** 种子/磁力 BT 资源状态（列表 + 加载中标记） */
-    private val torrentState = MutableStateFlow(Pair(emptyList<TorrentMediaResource>(), false))
+    /** 种子/磁力 BT 资源状态（列表 + 加载中标记 + 忽略分集过滤标记） */
+    private val torrentState = MutableStateFlow(TorrentSessionState())
 
     /**
      * 评论排序模式：唯一真源是设备侧偏好（与播放页共用同一条，两页默认值也必须同源）。
@@ -263,8 +272,9 @@ class EpisodeDetailViewModel(
                     sortOrder = sortOrder,
                     showLoginPromptDialog = prompt,
                     actionError = error,
-                    torrentResources = torrent.first,
-                    isTorrentLoading = torrent.second,
+                    torrentResources = torrent.resources,
+                    isTorrentLoading = torrent.isLoading,
+                    isTorrentEpisodeFilterIgnored = torrent.isEpisodeFilterIgnored,
                 )
             },
         ) { episodeData, identity, playback, session ->
@@ -288,6 +298,7 @@ class EpisodeDetailViewModel(
                 failedSourceReasons = playback.failedSourceReasons,
                 torrentResources = session.torrentResources,
                 isTorrentLoading = session.isTorrentLoading,
+                isTorrentEpisodeFilterIgnored = session.isTorrentEpisodeFilterIgnored,
             )
         }.stateIn(
             viewModelScope,
@@ -410,27 +421,38 @@ class EpisodeDetailViewModel(
     fun loadTorrentResources(
         episode: Episode? = null,
         forceRefresh: Boolean = false,
+        ignoreEpisodeFilter: Boolean = false,
     ) {
         val targetEpisode = episode ?: uiState.value.episode
         val subject = uiState.value.subject ?: return
         val activeTorrentRules = uiState.value.playbackRules.filter { it.isEnabled && it.kind == PlaybackRuleKind.TORRENT }
         if (activeTorrentRules.isEmpty()) {
             torrentJob?.cancel()
-            torrentState.value = Pair(emptyList(), false)
+            torrentState.value = TorrentSessionState()
             return
         }
 
-        val targetEpisodeId = targetEpisode?.id ?: -1L
+        val targetEpisodeId = if (ignoreEpisodeFilter) -999L else (targetEpisode?.id ?: -1L)
         if (!forceRefresh &&
             lastLoadedTorrentEpisodeId == targetEpisodeId &&
-            torrentState.value.first.isNotEmpty()
+            torrentState.value.resources.isNotEmpty() &&
+            torrentState.value.isEpisodeFilterIgnored == ignoreEpisodeFilter
         ) {
             // 同一分集已就绪且非强制刷新：0ms 立即复用现有状态，杜绝重复调度与界面闪烁
             return
         }
 
         val title = subject.displayName
-        val primaryEpSort = targetEpisode?.episodeNumber
+        val primaryEpSort = if (ignoreEpisodeFilter) null else targetEpisode?.episodeNumber
+        val candidateSorts =
+            if (ignoreEpisodeFilter) {
+                emptyList()
+            } else {
+                listOfNotNull(
+                    targetEpisode?.ep?.takeIf { it > 0f },
+                    targetEpisode?.sort?.takeIf { it > 0f && it != targetEpisode.ep },
+                ).distinct().ifEmpty { listOfNotNull(primaryEpSort) }
+            }
         val altTitles =
             (
                 listOfNotNull(
@@ -440,11 +462,19 @@ class EpisodeDetailViewModel(
             ).distinct()
 
         torrentJob?.cancel()
-        val currentResources = torrentState.value.first
+        val currentResources = torrentState.value.resources
         torrentState.value =
-            Pair(
-                if (currentResources.isNotEmpty() && lastLoadedTorrentEpisodeId == targetEpisodeId) currentResources else emptyList(),
-                true,
+            TorrentSessionState(
+                resources =
+                    if (currentResources.isNotEmpty() &&
+                        lastLoadedTorrentEpisodeId == targetEpisodeId
+                    ) {
+                        currentResources
+                    } else {
+                        emptyList()
+                    },
+                isLoading = true,
+                isEpisodeFilterIgnored = ignoreEpisodeFilter,
             )
         lastLoadedTorrentEpisodeId = targetEpisodeId
         torrentJob =
@@ -463,6 +493,7 @@ class EpisodeDetailViewModel(
                                             subjectId = subjectId,
                                             rule = rule,
                                             forceRefresh = forceRefresh,
+                                            candidateEpisodeSorts = candidateSorts,
                                         )
                                     }
                                 }.awaitAll()
@@ -472,13 +503,23 @@ class EpisodeDetailViewModel(
                         emptyList()
                     }
                 val deduplicated = allResources.mergeAndDeduplicate().distinctBy { it.dedupeKey }
-                torrentState.value = Pair(deduplicated, false)
+                torrentState.value =
+                    TorrentSessionState(
+                        resources = deduplicated,
+                        isLoading = false,
+                        isEpisodeFilterIgnored = ignoreEpisodeFilter,
+                    )
             }
     }
 
     /** 手动刷新当前分集的种子资源（绕过本地内存缓存重新触网拉取） */
     fun refreshTorrentResources(episode: Episode? = null) {
-        loadTorrentResources(episode = episode, forceRefresh = true)
+        loadTorrentResources(episode = episode, forceRefresh = true, ignoreEpisodeFilter = false)
+    }
+
+    /** 取消当前集数过滤，展示该番剧检索到的全部种子资源（供手工选择兜底） */
+    fun showAllTorrentsWithoutEpisodeFilter(episode: Episode? = null) {
+        loadTorrentResources(episode = episode, forceRefresh = false, ignoreEpisodeFilter = true)
     }
 
     /** 为当前分集组装播放器路由（组装逻辑见 [buildEpisodePlayerRoute]） */

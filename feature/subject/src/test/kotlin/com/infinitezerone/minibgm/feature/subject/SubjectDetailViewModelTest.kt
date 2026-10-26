@@ -1854,4 +1854,24 @@ class SubjectDetailViewModelTest {
             assertEquals(401L, completed.firstEpisode?.id)
             assertEquals(401L, viewModel.nextEpisodeToWatch()?.id)
         }
+
+    @Test
+    fun showAllTorrentsWithoutEpisodeFilter_updatesFilterIgnoredFlag() =
+        runTest {
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                )
+
+            assertFalse(viewModel.uiState.value.isTorrentEpisodeFilterIgnored)
+            viewModel.showAllTorrentsWithoutEpisodeFilter(null)
+            assertTrue(viewModel.uiState.value.isTorrentEpisodeFilterIgnored)
+        }
 }

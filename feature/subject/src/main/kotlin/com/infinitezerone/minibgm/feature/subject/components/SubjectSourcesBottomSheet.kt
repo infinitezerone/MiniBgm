@@ -136,6 +136,12 @@ fun SubjectSourcesBottomSheet(
     onRequestNotificationPermission: (() -> Unit)? = null,
     onRefreshTorrent: (() -> Unit)? = null,
     onDownloadStarted: (() -> Unit)? = null,
+    isTorrentEpisodeFilterIgnored: Boolean = false,
+    onShowAllTorrents: (() -> Unit)? = null,
+    onRestoreEpisodeFilter: (() -> Unit)? = null,
+    showEpisodePicker: Boolean = false,
+    onCloseEpisodePicker: (() -> Unit)? = null,
+    episodePickerContent: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val displayName = subject.displayName
@@ -208,655 +214,598 @@ fun SubjectSourcesBottomSheet(
         }
 
     val isFuture = remember(episode?.airdate) { episode?.let { isEpisodeFutureAir(it) } ?: false }
+    val isShowingPicker = showEpisodePicker && episodePickerContent != null
 
     BgmSourcesBottomSheet(
         title = sheetTitle,
         coverUrl = subject.images?.bestImage.orEmpty(),
-        subtitle = sheetSubtitle ?: stringResource(R.string.feature_subject_source_choose_source),
+        subtitle =
+            if (isShowingPicker) {
+                stringResource(R.string.feature_subject_episode_picker_subtitle)
+            } else {
+                sheetSubtitle ?: stringResource(R.string.feature_subject_source_choose_source)
+            },
         onDismissRequest = onDismissRequest,
         sheetHandle = sheetHandle,
+        contentScrollable = !isShowingPicker,
         modifier = modifier,
     ) { runAfterDismiss ->
-        // 0. 🌟 分集原位信息与打卡微操作区（单层扁平化呈现，彻底消灭弹窗跳弹窗）
-        if (episode != null) {
-            // 原位切集导航
-            if (onNavigateToPrevious != null || onNavigateToNext != null) {
+        if (isShowingPicker) {
+            if (onCloseEpisodePicker != null && episode != null) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     FilledTonalButton(
-                        onClick = { onNavigateToPrevious?.invoke() },
-                        enabled = onNavigateToPrevious != null,
+                        onClick = onCloseEpisodePicker,
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                         modifier = Modifier.height(28.dp),
                         shape = BgmShapes.small,
                     ) {
                         Icon(
                             imageVector = BgmIcons.KeyboardArrowLeft,
-                            contentDescription = stringResource(R.string.feature_subject_ep_previous),
-                            modifier = Modifier.size(15.dp),
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text(
-                            text = stringResource(R.string.feature_subject_ep_previous),
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-
-                    val indexLabel =
-                        if (currentIndex >= 0 && totalCount > 0) {
-                            "${currentIndex + 1} / $totalCount"
-                        } else {
-                            epLabel
-                        }
-                    if (onOpenEpisodePicker != null) {
-                        Surface(
-                            onClick = onOpenEpisodePicker,
-                            shape = BgmShapes.small,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                            ) {
-                                Icon(
-                                    imageVector = BgmIcons.FormatListNumbered,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                                Text(
-                                    text = indexLabel,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = indexLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-
-                    FilledTonalButton(
-                        onClick = { onNavigateToNext?.invoke() },
-                        enabled = onNavigateToNext != null,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                        modifier = Modifier.height(28.dp),
-                        shape = BgmShapes.small,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.feature_subject_ep_next),
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Icon(
-                            imageVector = BgmIcons.KeyboardArrowRight,
-                            contentDescription = stringResource(R.string.feature_subject_ep_next),
-                            modifier = Modifier.size(15.dp),
-                        )
-                    }
-                }
-            }
-
-            // 分集主标题与状态标签
-            val primaryTitle = episode.nameCn.ifBlank { episode.name.ifBlank { epLabel } }
-            val secondaryTitle = if (episode.name.isNotBlank() && episode.name != primaryTitle) episode.name else ""
-
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    val fullHeading = if (primaryTitle != epLabel) "$epLabel · $primaryTitle" else epLabel
-                    Text(
-                        text = fullHeading,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    val status =
-                        when {
-                            isWatched ->
-                                SourceEpisodeStatusDisplay(
-                                    text = stringResource(R.string.feature_subject_ep_status_watched),
-                                    containerColor = statusCollectContainerColor(),
-                                    contentColor = onStatusCollectContainerColor(),
-                                    icon = BgmIcons.Check,
-                                )
-                            isFuture ->
-                                SourceEpisodeStatusDisplay(
-                                    text =
-                                        if (episode.airdate.isNotBlank()) {
-                                            stringResource(R.string.feature_subject_player_airdate, episode.airdate)
-                                        } else {
-                                            stringResource(R.string.feature_subject_episodes_status_to_watch)
-                                        },
-                                    containerColor = statusAiringContainerColor(),
-                                    contentColor = onStatusAiringContainerColor(),
-                                    icon = BgmIcons.Schedule,
-                                )
-                            isNextToWatch ->
-                                SourceEpisodeStatusDisplay(
-                                    text = stringResource(R.string.feature_subject_episodes_status_to_watch),
-                                    containerColor = statusDoingContainerColor(),
-                                    contentColor = onStatusDoingContainerColor(),
-                                    icon = BgmIcons.Play,
-                                )
-                            else ->
-                                SourceEpisodeStatusDisplay(
-                                    text = stringResource(R.string.feature_subject_ep_status_unwatched),
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    icon = null,
-                                )
-                        }
-
-                    Surface(
-                        shape = BgmShapes.small,
-                        color = status.containerColor,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        ) {
-                            if (status.icon != null) {
-                                Icon(
-                                    imageVector = status.icon,
-                                    contentDescription = null,
-                                    tint = status.contentColor,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                            }
-                            Text(
-                                text = status.text,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = status.contentColor,
-                            )
-                        }
-                    }
-                }
-
-                if (secondaryTitle.isNotBlank()) {
-                    Text(
-                        text = secondaryTitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                // 行内元信息：放送时间 · 时长 · 吐槽讨论直达链接
-                val metaItems =
-                    buildList {
-                        if (episode.airdate.isNotBlank()) add(episode.airdate)
-                        if (episode.duration.isNotBlank()) add(episode.duration)
-                    }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.padding(top = 2.dp),
-                ) {
-                    if (metaItems.isNotEmpty()) {
-                        Text(
-                            text = metaItems.joinToString(" · "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                        )
-                        Text(
-                            text = "·",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        )
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        modifier =
-                            Modifier
-                                .clip(BgmShapes.small)
-                                .clickable {
-                                    onSelectEpisodeForDetail?.invoke()
-                                }.padding(horizontal = 4.dp, vertical = 2.dp),
-                    ) {
-                        Icon(
-                            imageVector = if (episode.comment >= 50) BgmIcons.LocalFireDepartment else BgmIcons.ChatBubbleOutline,
                             contentDescription = null,
-                            tint = if (episode.comment >= 50) WishOrange else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(13.dp),
+                            modifier = Modifier.size(15.dp),
                         )
-                        Spacer(modifier = Modifier.width(2.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text =
-                                if (episode.comment > 0) {
-                                    stringResource(R.string.feature_subject_ep_comments_total, episode.comment) + " ›"
-                                } else {
-                                    stringResource(R.string.feature_subject_ep_quick_no_comments) + " ›"
-                                },
+                            text = stringResource(R.string.feature_subject_source_back_to_episode, epLabel),
                             style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = if (episode.comment >= 50) WishOrange else MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
             }
-
-            // 剧情梗概（折叠卡片）
-            if (episode.desc.isNotBlank()) {
-                var isDescExpanded by rememberSaveable(episode.id) { mutableStateOf(false) }
-                Column(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(BgmShapes.medium)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .clickable { isDescExpanded = !isDescExpanded }
-                            .padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
+            episodePickerContent()
+        } else {
+            // 0. 🌟 分集原位信息与打卡微操作区（单层扁平化呈现，彻底消灭弹窗跳弹窗）
+            if (episode != null) {
+                // 原位切集导航
+                if (onNavigateToPrevious != null || onNavigateToNext != null) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(
-                            text = stringResource(R.string.feature_subject_ep_synopsis),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Icon(
-                            imageVector = if (isDescExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        FilledTonalButton(
+                            onClick = { onNavigateToPrevious?.invoke() },
+                            enabled = onNavigateToPrevious != null,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            modifier = Modifier.height(28.dp),
+                            shape = BgmShapes.small,
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.KeyboardArrowLeft,
+                                contentDescription = stringResource(R.string.feature_subject_ep_previous),
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = stringResource(R.string.feature_subject_ep_previous),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+
+                        val indexLabel =
+                            if (currentIndex >= 0 && totalCount > 0) {
+                                "${currentIndex + 1} / $totalCount"
+                            } else {
+                                epLabel
+                            }
+                        if (onOpenEpisodePicker != null) {
+                            Surface(
+                                onClick = onOpenEpisodePicker,
+                                shape = BgmShapes.small,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = BgmIcons.FormatListNumbered,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Text(
+                                        text = indexLabel,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = indexLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+
+                        FilledTonalButton(
+                            onClick = { onNavigateToNext?.invoke() },
+                            enabled = onNavigateToNext != null,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            modifier = Modifier.height(28.dp),
+                            shape = BgmShapes.small,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.feature_subject_ep_next),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                imageVector = BgmIcons.KeyboardArrowRight,
+                                contentDescription = stringResource(R.string.feature_subject_ep_next),
+                                modifier = Modifier.size(15.dp),
+                            )
+                        }
                     }
-                    Text(
-                        text = episode.desc.trim(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = if (isDescExpanded) Int.MAX_VALUE else 2,
-                        overflow = TextOverflow.Ellipsis,
-                        lineHeight = 18.sp,
-                    )
                 }
-            }
 
-            // 打卡操作行（显式 contentPadding，彻底杜绝文字截断）
-            if (onToggleWatched != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FilledTonalButton(
-                        onClick = { onToggleWatched() },
-                        modifier = Modifier.weight(1f).height(38.dp),
-                        shape = BgmShapes.medium,
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                // 分集主标题与状态标签
+                val primaryTitle = episode.nameCn.ifBlank { episode.name.ifBlank { epLabel } }
+                val secondaryTitle = if (episode.name.isNotBlank() && episode.name != primaryTitle) episode.name else ""
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Icon(
-                            imageVector = if (isWatched) BgmIcons.Check else BgmIcons.CheckBorder,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        val fullHeading = if (primaryTitle != epLabel) "$epLabel · $primaryTitle" else epLabel
                         Text(
-                            text =
-                                if (isWatched) {
-                                    stringResource(R.string.feature_subject_ep_unwatch)
-                                } else {
-                                    stringResource(R.string.feature_subject_ep_mark_watched)
-                                },
+                            text = fullHeading,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        val status =
+                            when {
+                                isWatched ->
+                                    SourceEpisodeStatusDisplay(
+                                        text = stringResource(R.string.feature_subject_ep_status_watched),
+                                        containerColor = statusCollectContainerColor(),
+                                        contentColor = onStatusCollectContainerColor(),
+                                        icon = BgmIcons.Check,
+                                    )
+                                isFuture ->
+                                    SourceEpisodeStatusDisplay(
+                                        text =
+                                            if (episode.airdate.isNotBlank()) {
+                                                stringResource(R.string.feature_subject_player_airdate, episode.airdate)
+                                            } else {
+                                                stringResource(R.string.feature_subject_episodes_status_to_watch)
+                                            },
+                                        containerColor = statusAiringContainerColor(),
+                                        contentColor = onStatusAiringContainerColor(),
+                                        icon = BgmIcons.Schedule,
+                                    )
+                                isNextToWatch ->
+                                    SourceEpisodeStatusDisplay(
+                                        text = stringResource(R.string.feature_subject_episodes_status_to_watch),
+                                        containerColor = statusDoingContainerColor(),
+                                        contentColor = onStatusDoingContainerColor(),
+                                        icon = BgmIcons.Play,
+                                    )
+                                else ->
+                                    SourceEpisodeStatusDisplay(
+                                        text = stringResource(R.string.feature_subject_ep_status_unwatched),
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        icon = null,
+                                    )
+                            }
+
+                        Surface(
+                            shape = BgmShapes.small,
+                            color = status.containerColor,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            ) {
+                                if (status.icon != null) {
+                                    Icon(
+                                        imageVector = status.icon,
+                                        contentDescription = null,
+                                        tint = status.contentColor,
+                                        modifier = Modifier.size(12.dp),
+                                    )
+                                }
+                                Text(
+                                    text = status.text,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = status.contentColor,
+                                )
+                            }
+                        }
+                    }
+
+                    if (secondaryTitle.isNotBlank()) {
+                        Text(
+                            text = secondaryTitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
-                            style = MaterialTheme.typography.labelLarge,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
 
-                    if (!isWatched && onBatchMark != null && episode.isMain && episode.episodeInt > 1) {
-                        OutlinedButton(
-                            onClick = { onBatchMark() },
+                    // 行内元信息：放送时间 · 时长 · 吐槽讨论直达链接
+                    val metaItems =
+                        buildList {
+                            if (episode.airdate.isNotBlank()) add(episode.airdate)
+                            if (episode.duration.isNotBlank()) add(episode.duration)
+                        }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 2.dp),
+                    ) {
+                        if (metaItems.isNotEmpty()) {
+                            Text(
+                                text = metaItems.joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                            )
+                            Text(
+                                text = "·",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            )
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            modifier =
+                                Modifier
+                                    .clip(BgmShapes.small)
+                                    .clickable {
+                                        runAfterDismiss {
+                                            onSelectEpisodeForDetail?.invoke()
+                                        }
+                                    }.padding(horizontal = 4.dp, vertical = 2.dp),
+                        ) {
+                            Icon(
+                                imageVector = if (episode.comment >= 50) BgmIcons.LocalFireDepartment else BgmIcons.ChatBubbleOutline,
+                                contentDescription = null,
+                                tint = if (episode.comment >= 50) WishOrange else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(13.dp),
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text =
+                                    if (episode.comment > 0) {
+                                        stringResource(R.string.feature_subject_ep_comments_total, episode.comment) + " ›"
+                                    } else {
+                                        stringResource(R.string.feature_subject_ep_quick_no_comments) + " ›"
+                                    },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = if (episode.comment >= 50) WishOrange else MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+
+                // 剧情梗概（折叠卡片）
+                if (episode.desc.isNotBlank()) {
+                    var isDescExpanded by rememberSaveable(episode.id) { mutableStateOf(false) }
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(BgmShapes.medium)
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .clickable { isDescExpanded = !isDescExpanded }
+                                .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.feature_subject_ep_synopsis),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Icon(
+                                imageVector = if (isDescExpanded) BgmIcons.KeyboardArrowUp else BgmIcons.KeyboardArrowDown,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Text(
+                            text = episode.desc.trim(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = if (isDescExpanded) Int.MAX_VALUE else 2,
+                            overflow = TextOverflow.Ellipsis,
+                            lineHeight = 18.sp,
+                        )
+                    }
+                }
+
+                // 打卡操作行（显式 contentPadding，彻底杜绝文字截断）
+                if (onToggleWatched != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        FilledTonalButton(
+                            onClick = { onToggleWatched() },
                             modifier = Modifier.weight(1f).height(38.dp),
                             shape = BgmShapes.medium,
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                         ) {
                             Icon(
-                                imageVector = BgmIcons.FormatListNumbered,
+                                imageVector = if (isWatched) BgmIcons.Check else BgmIcons.CheckBorder,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp),
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = stringResource(R.string.feature_subject_ep_watch_to_here),
+                                text =
+                                    if (isWatched) {
+                                        stringResource(R.string.feature_subject_ep_unwatch)
+                                    } else {
+                                        stringResource(R.string.feature_subject_ep_mark_watched)
+                                    },
                                 maxLines = 1,
                                 style = MaterialTheme.typography.labelLarge,
                             )
                         }
-                    }
-                }
-            }
 
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                modifier = Modifier.padding(vertical = 4.dp),
-            )
-        }
-        // 1. 🌟 Hero 主起播区 (一键即播) / 未播分集状态提示
-        if (isFuture && episode != null) {
-            Surface(
-                shape = BgmShapes.medium,
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Icon(
-                        imageVector = BgmIcons.Schedule,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    val unAiredText =
-                        if (episode.airdate.isNotBlank()) {
-                            stringResource(
-                                R.string.feature_subject_ep_not_aired_yet,
-                                episode.formattedNumber,
-                                episode.airdate,
-                            )
-                        } else {
-                            stringResource(
-                                R.string.feature_subject_ep_not_aired_no_date,
-                                episode.formattedNumber,
-                            )
-                        }
-                    Text(
-                        text = unAiredText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-        } else if (onInternalPlayClick != null) {
-            HeroPlayCard(
-                title =
-                    if (episode != null) {
-                        stringResource(R.string.feature_subject_source_hero_play_episode, epLabel)
-                    } else {
-                        stringResource(R.string.feature_subject_source_integrated_player)
-                    },
-                subtitle =
-                    if (episode != null) {
-                        if (firstHealthyRule != null) {
-                            stringResource(R.string.feature_subject_source_hero_preferred_format, firstHealthyRule.name)
-                        } else {
-                            stringResource(R.string.feature_subject_source_play_immediately_desc)
-                        }
-                    } else {
-                        stringResource(R.string.feature_subject_source_player_features)
-                    },
-                onClick = {
-                    runAfterDismiss {
-                        val route =
-                            if (episode != null) {
-                                PlayerRoute(
-                                    subjectId = subject.id,
-                                    episodeId = episode.id,
-                                    streamUrl = "",
-                                    episodeName = episode.nameCn.ifBlank { episode.name },
-                                    subjectName = displayName,
-                                    episodeSort = episode.episodeNumber,
-                                    episodeType = episode.type,
-                                    coverUrl = subject.images?.bestImage.orEmpty(),
+                        if (!isWatched && onBatchMark != null && episode.isMain && episode.episodeInt > 1) {
+                            OutlinedButton(
+                                onClick = { onBatchMark() },
+                                modifier = Modifier.weight(1f).height(38.dp),
+                                shape = BgmShapes.medium,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            ) {
+                                Icon(
+                                    imageVector = BgmIcons.FormatListNumbered,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
                                 )
-                            } else {
-                                PlayerRoute(
-                                    subjectId = subject.id,
-                                    episodeId = 0L,
-                                    subjectName = displayName,
-                                    coverUrl = subject.images?.bestImage.orEmpty(),
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = stringResource(R.string.feature_subject_ep_watch_to_here),
+                                    maxLines = 1,
+                                    style = MaterialTheme.typography.labelLarge,
                                 )
                             }
-                        onInternalPlayClick(route)
-                    }
-                },
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-        }
-
-        // 2. 🗂️ 场景分段标签栏
-        SourceTabsRow(
-            selectedTab = selectedTab,
-            onTabSelected = { selectedTab = it },
-            onlineCount = onlineRules.size,
-            torrentCount = torrentResources.size,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // 3. 📄 对应 Tab 下的纯净内容
-        when (selectedTab) {
-            SourceSheetTab.ONLINE -> {
-                if (onlineRules.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        for (rule in onlineRules) {
-                            val epStr =
-                                episode?.let { if (it.isMain) it.formattedNumber else it.episodeInt.toString() } ?: "1"
-                            val epId = episode?.id ?: 0L
-                            val resolvedUrl =
-                                remember(rule, displayName, epStr, subject.id, epId) {
-                                    rule.resolveUrl(
-                                        title = displayName,
-                                        ep = epStr,
-                                        subjectId = subject.id,
-                                        episodeId = epId,
-                                    )
-                                }
-                            val isMedia =
-                                remember(resolvedUrl, rule.description, rule.kind, rule.parserType) {
-                                    if (rule.kind == PlaybackRuleKind.SOURCE && rule.parserType != RuleParserType.AUTO) {
-                                        false
-                                    } else {
-                                        isLikelyMediaStream(resolvedUrl, rule.description)
-                                    }
-                                }
-                            val ruleFailure = failedSourceReasons[resolvedUrl]
-                            BgmSourceActionCard(
-                                title = rule.name,
-                                subtitle =
-                                    playbackSourceSubtitle(
-                                        rule.description.ifBlank {
-                                            if (onInternalPlayClick != null || isMedia) {
-                                                stringResource(R.string.feature_subject_source_internal_sniff)
-                                            } else {
-                                                stringResource(R.string.feature_subject_source_open_link)
-                                            }
-                                        },
-                                        ruleFailure,
-                                    ),
-                                iconVector =
-                                    if (onInternalPlayClick != null || isMedia) {
-                                        BgmIcons.PlayCircle
-                                    } else {
-                                        BgmIcons.OpenInNew
-                                    },
-                                iconTint =
-                                    when {
-                                        ruleFailure != null -> MaterialTheme.colorScheme.error
-                                        onInternalPlayClick != null || isMedia -> MaterialTheme.colorScheme.primary
-                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                trailingContent = {
-                                    val trailingIcon =
-                                        if (onInternalPlayClick != null || isMedia) {
-                                            BgmIcons.KeyboardArrowRight
-                                        } else {
-                                            BgmIcons.OpenInNew
-                                        }
-                                    Icon(
-                                        imageVector = trailingIcon,
-                                        contentDescription =
-                                            if (onInternalPlayClick != null || isMedia) {
-                                                stringResource(R.string.feature_subject_source_action_play)
-                                            } else {
-                                                stringResource(R.string.feature_subject_source_action_open)
-                                            },
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                },
-                                onClick = {
-                                    runAfterDismiss {
-                                        if (onInternalPlayClick != null) {
-                                            val route =
-                                                PlayerRoute(
-                                                    subjectId = subject.id,
-                                                    episodeId = episode?.id ?: 0L,
-                                                    streamUrl = if (isMedia) resolvedUrl else "",
-                                                    episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: "",
-                                                    subjectName = displayName,
-                                                    episodeSort = episode?.episodeNumber ?: 0f,
-                                                    episodeType = episode?.type ?: 0,
-                                                    initialRuleId = rule.id,
-                                                    // 直链是这条规则解析出来的：把来源一并带进播放器，
-                                                    // 面板与观看记录才能显示真实源名，而不是「默认直链」
-                                                    initialSourceId = rule.id,
-                                                    initialSourceName = rule.name,
-                                                    coverUrl = subject.images?.bestImage.orEmpty(),
-                                                )
-                                            onInternalPlayClick(route)
-                                        } else {
-                                            onOpenUrl(resolvedUrl)
-                                        }
-                                    }
-                                },
-                            )
                         }
                     }
-                } else {
-                    SourceEmptyStateCard(
-                        title = stringResource(R.string.feature_subject_source_no_online_routes),
-                        subtitle = stringResource(R.string.feature_subject_source_manage_desc),
-                        iconVector = BgmIcons.Settings,
-                    )
                 }
-                if (onManageRules != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    BgmSourceActionCard(
-                        title = stringResource(R.string.feature_subject_source_manage),
-                        subtitle = stringResource(R.string.feature_subject_source_manage_desc),
-                        iconVector = BgmIcons.Settings,
-                        iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        onClick = {
-                            runAfterDismiss {
-                                onManageRules()
-                            }
-                        },
-                    )
-                }
-                if (onAiSourceSearch != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    BgmSourceActionCard(
-                        title = stringResource(R.string.feature_subject_source_ai_search_desc),
-                        subtitle = stringResource(R.string.feature_subject_source_ai_search_hint),
-                        iconVector = BgmIcons.AutoAwesome,
-                        iconTint = MaterialTheme.colorScheme.primary,
-                        onClick = { runAfterDismiss(onAiSourceSearch) },
-                    )
-                }
-            }
-            SourceSheetTab.TORRENT -> {
-                TorrentMediaResourcesSection(
-                    isTorrentLoading = isTorrentLoading,
-                    torrentResources = torrentResources,
-                    hasTorrentRules = torrentRules.isNotEmpty(),
-                    context = context,
-                    subject = subject,
-                    episode = episode,
-                    onInternalPlayClick = onInternalPlayClick,
-                    onManageRules = onManageRules,
-                    onRequestNotificationPermission = onRequestNotificationPermission,
-                    onDismissAndRun = runAfterDismiss,
-                    onRefreshTorrent = onRefreshTorrent,
-                    onOpenUrl = onOpenUrl,
-                    onDownloadStarted = onDownloadStarted,
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    modifier = Modifier.padding(vertical = 4.dp),
                 )
             }
-            SourceSheetTab.EXTERNAL -> {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BgmSourceActionCard(
-                        title = stringResource(R.string.feature_subject_source_bilibili),
-                        subtitle =
-                            if (episode != null) {
-                                stringResource(R.string.feature_subject_source_bilibili_ep_desc)
+            // 1. 🌟 Hero 主起播区 (一键即播) / 未播分集状态提示
+            if (isFuture && episode != null) {
+                Surface(
+                    shape = BgmShapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            imageVector = BgmIcons.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        val unAiredText =
+                            if (episode.airdate.isNotBlank()) {
+                                stringResource(
+                                    R.string.feature_subject_ep_not_aired_yet,
+                                    episode.formattedNumber,
+                                    episode.airdate,
+                                )
                             } else {
-                                stringResource(R.string.feature_subject_source_bilibili_desc)
-                            },
-                        iconVector = BgmIcons.Tv,
-                        onClick = {
-                            runAfterDismiss {
-                                onOpenUrl(bilibiliTarget.deepLinkUri ?: bilibiliTarget.webFallbackUrl)
+                                stringResource(
+                                    R.string.feature_subject_ep_not_aired_no_date,
+                                    episode.formattedNumber,
+                                )
                             }
-                        },
-                    )
-                    if (episode != null) {
-                        for (target in externalPlayerTargets) {
-                            val installed = target.packageName in installedExternalPlayerPackages
-                            BgmSourceActionCard(
-                                title = stringResource(R.string.feature_subject_source_open_with_app, target.appName),
-                                subtitle =
-                                    if (installed) {
-                                        stringResource(R.string.feature_subject_source_open_with_app_hint, target.appName)
-                                    } else {
-                                        stringResource(R.string.feature_subject_source_app_not_detected, target.appName)
-                                    },
-                                iconVector = BgmIcons.PlayCircle,
-                                iconTint =
-                                    if (installed) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                onClick = {
-                                    runAfterDismiss {
-                                        context.launchExternalPlayer(target)
-                                    }
-                                },
-                            )
-                        }
+                        Text(
+                            text = unAiredText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
                     }
-                    if (onAiSourceSearch != null) {
-                        BgmSourceActionCard(
-                            title = stringResource(R.string.feature_subject_source_ai_search_desc),
-                            subtitle = stringResource(R.string.feature_subject_source_ai_search_hint),
-                            iconVector = BgmIcons.AutoAwesome,
-                            iconTint = MaterialTheme.colorScheme.primary,
-                            onClick = { runAfterDismiss(onAiSourceSearch) },
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            } else if (onInternalPlayClick != null) {
+                HeroPlayCard(
+                    title =
+                        if (episode != null) {
+                            stringResource(R.string.feature_subject_source_hero_play_episode, epLabel)
+                        } else {
+                            stringResource(R.string.feature_subject_source_integrated_player)
+                        },
+                    subtitle =
+                        if (episode != null) {
+                            if (firstHealthyRule != null) {
+                                stringResource(R.string.feature_subject_source_hero_preferred_format, firstHealthyRule.name)
+                            } else {
+                                stringResource(R.string.feature_subject_source_play_immediately_desc)
+                            }
+                        } else {
+                            stringResource(R.string.feature_subject_source_player_features)
+                        },
+                    onClick = {
+                        runAfterDismiss {
+                            val route =
+                                if (episode != null) {
+                                    PlayerRoute(
+                                        subjectId = subject.id,
+                                        episodeId = episode.id,
+                                        streamUrl = "",
+                                        episodeName = episode.nameCn.ifBlank { episode.name },
+                                        subjectName = displayName,
+                                        episodeSort = episode.episodeNumber,
+                                        episodeType = episode.type,
+                                        coverUrl = subject.images?.bestImage.orEmpty(),
+                                    )
+                                } else {
+                                    PlayerRoute(
+                                        subjectId = subject.id,
+                                        episodeId = 0L,
+                                        subjectName = displayName,
+                                        coverUrl = subject.images?.bestImage.orEmpty(),
+                                    )
+                                }
+                            onInternalPlayClick(route)
+                        }
+                    },
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+
+            // 2. 🗂️ 场景分段标签栏
+            SourceTabsRow(
+                selectedTab = selectedTab,
+                onTabSelected = { selectedTab = it },
+                onlineCount = onlineRules.size,
+                torrentCount = torrentResources.size,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 3. 📄 对应 Tab 下的纯净内容
+            when (selectedTab) {
+                SourceSheetTab.ONLINE -> {
+                    if (onlineRules.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (rule in onlineRules) {
+                                val epStr =
+                                    episode?.let { if (it.isMain) it.formattedNumber else it.episodeInt.toString() } ?: "1"
+                                val epId = episode?.id ?: 0L
+                                val resolvedUrl =
+                                    remember(rule, displayName, epStr, subject.id, epId) {
+                                        rule.resolveUrl(
+                                            title = displayName,
+                                            ep = epStr,
+                                            subjectId = subject.id,
+                                            episodeId = epId,
+                                        )
+                                    }
+                                val isMedia =
+                                    remember(resolvedUrl, rule.description, rule.kind, rule.parserType) {
+                                        if (rule.kind == PlaybackRuleKind.SOURCE && rule.parserType != RuleParserType.AUTO) {
+                                            false
+                                        } else {
+                                            isLikelyMediaStream(resolvedUrl, rule.description)
+                                        }
+                                    }
+                                val ruleFailure = failedSourceReasons[resolvedUrl]
+                                BgmSourceActionCard(
+                                    title = rule.name,
+                                    subtitle =
+                                        playbackSourceSubtitle(
+                                            rule.description.ifBlank {
+                                                if (onInternalPlayClick != null || isMedia) {
+                                                    stringResource(R.string.feature_subject_source_internal_sniff)
+                                                } else {
+                                                    stringResource(R.string.feature_subject_source_open_link)
+                                                }
+                                            },
+                                            ruleFailure,
+                                        ),
+                                    iconVector =
+                                        if (onInternalPlayClick != null || isMedia) {
+                                            BgmIcons.PlayCircle
+                                        } else {
+                                            BgmIcons.OpenInNew
+                                        },
+                                    iconTint =
+                                        when {
+                                            ruleFailure != null -> MaterialTheme.colorScheme.error
+                                            onInternalPlayClick != null || isMedia -> MaterialTheme.colorScheme.primary
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    trailingContent = {
+                                        val trailingIcon =
+                                            if (onInternalPlayClick != null || isMedia) {
+                                                BgmIcons.KeyboardArrowRight
+                                            } else {
+                                                BgmIcons.OpenInNew
+                                            }
+                                        Icon(
+                                            imageVector = trailingIcon,
+                                            contentDescription =
+                                                if (onInternalPlayClick != null || isMedia) {
+                                                    stringResource(R.string.feature_subject_source_action_play)
+                                                } else {
+                                                    stringResource(R.string.feature_subject_source_action_open)
+                                                },
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    },
+                                    onClick = {
+                                        runAfterDismiss {
+                                            if (onInternalPlayClick != null) {
+                                                val route =
+                                                    PlayerRoute(
+                                                        subjectId = subject.id,
+                                                        episodeId = episode?.id ?: 0L,
+                                                        streamUrl = if (isMedia) resolvedUrl else "",
+                                                        episodeName = episode?.let { it.nameCn.ifBlank { it.name } } ?: "",
+                                                        subjectName = displayName,
+                                                        episodeSort = episode?.episodeNumber ?: 0f,
+                                                        episodeType = episode?.type ?: 0,
+                                                        initialRuleId = rule.id,
+                                                        // 直链是这条规则解析出来的：把来源一并带进播放器，
+                                                        // 面板与观看记录才能显示真实源名，而不是「默认直链」
+                                                        initialSourceId = rule.id,
+                                                        initialSourceName = rule.name,
+                                                        coverUrl = subject.images?.bestImage.orEmpty(),
+                                                    )
+                                                onInternalPlayClick(route)
+                                            } else {
+                                                onOpenUrl(resolvedUrl)
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    } else {
+                        SourceEmptyStateCard(
+                            title = stringResource(R.string.feature_subject_source_no_online_routes),
+                            subtitle = stringResource(R.string.feature_subject_source_manage_desc),
+                            iconVector = BgmIcons.Settings,
                         )
                     }
                     if (onManageRules != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
                         BgmSourceActionCard(
                             title = stringResource(R.string.feature_subject_source_manage),
                             subtitle = stringResource(R.string.feature_subject_source_manage_desc),
@@ -868,6 +817,103 @@ fun SubjectSourcesBottomSheet(
                                 }
                             },
                         )
+                    }
+                    if (onAiSourceSearch != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        BgmSourceActionCard(
+                            title = stringResource(R.string.feature_subject_source_ai_search_desc),
+                            subtitle = stringResource(R.string.feature_subject_source_ai_search_hint),
+                            iconVector = BgmIcons.AutoAwesome,
+                            iconTint = MaterialTheme.colorScheme.primary,
+                            onClick = { runAfterDismiss(onAiSourceSearch) },
+                        )
+                    }
+                }
+                SourceSheetTab.TORRENT -> {
+                    TorrentMediaResourcesSection(
+                        isTorrentLoading = isTorrentLoading,
+                        torrentResources = torrentResources,
+                        hasTorrentRules = torrentRules.isNotEmpty(),
+                        context = context,
+                        subject = subject,
+                        episode = episode,
+                        onInternalPlayClick = onInternalPlayClick,
+                        onManageRules = onManageRules,
+                        onRequestNotificationPermission = onRequestNotificationPermission,
+                        onDismissAndRun = runAfterDismiss,
+                        onRefreshTorrent = onRefreshTorrent,
+                        onOpenUrl = onOpenUrl,
+                        onDownloadStarted = onDownloadStarted,
+                        isTorrentEpisodeFilterIgnored = isTorrentEpisodeFilterIgnored,
+                        onShowAllTorrents = onShowAllTorrents,
+                        onRestoreEpisodeFilter = onRestoreEpisodeFilter,
+                    )
+                }
+                SourceSheetTab.EXTERNAL -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        BgmSourceActionCard(
+                            title = stringResource(R.string.feature_subject_source_bilibili),
+                            subtitle =
+                                if (episode != null) {
+                                    stringResource(R.string.feature_subject_source_bilibili_ep_desc)
+                                } else {
+                                    stringResource(R.string.feature_subject_source_bilibili_desc)
+                                },
+                            iconVector = BgmIcons.Tv,
+                            onClick = {
+                                runAfterDismiss {
+                                    onOpenUrl(bilibiliTarget.deepLinkUri ?: bilibiliTarget.webFallbackUrl)
+                                }
+                            },
+                        )
+                        if (episode != null) {
+                            for (target in externalPlayerTargets) {
+                                val installed = target.packageName in installedExternalPlayerPackages
+                                BgmSourceActionCard(
+                                    title = stringResource(R.string.feature_subject_source_open_with_app, target.appName),
+                                    subtitle =
+                                        if (installed) {
+                                            stringResource(R.string.feature_subject_source_open_with_app_hint, target.appName)
+                                        } else {
+                                            stringResource(R.string.feature_subject_source_app_not_detected, target.appName)
+                                        },
+                                    iconVector = BgmIcons.PlayCircle,
+                                    iconTint =
+                                        if (installed) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    onClick = {
+                                        runAfterDismiss {
+                                            context.launchExternalPlayer(target)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        if (onAiSourceSearch != null) {
+                            BgmSourceActionCard(
+                                title = stringResource(R.string.feature_subject_source_ai_search_desc),
+                                subtitle = stringResource(R.string.feature_subject_source_ai_search_hint),
+                                iconVector = BgmIcons.AutoAwesome,
+                                iconTint = MaterialTheme.colorScheme.primary,
+                                onClick = { runAfterDismiss(onAiSourceSearch) },
+                            )
+                        }
+                        if (onManageRules != null) {
+                            BgmSourceActionCard(
+                                title = stringResource(R.string.feature_subject_source_manage),
+                                subtitle = stringResource(R.string.feature_subject_source_manage_desc),
+                                iconVector = BgmIcons.Settings,
+                                iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                onClick = {
+                                    runAfterDismiss {
+                                        onManageRules()
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -1122,6 +1168,12 @@ fun TorrentMediaResourcesSection(
     onRefreshTorrent: (() -> Unit)? = null,
     onOpenUrl: ((String) -> Unit)? = null,
     onDownloadStarted: (() -> Unit)? = null,
+    isTorrentEpisodeFilterIgnored: Boolean = false,
+    onShowAllTorrents: (() -> Unit)? = null,
+    onRestoreEpisodeFilter: (() -> Unit)? = null,
+    showEpisodePicker: Boolean = false,
+    onCloseEpisodePicker: (() -> Unit)? = null,
+    episodePickerContent: (@Composable () -> Unit)? = null,
 ) {
     val torrentRepository: TorrentRepository = koinInject()
     val torrentIntentDispatcher: TorrentIntentDispatcher = koinInject()
@@ -1139,11 +1191,16 @@ fun TorrentMediaResourcesSection(
     val torrentTasks by torrentRepository.tasks.collectAsState()
 
     /**
-     * 分集身份：优先当前分集上下文；条目级（未选分集）动作回退资源自身声明的集数，
+     * 分集身份：优先当前分集上下文；条目级（未选分集）或已切换为全局种子视图时回退资源自身声明的集数，
      * 绝不硬编码「第 1 话」——那会把所有条目级资源塌缩成同一个 `sort:1.0` 身份键，
      * 并把假的集数提示（episodeHint="1"）喂给 Rust 侧的分集选片逻辑。
      */
-    fun resourceEpisodeSort(resource: TorrentMediaResource): Float = episode?.episodeNumber ?: resource.episodeSort ?: 0f
+    fun resourceEpisodeSort(resource: TorrentMediaResource): Float =
+        if (isTorrentEpisodeFilterIgnored) {
+            resource.episodeSort ?: episode?.episodeNumber ?: 0f
+        } else {
+            episode?.episodeNumber ?: resource.episodeSort ?: 0f
+        }
 
     fun resourceEpisodeName(resource: TorrentMediaResource): String = episode?.let { it.nameCn.ifBlank { it.name } } ?: resource.title
 
@@ -1411,6 +1468,16 @@ fun TorrentMediaResourcesSection(
             actionText = if (onRefreshTorrent != null) stringResource(R.string.feature_subject_source_torrent_refresh) else null,
             onActionClick = onRefreshTorrent,
         )
+        if (episode != null && onShowAllTorrents != null && !isTorrentEpisodeFilterIgnored) {
+            Spacer(modifier = Modifier.height(8.dp))
+            BgmSourceActionCard(
+                title = stringResource(R.string.feature_subject_source_torrent_view_all),
+                subtitle = stringResource(R.string.feature_subject_source_torrent_view_all_hint),
+                iconVector = BgmIcons.List,
+                iconTint = MaterialTheme.colorScheme.primary,
+                onClick = onShowAllTorrents,
+            )
+        }
         if (onManageRules != null) {
             Spacer(modifier = Modifier.height(8.dp))
             BgmSourceActionCard(
@@ -1427,6 +1494,15 @@ fun TorrentMediaResourcesSection(
         }
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (isTorrentEpisodeFilterIgnored && onRestoreEpisodeFilter != null) {
+                BgmSourceActionCard(
+                    title = stringResource(R.string.feature_subject_source_torrent_filter_current_ep),
+                    subtitle = stringResource(R.string.feature_subject_source_torrent_filtering_all_hint),
+                    iconVector = BgmIcons.FilterList,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    onClick = onRestoreEpisodeFilter,
+                )
+            }
             val visibleResources =
                 if (showAllResources) {
                     torrentResources

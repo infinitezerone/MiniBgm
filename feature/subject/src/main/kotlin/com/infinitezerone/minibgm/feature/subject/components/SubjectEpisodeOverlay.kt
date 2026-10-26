@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.OverlayRequest
 import com.infinitezerone.minibgm.core.designsystem.component.rememberBgmBottomSheetHandle
 import com.infinitezerone.minibgm.core.model.Episode
@@ -45,6 +46,8 @@ internal fun SubjectEpisodeOverlay(
     onRefreshTorrent: (Episode?) -> Unit,
     onDownloadStarted: () -> Unit,
     onEpisodeChanged: (Episode?) -> Unit,
+    onShowAllTorrents: ((Episode?) -> Unit)? = null,
+    onRestoreEpisodeFilter: ((Episode?) -> Unit)? = null,
     onDismissRequest: () -> Unit,
 ) {
     var showPicker by remember(request) { mutableStateOf(request.startInPicker) }
@@ -72,27 +75,28 @@ internal fun SubjectEpisodeOverlay(
         }
     }
 
-    if (!showSources) {
-        val orderedEpisodes =
-            remember(uiState.episodes, uiState.episodeSortDescending) {
-                if (uiState.episodeSortDescending) {
-                    uiState.episodes.sortedByDescending { it.sort }
-                } else {
-                    uiState.episodes.sortedBy { it.sort }
-                }
+    val orderedEpisodes =
+        remember(uiState.episodes, uiState.episodeSortDescending) {
+            if (uiState.episodeSortDescending) {
+                uiState.episodes.sortedByDescending { it.sort }
+            } else {
+                uiState.episodes.sortedBy { it.sort }
             }
-        val groupedEpisodes =
-            remember(orderedEpisodes) {
-                orderedEpisodes.groupBy {
-                    EpisodeGroup.fromType(it.type)
-                }
+        }
+    val groupedEpisodes =
+        remember(orderedEpisodes) {
+            orderedEpisodes.groupBy {
+                EpisodeGroup.fromType(it.type)
             }
-        val availableGroups =
-            remember(groupedEpisodes) {
-                EpisodeGroup.entries.filter {
-                    groupedEpisodes.containsKey(it)
-                }
+        }
+    val availableGroups =
+        remember(groupedEpisodes) {
+            EpisodeGroup.entries.filter {
+                groupedEpisodes.containsKey(it)
             }
+        }
+
+    if (!supportsPlaybackSources) {
         SubjectEpisodesBottomSheet(
             subject = subject,
             subjectType = subjectType,
@@ -113,14 +117,11 @@ internal fun SubjectEpisodeOverlay(
             onRetryEpisodes = onRetryEpisodes,
             onToggleEpisodeWatched = onToggleEpisodeWatched,
             onSelectEpisode = { episode ->
-                if (supportsPlaybackSources) {
-                    selectedEpisode = episode
-                    showPicker = false
-                } else {
-                    onOpenEpisodeDetails(episode)
-                }
+                onDismissRequest()
+                onOpenEpisodeDetails(episode)
             },
             onOpenEpisodeDetails = { episode ->
+                onDismissRequest()
                 onOpenEpisodeDetails(episode)
             },
             onBatchMarkEpisode = onBatchMarkEpisode,
@@ -152,6 +153,50 @@ internal fun SubjectEpisodeOverlay(
                     hasProgress = uiState.collection != null,
                 )
             } ?: false,
+        showEpisodePicker = showPicker || !supportsPlaybackSources,
+        onCloseEpisodePicker =
+            if (supportsPlaybackSources && effectiveEpisode != null) {
+                { showPicker = false }
+            } else {
+                null
+            },
+        episodePickerContent = {
+            EpisodesTabPage(
+                uiState = uiState,
+                subjectType = subjectType,
+                totalEpisodes = totalEpisodes,
+                currentEpisodes = groupedEpisodes[activeGroup].orEmpty(),
+                availableGroups = availableGroups,
+                groupedEpisodes = groupedEpisodes,
+                activeGroup = activeGroup,
+                onSelectGroup = onSelectGroup,
+                isGridView = uiState.isEpisodeGridView,
+                onToggleGridView = onToggleGridView,
+                episodeSortDescending = uiState.episodeSortDescending,
+                hasMoreEpisodes = uiState.hasMoreEpisodes,
+                isLoadingMoreEpisodes = uiState.isLoadingMoreEpisodes,
+                onToggleEpisodeSort = onToggleEpisodeSort,
+                onLoadMoreEpisodes = onLoadMoreEpisodes,
+                onRetryEpisodes = onRetryEpisodes,
+                onToggleEpisodeWatched = onToggleEpisodeWatched,
+                onSelectEpisodeForDetail = onOpenEpisodeDetails,
+                onEpisodeClick = { episode ->
+                    if (supportsPlaybackSources) {
+                        selectedEpisode = episode
+                        showPicker = false
+                    } else {
+                        onDismissRequest()
+                        onOpenEpisodeDetails(episode)
+                    }
+                },
+                onBatchMarkEpisode = onBatchMarkEpisode,
+                onPlayEpisode = null,
+                onOpenSources = null,
+                onOpenEpisodeSources = null,
+                onPlayNextEpisode = null,
+                bottomPadding = 8.dp,
+            )
+        },
         onDismissRequest = onDismissRequest,
         sheetHandle = sheetHandle,
         onOpenUrl = onStreamingUrlLaunch,
@@ -215,5 +260,14 @@ internal fun SubjectEpisodeOverlay(
         onRequestNotificationPermission = onRequestNotificationPermission,
         onRefreshTorrent = { onRefreshTorrent(effectiveEpisode) },
         onDownloadStarted = onDownloadStarted,
+        isTorrentEpisodeFilterIgnored = uiState.isTorrentEpisodeFilterIgnored,
+        onShowAllTorrents =
+            onShowAllTorrents?.let { showAll ->
+                { showAll(effectiveEpisode) }
+            },
+        onRestoreEpisodeFilter =
+            onRestoreEpisodeFilter?.let { restore ->
+                { restore(effectiveEpisode) }
+            },
     )
 }

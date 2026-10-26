@@ -786,6 +786,8 @@ fun SubjectDetailScreen(
                 onManageRules = onManageRules,
                 onRequestNotificationPermission = requestDownloadNotification,
                 onRefreshTorrent = { episode -> viewModel.refreshTorrentResources(episode) },
+                onShowAllTorrents = { episode -> viewModel.showAllTorrentsWithoutEpisodeFilter(episode) },
+                onRestoreEpisodeFilter = { episode -> viewModel.refreshTorrentResources(episode) },
                 onDownloadStarted = {
                     coroutineScope.launch {
                         val result =

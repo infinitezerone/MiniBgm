@@ -558,4 +558,46 @@ class TorrentFeedRepositoryTest {
             assertEquals("ANi", results[0].fansubName)
             assertEquals(0, fake.requestedUrls.size)
         }
+
+    @Test
+    fun getTorrentResources_matchesGlobalSortWhenSplitSeasonCandidateSortsProvided() =
+        runTest {
+            val rss =
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <rss version="2.0">
+                  <channel>
+                    <title>Sample Torrent Feed</title>
+                    <item>
+                      <title>[沸班亚马制作组] 飙马野郎 JOJO的奇妙冒险 第二&amp;第三赛段 - 02 [1080p]</title>
+                      <link>magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567</link>
+                      <enclosure url="https://feed.example.com/2.torrent" length="350000000" type="application/x-bittorrent"/>
+                    </item>
+                  </channel>
+                </rss>
+                """.trimIndent()
+
+            val fake = FakeFeedFetchService(rss)
+            val rule =
+                PlaybackSourceRule(
+                    id = "test-torrent-rule",
+                    name = "Test Torrent Feed",
+                    urlTemplate = "https://feed.example.com/rss?keyword={title}",
+                    kind = PlaybackRuleKind.TORRENT,
+                    parserType = RuleParserType.RSS_TORRENT,
+                )
+
+            val repository = TorrentFeedRepositoryImpl(fake)
+            val results =
+                repository.getTorrentResources(
+                    title = "飙马野郎 JOJO的奇妙冒险 第二&第三赛段",
+                    episodeSort = 1f,
+                    candidateEpisodeSorts = listOf(1f, 2f),
+                    rule = rule,
+                )
+
+            assertEquals(1, results.size)
+            assertEquals(2f, results[0].episodeSort)
+            assertTrue(results[0].title.contains("- 02"))
+        }
 }

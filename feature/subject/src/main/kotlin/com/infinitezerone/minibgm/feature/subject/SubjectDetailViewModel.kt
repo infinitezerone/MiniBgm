@@ -139,6 +139,7 @@ data class SubjectDetailUiState(
     val totalEpisodes: Int = 0,
     val torrentResources: List<TorrentMediaResource> = emptyList(),
     val isTorrentLoading: Boolean = false,
+    val isTorrentEpisodeFilterIgnored: Boolean = false,
 )
 
 /** 条目/分集/收藏仓库流投影的中间态（私有于 [SubjectDetailViewModel]） */
@@ -248,6 +249,7 @@ class SubjectDetailViewModel(
     fun loadTorrentResources(
         episode: Episode? = null,
         forceRefresh: Boolean = false,
+        ignoreEpisodeFilter: Boolean = false,
     ) {
         val state = _uiState.value
         val subject = state.subject ?: return
@@ -258,23 +260,34 @@ class SubjectDetailViewModel(
                 it.copy(
                     torrentResources = emptyList(),
                     isTorrentLoading = false,
+                    isTorrentEpisodeFilterIgnored = ignoreEpisodeFilter,
                 )
             }
             return
         }
 
-        val targetEpisodeId = episode?.id ?: -1L
+        val targetEpisodeId = if (ignoreEpisodeFilter) -999L else (episode?.id ?: -1L)
         if (!forceRefresh &&
             lastLoadedTorrentSubjectId == subjectId &&
             lastLoadedTorrentEpisodeId == targetEpisodeId &&
-            state.torrentResources.isNotEmpty()
+            state.torrentResources.isNotEmpty() &&
+            state.isTorrentEpisodeFilterIgnored == ignoreEpisodeFilter
         ) {
             // 同一分集已就绪且非强制刷新：0ms 立即复用现有状态，杜绝重复调度与界面闪烁
             return
         }
 
         val title = subject.displayName
-        val primaryEpSort = episode?.episodeNumber
+        val primaryEpSort = if (ignoreEpisodeFilter) null else episode?.episodeNumber
+        val candidateSorts =
+            if (ignoreEpisodeFilter) {
+                emptyList()
+            } else {
+                listOfNotNull(
+                    episode?.ep?.takeIf { it > 0f },
+                    episode?.sort?.takeIf { it > 0f && it != episode.ep },
+                ).distinct().ifEmpty { listOfNotNull(primaryEpSort) }
+            }
         val altTitles =
             (
                 listOfNotNull(
@@ -290,6 +303,7 @@ class SubjectDetailViewModel(
                 // SWR 就地复用：已有数据且同一集时保持展示，仅在切换集数且无缓存时重置，彻底消灭全屏大转圈
                 torrentResources = if (hasExisting && lastLoadedTorrentEpisodeId == targetEpisodeId) it.torrentResources else emptyList(),
                 isTorrentLoading = true,
+                isTorrentEpisodeFilterIgnored = ignoreEpisodeFilter,
             )
         }
         lastLoadedTorrentSubjectId = subjectId
@@ -311,6 +325,7 @@ class SubjectDetailViewModel(
                                             subjectId = subjectId,
                                             rule = rule,
                                             forceRefresh = forceRefresh,
+                                            candidateEpisodeSorts = candidateSorts,
                                         )
                                     }
                                 }.awaitAll()
@@ -324,6 +339,7 @@ class SubjectDetailViewModel(
                     it.copy(
                         torrentResources = deduplicated,
                         isTorrentLoading = false,
+                        isTorrentEpisodeFilterIgnored = ignoreEpisodeFilter,
                     )
                 }
             }
@@ -331,7 +347,12 @@ class SubjectDetailViewModel(
 
     /** 手动刷新当前分集的种子资源（绕过本地内存缓存重新触网拉取） */
     fun refreshTorrentResources(episode: Episode? = null) {
-        loadTorrentResources(episode = episode, forceRefresh = true)
+        loadTorrentResources(episode = episode, forceRefresh = true, ignoreEpisodeFilter = false)
+    }
+
+    /** 取消当前集数过滤，展示该番剧检索到的全部种子资源（供手工选择兜底） */
+    fun showAllTorrentsWithoutEpisodeFilter(episode: Episode? = null) {
+        loadTorrentResources(episode = episode, forceRefresh = false, ignoreEpisodeFilter = true)
     }
 
     /** 计算「下一待看」分集：按客观播出状态与打卡进度推断，杜绝未播或已追平时倒退回第 1 集 */

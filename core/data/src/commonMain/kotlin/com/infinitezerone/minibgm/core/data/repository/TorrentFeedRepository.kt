@@ -36,6 +36,7 @@ interface TorrentFeedRepository {
         subjectId: Long = 0L,
         rule: PlaybackSourceRule? = null,
         forceRefresh: Boolean = false,
+        candidateEpisodeSorts: List<Float> = emptyList(),
     ): List<TorrentMediaResource>
 }
 
@@ -76,6 +77,7 @@ class TorrentFeedRepositoryImpl(
         subjectId: Long,
         rule: PlaybackSourceRule?,
         forceRefresh: Boolean,
+        candidateEpisodeSorts: List<Float>,
     ): List<TorrentMediaResource> {
         val cleanTitle = title.trim()
         if (cleanTitle.isBlank() && rule == null) return emptyList()
@@ -85,7 +87,14 @@ class TorrentFeedRepositoryImpl(
             return emptyList()
         }
 
-        val (epStr, epPadded) = formatEpisodeQueryStrings(episodeSort)
+        val effectiveCandidateSorts =
+            candidateEpisodeSorts
+                .filter { it > 0f }
+                .distinct()
+                .ifEmpty { listOfNotNull(episodeSort) }
+
+        val primaryEpSort = episodeSort ?: effectiveCandidateSorts.firstOrNull()
+        val (epStr, epPadded) = formatEpisodeQueryStrings(primaryEpSort)
 
         // 主标题优先，其后是按声明顺序去重后的别名；标题为空时保留一个空查询，
         // 兼容不依赖 {title} 占位符的固定 Feed 规则。
@@ -115,7 +124,7 @@ class TorrentFeedRepositoryImpl(
                         subjectId = subjectId,
                         triedUrls = triedUrls,
                         forceRefresh = forceRefresh,
-                        episodeSort = episodeSort,
+                        candidateSorts = effectiveCandidateSorts,
                         onFeedNonEmpty = { titlesWithNonEmptyFeed.add(queryTitle) },
                     )
             ) {
@@ -128,8 +137,8 @@ class TorrentFeedRepositoryImpl(
         // 阶段 2：若用户指定了分集、规则模板未包含 {ep}（如 Mikan/DMHY 等单页只返回最新 20 条的 RSS），
         // 且基础标题均未命中指定分集（说明较早的分集已被挤出第一页），
         // 则针对确实存在资源的标题追加带集数关键字定向检索（如 "标题 03"、"标题 3"）
-        if (episodeSort != null && !ruleHasEpPlaceholder && titlesWithNonEmptyFeed.isNotEmpty()) {
-            val epSpecificTitles = buildEpSpecificTitles(titlesWithNonEmptyFeed, epStr, epPadded)
+        if (effectiveCandidateSorts.isNotEmpty() && !ruleHasEpPlaceholder && titlesWithNonEmptyFeed.isNotEmpty()) {
+            val epSpecificTitles = buildEpSpecificTitles(titlesWithNonEmptyFeed, effectiveCandidateSorts)
             for (queryTitle in epSpecificTitles) {
                 when (
                     val outcome =
@@ -140,7 +149,7 @@ class TorrentFeedRepositoryImpl(
                             subjectId = subjectId,
                             triedUrls = triedUrls,
                             forceRefresh = forceRefresh,
-                            episodeSort = episodeSort,
+                            candidateSorts = effectiveCandidateSorts,
                         )
                 ) {
                     is SearchStepOutcome.Found -> return outcome.resources
@@ -171,16 +180,19 @@ class TorrentFeedRepositoryImpl(
 
     private fun buildEpSpecificTitles(
         titlesWithNonEmptyFeed: List<String>,
-        epStr: String,
-        epPadded: String,
-    ): List<String> =
-        titlesWithNonEmptyFeed
+        candidateSorts: List<Float>,
+    ): List<String> {
+        val queryPairs = candidateSorts.map { formatEpisodeQueryStrings(it) }
+        return titlesWithNonEmptyFeed
             .flatMap { base ->
-                listOfNotNull(
-                    "$base $epPadded",
-                    if (epPadded != epStr) "$base $epStr" else null,
-                )
+                queryPairs.flatMap { (epStr, epPadded) ->
+                    listOfNotNull(
+                        "$base $epPadded",
+                        if (epPadded != epStr) "$base $epStr" else null,
+                    )
+                }
             }.distinct()
+    }
 
     private suspend fun trySearchFeed(
         activeRule: PlaybackSourceRule,
@@ -189,7 +201,7 @@ class TorrentFeedRepositoryImpl(
         subjectId: Long,
         triedUrls: MutableSet<String>,
         forceRefresh: Boolean,
-        episodeSort: Float?,
+        candidateSorts: List<Float>,
         onFeedNonEmpty: (() -> Unit)? = null,
     ): SearchStepOutcome {
         val targetUrl =
@@ -204,7 +216,7 @@ class TorrentFeedRepositoryImpl(
             is FeedFetchResult.Success -> {
                 if (result.resources.isNotEmpty()) {
                     onFeedNonEmpty?.invoke()
-                    val filtered = filterAndSort(result.resources, episodeSort)
+                    val filtered = filterAndSort(result.resources, candidateSorts)
                     if (filtered.isNotEmpty()) {
                         SearchStepOutcome.Found(filtered)
                     } else {
@@ -304,11 +316,14 @@ class TorrentFeedRepositoryImpl(
 
     private fun filterAndSort(
         resources: List<TorrentMediaResource>,
-        episodeSort: Float?,
+        candidateSorts: List<Float>,
     ): List<TorrentMediaResource> {
         val filtered =
-            if (episodeSort != null) {
-                val matched = resources.filter { it.episodeSort == episodeSort }
+            if (candidateSorts.isNotEmpty()) {
+                val matched =
+                    resources.filter { res ->
+                        res.episodeSort != null && res.episodeSort in candidateSorts
+                    }
                 // 分集未命中时只回退到合集/BD 整包项（episodeSort == null），绝不回退整份 Feed：
                 // 否则请求第 5 集会看到第 1-4 集，点单文件资源还会被 Rust 侧「单一候选即选中」
                 // 静默播成第 1 集，用户全程无提示。

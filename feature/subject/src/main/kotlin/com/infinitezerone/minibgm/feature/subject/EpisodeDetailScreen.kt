@@ -806,6 +806,9 @@ fun EpisodeDetailScreen(
             isTorrentLoading = uiState.isTorrentLoading,
             onRequestNotificationPermission = requestDownloadNotification,
             onRefreshTorrent = { viewModel.refreshTorrentResources() },
+            isTorrentEpisodeFilterIgnored = uiState.isTorrentEpisodeFilterIgnored,
+            onShowAllTorrents = { viewModel.showAllTorrentsWithoutEpisodeFilter() },
+            onRestoreEpisodeFilter = { viewModel.refreshTorrentResources() },
             onDownloadStarted = {
                 coroutineScope.launch {
                     val result =
