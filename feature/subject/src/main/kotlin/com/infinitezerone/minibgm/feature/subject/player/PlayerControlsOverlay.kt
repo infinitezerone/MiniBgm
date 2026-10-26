@@ -718,21 +718,12 @@ private fun BoxScope.PlayerErrorState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(if (isLandscape) 10.dp else 6.dp),
     ) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.error.copy(alpha = 0.16f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.28f)),
-            modifier = Modifier.size(if (isLandscape) 44.dp else 36.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = BgmIcons.Warning,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(if (isLandscape) 22.dp else 18.dp),
-                )
-            }
-        }
+        Icon(
+            imageVector = BgmIcons.Warning,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(if (isLandscape) 32.dp else 26.dp),
+        )
 
         Text(
             text = stringResource(R.string.feature_subject_player_source_error_hint),

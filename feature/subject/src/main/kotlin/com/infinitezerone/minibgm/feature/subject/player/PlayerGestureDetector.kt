@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,7 +26,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -876,9 +874,9 @@ private fun FastForwardChip(
 }
 
 /**
- * 现代 YouTube 风格双击快进/快退指示器：
- * 移除大面积老式弧形涟漪遮罩，采用极简灵动药丸（居中偏侧），
- * 搭配微缩放、快进/快退双箭头与实时累加秒数（如 "10 秒" / "20 秒" / "30 秒"）。
+ * 现代极简双击快进/快退灵动胶囊（居中偏侧）：
+ * 告别笨重的 110dp 大黑圆盘，采用与顶部 HUD 一致的微药丸胶囊，
+ * 呈现轻盈通透的「<< 10 秒」/「10 秒 >>」交互反馈。
  */
 @Composable
 private fun YouTubeDoubleTapIndicator(
@@ -891,36 +889,44 @@ private fun YouTubeDoubleTapIndicator(
         contentAlignment = if (isLeft) Alignment.CenterStart else Alignment.CenterEnd,
     ) {
         Surface(
-            shape = CircleShape,
-            color = Color.Black.copy(alpha = 0.72f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+            shape = RoundedCornerShape(percent = 50),
+            color = Color.Black.copy(alpha = 0.82f),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
             contentColor = Color.White,
             modifier =
                 Modifier
-                    .padding(horizontal = 48.dp)
-                    .size(width = 110.dp, height = 110.dp),
+                    .padding(horizontal = 32.dp),
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
             ) {
-                Icon(
-                    imageVector = if (isLeft) BgmIcons.FastRewind else BgmIcons.FastForward,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(32.dp),
-                )
-                Spacer(modifier = Modifier.height(4.dp))
+                if (isLeft) {
+                    Icon(
+                        imageVector = BgmIcons.FastRewind,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
                 Text(
                     text = stringResource(R.string.feature_subject_player_seek_seconds_format, state.seconds),
                     style =
-                        MaterialTheme.typography.labelLarge.copy(
+                        MaterialTheme.typography.labelSmall.copy(
                             fontFeatureSettings = "tnum",
                         ),
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                 )
+                if (!isLeft) {
+                    Icon(
+                        imageVector = BgmIcons.FastForward,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
         }
     }
