@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +51,8 @@ internal fun SubjectHeaderActionRow(
     onShare: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val actionBorder = if (isDark) BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)) else null
     val isCollected = collection != null
     val collectLabel =
         if (isCollected) {
@@ -160,6 +164,7 @@ internal fun SubjectHeaderActionRow(
                 contentDescription = collectLabel,
                 size = 40.dp,
                 iconSize = 20.dp,
+                border = actionBorder,
                 contentColor =
                     if (isCollected) {
                         MaterialTheme.colorScheme.primary
@@ -185,6 +190,7 @@ internal fun SubjectHeaderActionRow(
                     ),
                 size = 40.dp,
                 iconSize = 20.dp,
+                border = actionBorder,
             )
         }
 
@@ -196,6 +202,7 @@ internal fun SubjectHeaderActionRow(
                 contentDescription = stringResource(R.string.feature_subject_share_title),
                 size = 40.dp,
                 iconSize = 20.dp,
+                border = actionBorder,
             )
         }
     }

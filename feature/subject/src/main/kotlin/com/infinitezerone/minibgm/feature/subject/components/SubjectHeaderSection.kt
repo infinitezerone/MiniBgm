@@ -2,22 +2,17 @@ package com.infinitezerone.minibgm.feature.subject.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -26,9 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,7 +35,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -326,7 +317,7 @@ fun SubjectHeaderCard(
             isLoggedIn = isLoggedIn,
             watchStatus = watchStatus,
             onPlayNext = onPlayNext,
-            onOpenEpisodePicker = onOpenEpisodePicker.takeIf { totalEpisodes > 0 },
+            onOpenEpisodePicker = onOpenEpisodePicker.takeIf { totalEpisodes > 0 || episodes.isNotEmpty() } ?: onOpenEpisodePicker,
             onOpenCollectionSheet = onOpenCollectionSheet,
             onPromptLogin = onPromptLogin,
             onShare = onShare,
@@ -400,19 +391,26 @@ fun SubjectHeaderCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
+                            val actionBorder =
+                                if (isDark) {
+                                    BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                                } else {
+                                    null
+                                }
+
                             if (isEpisodeLike && onDecrementWatched != null && currentEp > 0) {
-                                Text(
-                                    text = "-1",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier =
-                                        Modifier
-                                            .clip(RoundedCornerShape(4.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f))
-                                            .clickable(onClick = onDecrementWatched)
-                                            .padding(horizontal = 8.dp, vertical = 3.dp),
-                                )
+                                BgmCircleActionButton(
+                                    onClick = onDecrementWatched,
+                                    size = 28.dp,
+                                    border = actionBorder,
+                                ) {
+                                    Text(
+                                        text = "-1",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
                             }
 
                             if (isEpisodeLike && onIncrementWatched != null) {
@@ -422,8 +420,7 @@ fun SubjectHeaderCard(
                                     contentDescription = stringResource(R.string.feature_subject_check_in_next_ep),
                                     size = 28.dp,
                                     iconSize = 16.dp,
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    border = actionBorder,
                                 )
                             }
                         }
@@ -440,182 +437,6 @@ fun SubjectHeaderCard(
                             color = MaterialTheme.colorScheme.primary,
                             trackColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f),
                         )
-                    }
-                }
-            }
-        }
-
-        // 3. 首屏选集横向快轨（免弹窗直接浏览单集、快速进入播放源）
-        if (isEpisodeLike && episodes.isNotEmpty()) {
-            val currentEp = collection?.epStatus ?: 0
-            Spacer(modifier = Modifier.height(12.dp))
-            SubjectEpisodeRail(
-                episodes = episodes,
-                currentEp = currentEp,
-                totalEpisodes = if (totalEpisodes > 0) totalEpisodes else episodes.size,
-                onSelectEpisode = onSelectEpisode,
-                onOpenEpisodePicker = onOpenEpisodePicker,
-            )
-        }
-    }
-}
-
-/**
- * 首屏选集横向快轨：
- * 1. 紧随追番进度，横向展开最近正片分集卡片，支持原位点播与状态识别；
- * 2. 磁贴卡片高 52dp、宽 68dp，标准阶梯圆角 8dp，待看集点亮主色边框；
- * 3. 尾部提供全量选集抽屉快捷入口。
- */
-@Composable
-private fun SubjectEpisodeRail(
-    episodes: List<Episode>,
-    currentEp: Int,
-    totalEpisodes: Int,
-    onSelectEpisode: ((Episode) -> Unit)?,
-    onOpenEpisodePicker: (() -> Unit)?,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = stringResource(R.string.feature_subject_overview_episodes),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            if (onOpenEpisodePicker != null) {
-                Text(
-                    text =
-                        stringResource(
-                            R.string.feature_subject_player_total_episodes_count,
-                            totalEpisodes,
-                        ) + " ›",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier =
-                        Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable(onClick = onOpenEpisodePicker)
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        val railEpisodes =
-            remember(episodes) {
-                val mainEpisodes = episodes.filter { it.type == 0 }
-                if (mainEpisodes.isNotEmpty()) mainEpisodes.take(16) else episodes.take(16)
-            }
-
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(horizontal = 0.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            items(railEpisodes, key = { it.id }) { ep ->
-                val epInt = ep.episodeInt
-                val isWatched = currentEp > 0 && epInt in 1..currentEp
-                val isNext = epInt == currentEp + 1
-
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color =
-                        when {
-                            isNext -> MaterialTheme.colorScheme.primaryContainer
-                            isWatched -> MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
-                            else -> MaterialTheme.colorScheme.surfaceContainerLow
-                        },
-                    border =
-                        if (isNext) {
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                        } else {
-                            null
-                        },
-                    modifier =
-                        Modifier
-                            .size(width = 68.dp, height = 52.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onSelectEpisode?.invoke(ep) },
-                ) {
-                    Column(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 6.dp, vertical = 5.dp),
-                        verticalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text = "EP.${ep.sort.toInt()}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = if (isNext) FontWeight.ExtraBold else FontWeight.Bold,
-                                color =
-                                    when {
-                                        isNext -> MaterialTheme.colorScheme.onPrimaryContainer
-                                        isWatched -> MaterialTheme.colorScheme.primary
-                                        else -> MaterialTheme.colorScheme.onSurface
-                                    },
-                            )
-                            if (isWatched) {
-                                Icon(
-                                    imageVector = BgmIcons.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                            } else if (isNext) {
-                                Icon(
-                                    imageVector = BgmIcons.PlayArrow,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(12.dp),
-                                )
-                            }
-                        }
-
-                        val epTitle = ep.nameCn.ifBlank { ep.name }
-                        if (epTitle.isNotBlank()) {
-                            Text(
-                                text = epTitle,
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (onOpenEpisodePicker != null && totalEpisodes > railEpisodes.size) {
-                item(key = "rail_more") {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.35f),
-                        modifier =
-                            Modifier
-                                .size(width = 56.dp, height = 52.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable(onClick = onOpenEpisodePicker),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "更多 ›",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
                     }
                 }
             }

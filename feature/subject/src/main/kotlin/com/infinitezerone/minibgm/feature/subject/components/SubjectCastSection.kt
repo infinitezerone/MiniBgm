@@ -900,6 +900,7 @@ fun CharactersSection(
             CharacterSummaryList(
                 characters = visibleCharacters,
                 onCharacterClick = onCharacterClick,
+                onActorClick = onActorClick,
             )
         }
     }
@@ -912,6 +913,7 @@ private const val COLLAPSED_CHARACTER_COUNT = 4
 private fun CharacterSummaryList(
     characters: List<SubjectCharacter>,
     onCharacterClick: (Long) -> Unit,
+    onActorClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val chunked = remember(characters) { characters.chunked(2) }
@@ -928,7 +930,8 @@ private fun CharacterSummaryList(
                     Box(modifier = Modifier.weight(1f)) {
                         CharacterSummaryTile(
                             character = character,
-                            onClick = { onCharacterClick(character.id) },
+                            onCharacterClick = onCharacterClick,
+                            onActorClick = onActorClick,
                         )
                     }
                 }
@@ -943,32 +946,41 @@ private fun CharacterSummaryList(
 @Composable
 private fun CharacterSummaryTile(
     character: SubjectCharacter,
-    onClick: () -> Unit,
+    onCharacterClick: (Long) -> Unit,
+    onActorClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val firstActor = character.actors.firstOrNull()
+    val actorName = firstActor?.name.orEmpty()
+
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.35f),
-        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onCharacterClick(character.id) },
     ) {
         Row(
-            modifier = Modifier.padding(6.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             CoverImage(
                 url = character.images?.bestImage.orEmpty(),
                 contentDescription = character.name,
-                modifier = Modifier.size(width = 38.dp, height = 48.dp),
+                modifier = Modifier.size(width = 36.dp, height = 46.dp),
                 shape = RoundedCornerShape(4.dp),
-                aspectRatio = 0.76f,
+                aspectRatio = 0.78f,
                 alignment = Alignment.TopCenter,
                 placeholder = CoverPlaceholder.Person,
             )
 
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.Center,
             ) {
                 Text(
                     text = character.name,
@@ -978,24 +990,32 @@ private fun CharacterSummaryTile(
                     overflow = TextOverflow.Ellipsis,
                 )
 
-                val actorName =
-                    character.actors
-                        .firstOrNull()
-                        ?.name
-                        .orEmpty()
-                if (actorName.isNotBlank()) {
-                    Text(
-                        text = "CV: $actorName",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                if (firstActor != null && actorName.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.65f),
+                        modifier =
+                            Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable { onActorClick(firstActor.id) },
+                    ) {
+                        Text(
+                            text = "CV: $actorName",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                        )
+                    }
                 } else if (character.roleName.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = character.roleName,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -1130,6 +1150,7 @@ fun StaffSection(
     modifier: Modifier = Modifier,
 ) {
     var isExpanded by rememberSaveable { mutableStateOf(false) }
+    var selectingStaffForRelation by remember { mutableStateOf<Pair<String, List<SubjectPerson>>?>(null) }
     val entries =
         remember(persons) {
             persons
@@ -1145,6 +1166,20 @@ fun StaffSection(
         } else {
             entries.take(DEFAULT_STAFF_ENTRY_COUNT)
         }
+
+    val currentSelection = selectingStaffForRelation
+    if (currentSelection != null) {
+        val (relation, staffMembers) = currentSelection
+        StaffSelectionDialog(
+            relation = relation,
+            members = staffMembers,
+            onDismiss = { selectingStaffForRelation = null },
+            onPersonClick = { personId ->
+                selectingStaffForRelation = null
+                onPersonClick(personId)
+            },
+        )
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -1169,8 +1204,8 @@ fun StaffSection(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         rowStaff.forEach { (relation, staffMembers) ->
-                            val firstPerson = staffMembers.firstOrNull()
-                            val names = staffMembers.joinToString("、") { it.name }
+                            val isMulti = staffMembers.size > 1
+                            val singlePerson = if (!isMulti) staffMembers.firstOrNull() else null
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f),
@@ -1179,29 +1214,80 @@ fun StaffSection(
                                         .weight(1f)
                                         .clip(RoundedCornerShape(8.dp))
                                         .clickable {
-                                            if (firstPerson != null) onPersonClick(firstPerson.id)
+                                            if (singlePerson != null) {
+                                                onPersonClick(singlePerson.id)
+                                            } else if (isMulti) {
+                                                selectingStaffForRelation = relation to staffMembers
+                                            }
                                         },
                             ) {
                                 Column(
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalArrangement = Arrangement.spacedBy(2.dp),
                                 ) {
-                                    Text(
-                                        text = relation,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(
-                                        text = names,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = relation,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false),
+                                        )
+                                        if (isMulti) {
+                                            Text(
+                                                text = "${staffMembers.size}人",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            )
+                                        }
+                                    }
+
+                                    if (!isMulti && singlePerson != null) {
+                                        Text(
+                                            text = singlePerson.name,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    } else {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                                        ) {
+                                            staffMembers.forEachIndexed { index, person ->
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        text = person.name,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        modifier =
+                                                            Modifier
+                                                                .clip(RoundedCornerShape(4.dp))
+                                                                .clickable { onPersonClick(person.id) }
+                                                                .padding(horizontal = 1.dp, vertical = 1.dp),
+                                                    )
+                                                    if (index < staffMembers.lastIndex) {
+                                                        Text(
+                                                            text = "、",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1415,6 +1501,93 @@ fun CharacterImagePreviewDialog(
                         onDismiss()
                         onViewDetail(character.id)
                     }, text = stringResource(R.string.feature_subject_view_character_detail), variant = BgmPillVariant.Tonal)
+                }
+            }
+        }
+    }
+}
+
+/** 职位多人员席位选择弹窗：保证每一位主创均可直达主页 */
+@Composable
+private fun StaffSelectionDialog(
+    relation: String,
+    members: List<SubjectPerson>,
+    onDismiss: () -> Unit,
+    onPersonClick: (Long) -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .clip(RoundedCornerShape(16.dp)),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "$relation (${members.size}人)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    BgmGhostIconButton(
+                        onClick = onDismiss,
+                        icon = BgmIcons.Close,
+                        contentDescription = stringResource(DesignSystemR.string.core_designsystem_action_close),
+                        iconSize = 20.dp,
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    members.forEach { person ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.45f),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onPersonClick(person.id) },
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                CoverImage(
+                                    url = person.images?.bestImage.orEmpty(),
+                                    contentDescription = person.name,
+                                    modifier = Modifier.size(width = 32.dp, height = 40.dp),
+                                    shape = RoundedCornerShape(4.dp),
+                                    aspectRatio = 0.8f,
+                                    alignment = Alignment.TopCenter,
+                                    placeholder = CoverPlaceholder.Person,
+                                )
+                                Text(
+                                    text = person.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -130,39 +130,16 @@ internal fun OverviewTabPage(
     }
 }
 
-/** 智能段落折叠简介：纯净自然流，无多余灰框包裹。 */
+/** 智能段落折叠简介：纯净自然流，无多余灰框包裹。基于 maxLines = 4 平滑折叠。 */
 @Composable
 private fun SubjectSummarySection(
     summary: String,
     modifier: Modifier = Modifier,
 ) {
     var isExpanded by rememberSaveable { mutableStateOf(false) }
+    var hasOverflow by remember(summary) { mutableStateOf(false) }
 
-    val summaryBlocks =
-        remember(summary) {
-            summary.split(Regex("(?:\r?\n){2,}")).map { it.trim() }.filter { it.isNotEmpty() }
-        }
-
-    val collapsedPreview =
-        remember(summaryBlocks, summary) {
-            if (summaryBlocks.size > 1) {
-                val firstBlock = summaryBlocks[0]
-                if (firstBlock.length < 45 && summaryBlocks.size >= 2) {
-                    "$firstBlock\n\n${summaryBlocks[1]}"
-                } else {
-                    firstBlock
-                }
-            } else {
-                summary
-            }
-        }
-
-    val canExpand =
-        remember(summary, collapsedPreview, summaryBlocks) {
-            summaryBlocks.size > 1 || summary.length > 120 || summary.count { it == '\n' } >= 3
-        }
-
-    val displayText = if (isExpanded || !canExpand) summary else collapsedPreview
+    val canExpand = hasOverflow || summary.length > 80 || summary.count { it == '\n' } >= 3
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -176,12 +153,17 @@ private fun SubjectSummarySection(
         )
 
         Text(
-            text = displayText,
+            text = summary,
             style = MaterialTheme.typography.bodyMedium,
             color = onSurfaceBodyColor(),
-            maxLines = if (isExpanded || !canExpand) Int.MAX_VALUE else 4,
+            maxLines = if (isExpanded) Int.MAX_VALUE else 4,
             overflow = TextOverflow.Ellipsis,
             lineHeight = 24.sp,
+            onTextLayout = { textLayoutResult ->
+                if (!hasOverflow && (textLayoutResult.hasVisualOverflow || textLayoutResult.lineCount > 4)) {
+                    hasOverflow = true
+                }
+            },
             modifier = Modifier.fillMaxWidth().animateContentSize(),
         )
 
