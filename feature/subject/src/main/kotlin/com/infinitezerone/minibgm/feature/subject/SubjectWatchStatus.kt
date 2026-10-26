@@ -34,6 +34,7 @@ sealed interface SubjectWatchStatus {
     data class Completed(
         val totalEpisodes: Int,
         val lastEpisode: Episode?,
+        val firstEpisode: Episode? = null,
     ) : SubjectWatchStatus
 
     /** 暂无分集数据或非分集类型 */
@@ -92,5 +93,6 @@ fun computeSubjectWatchStatus(
     return SubjectWatchStatus.Completed(
         totalEpisodes = mainEpisodes.size,
         lastEpisode = airedEpisodes.lastOrNull(),
+        firstEpisode = mainEpisodes.firstOrNull(),
     )
 }

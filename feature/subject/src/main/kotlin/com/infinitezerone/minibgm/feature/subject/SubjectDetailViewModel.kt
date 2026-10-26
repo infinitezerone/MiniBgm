@@ -340,7 +340,7 @@ class SubjectDetailViewModel(
         return when (val status = computeSubjectWatchStatus(state.episodes, state.collection)) {
             is SubjectWatchStatus.ContinueWatching -> status.nextEpisode
             is SubjectWatchStatus.CaughtUp -> status.lastWatchedEpisode
-            is SubjectWatchStatus.Completed -> status.lastEpisode
+            is SubjectWatchStatus.Completed -> status.firstEpisode ?: status.lastEpisode
             is SubjectWatchStatus.Upcoming -> null
             SubjectWatchStatus.None -> state.episodes.firstOrNull()
         }

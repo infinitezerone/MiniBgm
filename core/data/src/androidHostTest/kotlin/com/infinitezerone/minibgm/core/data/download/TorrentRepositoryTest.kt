@@ -5,7 +5,6 @@ import com.infinitezerone.minibgm.core.data.repository.AndroidTorrentRepository
 import com.infinitezerone.minibgm.core.model.DownloadState
 import com.infinitezerone.minibgm.core.model.TorrentStreamState
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
-import com.infinitezerone.minibgm.core.network.AssetDownloadService
 import com.infinitezerone.minibgm.core.testing.repository.FakeTorrentRepository
 import com.infinitezerone.minibgm.core.testing.repository.FakeTorrentStreamEngine
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -74,7 +73,7 @@ class TorrentRepositoryTest {
         }
 
     @Test
-    fun androidTorrentRepository_downloadsStreamToFile_andReusesCachedTorrentFile() =
+    fun androidTorrentRepository_downloadTorrentFile_reusesCachedTorrentFileWithoutRefetch() =
         runTest {
             val tempRoot = Files.createTempDirectory("minibgm_torrent_repo_test").toFile()
             try {
@@ -110,45 +109,19 @@ class TorrentRepositoryTest {
                         override fun cancelDownload() = Unit
                     }
 
-                val streamPayload = ByteArray(4096) { (it % 251).toByte() }
-                val streamService =
-                    object : AssetDownloadService {
-                        override suspend fun streamAsset(
-                            url: String,
-                            rangeStart: Long,
-                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                        ): Long {
-                            onChunk(streamPayload, streamPayload.size, streamPayload.size.toLong(), false)
-                            return streamPayload.size.toLong()
-                        }
-                    }
-
-                val streamEngine = FakeTorrentStreamEngine(initialInstalled = true)
                 val repo =
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
-                        streamEngine = streamEngine,
+                        streamEngine = FakeTorrentStreamEngine(initialInstalled = true),
                         torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
                         startForegroundService = { _, _, _ -> },
                     )
 
-                val taskId =
-                    repo.startDownload(
-                        title = "[Sakurato] Steel Ball Run [04]",
-                        magnetUrl = "magnet:?xt=urn:btih:0327ac7116411c81f53636b41710246754a503b5",
-                        torrentUrl = "https://mikanani.me/Download/04.torrent",
-                        totalBytes = 0L,
-                    )
-
-                val completedTask = repo.tasks.value.single { it.id == taskId }
-                assertEquals(TorrentTaskStatus.COMPLETED, completedTask.status)
-                assertEquals(streamPayload.size.toLong(), completedTask.downloadedBytes)
-                assertEquals(streamPayload.size.toLong(), completedTask.totalBytes)
-                assertTrue(File(completedTask.savePath).isFile)
-                assertEquals(streamPayload.size.toLong(), File(completedTask.savePath).length())
+                val firstTorrent =
+                    repo.downloadTorrentFile("https://mikanani.me/Download/04.torrent", "[Sakurato] Steel Ball Run [04]")
+                assertTrue(firstTorrent.isSuccess)
                 assertEquals(1, torrentDownloadCalls.get())
 
                 // Second call to downloadTorrentFile with same title must reuse cached .torrent without network request
@@ -161,8 +134,62 @@ class TorrentRepositoryTest {
             }
         }
 
+    /** 磁盘写入全部由 librqbit 直接执行；引擎未暴露目标路径时必须快速失败，不得挂起或回退旧路径。 */
     @Test
-    fun androidTorrentRepository_directEngineDiskMode_skipsLoopbackCopy_protectsSession_queuesAndPersists() =
+    fun androidTorrentRepository_engineWithoutTargetPath_failsFast() =
+        runTest {
+            val tempRoot = Files.createTempDirectory("minibgm_no_target_path_test").toFile()
+            try {
+                val context =
+                    object : ContextWrapper(null) {
+                        override fun getFilesDir(): File = File(tempRoot, "files").apply { mkdirs() }
+
+                        override fun getCacheDir(): File = File(tempRoot, "cache").apply { mkdirs() }
+
+                        override fun getExternalFilesDir(type: String?): File = File(tempRoot, "ext_files").apply { mkdirs() }
+                    }
+
+                val downloader =
+                    object : AssetDownloader {
+                        override val downloadState: StateFlow<DownloadState> = MutableStateFlow(DownloadState.Idle)
+
+                        override suspend fun downloadAsset(
+                            rawUrl: String,
+                            destinationPath: String,
+                            customMirrorPrefix: String?,
+                        ): DownloadState = DownloadState.Completed(destinationPath, 64L)
+
+                        override fun cancelDownload() = Unit
+                    }
+
+                val streamEngine = FakeTorrentStreamEngine(initialInstalled = true)
+                val repo =
+                    AndroidTorrentRepository(
+                        context = context,
+                        assetDownloader = downloader,
+                        streamEngine = streamEngine,
+                        torrentTaskDao = FakeTorrentTaskDao(),
+                        ioDispatcher = UnconfinedTestDispatcher(testScheduler),
+                        startForegroundService = { _, _, _ -> },
+                    )
+
+                val taskId =
+                    repo.startDownload(
+                        title = "No Target Path",
+                        magnetUrl = "magnet:?xt=urn:btih:0327ac7116411c81f53636b41710246754a503b5",
+                        totalBytes = 0L,
+                    )
+
+                val task = repo.tasks.value.single { it.id == taskId }
+                assertEquals(TorrentTaskStatus.ERROR, task.status)
+                assertFalse(streamEngine.isDownloadSessionProtected(), "失败后必须解除下载会话保护")
+            } finally {
+                tempRoot.deleteRecursively()
+            }
+        }
+
+    @Test
+    fun androidTorrentRepository_directEngineDiskMode_protectsSession_queuesAndPersists() =
         runTest {
             val tempRoot = Files.createTempDirectory("minibgm_torrent_direct_test").toFile()
             try {
@@ -194,19 +221,6 @@ class TorrentRepositoryTest {
                         override fun cancelDownload() = Unit
                     }
 
-                val loopbackStreamCalls = AtomicInteger(0)
-                val streamService =
-                    object : AssetDownloadService {
-                        override suspend fun streamAsset(
-                            url: String,
-                            rangeStart: Long,
-                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                        ): Long {
-                            loopbackStreamCalls.incrementAndGet()
-                            return 0L
-                        }
-                    }
-
                 val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
                 val nativeMkvFile =
                     File(downloadDir, "[Sakurato] Steel Ball Run [04][1080p].mkv").apply {
@@ -223,7 +237,6 @@ class TorrentRepositoryTest {
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
                         streamEngine = streamEngine,
                         torrentTaskDao = fakeDao,
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -286,7 +299,7 @@ class TorrentRepositoryTest {
                 )
 
                 // 4. Native engine reports intermediate and 100% piece completion -> connectedPeers is propagated,
-                //    task 1 completes with zero HTTP loopback copy, and task 2 automatically dequeues into DOWNLOADING
+                //    task 1 completes via direct engine disk mode, and task 2 automatically dequeues into DOWNLOADING
                 streamEngine.emitStreamState(
                     com.infinitezerone.minibgm.core.model.TorrentStreamState.Buffering(
                         progress = 0.5f,
@@ -313,7 +326,6 @@ class TorrentRepositoryTest {
                     ),
                 )
 
-                assertEquals(0, loopbackStreamCalls.get(), "Direct engine disk mode must not copy video over HTTP loopback")
                 val completedTask1 = repo.tasks.value.single { it.id == taskId1 }
                 assertEquals(TorrentTaskStatus.COMPLETED, completedTask1.status)
                 assertEquals(8192L, completedTask1.downloadedBytes)
@@ -331,7 +343,6 @@ class TorrentRepositoryTest {
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
                         streamEngine = streamEngine,
                         torrentTaskDao = fakeDao,
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -388,15 +399,6 @@ class TorrentRepositoryTest {
                         override fun cancelDownload() = Unit
                     }
 
-                val streamService =
-                    object : AssetDownloadService {
-                        override suspend fun streamAsset(
-                            url: String,
-                            rangeStart: Long,
-                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                        ): Long = 0L
-                    }
-
                 val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
                 val nativeMkvFile = File(downloadDir, "[BlackClover] 171.mkv")
 
@@ -409,7 +411,6 @@ class TorrentRepositoryTest {
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
                         streamEngine = streamEngine,
                         torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -488,15 +489,6 @@ class TorrentRepositoryTest {
                         override fun cancelDownload() = Unit
                     }
 
-                val streamService =
-                    object : AssetDownloadService {
-                        override suspend fun streamAsset(
-                            url: String,
-                            rangeStart: Long,
-                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                        ): Long = 0L
-                    }
-
                 val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
                 val streamEngine =
                     FakeTorrentStreamEngine(initialInstalled = true).apply {
@@ -507,7 +499,6 @@ class TorrentRepositoryTest {
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
                         streamEngine = streamEngine,
                         torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -591,15 +582,6 @@ class TorrentRepositoryTest {
                         override fun cancelDownload() = Unit
                     }
 
-                val streamService =
-                    object : AssetDownloadService {
-                        override suspend fun streamAsset(
-                            url: String,
-                            rangeStart: Long,
-                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                        ): Long = 0L
-                    }
-
                 val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
                 val streamEngine =
                     FakeTorrentStreamEngine(initialInstalled = true).apply {
@@ -612,7 +594,6 @@ class TorrentRepositoryTest {
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
                         streamEngine = streamEngine,
                         torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -691,15 +672,6 @@ class TorrentRepositoryTest {
                         override fun cancelDownload() = Unit
                     }
 
-                val streamService =
-                    object : AssetDownloadService {
-                        override suspend fun streamAsset(
-                            url: String,
-                            rangeStart: Long,
-                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                        ): Long = 0L
-                    }
-
                 val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
                 val streamEngine =
                     FakeTorrentStreamEngine(initialInstalled = true).apply {
@@ -711,7 +683,6 @@ class TorrentRepositoryTest {
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
                         streamEngine = streamEngine,
                         torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -766,15 +737,6 @@ class TorrentRepositoryTest {
                         override fun cancelDownload() = Unit
                     }
 
-                val streamService =
-                    object : AssetDownloadService {
-                        override suspend fun streamAsset(
-                            url: String,
-                            rangeStart: Long,
-                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                        ): Long = 0L
-                    }
-
                 // Fake 引擎：有 connectedPeers = 2，但 speedBytesPerSec = 0，downloadedBytes = 0
                 val streamEngine =
                     FakeTorrentStreamEngine(initialInstalled = true).apply {
@@ -785,7 +747,6 @@ class TorrentRepositoryTest {
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
                         streamEngine = streamEngine,
                         torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -857,15 +818,6 @@ class TorrentRepositoryTest {
                         override fun cancelDownload() = Unit
                     }
 
-                val streamService =
-                    object : AssetDownloadService {
-                        override suspend fun streamAsset(
-                            url: String,
-                            rangeStart: Long,
-                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                        ): Long = 0L
-                    }
-
                 val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
                 val streamEngine =
                     FakeTorrentStreamEngine(initialInstalled = true).apply {
@@ -876,7 +828,6 @@ class TorrentRepositoryTest {
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
                         streamEngine = streamEngine,
                         torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -955,15 +906,6 @@ class TorrentRepositoryTest {
                         override fun cancelDownload() = Unit
                     }
 
-                val streamService =
-                    object : AssetDownloadService {
-                        override suspend fun streamAsset(
-                            url: String,
-                            rangeStart: Long,
-                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                        ): Long = 0L
-                    }
-
                 val fakeDao = FakeTorrentTaskDao()
                 // 先在 DAO 中存入一个持久化任务
                 fakeDao.upsertTask(
@@ -999,7 +941,6 @@ class TorrentRepositoryTest {
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
                         streamEngine = streamEngine,
                         torrentTaskDao = fakeDao,
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -1050,15 +991,6 @@ class TorrentRepositoryTest {
                         override fun cancelDownload() = Unit
                     }
 
-                val streamService =
-                    object : AssetDownloadService {
-                        override suspend fun streamAsset(
-                            url: String,
-                            rangeStart: Long,
-                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                        ): Long = 0L
-                    }
-
                 val downloadDir = File(context.getExternalFilesDir(null), "downloads").apply { mkdirs() }
                 val streamEngine =
                     FakeTorrentStreamEngine(initialInstalled = true).apply {
@@ -1069,7 +1001,6 @@ class TorrentRepositoryTest {
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
                         streamEngine = streamEngine,
                         torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -1146,15 +1077,6 @@ class TorrentRepositoryTest {
                         override fun cancelDownload() = Unit
                     }
 
-                val streamService =
-                    object : AssetDownloadService {
-                        override suspend fun streamAsset(
-                            url: String,
-                            rangeStart: Long,
-                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                        ): Long = 0L
-                    }
-
                 // 起播永不就绪（死种）：任务停留在 RESOLVING，永远拿不到可播地址
                 val streamEngine =
                     FakeTorrentStreamEngine(initialInstalled = true).apply {
@@ -1165,7 +1087,6 @@ class TorrentRepositoryTest {
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
                         streamEngine = streamEngine,
                         torrentTaskDao = FakeTorrentTaskDao(),
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -1228,15 +1149,6 @@ class TorrentRepositoryTest {
                         override fun cancelDownload() = Unit
                     }
 
-                val streamService =
-                    object : AssetDownloadService {
-                        override suspend fun streamAsset(
-                            url: String,
-                            rangeStart: Long,
-                            onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                        ): Long = 0L
-                    }
-
                 // DB 里留着一个「路径存在但载荷非法」的种子：镜像返回 HTTP 200 的 HTML 错误页，
                 // AssetDownloader 只按字节数判成功，历史上会被永久复用。
                 val staleTorrent =
@@ -1279,7 +1191,6 @@ class TorrentRepositoryTest {
                     AndroidTorrentRepository(
                         context = context,
                         assetDownloader = downloader,
-                        assetDownloadService = streamService,
                         streamEngine = streamEngine,
                         torrentTaskDao = fakeDao,
                         ioDispatcher = UnconfinedTestDispatcher(testScheduler),
@@ -1358,18 +1269,9 @@ class TorrentRepositoryTest {
 
                 override fun cancelDownload() = Unit
             }
-        val streamService =
-            object : AssetDownloadService {
-                override suspend fun streamAsset(
-                    url: String,
-                    rangeStart: Long,
-                    onChunk: suspend (bytes: ByteArray, length: Int, totalBytes: Long, isPartial: Boolean) -> Unit,
-                ): Long = 0L
-            }
         return AndroidTorrentRepository(
             context = context,
             assetDownloader = downloader,
-            assetDownloadService = streamService,
             streamEngine = FakeTorrentStreamEngine(initialInstalled = true),
             torrentTaskDao = dao,
             ioDispatcher = UnconfinedTestDispatcher(testScheduler),

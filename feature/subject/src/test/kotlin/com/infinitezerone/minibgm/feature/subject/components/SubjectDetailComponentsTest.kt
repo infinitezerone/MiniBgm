@@ -21,6 +21,7 @@ import com.infinitezerone.minibgm.core.testing.data.sampleSubject
 import com.infinitezerone.minibgm.core.testing.data.sampleUserCollection
 import com.infinitezerone.minibgm.feature.subject.SubjectDetailUiState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -277,5 +278,163 @@ class SubjectDetailComponentsTest {
         composeTestRule.onNodeWithText("客串 (1)").performClick()
         composeTestRule.onNodeWithText("客串C").assertIsDisplayed()
         composeTestRule.onNodeWithText("主角A").assertDoesNotExist()
+    }
+
+    @Test
+    fun subject_header_action_row_shows_upcoming_status() {
+        val sampleEp1 =
+            com.infinitezerone.minibgm.core.model
+                .Episode(id = 1L, sort = 1f, ep = 1f)
+        var upcomingPlayClicked = false
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                SubjectHeaderActionRow(
+                    subjectType = com.infinitezerone.minibgm.core.model.SubjectType.ANIME,
+                    isEpisodeLike = true,
+                    collection = null,
+                    isLoggedIn = true,
+                    watchStatus =
+                        com.infinitezerone.minibgm.feature.subject.SubjectWatchStatus.Upcoming(
+                            firstEpisode = sampleEp1,
+                            airDate = "2026-10-28",
+                        ),
+                    onPlayNext = { upcomingPlayClicked = true },
+                    onOpenEpisodePicker = {},
+                    onOpenCollectionSheet = {},
+                    onPromptLogin = {},
+                    onShare = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("未开播 (10-28)").assertIsDisplayed()
+        assertFalse(upcomingPlayClicked)
+    }
+
+    @Test
+    fun subject_header_action_row_shows_start_watching_status() {
+        val sampleEp1 =
+            com.infinitezerone.minibgm.core.model
+                .Episode(id = 1L, sort = 1f, ep = 1f)
+        var startPlayClicked = false
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                SubjectHeaderActionRow(
+                    subjectType = com.infinitezerone.minibgm.core.model.SubjectType.ANIME,
+                    isEpisodeLike = true,
+                    collection = null,
+                    isLoggedIn = true,
+                    watchStatus =
+                        com.infinitezerone.minibgm.feature.subject.SubjectWatchStatus.ContinueWatching(
+                            nextEpisode = sampleEp1,
+                            remainingAiredEpisodes = 12,
+                        ),
+                    onPlayNext = { startPlayClicked = true },
+                    onOpenEpisodePicker = {},
+                    onOpenCollectionSheet = {},
+                    onPromptLogin = {},
+                    onShare = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("开始观看 第 1 话").assertIsDisplayed().performClick()
+        assertTrue(startPlayClicked)
+    }
+
+    @Test
+    fun subject_header_action_row_shows_continue_watching_status() {
+        val sampleEp4 =
+            com.infinitezerone.minibgm.core.model
+                .Episode(id = 4L, sort = 4f, ep = 4f)
+        var continuePlayClicked = false
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                SubjectHeaderActionRow(
+                    subjectType = com.infinitezerone.minibgm.core.model.SubjectType.ANIME,
+                    isEpisodeLike = true,
+                    collection = sampleUserCollection.copy(epStatus = 3),
+                    isLoggedIn = true,
+                    watchStatus =
+                        com.infinitezerone.minibgm.feature.subject.SubjectWatchStatus.ContinueWatching(
+                            nextEpisode = sampleEp4,
+                            remainingAiredEpisodes = 2,
+                        ),
+                    onPlayNext = { continuePlayClicked = true },
+                    onOpenEpisodePicker = {},
+                    onOpenCollectionSheet = {},
+                    onPromptLogin = {},
+                    onShare = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("继续观看 第 4 话").assertIsDisplayed().performClick()
+        assertTrue(continuePlayClicked)
+    }
+
+    @Test
+    fun subject_header_action_row_shows_caught_up_status() {
+        val sampleEp3 =
+            com.infinitezerone.minibgm.core.model
+                .Episode(id = 3L, sort = 3f, ep = 3f)
+        val sampleEp4 =
+            com.infinitezerone.minibgm.core.model
+                .Episode(id = 4L, sort = 4f, ep = 4f)
+        var caughtUpPlayClicked = false
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                SubjectHeaderActionRow(
+                    subjectType = com.infinitezerone.minibgm.core.model.SubjectType.ANIME,
+                    isEpisodeLike = true,
+                    collection = null,
+                    isLoggedIn = true,
+                    watchStatus =
+                        com.infinitezerone.minibgm.feature.subject.SubjectWatchStatus.CaughtUp(
+                            lastWatchedEpisode = sampleEp3,
+                            nextAirEpisode = sampleEp4,
+                            nextAirDate = "2026-10-28",
+                        ),
+                    onPlayNext = { caughtUpPlayClicked = true },
+                    onOpenEpisodePicker = {},
+                    onOpenCollectionSheet = {},
+                    onPromptLogin = {},
+                    onShare = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("已追平 · 重温第 3 话").assertIsDisplayed().performClick()
+        assertTrue(caughtUpPlayClicked)
+    }
+
+    @Test
+    fun subject_header_action_row_shows_completed_status() {
+        val sampleEp1 =
+            com.infinitezerone.minibgm.core.model
+                .Episode(id = 1L, sort = 1f, ep = 1f)
+        val sampleEp4 =
+            com.infinitezerone.minibgm.core.model
+                .Episode(id = 4L, sort = 4f, ep = 4f)
+        var completedPlayClicked = false
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                SubjectHeaderActionRow(
+                    subjectType = com.infinitezerone.minibgm.core.model.SubjectType.ANIME,
+                    isEpisodeLike = true,
+                    collection = null,
+                    isLoggedIn = true,
+                    watchStatus =
+                        com.infinitezerone.minibgm.feature.subject.SubjectWatchStatus.Completed(
+                            totalEpisodes = 12,
+                            lastEpisode = sampleEp4,
+                            firstEpisode = sampleEp1,
+                        ),
+                    onPlayNext = { completedPlayClicked = true },
+                    onOpenEpisodePicker = {},
+                    onOpenCollectionSheet = {},
+                    onPromptLogin = {},
+                    onShare = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("从头重温").assertIsDisplayed().performClick()
+        assertTrue(completedPlayClicked)
     }
 }

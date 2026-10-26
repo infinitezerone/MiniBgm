@@ -1829,9 +1829,29 @@ class SubjectDetailViewModelTest {
                     Episode(id = 401, sort = 1f, ep = 1f, airdate = "2020-01-01"),
                     Episode(id = 402, sort = 2f, ep = 2f, airdate = "2020-01-08"),
                 )
+            val collectionRepo =
+                FakeCollectionRepository().apply {
+                    sendCollection(sampleUserCollection.copy(epStatus = 2))
+                }
+            val repository =
+                FakeSubjectRepository().apply {
+                    sendSubject(sampleSubject)
+                    sendEpisodes(sampleSubject.id, episodes)
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = collectionRepo,
+                    communityRepository = FakeCommunityRepository(),
+                )
+
             val status = computeSubjectWatchStatus(episodes, sampleUserCollection.copy(epStatus = 2))
             assertTrue(status is SubjectWatchStatus.Completed)
-            assertEquals(2, (status as SubjectWatchStatus.Completed).totalEpisodes)
-            assertEquals(402L, status.lastEpisode?.id)
+            val completed = status as SubjectWatchStatus.Completed
+            assertEquals(2, completed.totalEpisodes)
+            assertEquals(402L, completed.lastEpisode?.id)
+            assertEquals(401L, completed.firstEpisode?.id)
+            assertEquals(401L, viewModel.nextEpisodeToWatch()?.id)
         }
 }

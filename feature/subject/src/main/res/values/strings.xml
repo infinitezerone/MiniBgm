@@ -57,6 +57,11 @@
     <string name="feature_subject_resume_watch">续看 E%1$s</string>
     <string name="feature_subject_continue_watching">继续观看</string>
     <string name="feature_subject_start_watching">开始观看</string>
+    <string name="feature_subject_action_continue_with_ep">继续观看 第 %1$d 话</string>
+    <string name="feature_subject_action_start_with_ep">开始观看 第 %1$d 话</string>
+    <string name="feature_subject_action_caught_up_rewatch">已追平 · 重温第 %1$d 话</string>
+    <string name="feature_subject_action_upcoming">尚未开播</string>
+    <string name="feature_subject_action_upcoming_with_date">未开播 (%1$s)</string>
     <string name="feature_subject_action_pick_episode">选集</string>
     <string name="feature_subject_action_pick_volume">选卷</string>
     <string name="feature_subject_action_pick_track">选曲</string>

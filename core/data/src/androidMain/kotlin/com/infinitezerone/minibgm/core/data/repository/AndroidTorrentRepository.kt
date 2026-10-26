@@ -3,7 +3,6 @@ package com.infinitezerone.minibgm.core.data.repository
 import android.content.Context
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.download.AssetDownloader
-import com.infinitezerone.minibgm.core.data.download.DOWNLOAD_TEMP_SUFFIX
 import com.infinitezerone.minibgm.core.data.download.TorrentDownloadService
 import com.infinitezerone.minibgm.core.data.download.TorrentFileCache
 import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
@@ -15,7 +14,6 @@ import com.infinitezerone.minibgm.core.model.TorrentTask
 import com.infinitezerone.minibgm.core.model.TorrentTaskStatus
 import com.infinitezerone.minibgm.core.model.magnetInfoHash
 import com.infinitezerone.minibgm.core.model.torrentEpisodeKey
-import com.infinitezerone.minibgm.core.network.AssetDownloadService
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -42,13 +40,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.io.IOException
-import java.io.RandomAccessFile
 import java.util.UUID
 
 class AndroidTorrentRepository(
     private val context: Context,
     private val assetDownloader: AssetDownloader,
-    private val assetDownloadService: AssetDownloadService,
     private val streamEngine: TorrentStreamEngine,
     private val torrentTaskDao: TorrentTaskDao,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -380,21 +376,28 @@ class AndroidTorrentRepository(
         val streamUrl = startEngineForTask(task, localTorrentPath, taskId) ?: return
 
         val nativeTargetPath = streamEngine.getActiveTargetFilePath()?.takeIf { it.isNotBlank() }
+        if (nativeTargetPath == null) {
+            // 磁盘写入完全由 librqbit 在 saveDir 下直接执行；引擎未暴露目标文件路径说明会话异常。
+            // 快速失败收敛为 ERROR，不再回退到「回环 HTTP 流式拷贝落盘」的旧路径。
+            logger.e { "任务 $taskId 原生引擎未暴露落盘路径，无法继续下载" }
+            markTaskFailed(taskId, "BT 引擎未返回目标文件路径")
+            withContext(NonCancellable) {
+                streamEngine.setDownloadSessionProtected(false)
+                streamEngine.stopStream(force = false)
+            }
+            return
+        }
         updateTask(taskId) {
             it.copy(
                 status = TorrentTaskStatus.DOWNLOADING,
                 errorMessage = null,
                 streamUrl = streamUrl,
-                savePath = nativeTargetPath ?: it.savePath,
+                savePath = nativeTargetPath,
             )
         }
 
-        // 4. 若原生引擎已暴露真实落盘路径，直接监听 librqbit 分片进度；单测 Fake 回退至流式落盘
-        if (nativeTargetPath != null) {
-            monitorDirectEngineDownload(taskId, File(nativeTargetPath))
-        } else {
-            downloadStreamToFile(taskId, streamUrl, File(task.savePath))
-        }
+        // 4. 直接监听 librqbit 分片进度（分片落盘全部由原生引擎完成）
+        monitorDirectEngineDownload(taskId, File(nativeTargetPath))
     }
 
     private suspend fun resolveValidTorrentPath(
@@ -614,156 +617,6 @@ class AndroidTorrentRepository(
         }
     }
 
-    private suspend fun downloadStreamToFile(
-        taskId: String,
-        streamUrl: String,
-        targetFile: File,
-    ) {
-        val tempFile = File("${targetFile.absolutePath}$DOWNLOAD_TEMP_SUFFIX")
-        tempFile.parentFile?.mkdirs()
-        val existingBytes = if (tempFile.exists()) tempFile.length() else 0L
-
-        var lastEmitTime = 0L
-        var lastSpeedCalcTime = System.currentTimeMillis()
-        var bytesSinceLastSpeed = 0L
-        var currentSpeed = 0L
-
-        // 同步监听 P2P 引擎原生状态：在顺序流等待分片 0 期间也能实时反馈 P2P 真实总大小、已缓冲字节与速率
-        val statsObserverJob =
-            scope.launch {
-                streamEngine.streamState.collect { state ->
-                    when (state) {
-                        is TorrentStreamState.Ready -> {
-                            if (state.totalBytes > 0L || state.connectedPeers > 0) {
-                                updateTask(taskId, persist = false) {
-                                    if (it.status == TorrentTaskStatus.DOWNLOADING) {
-                                        it.copy(
-                                            totalBytes = if (state.totalBytes > 0L) state.totalBytes else it.totalBytes,
-                                            connectedPeers = state.connectedPeers,
-                                        )
-                                    } else {
-                                        it
-                                    }
-                                }
-                            }
-                        }
-
-                        is TorrentStreamState.Buffering -> {
-                            updateTask(taskId, persist = false) {
-                                if (it.status == TorrentTaskStatus.DOWNLOADING) {
-                                    it.copy(
-                                        downloadedBytes = maxOf(it.downloadedBytes, state.bufferedBytes),
-                                        totalBytes = if (state.targetBytes > 0L) state.targetBytes else it.totalBytes,
-                                        downloadSpeedBytesPerSec =
-                                            if (state.speedBytesPerSec > 0L) {
-                                                state.speedBytesPerSec
-                                            } else {
-                                                it.downloadSpeedBytesPerSec
-                                            },
-                                        connectedPeers = state.connectedPeers,
-                                    )
-                                } else {
-                                    it
-                                }
-                            }
-                        }
-
-                        else -> Unit
-                    }
-                }
-            }
-
-        try {
-            val raf = RandomAccessFile(tempFile, "rw")
-            var currentDownloaded = existingBytes
-            var finalTotalBytes = -1L
-            var isFirstChunk = true
-
-            try {
-                assetDownloadService.streamAsset(
-                    url = streamUrl,
-                    rangeStart = existingBytes,
-                ) { chunk, length, totalBytes, isPartial ->
-                    if (isFirstChunk) {
-                        isFirstChunk = false
-                        if (!isPartial) {
-                            raf.setLength(0L)
-                            raf.seek(0L)
-                            currentDownloaded = 0L
-                        } else {
-                            raf.seek(existingBytes)
-                            currentDownloaded = existingBytes
-                        }
-                    }
-
-                    raf.write(chunk, 0, length)
-                    currentDownloaded += length
-                    finalTotalBytes = totalBytes
-                    bytesSinceLastSpeed += length
-
-                    val now = System.currentTimeMillis()
-                    if (now - lastSpeedCalcTime >= 1000) {
-                        val elapsed = now - lastSpeedCalcTime
-                        currentSpeed = if (elapsed > 0) (bytesSinceLastSpeed * 1000) / elapsed else 0L
-                        lastSpeedCalcTime = now
-                        bytesSinceLastSpeed = 0L
-                    }
-
-                    if (now - lastEmitTime >= 500 || (finalTotalBytes > 0L && currentDownloaded >= finalTotalBytes)) {
-                        lastEmitTime = now
-                        updateTask(taskId, persist = false) {
-                            it.copy(
-                                downloadedBytes = maxOf(it.downloadedBytes, currentDownloaded),
-                                totalBytes = if (finalTotalBytes > 0L) finalTotalBytes else it.totalBytes,
-                                downloadSpeedBytesPerSec = if (currentSpeed > 0L) currentSpeed else it.downloadSpeedBytesPerSec,
-                                status = TorrentTaskStatus.DOWNLOADING,
-                            )
-                        }
-                    }
-                }
-            } finally {
-                raf.close()
-            }
-
-            // 流读取完成，校验完整性并原子替换落盘
-            val writtenLength = if (tempFile.exists()) tempFile.length() else 0L
-            if (writtenLength <= 0L || (finalTotalBytes > 0L && writtenLength < finalTotalBytes)) {
-                throw IOException("P2P 下载流未完成传输 (已写入 $writtenLength / 总 $finalTotalBytes 字节)")
-            }
-
-            if (targetFile.exists()) targetFile.delete()
-            if (!tempFile.renameTo(targetFile)) {
-                tempFile.copyTo(targetFile, overwrite = true)
-                tempFile.delete()
-            }
-            val finalLength = targetFile.length()
-            updateTask(taskId) {
-                it.copy(
-                    status = TorrentTaskStatus.COMPLETED,
-                    downloadedBytes = finalLength,
-                    totalBytes = finalLength,
-                    downloadSpeedBytesPerSec = 0L,
-                    connectedPeers = 0,
-                    streamUrl = "",
-                    completionTimestamp = System.currentTimeMillis(),
-                )
-            }
-            logger.i { "任务 $taskId 下载完成并落盘: ${targetFile.absolutePath} ($finalLength 字节)" }
-        } catch (e: CancellationException) {
-            logger.i { "任务 $taskId 协程被取消（已暂停或被移除）" }
-            throw e
-        } catch (e: Exception) {
-            logger.e(e) { "任务 $taskId 下载异常: ${e.message}" }
-            markTaskFailed(taskId, e.message ?: "下载流读取失败")
-        } finally {
-            statsObserverJob.cancel()
-            withContext(NonCancellable) {
-                streamEngine.setDownloadSessionProtected(false)
-                streamEngine.stopStream(force = false)
-            }
-        }
-    }
-
     override suspend fun pauseDownload(taskId: String) {
         restoreDeferred.await()
         val runningJob: Job?
@@ -845,7 +698,6 @@ class AndroidTorrentRepository(
         if (deleteFiles && task != null) {
             runCatching {
                 File(task.savePath).delete()
-                File("${task.savePath}$DOWNLOAD_TEMP_SUFFIX").delete()
                 task.torrentFilePath?.let { File(it).delete() }
             }
         }

@@ -67,12 +67,49 @@ internal fun SubjectHeaderActionRow(
         modifier = modifier.fillMaxWidth(),
     ) {
         if (isEpisodeLike) {
+            val isUpcoming = watchStatus is SubjectWatchStatus.Upcoming
+            val isCaughtUp = watchStatus is SubjectWatchStatus.CaughtUp
+            val isCompleted = watchStatus is SubjectWatchStatus.Completed
+
             val playLabel =
                 when (watchStatus) {
-                    is SubjectWatchStatus.ContinueWatching -> stringResource(R.string.feature_subject_continue_watching)
+                    is SubjectWatchStatus.Upcoming -> {
+                        val date = watchStatus.airDate.trim()
+                        val shortDate = if (date.contains("-") && date.length >= 8) date.substringAfter("-") else date
+                        if (shortDate.isNotBlank()) {
+                            stringResource(R.string.feature_subject_action_upcoming_with_date, shortDate)
+                        } else {
+                            stringResource(R.string.feature_subject_action_upcoming)
+                        }
+                    }
+                    is SubjectWatchStatus.ContinueWatching -> {
+                        val epNumber = watchStatus.nextEpisode.episodeInt
+                        val isFirstTime = (collection?.epStatus ?: 0) == 0
+                        if (isFirstTime) {
+                            if (epNumber > 0) {
+                                stringResource(R.string.feature_subject_action_start_with_ep, epNumber)
+                            } else {
+                                stringResource(R.string.feature_subject_start_watching)
+                            }
+                        } else {
+                            if (epNumber > 0) {
+                                stringResource(R.string.feature_subject_action_continue_with_ep, epNumber)
+                            } else {
+                                stringResource(R.string.feature_subject_continue_watching)
+                            }
+                        }
+                    }
+                    is SubjectWatchStatus.CaughtUp -> {
+                        val epNumber = watchStatus.lastWatchedEpisode?.episodeInt ?: 0
+                        if (epNumber > 0) {
+                            stringResource(R.string.feature_subject_action_caught_up_rewatch, epNumber)
+                        } else {
+                            stringResource(R.string.feature_subject_status_caught_up)
+                        }
+                    }
                     is SubjectWatchStatus.Completed ->
                         stringResource(R.string.feature_subject_rewatch_from_start)
-                    else ->
+                    SubjectWatchStatus.None ->
                         if ((collection?.epStatus ?: 0) > 0) {
                             stringResource(R.string.feature_subject_continue_watching)
                         } else {
@@ -80,20 +117,44 @@ internal fun SubjectHeaderActionRow(
                         }
                 }
 
+            val playIcon =
+                when {
+                    isUpcoming -> BgmIcons.Schedule
+                    isCaughtUp || isCompleted -> BgmIcons.Replay
+                    else -> BgmIcons.PlayArrow
+                }
+
+            val isPlayEnabled = !isUpcoming && onPlayNext != null
+
+            val (containerColor, contentColor) =
+                when {
+                    isUpcoming ->
+                        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.8f) to
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    isCaughtUp || isCompleted ->
+                        MaterialTheme.colorScheme.primaryContainer to
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                    else ->
+                        MaterialTheme.colorScheme.primary to
+                            MaterialTheme.colorScheme.onPrimary
+                }
+
             Button(
                 onClick = { onPlayNext?.invoke() },
-                enabled = onPlayNext != null,
+                enabled = isPlayEnabled,
                 shape = CircleShape,
                 colors =
                     ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        containerColor = containerColor,
+                        contentColor = contentColor,
+                        disabledContainerColor = containerColor,
+                        disabledContentColor = contentColor,
                     ),
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                 modifier = Modifier.weight(1f).height(40.dp),
             ) {
                 Icon(
-                    imageVector = BgmIcons.PlayArrow,
+                    imageVector = playIcon,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                 )
