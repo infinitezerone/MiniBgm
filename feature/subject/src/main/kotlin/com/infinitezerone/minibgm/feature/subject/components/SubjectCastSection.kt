@@ -820,11 +820,11 @@ enum class CharacterRoleCategory(
 
     companion object {
         fun classify(character: SubjectCharacter): CharacterRoleCategory {
-            val role = character.roleName.trim()
+            val role = character.resolvedRoleName.trim()
             return when {
                 role.contains("主角") || role.equals("Main", ignoreCase = true) -> MAIN
                 role.contains("配角") || role.equals("Supporting", ignoreCase = true) -> SUPPORTING
-                role.contains("客串") || role.equals("Guest", ignoreCase = true) -> GUEST
+                role.contains("客串") || role.contains("闲角") || role.equals("Guest", ignoreCase = true) -> GUEST
                 else -> OTHER
             }
         }
@@ -1165,10 +1165,10 @@ private fun CharacterSummaryTile(
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                         )
                     }
-                } else if (character.roleName.isNotBlank()) {
+                } else if (character.resolvedRoleName.isNotBlank()) {
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = character.roleName,
+                        text = character.resolvedRoleName,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -1210,14 +1210,14 @@ private fun CharacterCard(
                     placeholder = CoverPlaceholder.Person,
                 )
 
-                if (character.roleName.isNotBlank()) {
+                if (character.resolvedRoleName.isNotBlank()) {
                     Surface(
                         shape = RoundedCornerShape(topStart = 12.dp, bottomEnd = 8.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.92f),
                         modifier = Modifier.align(Alignment.TopStart),
                     ) {
                         Text(
-                            text = character.roleName,
+                            text = character.resolvedRoleName,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -1604,13 +1604,13 @@ fun CharacterImagePreviewDialog(
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
                         )
-                        if (character.roleName.isNotBlank()) {
+                        if (character.resolvedRoleName.isNotBlank()) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
                                 color = MaterialTheme.colorScheme.secondaryContainer,
                             ) {
                                 Text(
-                                    text = character.roleName,
+                                    text = character.resolvedRoleName,
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,

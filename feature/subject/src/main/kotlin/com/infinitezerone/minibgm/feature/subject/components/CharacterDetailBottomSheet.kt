@@ -97,7 +97,7 @@ fun CharacterDetailBottomSheet(
                     shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
-                    val roleName = character?.roleName
+                    val roleName = character?.resolvedRoleName
                     Text(
                         text =
                             if (!roleName.isNullOrBlank()) {
@@ -157,9 +157,9 @@ fun CharacterDetailBottomSheet(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        if (!character?.roleName.isNullOrBlank()) {
+                        if (!character?.resolvedRoleName.isNullOrBlank()) {
                             EntityInfoPill(
-                                text = character.roleName,
+                                text = character.resolvedRoleName,
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                             )

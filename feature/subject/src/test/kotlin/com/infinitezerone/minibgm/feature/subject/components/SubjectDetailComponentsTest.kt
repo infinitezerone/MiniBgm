@@ -231,11 +231,11 @@ class SubjectDetailComponentsTest {
         val testCharacters =
             listOf(
                 com.infinitezerone.minibgm.core.model
-                    .SubjectCharacter(id = 1L, name = "配角前置", roleName = "配角"),
+                    .SubjectCharacter(id = 1L, name = "配角前置", relation = "配角"),
                 com.infinitezerone.minibgm.core.model
-                    .SubjectCharacter(id = 2L, name = "主角A", roleName = "主角"),
+                    .SubjectCharacter(id = 2L, name = "主角A", relation = "主角"),
                 com.infinitezerone.minibgm.core.model
-                    .SubjectCharacter(id = 3L, name = "客串C", roleName = "客串"),
+                    .SubjectCharacter(id = 3L, name = "客串C", relation = "闲角"),
                 com.infinitezerone.minibgm.core.model
                     .SubjectCharacter(id = 4L, name = "主角B", roleName = "主角"),
                 com.infinitezerone.minibgm.core.model
