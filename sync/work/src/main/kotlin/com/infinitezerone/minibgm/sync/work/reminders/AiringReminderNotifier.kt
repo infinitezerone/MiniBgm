@@ -27,12 +27,21 @@ class AiringReminderNotifier(
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
             return false
         }
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
-                PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
+        val permissionGranted =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+                    PackageManager.PERMISSION_GRANTED
+            } else {
+                true
+            }
+        return permissionGranted && preAirChannelEnabled()
+    }
+
+    private fun preAirChannelEnabled(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
+        val notificationManager = context.getSystemService(NotificationManager::class.java) ?: return true
+        return notificationManager.getNotificationChannel(PRE_AIR_CHANNEL_ID)?.importance !=
+            NotificationManager.IMPORTANCE_NONE
     }
 
     /**
@@ -46,6 +55,10 @@ class AiringReminderNotifier(
         if (upcoming.isEmpty()) return
         createNotificationChannels(context)
         val manager = NotificationManagerCompat.from(context)
+        if (!notificationsEnabled()) {
+            refreshPreAirSummary()
+            return
+        }
 
         for (item in upcoming) {
             val isFinale = item.isFinale
@@ -80,6 +93,7 @@ class AiringReminderNotifier(
                     .setVibrate(VIBRATION_PATTERN)
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .setGroup(GROUP_ID)
+                    .setTimeoutAfter(PRE_AIR_NOTIFICATION_TTL_MS)
                     .setAutoCancel(true)
                     .build()
 
@@ -155,6 +169,7 @@ class AiringReminderNotifier(
                 .setGroupSummary(true)
                 .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
                 .setSilent(true)
+                .setTimeoutAfter(PRE_AIR_NOTIFICATION_TTL_MS)
                 .setAutoCancel(false)
                 .build()
 
@@ -228,6 +243,7 @@ class AiringReminderNotifier(
             "com.infinitezerone.minibgm.sync.work.action.AIRING_PRE_AIR_DISMISSED"
 
         private const val MAX_SUMMARY_LINES = 5
+        private const val PRE_AIR_NOTIFICATION_TTL_MS = 12L * 60L * 60L * 1000L
         private val VIBRATION_PATTERN = longArrayOf(0, 250, 250, 250)
         private const val LEGACY_DAILY_CHANNEL_ID = "airing_reminders"
         private const val LEGACY_DAILY_NOTIFICATION_ID = 4701
