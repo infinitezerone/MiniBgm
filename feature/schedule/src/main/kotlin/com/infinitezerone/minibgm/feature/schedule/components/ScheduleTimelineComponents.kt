@@ -9,7 +9,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -64,8 +63,8 @@ enum class AirStatus {
     AIRED,
 }
 
-/** 相邻时间线插槽行之间的纵向间距，呼吸感充沛，区分不同时段 */
-val TIMELINE_SLOT_SPACING = 18.dp
+/** 相邻时间线插槽行之间的纵向间距，紧凑有序，区分不同时段 */
+val TIMELINE_SLOT_SPACING = 10.dp
 
 /** 当前时刻（按东八区）折算的当日分钟数 */
 fun getCurrentMinutesCst(): Int {
@@ -173,7 +172,7 @@ fun TimelineSlotRow(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         TimelineSlotHeader(
             time = time,
@@ -213,7 +212,7 @@ fun TimelineSlotHeader(
         }
 
     Row(
-        modifier = modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = modifier.fillMaxWidth().padding(top = 2.dp, bottom = 1.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -412,15 +411,15 @@ fun ScheduleTimelineCard(
                         )
                     },
                 ).expressivePress(interactionSource = rowInteractionSource, pressedScale = 0.985f)
-                .padding(vertical = 5.dp),
+                .padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        // 1. 封面海报 (88dp 高度比例沉稳)
+        // 1. 封面海报 (80dp 紧凑比例)
         Box(
             modifier =
                 Modifier
-                    .height(88.dp)
+                    .height(80.dp)
                     .aspectRatio(BGM_POSTER_ASPECT_RATIO)
                     .clip(RoundedCornerShape(8.dp))
                     .bgmSharedElement(
@@ -447,24 +446,19 @@ fun ScheduleTimelineCard(
             )
         }
 
-        // 2. 中间信息列 (与海报 88dp 等高，上下两段式自然分布)
+        // 2. 中间信息列 (与海报 80dp 等高，上下两段式紧凑分布)
         Column(
             modifier =
                 Modifier
                     .weight(1f)
-                    .height(88.dp),
+                    .height(80.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
             // 上半区：主标题 + 关键词小行
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = displayName,
-                    style =
-                        MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 15.sp,
-                            lineHeight = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
+                    style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -474,190 +468,153 @@ fun ScheduleTimelineCard(
                     val keywordLabels = keywords.map { stringResource(it.labelRes, *it.formatArgs.toTypedArray()) }
                     Text(
                         text = keywordLabels.joinToString(" · "),
-                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
 
-            // 下半区：分集徽章与多集直达导轨
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (episodes.isNotEmpty() || schedule.nextEpisodeNumber > 0) {
-                        val epText =
-                            when {
-                                isMultiEpisode -> {
-                                    val minEp = episodes.first()
-                                    val maxEp = episodes.last()
-                                    val isConsecutive = maxEp - minEp == episodes.size - 1
-                                    if (isConsecutive && minEp == 1 && episodes.size >= 6) {
-                                        stringResource(R.string.feature_schedule_batch_episodes_format, minEp, maxEp)
-                                    } else if (isConsecutive) {
-                                        stringResource(R.string.feature_schedule_multi_episodes_format, minEp, maxEp, episodes.size)
-                                    } else {
-                                        stringResource(R.string.feature_schedule_episodes_list_format, episodes.joinToString(","))
-                                    }
-                                }
-                                isFirstEp -> {
-                                    if (schedule.totalEpisodes > 0) {
-                                        stringResource(R.string.feature_schedule_first_episode_with_total, schedule.totalEpisodes)
-                                    } else {
-                                        stringResource(R.string.feature_schedule_first_episode)
-                                    }
-                                }
-                                else -> {
-                                    val ep = episodes.firstOrNull() ?: schedule.nextEpisodeNumber
-                                    if (schedule.totalEpisodes > 0 && ep > 0) {
-                                        stringResource(R.string.feature_schedule_episode_with_total_format, ep, schedule.totalEpisodes)
-                                    } else {
-                                        stringResource(R.string.feature_schedule_episode_format, ep)
-                                    }
+            // 下半区：分集徽章与限制级标签
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (episodes.isNotEmpty() || schedule.nextEpisodeNumber > 0) {
+                    val epText =
+                        when {
+                            isMultiEpisode -> {
+                                val minEp = episodes.first()
+                                val maxEp = episodes.last()
+                                val isConsecutive = maxEp - minEp == episodes.size - 1
+                                if (isConsecutive && minEp == 1 && episodes.size >= 6) {
+                                    stringResource(R.string.feature_schedule_batch_episodes_format, minEp, maxEp)
+                                } else if (isConsecutive) {
+                                    stringResource(R.string.feature_schedule_multi_episodes_format, minEp, maxEp, episodes.size)
+                                } else {
+                                    stringResource(R.string.feature_schedule_episodes_list_format, episodes.joinToString(","))
                                 }
                             }
+                            isFirstEp -> {
+                                if (schedule.totalEpisodes > 0) {
+                                    stringResource(R.string.feature_schedule_first_episode_with_total, schedule.totalEpisodes)
+                                } else {
+                                    stringResource(R.string.feature_schedule_first_episode)
+                                }
+                            }
+                            else -> {
+                                val ep = episodes.firstOrNull() ?: schedule.nextEpisodeNumber
+                                if (schedule.totalEpisodes > 0 && ep > 0) {
+                                    stringResource(R.string.feature_schedule_episode_with_total_format, ep, schedule.totalEpisodes)
+                                } else {
+                                    stringResource(R.string.feature_schedule_episode_format, ep)
+                                }
+                            }
+                        }
 
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color =
+                            when {
+                                isMultiEpisode -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.85f)
+                                isFirstEp -> MaterialTheme.colorScheme.tertiaryContainer
+                                else -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
+                            },
+                    ) {
+                        Text(
+                            text = epText,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color =
                                 when {
-                                    isMultiEpisode -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.85f)
-                                    isFirstEp -> MaterialTheme.colorScheme.tertiaryContainer
-                                    else -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
+                                    isMultiEpisode -> MaterialTheme.colorScheme.onTertiaryContainer
+                                    isFirstEp -> MaterialTheme.colorScheme.onTertiaryContainer
+                                    else -> MaterialTheme.colorScheme.primary
                                 },
-                        ) {
-                            Text(
-                                text = epText,
-                                style = MaterialTheme.typography.labelMedium.copy(fontSize = 11.sp),
-                                fontWeight = FontWeight.ExtraBold,
-                                color =
-                                    when {
-                                        isMultiEpisode -> MaterialTheme.colorScheme.onTertiaryContainer
-                                        isFirstEp -> MaterialTheme.colorScheme.onTertiaryContainer
-                                        else -> MaterialTheme.colorScheme.primary
-                                    },
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                        }
-                    }
-
-                    // 限制级标签
-                    if (schedule.isAdult) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.feature_schedule_tag_adult),
-                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.5.dp),
-                            )
-                        }
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
                     }
                 }
 
-                if (isMultiEpisode) {
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                // 限制级标签
+                if (schedule.isAdult) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
                     ) {
                         Text(
-                            text = stringResource(R.string.feature_schedule_quick_jump_label),
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            text = stringResource(R.string.feature_schedule_tag_adult),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.5.dp),
                         )
-                        episodes.forEach { epNum ->
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                onClick = {
-                                    onSubjectClick(
-                                        SubjectDetailRoute(
-                                            subjectId = schedule.bgmId,
-                                            initialName = displayName,
-                                            initialCoverUrl = schedule.coverUrl,
-                                            initialScore = score,
-                                            source = "schedule_ep_$epNum",
-                                        ),
-                                    )
-                                },
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.feature_schedule_ep_pill_format, epNum),
-                                    style =
-                                        MaterialTheme.typography.labelSmall.copy(
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                        ),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                                )
-                            }
-                        }
                     }
                 }
             }
         }
 
-        // 3. 右侧追番按钮
+        // 3. 右侧追番动作区：半高微细分割线 + 纯图标动作按钮（大幅释放中间标题空间）
         if (onToggleWatching != null) {
             val watchInteraction = remember { MutableInteractionSource() }
-            Surface(
-                shape = CircleShape,
-                color =
+            val actionLabel =
+                stringResource(
                     if (isWatching) {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        R.string.feature_schedule_action_watching
                     } else {
-                        MaterialTheme.colorScheme.surfaceContainerHigh
+                        R.string.feature_schedule_action_watch
                     },
-                modifier =
-                    Modifier
-                        .expressivePress(interactionSource = watchInteraction, pressedScale = 0.94f)
-                        .clickable(
-                            interactionSource = watchInteraction,
-                            indication = null,
-                            onClick = onToggleWatching,
-                        ),
+                )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                // 微细半高纵向分割线
+                Box(
+                    modifier =
+                        Modifier
+                            .width(1.dp)
+                            .height(26.dp)
+                            .background(
+                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                                shape = CircleShape,
+                            ),
+                )
+
+                Surface(
+                    shape = CircleShape,
+                    color =
+                        if (isWatching) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f)
+                        },
+                    modifier =
+                        Modifier
+                            .size(38.dp)
+                            .expressivePress(interactionSource = watchInteraction, pressedScale = 0.88f)
+                            .clickable(
+                                interactionSource = watchInteraction,
+                                indication = null,
+                                onClick = onToggleWatching,
+                            ),
                 ) {
-                    Icon(
-                        imageVector = if (isWatching) BgmIcons.Bookmark else BgmIcons.BookmarkBorder,
-                        contentDescription = null,
-                        tint =
-                            if (isWatching) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        modifier = Modifier.size(13.dp),
-                    )
-                    Text(
-                        text =
-                            if (isWatching) {
-                                stringResource(R.string.feature_schedule_action_watching)
-                            } else {
-                                stringResource(R.string.feature_schedule_action_watch)
-                            },
-                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
-                        color =
-                            if (isWatching) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                    )
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
+                        Icon(
+                            imageVector = if (isWatching) BgmIcons.PlaylistAddCheck else BgmIcons.PlaylistAdd,
+                            contentDescription = actionLabel,
+                            tint =
+                                if (isWatching) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
                 }
             }
         }

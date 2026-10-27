@@ -39,17 +39,17 @@ fun ScheduleTimelineSkeleton(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
         userScrollEnabled = false,
     ) {
         items(5) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 // 时间标头占位
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 1.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -65,9 +65,9 @@ fun ScheduleTimelineSkeleton(
                     )
                 }
 
-                // 全幅通透卡片占位（98dp 对齐实卡 88dp 内容 + 上下 5dp 呼吸，消除加载→内容跳变）
+                // 全幅通透卡片占位（84dp 对齐实卡 80dp 内容 + 上下 2dp 呼吸，消除加载→内容跳变）
                 Card(
-                    modifier = Modifier.fillMaxWidth().height(98.dp),
+                    modifier = Modifier.fillMaxWidth().height(84.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors =
                         CardDefaults.cardColors(

@@ -9,6 +9,8 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.automirrored.filled.ViewList
@@ -189,6 +191,8 @@ object BgmIcons {
     // ---- 4. 收藏与追踪交互 ----
     val Bookmark: ImageVector = Icons.Filled.Bookmark
     val BookmarkBorder: ImageVector = Icons.Filled.BookmarkBorder
+    val PlaylistAdd: ImageVector = Icons.AutoMirrored.Filled.PlaylistAdd
+    val PlaylistAddCheck: ImageVector = Icons.AutoMirrored.Filled.PlaylistAddCheck
     val Star: ImageVector = Icons.Filled.Star
     val StarBorder: ImageVector = Icons.Outlined.StarBorder
     val Favorite: ImageVector = Icons.Filled.Favorite

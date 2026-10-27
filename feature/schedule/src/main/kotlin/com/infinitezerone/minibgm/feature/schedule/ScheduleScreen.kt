@@ -297,7 +297,7 @@ fun ScheduleScreen(
                             onSwitchToAll = viewModel::toggleOnlyWatching,
                             onToggleWatching = viewModel::toggleWatching,
                             listState = listState,
-                            topPadding = totalTopChromeHeight + 12.dp,
+                            topPadding = totalTopChromeHeight + 8.dp,
                         )
                     }
                 }
@@ -393,7 +393,7 @@ private fun DayScheduleList(
                         item(key = "timeslot_with_now_${pageIndex}_${entry.key}") {
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
                             ) {
                                 ScheduleNowIndicator(nowMinutesCst = nowMinutes)
                                 TimelineSlotRow(
