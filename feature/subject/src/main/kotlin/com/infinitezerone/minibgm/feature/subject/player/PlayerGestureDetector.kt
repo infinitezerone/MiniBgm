@@ -4,12 +4,19 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.media.AudioManager
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -22,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,8 +50,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.SuspendingPointerInputModifierNode
 import androidx.compose.ui.node.DelegatingNode
@@ -53,6 +64,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.feature.subject.R
@@ -304,7 +316,16 @@ private class PlayerGesturesNode(
         val target = (basePos + deltaMs).coerceIn(0L, maxPos)
         pendingSeekTargetMs = target
 
-        // 视觉与触觉反馈即时响应（数字累加、侧边灵动药丸动效）
+        // 同步外部进度条：实时更新拖动状态与位置，消除快进等待延迟感
+        if (total > 0L) {
+            val targetFraction = (target.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+            if (!isSameSideInWindow) {
+                onScrubStart(targetFraction)
+            }
+            onScrubbing(targetFraction)
+        }
+
+        // 视觉与触觉反馈即时响应（数字累加动效）
         onDoubleTapAction(side, accumulatedSeconds)
         onHaptic(HapticFeedbackType.LongPress)
 
@@ -331,6 +352,9 @@ private class PlayerGesturesNode(
     }
 
     override fun onDetach() {
+        if (pendingSeekJob?.isActive == true) {
+            onScrubCancel()
+        }
         pendingSeekJob?.cancel()
         pendingSeekJob = null
         super.onDetach()
@@ -356,6 +380,13 @@ private class PlayerGesturesNode(
         onScrubEnd: (Float) -> Unit = {},
         onScrubCancel: () -> Unit = {},
     ) {
+        if (isLocked && !this.isLocked && pendingSeekJob?.isActive == true) {
+            pendingSeekJob?.cancel()
+            pendingSeekJob = null
+            lastDoubleTapSide = null
+            accumulatedSeconds = 0
+            onScrubCancel()
+        }
         this.context = context
         this.isPlaying = isPlaying
         this.currentPositionMs = currentPositionMs
@@ -620,7 +651,7 @@ internal fun PlayerGestureDetector(
     // 双击微动效 650ms 后自动平滑淡出
     LaunchedEffect(doubleTapTrigger) {
         if (doubleTapTrigger > 0L) {
-            delay(650)
+            delay(DOUBLE_TAP_COMMIT_DELAY_MS)
             activeDoubleTap = null
         }
     }
@@ -874,9 +905,9 @@ private fun FastForwardChip(
 }
 
 /**
- * 现代极简双击快进/快退灵动胶囊（居中偏侧）：
- * 告别笨重的 110dp 大黑圆盘，采用与顶部 HUD 一致的微药丸胶囊，
- * 呈现轻盈通透的「<< 10 秒」/「10 秒 >>」交互反馈。
+ * 现代极简双击快进/快退反馈动效（无底座纯净设计）：
+ * 告别笨重/生硬的药丸背景框（去 HUD），仅保留方向箭头与动态跳跃秒数，
+ * 配合弹簧数字位移、箭头冲击微动效与文字柔和阴影，在明暗画面下均灵动通透。
  */
 @Composable
 private fun YouTubeDoubleTapIndicator(
@@ -884,49 +915,130 @@ private fun YouTubeDoubleTapIndicator(
     modifier: Modifier = Modifier,
 ) {
     val isLeft = state.side == DoubleTapSide.LEFT
+    var arrowOffsetPx by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(state.token) {
+        arrowOffsetPx = if (isLeft) -8f else 8f
+        delay(60)
+        arrowOffsetPx = 0f
+    }
+    val animatedArrowOffset by animateFloatAsState(
+        targetValue = arrowOffsetPx,
+        animationSpec =
+            spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMedium,
+            ),
+        label = "DoubleTapArrowOffset",
+    )
+
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = if (isLeft) Alignment.CenterStart else Alignment.CenterEnd,
     ) {
-        Surface(
-            shape = RoundedCornerShape(percent = 50),
-            color = Color.Black.copy(alpha = 0.82f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
-            contentColor = Color.White,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             modifier =
                 Modifier
-                    .padding(horizontal = 32.dp),
+                    .padding(horizontal = 40.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-            ) {
-                if (isLeft) {
-                    Icon(
-                        imageVector = BgmIcons.FastRewind,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
+            if (isLeft) {
+                Icon(
+                    imageVector = BgmIcons.FastRewind,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier =
+                        Modifier
+                            .size(24.dp)
+                            .offset { IntOffset(x = animatedArrowOffset.dp.roundToPx(), y = 0) }
+                            .drawBehind {
+                                drawCircle(
+                                    color = Color.Black.copy(alpha = 0.25f),
+                                    radius = size.minDimension * 0.7f,
+                                )
+                            },
+                )
+            }
+            AnimatedContent(
+                targetState = state.seconds,
+                transitionSpec = {
+                    if (targetState > initialState) {
+                        (
+                            slideInVertically(
+                                animationSpec =
+                                    spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessMedium,
+                                    ),
+                                initialOffsetY = { it / 3 },
+                            ) +
+                                scaleIn(
+                                    animationSpec =
+                                        spring(
+                                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                                            stiffness = Spring.StiffnessMedium,
+                                        ),
+                                    initialScale = 0.72f,
+                                ) + fadeIn(tween(140))
+                        ) togetherWith (
+                            slideOutVertically(
+                                animationSpec = tween(120),
+                                targetOffsetY = { -it / 3 },
+                            ) +
+                                scaleOut(
+                                    animationSpec = tween(120),
+                                    targetScale = 1.2f,
+                                ) + fadeOut(tween(120))
+                        )
+                    } else {
+                        (
+                            scaleIn(
+                                animationSpec =
+                                    spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessMedium,
+                                    ),
+                                initialScale = 0.8f,
+                            ) + fadeIn(tween(140))
+                        ) togetherWith (
+                            scaleOut(animationSpec = tween(120), targetScale = 1.1f) + fadeOut(tween(120))
+                        )
+                    }
+                },
+                label = "DoubleTapSecondsAnimation",
+            ) { targetSeconds ->
                 Text(
-                    text = stringResource(R.string.feature_subject_player_seek_seconds_format, state.seconds),
+                    text = stringResource(R.string.feature_subject_player_seek_seconds_format, targetSeconds),
                     style =
-                        MaterialTheme.typography.labelSmall.copy(
+                        MaterialTheme.typography.titleMedium.copy(
                             fontFeatureSettings = "tnum",
+                            shadow =
+                                Shadow(
+                                    color = Color.Black.copy(alpha = 0.75f),
+                                    offset = Offset(0f, 2f),
+                                    blurRadius = 8f,
+                                ),
                         ),
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                 )
-                if (!isLeft) {
-                    Icon(
-                        imageVector = BgmIcons.FastForward,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
+            }
+            if (!isLeft) {
+                Icon(
+                    imageVector = BgmIcons.FastForward,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier =
+                        Modifier
+                            .size(24.dp)
+                            .offset { IntOffset(x = animatedArrowOffset.dp.roundToPx(), y = 0) }
+                            .drawBehind {
+                                drawCircle(
+                                    color = Color.Black.copy(alpha = 0.25f),
+                                    radius = size.minDimension * 0.7f,
+                                )
+                            },
+                )
             }
         }
     }

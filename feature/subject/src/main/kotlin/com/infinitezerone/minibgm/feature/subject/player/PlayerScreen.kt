@@ -606,7 +606,14 @@ fun PlayerScreen(
             resizeMode = resizeMode,
             showEpisodeQueue = config.showEpisodeQueue,
             onSingleTap = { areControlsVisible = !areControlsVisible },
-            onDoubleTapSeek = controller::seekTo,
+            onDoubleTapSeek = { targetMs ->
+                if (playback.durationMs > 0L) {
+                    scrub.end((targetMs.toFloat() / playback.durationMs.toFloat()).coerceIn(0f, 1f))
+                } else {
+                    scrub.cancel()
+                }
+                controller.seekTo(targetMs)
+            },
             onDoubleTapPlayPause = {
                 val wasPlaying = playback.isPlaying
                 controller.togglePlayPause()
