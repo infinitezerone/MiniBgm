@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.infinitezerone.minibgm.core.data.notification.AiringNotificationChannels
 import com.infinitezerone.minibgm.core.model.UpcomingAiring
 import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
 import com.infinitezerone.minibgm.sync.work.R
@@ -40,7 +41,7 @@ class AiringReminderNotifier(
     private fun preAirChannelEnabled(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
         val notificationManager = context.getSystemService(NotificationManager::class.java) ?: return true
-        return notificationManager.getNotificationChannel(PRE_AIR_CHANNEL_ID)?.importance !=
+        return notificationManager.getNotificationChannel(AiringNotificationChannels.PRE_AIR)?.importance !=
             NotificationManager.IMPORTANCE_NONE
     }
 
@@ -81,7 +82,7 @@ class AiringReminderNotifier(
 
             val notification =
                 NotificationCompat
-                    .Builder(context, PRE_AIR_CHANNEL_ID)
+                    .Builder(context, AiringNotificationChannels.PRE_AIR)
                     .setSmallIcon(R.drawable.ic_notification_airing)
                     .setContentTitle(contentTitle)
                     .setContentText(itemText)
@@ -92,7 +93,7 @@ class AiringReminderNotifier(
                     .setDefaults(NotificationCompat.DEFAULT_ALL)
                     .setVibrate(VIBRATION_PATTERN)
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                    .setGroup(GROUP_ID)
+                    .setGroup(AiringNotificationChannels.GROUP_ID)
                     .setTimeoutAfter(PRE_AIR_NOTIFICATION_TTL_MS)
                     .setAutoCancel(true)
                     .build()
@@ -157,7 +158,7 @@ class AiringReminderNotifier(
 
         val summary =
             NotificationCompat
-                .Builder(context, PRE_AIR_CHANNEL_ID)
+                .Builder(context, AiringNotificationChannels.PRE_AIR)
                 .setSmallIcon(R.drawable.ic_notification_airing)
                 .setContentTitle(title)
                 .setContentText(context.getString(R.string.airing_pre_air_summary_text))
@@ -165,7 +166,7 @@ class AiringReminderNotifier(
                 .setContentIntent(launchScheduleIntent())
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setGroup(GROUP_ID)
+                .setGroup(AiringNotificationChannels.GROUP_ID)
                 .setGroupSummary(true)
                 .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
                 .setSilent(true)
@@ -237,8 +238,6 @@ class AiringReminderNotifier(
     }
 
     companion object {
-        const val GROUP_ID = "group_airing"
-        const val PRE_AIR_CHANNEL_ID = "airing_pre_air"
         const val ACTION_PRE_AIR_NOTIFICATION_DISMISSED =
             "com.infinitezerone.minibgm.sync.work.action.AIRING_PRE_AIR_DISMISSED"
 
@@ -260,7 +259,7 @@ class AiringReminderNotifier(
             // 1. 注册渠道组
             manager.createNotificationChannelGroup(
                 NotificationChannelGroup(
-                    GROUP_ID,
+                    AiringNotificationChannels.GROUP_ID,
                     context.getString(R.string.airing_channel_group_name),
                 ),
             )
@@ -268,11 +267,11 @@ class AiringReminderNotifier(
             // 2. 单集即时开播提醒渠道 (HIGH, 带振动与锁屏公开)
             val preAirChannel =
                 NotificationChannel(
-                    PRE_AIR_CHANNEL_ID,
+                    AiringNotificationChannels.PRE_AIR,
                     context.getString(R.string.airing_pre_air_channel_name),
                     NotificationManager.IMPORTANCE_HIGH,
                 ).apply {
-                    group = GROUP_ID
+                    group = AiringNotificationChannels.GROUP_ID
                     description = context.getString(R.string.airing_pre_air_channel_desc)
                     enableVibration(true)
                     vibrationPattern = VIBRATION_PATTERN

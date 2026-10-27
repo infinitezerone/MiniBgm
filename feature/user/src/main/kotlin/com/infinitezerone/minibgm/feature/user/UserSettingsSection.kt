@@ -208,6 +208,7 @@ internal fun ReminderSettingsCard(
     airingReminderEnabled: Boolean,
     onToggleAiringReminder: (Boolean) -> Unit,
     hasNotificationPermission: Boolean,
+    hasAiringChannel: Boolean,
     airingPreAirEnabled: Boolean,
     onToggleAiringPreAir: (Boolean) -> Unit,
     airingNotificationOffsetMinutes: Int,
@@ -219,12 +220,13 @@ internal fun ReminderSettingsCard(
     onOpenKeepAliveSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val isReminderActive = airingReminderEnabled && hasNotificationPermission
+    val notificationsUsable = hasNotificationPermission && hasAiringChannel
+    val isReminderActive = airingReminderEnabled && notificationsUsable
     val reminderSubtitle =
-        if (!hasNotificationPermission) {
-            stringResource(R.string.feature_user_settings_reminder_perm_subtitle)
-        } else {
-            null
+        when {
+            !hasNotificationPermission -> stringResource(R.string.feature_user_settings_reminder_perm_subtitle)
+            !hasAiringChannel -> stringResource(R.string.feature_user_settings_channel_disabled_subtitle)
+            else -> null
         }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -233,13 +235,13 @@ internal fun ReminderSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.NotificationsActive,
                 iconTint =
-                    if (hasNotificationPermission) {
+                    if (notificationsUsable) {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     } else {
                         MaterialTheme.colorScheme.error
                     },
                 iconContainerColor =
-                    if (hasNotificationPermission) {
+                    if (notificationsUsable) {
                         MaterialTheme.colorScheme.surfaceContainerHigh
                     } else {
                         MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)

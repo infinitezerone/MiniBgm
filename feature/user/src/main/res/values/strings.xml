@@ -81,6 +81,7 @@
     <string name="feature_user_section_sync_reminder">提醒设置</string>
     <string name="feature_user_settings_auto_sync_title">播放源自动同步</string>
     <string name="feature_user_settings_reminder_perm_subtitle">未开启系统通知权限</string>
+    <string name="feature_user_settings_channel_disabled_subtitle">系统已关闭单集开播提醒渠道，点击前往设置</string>
     <string name="feature_user_settings_airing_reminder_title">追番更新提醒</string>
     <string name="feature_user_settings_pre_air_title">新集开播提醒</string>
     <string name="feature_user_settings_reminder_time_title">提醒时间</string>

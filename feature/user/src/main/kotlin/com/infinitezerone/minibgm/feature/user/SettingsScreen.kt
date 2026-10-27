@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.user
 
+import android.app.NotificationManager
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -56,6 +57,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.infinitezerone.minibgm.core.common.AppResult
 import com.infinitezerone.minibgm.core.data.download.TorrentStreamEngine
+import com.infinitezerone.minibgm.core.data.notification.AiringNotificationChannels
 import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
@@ -248,12 +250,14 @@ fun SettingsScreen(
     }
 
     var hasNotificationPermission by remember { mutableStateOf(true) }
+    var hasAiringChannel by remember { mutableStateOf(true) }
     var isIgnoringBatteryOptimizations by remember { mutableStateOf(false) }
     var isSimulatingTorrentUninstalled by remember { mutableStateOf(false) }
     var isTorrentPluginInstalled by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         hasNotificationPermission = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        hasAiringChannel = isAiringChannelEnabled(context)
         isIgnoringBatteryOptimizations = BackgroundKeepAliveHelper.isIgnoringBatteryOptimizations(context)
         if (isDeveloperModeActive) {
             isSimulatingTorrentUninstalled = torrentStreamEngine.isDebugSimulateUninstalled()
@@ -263,6 +267,7 @@ fun SettingsScreen(
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         hasNotificationPermission = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        hasAiringChannel = isAiringChannelEnabled(context)
         isIgnoringBatteryOptimizations = BackgroundKeepAliveHelper.isIgnoringBatteryOptimizations(context)
         if (isDeveloperModeActive) {
             isSimulatingTorrentUninstalled = torrentStreamEngine.isDebugSimulateUninstalled()
@@ -284,20 +289,25 @@ fun SettingsScreen(
             hasNotificationPermission = granted
             if (granted) {
                 viewModel.setAiringReminderEnabled(true)
-                coroutineScope.launch {
-                    val result =
-                        snackbarHostState.showSnackbar(
-                            message = context.getString(R.string.feature_user_reminder_enabled_toast),
-                            actionLabel = context.getString(R.string.feature_user_action_go_settings),
-                            duration = SnackbarDuration.Short,
-                        )
-                    if (result == SnackbarResult.ActionPerformed) {
-                        val intent =
-                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                            }
-                        context.startActivity(intent)
+                if (isAiringChannelEnabled(context)) {
+                    coroutineScope.launch {
+                        val result =
+                            snackbarHostState.showSnackbar(
+                                message = context.getString(R.string.feature_user_reminder_enabled_toast),
+                                actionLabel = context.getString(R.string.feature_user_action_go_settings),
+                                duration = SnackbarDuration.Short,
+                            )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            val intent =
+                                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                }
+                            context.startActivity(intent)
+                        }
                     }
+                } else {
+                    hasAiringChannel = false
+                    openAiringChannelSettings(context)
                 }
             } else {
                 viewModel.setAiringReminderEnabled(false)
@@ -337,6 +347,8 @@ fun SettingsScreen(
                 } else {
                     showNotificationRationale()
                 }
+            } else if (!hasAiringChannel) {
+                openAiringChannelSettings(context)
             } else {
                 viewModel.setAiringReminderEnabled(true)
             }
@@ -350,6 +362,7 @@ fun SettingsScreen(
         onBackClick = onBackClick,
         onSelectSyncInterval = viewModel::setSyncInterval,
         onToggleAiringReminder = toggleAiringReminder,
+        hasAiringChannel = hasAiringChannel,
         airingPreAirEnabled = uiState.airingPreAirEnabled,
         onToggleAiringPreAir = viewModel::setAiringPreAirEnabled,
         airingBingeFinaleEnabled = uiState.airingBingeFinaleEnabled,
@@ -724,6 +737,26 @@ private fun shareCrashLog(
     )
 }
 
+private fun isAiringChannelEnabled(context: Context): Boolean {
+    val manager = context.getSystemService(NotificationManager::class.java) ?: return true
+    return manager.getNotificationChannel(AiringNotificationChannels.PRE_AIR)?.importance != NotificationManager.IMPORTANCE_NONE
+}
+
+private fun openAiringChannelSettings(context: Context) {
+    val intent =
+        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            putExtra(Settings.EXTRA_CHANNEL_ID, AiringNotificationChannels.PRE_AIR)
+        }
+    runCatching { context.startActivity(intent) }.onFailure {
+        context.startActivity(
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            },
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreenContent(
@@ -731,6 +764,7 @@ fun SettingsScreenContent(
     onBackClick: () -> Unit,
     onSelectSyncInterval: (SyncInterval) -> Unit,
     onToggleAiringReminder: (Boolean) -> Unit,
+    hasAiringChannel: Boolean = true,
     airingPreAirEnabled: Boolean = true,
     onToggleAiringPreAir: (Boolean) -> Unit = {},
     airingBingeFinaleEnabled: Boolean = true,
@@ -855,6 +889,7 @@ fun SettingsScreenContent(
                         airingReminderEnabled = uiState.airingReminderEnabled,
                         onToggleAiringReminder = onToggleAiringReminder,
                         hasNotificationPermission = hasNotificationPermission,
+                        hasAiringChannel = hasAiringChannel,
                         airingPreAirEnabled = airingPreAirEnabled,
                         onToggleAiringPreAir = onToggleAiringPreAir,
                         airingNotificationOffsetMinutes = airingNotificationOffsetMinutes,
