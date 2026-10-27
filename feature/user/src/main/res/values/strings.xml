@@ -82,7 +82,6 @@
     <string name="feature_user_settings_auto_sync_title">播放源自动同步</string>
     <string name="feature_user_settings_reminder_perm_subtitle">未开启系统通知权限</string>
     <string name="feature_user_settings_airing_reminder_title">追番更新提醒</string>
-    <string name="feature_user_settings_daily_summary_title">每日更新汇总</string>
     <string name="feature_user_settings_pre_air_title">新集开播提醒</string>
     <string name="feature_user_settings_reminder_time_title">提醒时间</string>
     <string name="feature_user_settings_binge_finale_title">囤番完结提醒</string>
@@ -95,12 +94,10 @@
     <string name="feature_user_keep_alive_action_battery">忽略电池优化</string>
     <string name="feature_user_keep_alive_action_autostart">前往自启动设置</string>
     <string name="feature_user_notification_rationale_title">需要系统通知权限</string>
-    <string name="feature_user_notification_rationale_message">您已关闭或未开启 MiniBgm 的通知权限。请前往系统设置中允许通知，以便接收每日追番开播提醒。</string>
+    <string name="feature_user_notification_rationale_message">您已关闭或未开启 MiniBgm 的通知权限。请前往系统设置中允许通知，以便接收追番开播提醒。</string>
     <string name="feature_user_reminder_enabled_toast">已开启追番开播提醒（如需横幅/振动可在系统设置中开启）</string>
     <string name="feature_user_notification_denied_toast">未授予通知权限，无法接收提醒</string>
     <string name="feature_user_sync_interval_title">播放源自动同步频率</string>
-    <string name="feature_user_reminder_hour_title">每日提醒时刻</string>
-
     <!-- 7. 设置页：数据与存储 -->
     <string name="feature_user_section_data_storage">数据与缓存</string>
     <string name="feature_user_settings_ai_config_title">助手配置</string>

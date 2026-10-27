@@ -675,17 +675,6 @@
     <issue
         id="LocalContextGetResourceValueCall"
         message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
-        errorLine1="                                        title = context.getString(R.string.feature_user_reminder_hour_title),"
-        errorLine2="                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/kotlin/com/infinitezerone/minibgm/feature/user/SettingsScreen.kt"
-            line="872"
-            column="49"/>
-    </issue>
-
-    <issue
-        id="LocalContextGetResourceValueCall"
-        message="Querying resource values using LocalContext.current is not configuration-aware and may return stale values if the Configuration changes"
         errorLine1="                                    context.getString("
         errorLine2="                                    ^">
         <location

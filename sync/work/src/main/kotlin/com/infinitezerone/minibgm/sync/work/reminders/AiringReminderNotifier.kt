@@ -32,33 +32,6 @@ class AiringReminderNotifier(
         }
     }
 
-    /** 每日汇总通知（固定 ID，点击跳转时刻表） */
-    fun notify(upcoming: List<UpcomingAiring>) {
-        if (upcoming.isEmpty()) return
-        createNotificationChannels(context)
-        val manager = NotificationManagerCompat.from(context)
-
-        val listText =
-            upcoming.joinToString("\n") { item ->
-                context.getString(R.string.airing_reminder_item, item.displayName, item.episode)
-            }
-        val notification =
-            NotificationCompat
-                .Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_notification_airing)
-                .setContentTitle(context.getString(R.string.airing_reminder_title, upcoming.size))
-                .setStyle(NotificationCompat.BigTextStyle().bigText(listText))
-                .setContentIntent(launchScheduleIntent())
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setDefaults(NotificationCompat.DEFAULT_ALL)
-                .setVibrate(VIBRATION_PATTERN)
-                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setAutoCancel(true)
-                .build()
-
-        post(manager, NOTIFICATION_ID, notification)
-    }
-
     /**
      * 单集临近/刚开播提醒。
      * 为每部番剧分配独立 Notification ID，互不顶掉覆盖；
@@ -122,17 +95,6 @@ class AiringReminderNotifier(
         }
     }
 
-    private fun launchScheduleIntent(): PendingIntent? {
-        val launch = BgmNavIntents.createScheduleIntent(context)
-        if (launch.component == null && launch.action == null) return null
-        return PendingIntent.getActivity(
-            context,
-            NOTIFICATION_ID,
-            launch,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-    }
-
     private fun launchSubjectIntent(subjectId: Long): PendingIntent? {
         val launch = BgmNavIntents.createSubjectIntent(context, subjectId)
         if (launch.component == null && launch.action == null) return null
@@ -146,10 +108,10 @@ class AiringReminderNotifier(
 
     companion object {
         const val GROUP_ID = "group_airing"
-        const val CHANNEL_ID = "airing_reminders"
-        const val NOTIFICATION_ID = 4701
         const val PRE_AIR_CHANNEL_ID = "airing_pre_air"
         private val VIBRATION_PATTERN = longArrayOf(0, 250, 250, 250)
+        private const val LEGACY_DAILY_CHANNEL_ID = "airing_reminders"
+        private const val LEGACY_DAILY_NOTIFICATION_ID = 4701
 
         fun notificationIdForSubject(subjectId: Long): Int = (47000 + (subjectId % 10000)).toInt()
 
@@ -159,6 +121,8 @@ class AiringReminderNotifier(
         fun createNotificationChannels(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
             val manager = NotificationManagerCompat.from(context)
+            context.getSystemService(NotificationManager::class.java)?.deleteNotificationChannel(LEGACY_DAILY_CHANNEL_ID)
+            manager.cancel(LEGACY_DAILY_NOTIFICATION_ID)
 
             // 1. 注册渠道组
             manager.createNotificationChannelGroup(
@@ -168,23 +132,7 @@ class AiringReminderNotifier(
                 ),
             )
 
-            // 2. 每日更新汇总渠道 (HIGH, 带振动与锁屏公开)
-            val dailyChannel =
-                NotificationChannel(
-                    CHANNEL_ID,
-                    context.getString(R.string.airing_reminder_channel_name),
-                    NotificationManager.IMPORTANCE_HIGH,
-                ).apply {
-                    group = GROUP_ID
-                    description = context.getString(R.string.airing_reminder_channel_desc)
-                    enableVibration(true)
-                    vibrationPattern = VIBRATION_PATTERN
-                    setShowBadge(true)
-                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-                }
-            manager.createNotificationChannel(dailyChannel)
-
-            // 3. 单集即时开播提醒渠道 (HIGH, 带振动与锁屏公开)
+            // 2. 单集即时开播提醒渠道 (HIGH, 带振动与锁屏公开)
             val preAirChannel =
                 NotificationChannel(
                     PRE_AIR_CHANNEL_ID,

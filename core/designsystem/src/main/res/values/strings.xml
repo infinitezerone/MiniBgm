@@ -22,9 +22,9 @@
 
     <!-- 追番权限提醒对话框 (Airing Reminder Permission Dialog) -->
     <string name="core_designsystem_airing_perm_title">开启追番更新提醒？</string>
-    <string name="core_designsystem_airing_perm_msg_with_title">已将《%1$s》加入追番！开启通知权限后，MiniBgm 可以在该番剧每日开播和更新时提前提醒你，不错过每一话精彩。</string>
-    <string name="core_designsystem_airing_perm_msg_generic">已将番剧加入追番！开启通知权限后，MiniBgm 可以在番剧每日开播和更新时提前提醒你，不错过每一话精彩。</string>
-    <string name="core_designsystem_airing_perm_tip">提示：可在「我的 - 设置」中自定义每日提醒时刻与延迟时间。</string>
+    <string name="core_designsystem_airing_perm_msg_with_title">已将《%1$s》加入追番！开启通知权限后，MiniBgm 可以在该番剧开播时提前提醒你，不错过每一话精彩。</string>
+    <string name="core_designsystem_airing_perm_msg_generic">已将番剧加入追番！开启通知权限后，MiniBgm 可以在番剧开播时提前提醒你，不错过每一话精彩。</string>
+    <string name="core_designsystem_airing_perm_tip">提示：可在「我的 - 设置」中自定义开播提醒的提前或延后时间。</string>
     <string name="core_designsystem_action_enable_notification">开启通知</string>
     <string name="core_designsystem_action_not_now">暂不开启</string>
 

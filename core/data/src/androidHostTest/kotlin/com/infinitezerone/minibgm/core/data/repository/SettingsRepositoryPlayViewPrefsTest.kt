@@ -262,6 +262,6 @@ class SettingsRepositoryPlayViewPrefsTest {
             assertFalse(settings.danmakuEnabled)
             assertFalse(settings.autoNextEnabled)
             assertEquals(SyncInterval.DAILY, settings.syncInterval)
-            assertEquals(8, settings.airingReminderHour)
+            assertTrue(settings.airingPreAirEnabled)
         }
 }

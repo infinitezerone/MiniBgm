@@ -50,10 +50,8 @@ data class UserUiState(
     val isCountsLoading: Boolean = false,
     val trackingFootprint: TrackingFootprint? = null,
     val airingReminderEnabled: Boolean = true,
-    val airingDailySummaryEnabled: Boolean = true,
     val airingPreAirEnabled: Boolean = true,
     val airingBingeFinaleEnabled: Boolean = true,
-    val airingReminderHour: Int = 8,
     val notifyBeforeAirMinutes: Int = 15,
     val airingNotificationOffsetMinutes: Int = -15,
     val aiConfig: AiConfig = AiConfig(),
@@ -221,10 +219,8 @@ class UserViewModel(
                 isCountsLoading = local.isCountsLoading,
                 trackingFootprint = local.trackingFootprint,
                 airingReminderEnabled = sync.settings.airingReminderEnabled,
-                airingDailySummaryEnabled = sync.settings.airingDailySummaryEnabled,
                 airingPreAirEnabled = sync.settings.airingPreAirEnabled,
                 airingBingeFinaleEnabled = sync.settings.airingBingeFinaleEnabled,
-                airingReminderHour = sync.settings.airingReminderHour,
                 notifyBeforeAirMinutes = sync.settings.notifyBeforeAirMinutes,
                 airingNotificationOffsetMinutes = sync.settings.airingNotificationOffsetMinutes,
                 aiConfig = sync.settings.aiConfig,
@@ -336,13 +332,6 @@ class UserViewModel(
         }
     }
 
-    /** 每日更新汇总子开关 */
-    fun setAiringDailySummaryEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            settingsRepository.setAiringDailySummaryEnabled(enabled)
-        }
-    }
-
     /** 单集开播即时提醒子开关 */
     fun setAiringPreAirEnabled(enabled: Boolean) {
         viewModelScope.launch {
@@ -354,13 +343,6 @@ class UserViewModel(
     fun setAiringBingeFinaleEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setAiringBingeFinaleEnabled(enabled)
-        }
-    }
-
-    /** 每日提醒触发时刻（设备本地时间小时） */
-    fun setAiringReminderHour(hour: Int) {
-        viewModelScope.launch {
-            settingsRepository.setAiringReminderHour(hour)
         }
     }
 

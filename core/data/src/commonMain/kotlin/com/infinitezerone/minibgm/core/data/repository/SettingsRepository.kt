@@ -36,10 +36,8 @@ data class UserSettings(
     val syncInterval: SyncInterval = SyncInterval.WEEKLY,
     val bangumiDataLastSyncTimestamp: Long = 0L,
     val airingReminderEnabled: Boolean = true,
-    val airingDailySummaryEnabled: Boolean = true,
     val airingPreAirEnabled: Boolean = true,
     val airingBingeFinaleEnabled: Boolean = true,
-    val airingReminderHour: Int = 8,
     val notifyBeforeAirMinutes: Int = 15,
     val airDelayOffsetMinutes: Int = 0,
     val airingNotificationOffsetMinutes: Int = -15,
@@ -91,17 +89,11 @@ interface SettingsRepository {
     /** 开播提醒总开关（通知权限的授予与否由 UI 层请求） */
     suspend fun setAiringReminderEnabled(enabled: Boolean)
 
-    /** 每日更新汇总子开关 */
-    suspend fun setAiringDailySummaryEnabled(enabled: Boolean)
-
     /** 单集开播即时提醒子开关 */
     suspend fun setAiringPreAirEnabled(enabled: Boolean)
 
     /** 囤番完结开播提醒子开关 */
     suspend fun setAiringBingeFinaleEnabled(enabled: Boolean)
-
-    /** 每日提醒触发时刻（设备本地时间小时） */
-    suspend fun setAiringReminderHour(hour: Int)
 
     /** 单集临近提醒提前时间量（分钟） */
     suspend fun setNotifyBeforeAirMinutes(minutes: Int)
@@ -292,10 +284,8 @@ internal class SettingsRepositoryImpl(
                 syncInterval = prefs.syncInterval,
                 bangumiDataLastSyncTimestamp = prefs.bangumiDataLastSyncTimestamp,
                 airingReminderEnabled = prefs.airingReminderEnabled,
-                airingDailySummaryEnabled = prefs.airingDailySummaryEnabled,
                 airingPreAirEnabled = prefs.airingPreAirEnabled,
                 airingBingeFinaleEnabled = prefs.airingBingeFinaleEnabled,
-                airingReminderHour = prefs.airingReminderHour,
                 notifyBeforeAirMinutes = prefs.notifyBeforeAirMinutes,
                 airDelayOffsetMinutes = prefs.airDelayOffsetMinutes,
                 airingNotificationOffsetMinutes = prefs.airingNotificationOffsetMinutes,
@@ -422,20 +412,12 @@ internal class SettingsRepositoryImpl(
         userPreferences.setAiringReminderEnabled(enabled)
     }
 
-    override suspend fun setAiringDailySummaryEnabled(enabled: Boolean) {
-        userPreferences.setAiringDailySummaryEnabled(enabled)
-    }
-
     override suspend fun setAiringPreAirEnabled(enabled: Boolean) {
         userPreferences.setAiringPreAirEnabled(enabled)
     }
 
     override suspend fun setAiringBingeFinaleEnabled(enabled: Boolean) {
         userPreferences.setAiringBingeFinaleEnabled(enabled)
-    }
-
-    override suspend fun setAiringReminderHour(hour: Int) {
-        userPreferences.setAiringReminderHour(hour)
     }
 
     override suspend fun setNotifyBeforeAirMinutes(minutes: Int) {

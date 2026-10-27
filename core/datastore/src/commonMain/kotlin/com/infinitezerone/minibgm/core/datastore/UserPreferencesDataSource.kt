@@ -140,12 +140,6 @@ class UserPreferencesDataSource(
         }
     }
 
-    suspend fun setAiringDailySummaryEnabled(enabled: Boolean) {
-        dataStore.updateData { current ->
-            current.copy(airingDailySummaryEnabled = enabled)
-        }
-    }
-
     suspend fun setAiringPreAirEnabled(enabled: Boolean) {
         dataStore.updateData { current ->
             current.copy(airingPreAirEnabled = enabled)
@@ -155,19 +149,6 @@ class UserPreferencesDataSource(
     suspend fun setAiringBingeFinaleEnabled(enabled: Boolean) {
         dataStore.updateData { current ->
             current.copy(airingBingeFinaleEnabled = enabled)
-        }
-    }
-
-    suspend fun setAiringReminderLastNotifiedDate(date: String) {
-        dataStore.updateData { current ->
-            current.copy(airingReminderLastNotifiedDate = date)
-        }
-    }
-
-    /** 每日提醒触发时刻（设备本地时间小时，越界值收敛到 0-23） */
-    suspend fun setAiringReminderHour(hour: Int) {
-        dataStore.updateData { current ->
-            current.copy(airingReminderHour = hour.coerceIn(0, 23))
         }
     }
 

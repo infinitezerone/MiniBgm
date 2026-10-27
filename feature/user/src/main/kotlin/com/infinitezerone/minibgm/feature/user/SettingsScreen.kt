@@ -350,15 +350,11 @@ fun SettingsScreen(
         onBackClick = onBackClick,
         onSelectSyncInterval = viewModel::setSyncInterval,
         onToggleAiringReminder = toggleAiringReminder,
-        airingDailySummaryEnabled = uiState.airingDailySummaryEnabled,
-        onToggleAiringDailySummary = viewModel::setAiringDailySummaryEnabled,
         airingPreAirEnabled = uiState.airingPreAirEnabled,
         onToggleAiringPreAir = viewModel::setAiringPreAirEnabled,
         airingBingeFinaleEnabled = uiState.airingBingeFinaleEnabled,
         onToggleAiringBingeFinale = viewModel::setAiringBingeFinaleEnabled,
         hasNotificationPermission = hasNotificationPermission,
-        airingReminderHour = uiState.airingReminderHour,
-        onSelectReminderHour = viewModel::setAiringReminderHour,
         airingNotificationOffsetMinutes = uiState.airingNotificationOffsetMinutes,
         onSelectAiringNotificationOffsetMinutes = viewModel::setAiringNotificationOffsetMinutes,
         onOpenSystemNotificationSettings = {
@@ -735,15 +731,11 @@ fun SettingsScreenContent(
     onBackClick: () -> Unit,
     onSelectSyncInterval: (SyncInterval) -> Unit,
     onToggleAiringReminder: (Boolean) -> Unit,
-    airingDailySummaryEnabled: Boolean = true,
-    onToggleAiringDailySummary: (Boolean) -> Unit = {},
     airingPreAirEnabled: Boolean = true,
     onToggleAiringPreAir: (Boolean) -> Unit = {},
     airingBingeFinaleEnabled: Boolean = true,
     onToggleAiringBingeFinale: (Boolean) -> Unit = {},
     hasNotificationPermission: Boolean = true,
-    airingReminderHour: Int,
-    onSelectReminderHour: (Int) -> Unit,
     airingNotificationOffsetMinutes: Int = -15,
     onSelectAiringNotificationOffsetMinutes: (Int) -> Unit = {},
     onOpenSystemNotificationSettings: () -> Unit = {},
@@ -863,25 +855,6 @@ fun SettingsScreenContent(
                         airingReminderEnabled = uiState.airingReminderEnabled,
                         onToggleAiringReminder = onToggleAiringReminder,
                         hasNotificationPermission = hasNotificationPermission,
-                        airingDailySummaryEnabled = airingDailySummaryEnabled,
-                        onToggleAiringDailySummary = onToggleAiringDailySummary,
-                        airingReminderHour = airingReminderHour,
-                        onOpenReminderHourDialog = {
-                            coroutineScope.launch {
-                                val selected =
-                                    overlayHostState.await(
-                                        SingleChoiceDialogAction(
-                                            title = context.getString(R.string.feature_user_reminder_hour_title),
-                                            options = listOf(7, 8, 12, 18, 21),
-                                            selectedOption = airingReminderHour,
-                                            optionLabel = { "%02d:00".format(it) },
-                                        ),
-                                    )
-                                if (selected != null) {
-                                    onSelectReminderHour(selected)
-                                }
-                            }
-                        },
                         airingPreAirEnabled = airingPreAirEnabled,
                         onToggleAiringPreAir = onToggleAiringPreAir,
                         airingNotificationOffsetMinutes = airingNotificationOffsetMinutes,
@@ -1036,8 +1009,6 @@ private fun SettingsScreenPreview() {
             onBackClick = {},
             onSelectSyncInterval = {},
             onToggleAiringReminder = {},
-            airingReminderHour = 8,
-            onSelectReminderHour = {},
             airingNotificationOffsetMinutes = -15,
             onSelectAiringNotificationOffsetMinutes = {},
             pipEnabled = true,

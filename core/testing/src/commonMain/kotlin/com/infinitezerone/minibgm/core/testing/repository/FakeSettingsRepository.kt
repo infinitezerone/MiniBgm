@@ -24,8 +24,6 @@ class FakeSettingsRepository(
         private set
     var setAiringReminderEnabledCallCount: Int = 0
         private set
-    var setAiringReminderHourCallCount: Int = 0
-        private set
     var setAiConfigCallCount: Int = 0
         private set
     var setDanmakuConfigCallCount: Int = 0
@@ -78,21 +76,12 @@ class FakeSettingsRepository(
         settingsState.value = settingsState.value.copy(airingReminderEnabled = enabled)
     }
 
-    override suspend fun setAiringDailySummaryEnabled(enabled: Boolean) {
-        settingsState.value = settingsState.value.copy(airingDailySummaryEnabled = enabled)
-    }
-
     override suspend fun setAiringPreAirEnabled(enabled: Boolean) {
         settingsState.value = settingsState.value.copy(airingPreAirEnabled = enabled)
     }
 
     override suspend fun setAiringBingeFinaleEnabled(enabled: Boolean) {
         settingsState.value = settingsState.value.copy(airingBingeFinaleEnabled = enabled)
-    }
-
-    override suspend fun setAiringReminderHour(hour: Int) {
-        setAiringReminderHourCallCount++
-        settingsState.value = settingsState.value.copy(airingReminderHour = hour)
     }
 
     override suspend fun setNotifyBeforeAirMinutes(minutes: Int) {

@@ -14,12 +14,10 @@ import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.CollectionType
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
-import java.time.LocalDateTime
-import java.time.ZoneId
 
 /**
  * 开播提醒定时调度器：基于 Android [AlarmManager.setAndAllowWhileIdle] 实现低功耗、准时的
- * 单集临近开播与每日汇总唤醒调度（Next-Up 链式预约），杜绝 WorkManager 频繁轮询与息屏延误。
+ * 单集临近开播唤醒调度（Next-Up 链式预约），杜绝 WorkManager 频繁轮询与息屏延误。
  */
 class AiringAlarmScheduler(
     private val context: Context,
@@ -32,12 +30,12 @@ class AiringAlarmScheduler(
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
 
     /**
-     * 重新核准并预约所有提醒（单集开播 + 每日汇总）。
+     * 重新核准并预约单集开播提醒。
      * 在数据同步完成、用户收藏更新、设置项变动或开机重启时调用。
      */
     suspend fun rescheduleAll() {
+        cancelLegacyDailySummaryAlarm()
         scheduleNextPreAir()
-        scheduleDailySummary()
     }
 
     /**
@@ -137,52 +135,6 @@ class AiringAlarmScheduler(
         }
     }
 
-    /**
-     * 预约每日追番汇总提醒（每天在用户设定的小时触发一次）。
-     */
-    suspend fun scheduleDailySummary() {
-        if (alarmManager == null) return
-        val prefs = userPreferences.userPreferences.firstOrNull() ?: return
-        val isLoggedIn = tokenProvider.activeUserId.first() != null
-
-        if (!prefs.airingReminderEnabled || !prefs.airingDailySummaryEnabled || !isLoggedIn) {
-            cancelDailySummaryAlarm()
-            return
-        }
-
-        val now = LocalDateTime.now()
-        val todayStr = now.toLocalDate().toString()
-        var targetDateTime =
-            now
-                .withHour(prefs.airingReminderHour.coerceIn(0, 23))
-                .withMinute(0)
-                .withSecond(0)
-                .withNano(0)
-
-        // 若今天该时刻已过，或者今天已经推送过汇总，预约明天同一时刻
-        if (now.isAfter(targetDateTime) || prefs.airingReminderLastNotifiedDate == todayStr) {
-            targetDateTime = targetDateTime.plusDays(1)
-        }
-
-        val triggerMillis =
-            targetDateTime
-                .atZone(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-
-        val pendingIntent = createDailySummaryPendingIntent()
-
-        runCatching {
-            setExactOrInexactAlarm(triggerMillis, pendingIntent)
-            log.i {
-                "[ALARM_SCHEDULER:DAILY] scheduled daily summary at " +
-                    TimeUtils.isoUtcFromEpochMillis(triggerMillis)
-            }
-        }.onFailure { e ->
-            log.e(e) { "[ALARM_SCHEDULER:DAILY:FAILED] failed to set daily summary alarm" }
-        }
-    }
-
     private fun setExactOrInexactAlarm(
         triggerMillis: Long,
         pendingIntent: PendingIntent,
@@ -216,16 +168,12 @@ class AiringAlarmScheduler(
     }
 
     fun cancelAll() {
+        cancelLegacyDailySummaryAlarm()
         cancelPreAirAlarm()
-        cancelDailySummaryAlarm()
     }
 
     fun cancelPreAirAlarm() {
         alarmManager?.cancel(createPreAirPendingIntent())
-    }
-
-    fun cancelDailySummaryAlarm() {
-        alarmManager?.cancel(createDailySummaryPendingIntent())
     }
 
     private fun createPreAirPendingIntent(): PendingIntent {
@@ -241,25 +189,29 @@ class AiringAlarmScheduler(
         )
     }
 
-    private fun createDailySummaryPendingIntent(): PendingIntent {
+    /** 旧版本遗留的每日汇总闹钟：升级后不再有消费方，启动时主动取消一次。 */
+    private fun cancelLegacyDailySummaryAlarm() {
         val intent =
             Intent(context, AiringAlarmReceiver::class.java).apply {
-                action = ACTION_AIRING_DAILY_SUMMARY
+                action = LEGACY_ACTION_AIRING_DAILY_SUMMARY
             }
-        return PendingIntent.getBroadcast(
-            context,
-            REQUEST_CODE_DAILY_SUMMARY,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
+        val pendingIntent =
+            PendingIntent.getBroadcast(
+                context,
+                LEGACY_REQUEST_CODE_DAILY_SUMMARY,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        alarmManager?.cancel(pendingIntent)
     }
 
     companion object {
         const val ACTION_AIRING_PRE_AIR = "com.infinitezerone.minibgm.sync.work.action.AIRING_PRE_AIR"
-        const val ACTION_AIRING_DAILY_SUMMARY = "com.infinitezerone.minibgm.sync.work.action.AIRING_DAILY_SUMMARY"
 
         private const val REQUEST_CODE_PRE_AIR = 47101
-        private const val REQUEST_CODE_DAILY_SUMMARY = 47102
+        private const val LEGACY_REQUEST_CODE_DAILY_SUMMARY = 47102
+        private const val LEGACY_ACTION_AIRING_DAILY_SUMMARY =
+            "com.infinitezerone.minibgm.sync.work.action.AIRING_DAILY_SUMMARY"
 
         /** 单集开播检索窗口（14 天 = 336 小时），覆盖跨周番剧与周番停播/合集等空档，保证 Next-Up 链式不中断 */
         const val PRE_AIR_LOOKAHEAD_HOURS = 14L * 24L

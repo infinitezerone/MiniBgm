@@ -139,6 +139,6 @@ class SettingsRepositoryPipModeTest {
             val settings = h.repository.settings.first()
             assertFalse(settings.pipEnabled)
             assertEquals(SyncInterval.DAILY, settings.syncInterval)
-            assertEquals(8, settings.airingReminderHour)
+            assertTrue(settings.airingPreAirEnabled)
         }
 }

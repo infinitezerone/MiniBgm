@@ -224,19 +224,14 @@ class UserPreferencesDataSourceTest {
         }
 
     @Test
-    fun `notification sub-switches toggle independently`() =
+    fun `pre-air notification sub-switch toggles independently`() =
         runTest {
             val (dataSource, dataStore) = createDataSource()
-            assertTrue(dataStore.data.first().airingDailySummaryEnabled, "default daily summary should be true")
             assertTrue(dataStore.data.first().airingPreAirEnabled, "default pre-air should be true")
 
-            dataSource.setAiringDailySummaryEnabled(false)
-            assertFalse(dataStore.data.first().airingDailySummaryEnabled)
-            assertTrue(dataStore.data.first().airingPreAirEnabled)
-
             dataSource.setAiringPreAirEnabled(false)
-            assertFalse(dataStore.data.first().airingDailySummaryEnabled)
             assertFalse(dataStore.data.first().airingPreAirEnabled)
+            assertTrue(dataStore.data.first().airingReminderEnabled)
         }
 
     @Test

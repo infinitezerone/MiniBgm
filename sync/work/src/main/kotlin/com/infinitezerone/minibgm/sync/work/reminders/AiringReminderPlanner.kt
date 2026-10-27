@@ -32,24 +32,6 @@ object AiringReminderPlanner {
         return (neededMinutes + 59L) / 60L
     }
 
-    fun plan(
-        enabled: Boolean,
-        isLoggedIn: Boolean,
-        lastNotifiedDate: String,
-        today: String,
-        currentHour: Int,
-        reminderHour: Int,
-        upcoming: List<UpcomingAiring>,
-    ): List<UpcomingAiring> {
-        if (!enabled) return emptyList()
-        if (!isLoggedIn) return emptyList()
-        // 未到用户设定的提醒时刻
-        if (currentHour < reminderHour) return emptyList()
-        // 每日去重：同一天只提醒一次
-        if (lastNotifiedDate == today) return emptyList()
-        return upcoming
-    }
-
     /**
      * 开播前提醒：挑选已进入有效窗口且尚未提醒过的单集。
      * 支持播放源延迟偏移与超时容错区间，杜绝因系统休眠调度抖动导致的漏报。

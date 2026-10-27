@@ -229,17 +229,6 @@ class UserViewModelTest {
         }
 
     @Test
-    fun setAiringReminderHour_updatesState() =
-        runTest {
-            val (viewModel, _) = createViewModel()
-
-            viewModel.setAiringReminderHour(21)
-
-            val state = viewModel.uiState.first { it.airingReminderHour == 21 }
-            assertEquals(21, state.airingReminderHour)
-        }
-
-    @Test
     fun loggedInState_loadsCollectionCountsFromRepository() =
         runTest {
             val authRepo =
@@ -364,7 +353,7 @@ class UserViewModelTest {
 
             // 修改设置项
             viewModel.setSyncInterval(SyncInterval.DAILY)
-            viewModel.setAiringReminderHour(10)
+            viewModel.setAiringPreAirEnabled(false)
 
             // 验证未触发重新拉取：settings 流不在 counts 换挡判据（profile + generation）里
             assertEquals(1, collectionRepo.fetchCollectionCountsCallCount)

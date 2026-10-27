@@ -78,9 +78,7 @@ object Sync {
                 .map {
                     listOf(
                         it.airingReminderEnabled,
-                        it.airingDailySummaryEnabled,
                         it.airingPreAirEnabled,
-                        it.airingReminderHour,
                         it.notifyBeforeAirMinutes,
                         it.airDelayOffsetMinutes,
                         it.bangumiDataLastSyncTimestamp,

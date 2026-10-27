@@ -208,10 +208,6 @@ internal fun ReminderSettingsCard(
     airingReminderEnabled: Boolean,
     onToggleAiringReminder: (Boolean) -> Unit,
     hasNotificationPermission: Boolean,
-    airingDailySummaryEnabled: Boolean,
-    onToggleAiringDailySummary: (Boolean) -> Unit,
-    airingReminderHour: Int,
-    onOpenReminderHourDialog: () -> Unit,
     airingPreAirEnabled: Boolean,
     onToggleAiringPreAir: (Boolean) -> Unit,
     airingNotificationOffsetMinutes: Int,
@@ -269,23 +265,7 @@ internal fun ReminderSettingsCard(
                 Column {
                     SettingsDivider()
 
-                    // 1. 每日更新汇总
-                    SettingsItemRow(
-                        icon = BgmIcons.Schedule,
-                        title = stringResource(R.string.feature_user_settings_daily_summary_title),
-                        subtitle = if (airingDailySummaryEnabled) "%02d:00".format(airingReminderHour) else null,
-                        onClick = if (airingDailySummaryEnabled) onOpenReminderHourDialog else null,
-                        trailing = {
-                            Switch(
-                                checked = airingDailySummaryEnabled,
-                                onCheckedChange = onToggleAiringDailySummary,
-                            )
-                        },
-                    )
-
-                    SettingsDivider()
-
-                    // 2. 新集开播提醒
+                    // 1. 新集开播提醒
                     val timingSubtitle =
                         when {
                             airingNotificationOffsetMinutes < 0 ->
@@ -325,7 +305,7 @@ internal fun ReminderSettingsCard(
 
                     SettingsDivider()
 
-                    // 3. 囤番完结提醒
+                    // 2. 囤番完结提醒
                     SettingsItemRow(
                         icon = BgmIcons.Inventory,
                         title = stringResource(R.string.feature_user_settings_binge_finale_title),
