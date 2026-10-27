@@ -840,29 +840,29 @@ private fun TopCapsuleIndicator(
 }
 
 /**
- * 进度快进/快退 HUD 卡片
+ * 进度快进/快退 HUD 悬浮指示卡片（极简半透明微胶囊设计）
  */
 @Composable
-private fun SeekFeedbackCard(
+internal fun SeekFeedbackCard(
     targetMs: Long,
     totalMs: Long,
     deltaMs: Long,
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = Color.Black.copy(alpha = 0.82f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+        shape = RoundedCornerShape(percent = 50),
+        color = Color.Black.copy(alpha = 0.50f),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f)),
         contentColor = Color.White,
-        modifier = modifier.padding(16.dp),
+        modifier = modifier,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
             modifier =
                 Modifier
                     .widthIn(min = 160.dp)
-                    .padding(horizontal = 22.dp, vertical = 12.dp),
+                    .padding(horizontal = 22.dp, vertical = 8.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -872,13 +872,13 @@ private fun SeekFeedbackCard(
                     imageVector = if (deltaMs >= 0) BgmIcons.FastForward else BgmIcons.FastRewind,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(18.dp),
                 )
                 val deltaSec = (abs(deltaMs) / 1000).toInt()
                 Text(
                     text = "${if (deltaMs >= 0) "+" else "-"}${deltaSec}s",
                     style =
-                        MaterialTheme.typography.titleMedium.copy(
+                        MaterialTheme.typography.titleSmall.copy(
                             fontFeatureSettings = "tnum",
                         ),
                     fontWeight = FontWeight.Bold,
@@ -888,11 +888,11 @@ private fun SeekFeedbackCard(
             Text(
                 text = "${formatDuration(targetMs)} / ${formatDuration(totalMs)}",
                 style =
-                    MaterialTheme.typography.bodyMedium.copy(
+                    MaterialTheme.typography.labelMedium.copy(
                         fontFeatureSettings = "tnum",
                     ),
                 fontWeight = FontWeight.Medium,
-                color = Color.White.copy(alpha = 0.9f),
+                color = Color.White.copy(alpha = 0.85f),
             )
         }
     }
