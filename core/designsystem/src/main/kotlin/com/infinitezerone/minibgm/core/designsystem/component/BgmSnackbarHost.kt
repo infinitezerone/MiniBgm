@@ -1,9 +1,8 @@
 package com.infinitezerone.minibgm.core.designsystem.component
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
@@ -11,6 +10,7 @@ import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -83,35 +83,52 @@ fun BgmSnackbarHost(
         hostState = hostState,
         modifier =
             modifier
-                .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal))
+                .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(bottom = bottomPadding),
         snackbar = snackbar,
     )
 }
 
 @Composable
-fun BgmSnackbar(snackbarData: SnackbarData) {
-    if (LocalAppUiStyle.current == AppUiStyle.Luminous) {
-        BgmLuminousSnackbar(snackbarData)
-    } else {
-        Snackbar(snackbarData)
-    }
-}
+fun BgmSnackbar(
+    snackbarData: SnackbarData,
+    modifier: Modifier = Modifier,
+) {
+    val uiStyle = LocalAppUiStyle.current
+    val shape = MaterialTheme.shapes.large
 
-@Composable
-private fun BgmLuminousSnackbar(snackbarData: SnackbarData) {
-    BgmGlassSurface(
-        shape = MaterialTheme.shapes.large,
-        level = BgmGlassLevel.Prominent,
-        shadowElevation = BgmElevation.floatingChrome,
-    ) {
-        Snackbar(
-            snackbarData = snackbarData,
-            shape = RectangleShape,
-            containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            actionColor = MaterialTheme.colorScheme.primary,
-            dismissActionContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    if (uiStyle == AppUiStyle.Luminous) {
+        BgmGlassSurface(
+            modifier = modifier.padding(horizontal = 16.dp),
+            shape = shape,
+            level = BgmGlassLevel.Prominent,
+            shadowElevation = BgmElevation.floatingChrome,
+        ) {
+            Snackbar(
+                snackbarData = snackbarData,
+                shape = RectangleShape,
+                containerColor = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                actionColor = MaterialTheme.colorScheme.primary,
+                dismissActionContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    } else {
+        Surface(
+            modifier = modifier.padding(horizontal = 16.dp),
+            shape = shape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shadowElevation = BgmElevation.floatingChrome,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Snackbar(
+                snackbarData = snackbarData,
+                shape = RectangleShape,
+                containerColor = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                actionColor = MaterialTheme.colorScheme.primary,
+                dismissActionContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }

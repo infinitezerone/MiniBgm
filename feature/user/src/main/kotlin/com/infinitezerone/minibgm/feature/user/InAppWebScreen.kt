@@ -5,8 +5,8 @@ import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -166,7 +166,7 @@ internal fun InAppWebScreen(
             }
         }
 
-        SnackbarHost(
+        BgmSnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier.align(Alignment.BottomCenter),
         )

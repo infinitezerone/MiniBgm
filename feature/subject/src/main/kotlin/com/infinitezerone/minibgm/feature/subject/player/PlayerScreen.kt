@@ -42,7 +42,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Tab
@@ -95,6 +94,7 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.model.DanmakuItem
@@ -712,9 +712,10 @@ fun PlayerScreen(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = {
-            SnackbarHost(
+            BgmSnackbarHost(
                 hostState = snackbarHostState,
-                modifier = Modifier.navigationBarsPadding(),
+                isTopLevel = false,
+                bottomOffset = if (isLandscape) 0.dp else 12.dp,
             )
         },
         containerColor = if (isLandscape) Color.Black else MaterialTheme.colorScheme.background,

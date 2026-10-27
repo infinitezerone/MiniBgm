@@ -36,7 +36,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -61,6 +60,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.CoverImage
@@ -198,7 +198,7 @@ internal fun SubjectDownloadDetailContent(
         }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { BgmSnackbarHost(hostState = snackbarHostState) },
         topBar = {
             BgmTopAppBar(
                 title = {

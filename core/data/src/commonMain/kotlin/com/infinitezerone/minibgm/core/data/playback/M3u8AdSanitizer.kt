@@ -201,7 +201,10 @@ object M3u8AdSanitizer {
         return resultLines.joinToString("\n")
     }
 
-    private fun inspectSegmentLine(trimmed: String, block: SegmentBlock) {
+    private fun inspectSegmentLine(
+        trimmed: String,
+        block: SegmentBlock,
+    ) {
         if (trimmed.startsWith("#EXTINF:")) {
             val match = EXTINF_DURATION_REGEX.matchEntire(trimmed)
             val dur = match?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0

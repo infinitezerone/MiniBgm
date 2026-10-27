@@ -6,7 +6,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class M3u8AdSanitizerTest {
-
     @Test
     fun sanitize_stripsHeadDiscontinuityAdSegments_andUpdatesSequence() {
         val rawM3u8 =

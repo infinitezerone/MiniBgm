@@ -29,7 +29,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -55,6 +54,7 @@ import com.infinitezerone.minibgm.core.common.BgmUrlParser
 import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
+import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmTopAppBar
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -141,7 +141,7 @@ fun TopicDetailScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        snackbarHost = { BgmSnackbarHost(hostState = snackbarHostState) },
         topBar = {
             BgmTopAppBar(
                 contentMaxWidth = 840.dp,
