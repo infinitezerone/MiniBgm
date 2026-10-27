@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +47,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
@@ -560,44 +559,37 @@ fun SubjectDetailScreen(
                                 Modifier
                                     .fillMaxSize()
                                     .padding(top = topChromeHeight)
-                                    .padding(24.dp),
+                                    .padding(32.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Card(
-                                colors =
-                                    CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                                    ),
-                                modifier = Modifier.fillMaxWidth(),
+                            Column(
+                                modifier = Modifier.fillMaxWidth().widthIn(max = 380.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Column(
-                                    modifier = Modifier.padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = BgmIcons.ErrorOutline,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(48.dp),
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.feature_subject_load_failed),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                    )
-                                    Text(
-                                        text = uiState.error.orEmpty(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                    )
-                                    BgmPillButton(
-                                        onClick = viewModel::refresh,
-                                        text = stringResource(R.string.feature_subject_reload),
-                                        modifier = Modifier.padding(top = 8.dp),
-                                    )
-                                }
+                                Icon(
+                                    imageVector = BgmIcons.ErrorOutline,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(40.dp),
+                                )
+                                Text(
+                                    text = stringResource(R.string.feature_subject_load_failed),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = uiState.error.orEmpty(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                                BgmPillButton(
+                                    onClick = viewModel::refresh,
+                                    text = stringResource(R.string.feature_subject_reload),
+                                    modifier = Modifier.padding(top = 8.dp),
+                                )
                             }
                         }
                     }
@@ -622,7 +614,7 @@ fun SubjectDetailScreen(
                                 onIncrementWatched = viewModel::incrementWatchedEpisode,
                                 onUpdateCollectionStatus = { type ->
                                     viewModel.updateCollectionStatus(type)
-                                    if (type == CollectionType.DOING && uiState.isLoggedIn) {
+                                    if ((type == CollectionType.DOING || type == CollectionType.WISH) && uiState.isLoggedIn) {
                                         val systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
                                         if (!systemAllowed && !hasDismissedAiringReminderPrompt) {
                                             showAiringReminderPrompt = true
@@ -665,6 +657,7 @@ fun SubjectDetailScreen(
                                     // Lazy 项被回收/预取时可能回调空矩形；忽略它，避免顶栏在滚过标题后重新变透明。
                                     if (bounds.height > 0f) titleBounds = bounds
                                 },
+                                onRetry = viewModel::refresh,
                                 modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(),
                             )
                         }

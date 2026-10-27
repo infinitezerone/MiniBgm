@@ -5,6 +5,7 @@ import androidx.compose.animation.rememberSplineBasedDecay
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -12,13 +13,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
@@ -42,10 +44,14 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
+import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.model.CollectionType
 import com.infinitezerone.minibgm.core.model.Subject
 import com.infinitezerone.minibgm.core.model.SubjectCharacter
@@ -126,6 +132,7 @@ internal fun SubjectDetailContent(
     topPadding: Dp = 12.dp,
     headerCollapse: SubjectHeaderCollapseState,
     onTitleBoundsChanged: (Rect) -> Unit = {},
+    onRetry: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -240,9 +247,6 @@ internal fun SubjectDetailContent(
             Column(
                 modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
             ) {
-                if (uiState.error != null) {
-                    SubjectInlineError(message = uiState.error.orEmpty())
-                }
                 Box(modifier = Modifier.fillMaxWidth().padding(top = SubjectHeaderTopPadding)) {
                     SubjectHeader(
                         displaySubject = displaySubject,
@@ -264,11 +268,49 @@ internal fun SubjectDetailContent(
                         onPlayNextLongClick = onPlayNextLongClick,
                     )
                 }
-                if (uiState.isLoading || isTransitionStabilizing) {
-                    Spacer(Modifier.height(SubjectHeaderTabGap))
-                    SubjectDetailTabBarSkeleton(modifier = Modifier.padding(horizontal = 16.dp))
-                    Spacer(Modifier.height(SubjectTabTopPadding))
-                    SubjectDetailBodySkeleton(modifier = Modifier.padding(horizontal = 16.dp))
+                when {
+                    uiState.isLoading || isTransitionStabilizing -> {
+                        Spacer(Modifier.height(SubjectHeaderTabGap))
+                        SubjectDetailTabBarSkeleton(modifier = Modifier.padding(horizontal = 16.dp))
+                        Spacer(Modifier.height(SubjectTabTopPadding))
+                        SubjectDetailBodySkeleton(modifier = Modifier.padding(horizontal = 16.dp))
+                    }
+                    uiState.error != null -> {
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 32.dp, vertical = 48.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(
+                                imageVector = BgmIcons.ErrorOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(36.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.feature_subject_load_failed),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = uiState.error.orEmpty(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                            )
+                            if (onRetry != null) {
+                                BgmPillButton(
+                                    onClick = onRetry,
+                                    text = stringResource(R.string.feature_subject_reload),
+                                    modifier = Modifier.padding(top = 6.dp),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -291,7 +333,7 @@ internal fun SubjectDetailContent(
                         }
                     }.nestedScroll(collapseConnection),
             content = {
-                // Measurable 0: 头部收合区（错误提示 + 上间距 + Hero 卡片 + 与 Tab 栏的呼吸距离）
+                // Measurable 0: 头部收合区（上间距 + Hero 卡片 + 与 Tab 栏的呼吸距离）
                 Box(
                     modifier =
                         Modifier
@@ -299,9 +341,6 @@ internal fun SubjectDetailContent(
                             .then(headerDragModifier),
                 ) {
                     Column {
-                        if (uiState.error != null) {
-                            SubjectInlineError(message = uiState.error.orEmpty())
-                        }
                         Spacer(Modifier.height(SubjectHeaderTopPadding))
                         SubjectHeader(
                             displaySubject = displaySubject,
@@ -459,21 +498,4 @@ private fun SubjectHeader(
         onPlayNextLongClick = onPlayNextLongClick,
         modifier = Modifier.padding(horizontal = 16.dp),
     )
-}
-
-/** 同步失败的内联提示条。 */
-@Composable
-private fun SubjectInlineError(message: String) {
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.errorContainer,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.feature_subject_sync_hint, message),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onErrorContainer,
-            modifier = Modifier.padding(12.dp),
-        )
-    }
 }
