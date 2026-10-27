@@ -222,12 +222,6 @@ internal fun ReminderSettingsCard(
 ) {
     val isReminderActive = airingReminderEnabled && hasNotificationPermission
     val isPreAirActive = airingPreAirEnabled && hasNotificationPermission && hasAiringChannel
-    val reminderSubtitle =
-        if (!hasNotificationPermission) {
-            stringResource(R.string.feature_user_settings_reminder_perm_subtitle)
-        } else {
-            null
-        }
 
     Column(modifier = modifier.fillMaxWidth()) {
         SettingsSectionHeader(text = stringResource(R.string.feature_user_section_sync_reminder))
@@ -247,7 +241,6 @@ internal fun ReminderSettingsCard(
                         MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
                     },
                 title = stringResource(R.string.feature_user_settings_airing_reminder_title),
-                subtitle = reminderSubtitle,
                 onClick = {
                     onToggleAiringReminder(!isReminderActive)
                 },
