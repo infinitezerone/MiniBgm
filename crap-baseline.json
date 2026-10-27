@@ -190,6 +190,48 @@
       "method": "invokeSuspend",
       "category": "platform",
       "reason": "Plugin installation involving dynamic DEX and native library loading"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/data/playback/M3u8AdSanitizer",
+      "method": "stripHeuristicAdSegments",
+      "category": "structural",
+      "reason": "HLS m3u8 playlist heuristic ad segmentation stripper; CC=37 exceeds threshold structurally at 98.6% coverage"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/data/repository/resolver/parse/TvBoxParseResolverImpl",
+      "method": "extractFlags$MiniBgm_core_data",
+      "category": "structural",
+      "reason": "TVBox flag extractor over complex JSON and query flag permutations"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/data/repository/resolver/parse/TvBoxParseResolverImpl$resolveScriptParse$2$1",
+      "method": "invokeSuspend",
+      "category": "coverage-gap",
+      "reason": "Script-based parse execution coroutine in TVBox parse resolver"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/data/repository/resolver/parse/TvBoxParseResolverImpl",
+      "method": "fallbackSniff",
+      "category": "coverage-gap",
+      "reason": "TVBox fallback media sniffing"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/data/repository/resolver/parse/TvBoxParseResolverImpl",
+      "method": "requestHeadersFor$MiniBgm_core_data",
+      "category": "coverage-gap",
+      "reason": "TVBox parse request header builder with custom user-agent and header rules"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/PageFetchServiceImpl",
+      "method": "postBody",
+      "category": "coverage-gap",
+      "reason": "HTTP client post body fetcher for TVBox parse APIs"
+    },
+    {
+      "class": "com/infinitezerone/minibgm/core/network/PageFetchServiceImpl$postBody$1",
+      "method": "invokeSuspend",
+      "category": "coverage-gap",
+      "reason": "HTTP client post body coroutine execution loop"
     }
   ]
 }

@@ -487,4 +487,68 @@ class PageFetchServiceTest {
 
             assertEquals(StreamProbe.Responded(status = 200, contentType = "video/mp4"), probe)
         }
+
+    @Test
+    fun `postBody 成功取回响应并发送指定的请求体与头`() =
+        runTest {
+            var sentBody = ""
+            val client =
+                HttpClient(
+                    MockEngine { request ->
+                        capturedHeaders.add(request.headers)
+                        sentBody = (request.body as? io.ktor.http.content.TextContent)?.text.orEmpty()
+                        respond(
+                            content = "{\"result\":\"ok\"}",
+                            status = HttpStatusCode.OK,
+                            headers = headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                        )
+                    },
+                )
+            val service = PageFetchServiceImpl(client)
+            val page =
+                service.postBody(
+                    url = "https://api.example.com/parse",
+                    body = "url=https%3A%2F%2Ftest.com",
+                    contentType = "application/x-www-form-urlencoded",
+                    requestHeaders = mapOf("X-Custom" to "val1", "X-Bad" to "1\r\nX-Hack: 2"),
+                )
+
+            assertEquals("{\"result\":\"ok\"}", page?.html)
+            assertEquals("https://api.example.com/parse", page?.url)
+            assertEquals("url=https%3A%2F%2Ftest.com", sentBody)
+            val headers = capturedHeaders.single()
+            assertEquals("val1", headers["X-Custom"])
+            assertNull(headers["X-Bad"])
+        }
+
+    @Test
+    fun `postBody 非法地址与空响应降级为 null`() =
+        runTest {
+            val service = service(status = HttpStatusCode.InternalServerError, body = "")
+            assertNull(service.postBody("ftp://example.com", "body"))
+            assertNull(service.postBody("https://fail.example.com", "body"))
+        }
+
+    @Test
+    fun `postBody 重定向跟随并最终返回页面`() =
+        runTest {
+            val client =
+                HttpClient(
+                    MockEngine { request ->
+                        if (request.url.encodedPath == "/initial") {
+                            respondRedirect("https://api.example.com/final")
+                        } else {
+                            respond(
+                                content = "final content",
+                                status = HttpStatusCode.OK,
+                                headers = headersOf(HttpHeaders.ContentType to listOf("text/plain")),
+                            )
+                        }
+                    },
+                )
+            val service = PageFetchServiceImpl(client)
+            val page = service.postBody("https://api.example.com/initial", "test")
+            assertEquals("final content", page?.html)
+            assertEquals("https://api.example.com/final", page?.url)
+        }
 }
