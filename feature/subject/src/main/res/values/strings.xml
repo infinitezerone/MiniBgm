@@ -425,7 +425,7 @@
     <string name="feature_subject_player_auto_play_next">自动连播</string>
     <string name="feature_subject_player_close_drawer">关闭</string>
     <string name="feature_subject_player_item_index_format">第 %1$d 条</string>
-    <string name="feature_subject_player_speed_fast_forward">%1$sx 快进</string>
+    <string name="feature_subject_player_speed_fast_forward">%1$sX</string>
     <string name="feature_subject_player_resume_position">上次播至 %1$s</string>
     <string name="feature_subject_player_start_from_beginning">从头播放</string>
     <string name="feature_subject_player_switching_source">正在切换线路…</string>

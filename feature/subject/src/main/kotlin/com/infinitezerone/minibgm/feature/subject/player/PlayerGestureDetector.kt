@@ -431,11 +431,11 @@ private class PlayerGesturesNode(
                         val isLeftActive =
                             lastDoubleTapSide == DoubleTapSide.LEFT &&
                                 (now - lastDoubleTapTime) <= DOUBLE_TAP_WINDOW_MS &&
-                                offset.x < width * 0.45f
+                                offset.x < width * QUICK_SEEK_ACTIVE_EDGE_RATIO
                         val isRightActive =
                             lastDoubleTapSide == DoubleTapSide.RIGHT &&
                                 (now - lastDoubleTapTime) <= DOUBLE_TAP_WINDOW_MS &&
-                                offset.x > width * 0.55f
+                                offset.x > width * (1f - QUICK_SEEK_ACTIVE_EDGE_RATIO)
 
                         when {
                             isLeftActive -> handleQuickSeek(DoubleTapSide.LEFT)
@@ -455,8 +455,8 @@ private class PlayerGesturesNode(
                         val width = size.width
                         val x = offset.x
                         when {
-                            x < width * 0.35f -> handleQuickSeek(DoubleTapSide.LEFT)
-                            x > width * 0.65f -> handleQuickSeek(DoubleTapSide.RIGHT)
+                            x < width * QUICK_SEEK_INITIAL_EDGE_RATIO -> handleQuickSeek(DoubleTapSide.LEFT)
+                            x > width * (1f - QUICK_SEEK_INITIAL_EDGE_RATIO) -> handleQuickSeek(DoubleTapSide.RIGHT)
                             else -> {
                                 commitPendingQuickSeek()
                                 onHaptic(HapticFeedbackType.LongPress)
@@ -480,12 +480,12 @@ private class PlayerGesturesNode(
                             !isLocked &&
                                 lastDoubleTapSide == DoubleTapSide.LEFT &&
                                 (now - lastDoubleTapTime) <= DOUBLE_TAP_WINDOW_MS &&
-                                offset.x < width * 0.45f
+                                offset.x < width * QUICK_SEEK_ACTIVE_EDGE_RATIO
                         val isRightActive =
                             !isLocked &&
                                 lastDoubleTapSide == DoubleTapSide.RIGHT &&
                                 (now - lastDoubleTapTime) <= DOUBLE_TAP_WINDOW_MS &&
-                                offset.x > width * 0.55f
+                                offset.x > width * (1f - QUICK_SEEK_ACTIVE_EDGE_RATIO)
 
                         val released = tryAwaitRelease()
                         if (isFastForwarding) {
@@ -897,35 +897,36 @@ private fun SeekFeedbackCard(
 }
 
 /**
- * 长按倍速微胶囊指示器（置于顶部中央，规格与音量/亮度指示器对齐，避免遮挡字幕）
+ * 长按倍速微胶囊指示器（极简半透明设计，置于顶部中央，避免遮挡字幕）
  */
 @Composable
 private fun FastForwardChip(
     speed: Float,
     modifier: Modifier = Modifier,
 ) {
+    val speedStr = if (speed % 1f == 0f) speed.toInt().toString() else speed.toString()
     Surface(
         shape = RoundedCornerShape(percent = 50),
-        color = Color.Black.copy(alpha = 0.82f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+        color = Color.Black.copy(alpha = 0.45f),
+        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.12f)),
         contentColor = Color.White,
         modifier = modifier.padding(top = GESTURE_HUD_TOP_PADDING),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
             Icon(
                 imageVector = BgmIcons.FastForward,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(16.dp),
             )
             Text(
-                text = stringResource(R.string.feature_subject_player_speed_fast_forward, speed),
+                text = stringResource(R.string.feature_subject_player_speed_fast_forward, speedStr),
                 style =
-                    MaterialTheme.typography.labelSmall.copy(
+                    MaterialTheme.typography.labelMedium.copy(
                         fontFeatureSettings = "tnum",
                     ),
                 fontWeight = FontWeight.Bold,
@@ -948,8 +949,8 @@ private fun YouTubeDoubleTapIndicator(
     val isLeft = state.side == DoubleTapSide.LEFT
     var arrowOffsetPx by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(state.token) {
-        arrowOffsetPx = if (isLeft) -8f else 8f
-        delay(60)
+        arrowOffsetPx = if (isLeft) -5f else 5f
+        delay(50)
         arrowOffsetPx = 0f
     }
     val animatedArrowOffset by animateFloatAsState(
@@ -968,10 +969,10 @@ private fun YouTubeDoubleTapIndicator(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier =
                 Modifier
-                    .padding(horizontal = 48.dp),
+                    .padding(horizontal = 36.dp),
         ) {
             if (isLeft) {
                 Icon(
@@ -980,7 +981,7 @@ private fun YouTubeDoubleTapIndicator(
                     tint = Color.White,
                     modifier =
                         Modifier
-                            .size(20.dp)
+                            .size(16.dp)
                             .rotate(180f)
                             .offset { IntOffset(x = animatedArrowOffset.dp.roundToPx(), y = 0) },
                 )
@@ -1036,13 +1037,13 @@ private fun YouTubeDoubleTapIndicator(
                 Text(
                     text = stringResource(R.string.feature_subject_player_seek_seconds_format, targetSeconds),
                     style =
-                        MaterialTheme.typography.titleMedium.copy(
+                        MaterialTheme.typography.titleSmall.copy(
                             fontFeatureSettings = "tnum",
                             shadow =
                                 Shadow(
-                                    color = Color.Black.copy(alpha = 0.75f),
-                                    offset = Offset(0f, 2f),
-                                    blurRadius = 8f,
+                                    color = Color.Black.copy(alpha = 0.55f),
+                                    offset = Offset(0f, 1f),
+                                    blurRadius = 4f,
                                 ),
                         ),
                     fontWeight = FontWeight.Bold,
@@ -1056,7 +1057,7 @@ private fun YouTubeDoubleTapIndicator(
                     tint = Color.White,
                     modifier =
                         Modifier
-                            .size(20.dp)
+                            .size(16.dp)
                             .offset { IntOffset(x = animatedArrowOffset.dp.roundToPx(), y = 0) },
                 )
             }
@@ -1064,6 +1065,8 @@ private fun YouTubeDoubleTapIndicator(
     }
 }
 
+private const val QUICK_SEEK_INITIAL_EDGE_RATIO = 0.28f
+private const val QUICK_SEEK_ACTIVE_EDGE_RATIO = 0.32f
 private const val DOUBLE_TAP_WINDOW_MS = 900L
 private const val DOUBLE_TAP_COMMIT_DELAY_MS = 900L
 
