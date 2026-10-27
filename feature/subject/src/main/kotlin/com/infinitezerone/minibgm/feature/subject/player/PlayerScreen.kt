@@ -607,7 +607,13 @@ fun PlayerScreen(
             showEpisodeQueue = config.showEpisodeQueue,
             onSingleTap = { areControlsVisible = !areControlsVisible },
             onDoubleTapSeek = controller::seekTo,
-            onDoubleTapPlayPause = controller::togglePlayPause,
+            onDoubleTapPlayPause = {
+                val wasPlaying = playback.isPlaying
+                controller.togglePlayPause()
+                if (wasPlaying) {
+                    areControlsVisible = true
+                }
+            },
             onFastForwardStart = { controller.setPlaybackSpeed(2f) },
             onFastForwardEnd = { controller.setPlaybackSpeed(playbackSpeed) },
             onPlayPauseToggle = controller::togglePlayPause,
@@ -1059,11 +1065,10 @@ private fun PlayerVideoStage(
             }
         }
 
-        // 控制栏收起且正常播放时常驻在视频最底边的极简进度线
+        // 控制栏收起时常驻在视频最底边的极简进度线（播放中或暂停中均保持可见，避免暂停时进度条突兀消失）
         AnimatedVisibility(
             visible =
                 !controlsVisible &&
-                    playback.isPlaying &&
                     !playback.isBuffering &&
                     !playback.isEnded &&
                     errorMessage == null &&
