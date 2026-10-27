@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinitezerone.minibgm.core.common.ChineseConverter
+import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.common.onError
 import com.infinitezerone.minibgm.core.common.onSuccess
@@ -119,6 +120,26 @@ data class PlayerEpisodeItem(
                     "第 ${sort.toEpisodeLabel()} 话"
                 }
             }
+
+    val isNotAired: Boolean
+        get() {
+            val airMillis = TimeUtils.epochMillisOfIso(airdate) ?: return false
+            return airMillis > TimeUtils.nowEpochMillis()
+        }
+}
+
+/**
+ * 辅助方法：从分集 airdate（如 "2026-11-05"）中提取 "11-05" 简短月日展示，无有效月日则返回空串
+ */
+internal fun formatShortAirdate(airdate: String): String {
+    if (airdate.isBlank()) return ""
+    val datePart = airdate.substringBefore("T").substringBefore(" ").trim()
+    val parts = datePart.split("-")
+    return if (parts.size >= 3) {
+        "${parts[1]}-${parts[2]}"
+    } else {
+        datePart
+    }
 }
 
 /**
@@ -961,7 +982,7 @@ class PlayerViewModel(
             if (currentIdx in 0 until currentState.episodes.lastIndex) {
                 session.pendingAutoNextOnMoreLoaded = false
                 val nextEp = currentState.episodes[currentIdx + 1]
-                if (nextEp.type == currentState.episodeType) {
+                if (nextEp.type == currentState.episodeType && !nextEp.isNotAired) {
                     selectEpisode(nextEp)
                 }
             } else if (!currentState.isLoadingMoreEpisodes && !currentState.hasMoreEpisodes) {
@@ -1139,8 +1160,8 @@ class PlayerViewModel(
             }
         if (epIndex in 0 until state.episodes.lastIndex) {
             val nextEp = state.episodes[epIndex + 1]
-            // 同类型分集才自动连播（正篇完结不自动切入特别篇/特典）
-            if (nextEp.type == state.episodeType) {
+            // 同类型分集且已播出才自动连播（正篇完结不自动切入特别篇/特典，未播分集不连播）
+            if (nextEp.type == state.episodeType && !nextEp.isNotAired) {
                 selectEpisode(nextEp)
                 return true
             }
@@ -1267,6 +1288,10 @@ class PlayerViewModel(
 
     /** 选中具体分集并播放 */
     fun selectEpisode(episode: PlayerEpisodeItem) {
+        if (episode.isNotAired) {
+            _events.trySend(PlayerUiEvent.ShowSnackbar(messageRes = R.string.feature_subject_player_episode_not_aired))
+            return
+        }
         val state = _uiState.value
         if (episode.sort == state.episodeSort && episode.id == state.episodeId && state.streamUrl.isNotBlank()) return
         flushPlaybackPosition()

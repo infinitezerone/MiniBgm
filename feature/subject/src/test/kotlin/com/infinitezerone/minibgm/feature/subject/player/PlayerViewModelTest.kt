@@ -2705,4 +2705,79 @@ class PlayerViewModelTest {
             assertEquals(0.6f, vm.uiState.value.danmakuAlpha)
             assertEquals(5000L, vm.uiState.value.danmakuDurationMs)
         }
+
+    @Test
+    fun formatShortAirdate_formatsIsoAndDateStrings() {
+        assertEquals("11-05", formatShortAirdate("2026-11-05"))
+        assertEquals("11-05", formatShortAirdate("2026-11-05T12:00:00Z"))
+        assertEquals("11-05", formatShortAirdate("2026-11-05 08:30:00"))
+        assertEquals("", formatShortAirdate(""))
+    }
+
+    @Test
+    fun playerEpisodeItem_isNotAired_identifiesFutureEpisodes() {
+        val futureEp = PlayerEpisodeItem(id = 1L, airdate = "2099-01-01")
+        val pastEp = PlayerEpisodeItem(id = 2L, airdate = "2000-01-01")
+        val blankEp = PlayerEpisodeItem(id = 3L, airdate = "")
+        assertTrue(futureEp.isNotAired)
+        assertFalse(pastEp.isNotAired)
+        assertFalse(blankEp.isNotAired)
+    }
+
+    @Test
+    fun playNextEpisode_whenNextEpisodeIsNotAired_doesNotAutoPlayNext() =
+        runTest {
+            val episodes =
+                listOf(
+                    Episode(id = 1001L, sort = 1f, type = 0, name = "Ep 1", airdate = "2020-01-01"),
+                    Episode(id = 1002L, sort = 2f, type = 0, name = "Ep 2", airdate = "2099-01-01"),
+                )
+            val subjectRepo = FakeSubjectRepository()
+            subjectRepo.sendEpisodes(subjectId, episodes)
+
+            val viewModel =
+                viewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = 1001L,
+                            streamUrl = "https://example.com/ep1.m3u8",
+                            episodeSort = 1f,
+                            queue = emptyList(),
+                        ),
+                    subjectRepository = subjectRepo,
+                )
+            advanceUntilIdle()
+
+            val advanced = viewModel.playNextEpisode()
+            assertFalse(advanced)
+            assertEquals(1001L, viewModel.uiState.value.episodeId)
+            assertEquals("https://example.com/ep1.m3u8", viewModel.uiState.value.streamUrl)
+        }
+
+    @Test
+    fun selectEpisode_whenEpisodeIsNotAired_interceptsAndShowsSnackbar() =
+        runTest {
+            val viewModel =
+                viewModel(
+                    route =
+                        PlayerRoute(
+                            subjectId = subjectId,
+                            episodeId = 1001L,
+                            streamUrl = "https://example.com/ep1.m3u8",
+                            episodeSort = 1f,
+                        ),
+                )
+            advanceUntilIdle()
+
+            val futureEp = PlayerEpisodeItem(id = 1002L, sort = 2f, airdate = "2099-01-01")
+            viewModel.selectEpisode(futureEp)
+
+            assertEquals(1001L, viewModel.uiState.value.episodeId)
+            assertEquals("https://example.com/ep1.m3u8", viewModel.uiState.value.streamUrl)
+
+            val event = viewModel.events.first()
+            assertTrue(event is PlayerUiEvent.ShowSnackbar)
+            assertEquals(R.string.feature_subject_player_episode_not_aired, (event as PlayerUiEvent.ShowSnackbar).messageRes)
+        }
 }

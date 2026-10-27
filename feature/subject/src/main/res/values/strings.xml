@@ -553,4 +553,6 @@
     <string name="feature_subject_player_danmaku_candidate_count">%1$d 个可选候选</string>
     <string name="feature_subject_player_danmaku_no_candidates">暂无更多候选分集</string>
     <string name="feature_subject_player_danmaku_settings_entry">弹幕设置</string>
+    <string name="feature_subject_player_episode_not_aired">该分集尚未播出</string>
+    <string name="feature_subject_player_episode_airing_date">%1$s 待播</string>
 </resources>

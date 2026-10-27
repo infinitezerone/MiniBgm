@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -324,20 +325,29 @@ internal fun EpisodeGridCard(
             "SP${episode.sort.toInt()}"
         }
 
+    val isNotAired = episode.isNotAired
+
     Surface(
         onClick = onClick,
+        enabled = !isNotAired,
         shape = RoundedCornerShape(8.dp),
-        color =
-            if (isSelected) {
-                MaterialTheme.colorScheme.primary
+        border =
+            if (isNotAired) {
+                BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
+                null
+            },
+        color =
+            when {
+                isSelected -> MaterialTheme.colorScheme.primary
+                isNotAired -> MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.45f)
+                else -> MaterialTheme.colorScheme.surfaceContainerHigh
             },
         contentColor =
-            if (isSelected) {
-                MaterialTheme.colorScheme.onPrimary
-            } else {
-                MaterialTheme.colorScheme.onSurface
+            when {
+                isSelected -> MaterialTheme.colorScheme.onPrimary
+                isNotAired -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                else -> MaterialTheme.colorScheme.onSurface
             },
         modifier = modifier.fillMaxWidth().height(48.dp),
     ) {
@@ -363,9 +373,17 @@ internal fun EpisodeGridCard(
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
                     )
+                } else if (isNotAired) {
+                    val shortDate = formatShortAirdate(episode.airdate)
+                    Text(
+                        text = shortDate.ifBlank { stringResource(R.string.feature_subject_status_future) },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    )
                 }
             }
-            if (episode.isWatched) {
+            if (episode.isWatched && !isNotAired) {
                 Box(
                     modifier =
                         Modifier
@@ -396,20 +414,29 @@ internal fun EpisodeListCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isNotAired = episode.isNotAired
+
     Surface(
         onClick = onClick,
+        enabled = !isNotAired,
         shape = RoundedCornerShape(8.dp),
-        color =
-            if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
+        border =
+            if (isNotAired) {
+                BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             } else {
-                MaterialTheme.colorScheme.surfaceContainerLow
+                null
+            },
+        color =
+            when {
+                isSelected -> MaterialTheme.colorScheme.primaryContainer
+                isNotAired -> MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.5f)
+                else -> MaterialTheme.colorScheme.surfaceContainerLow
             },
         contentColor =
-            if (isSelected) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurface
+            when {
+                isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
+                isNotAired -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                else -> MaterialTheme.colorScheme.onSurface
             },
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -422,7 +449,12 @@ internal fun EpisodeListCard(
                 text = sortText,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                color =
+                    when {
+                        isSelected -> MaterialTheme.colorScheme.primary
+                        isNotAired -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
             )
             Spacer(modifier = Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
@@ -440,41 +472,62 @@ internal fun EpisodeListCard(
                     Text(
                         text = episode.name,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isNotAired) 0.4f else 1f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-            if (episode.commentCount > 0) {
+            if (isNotAired) {
                 Spacer(modifier = Modifier.width(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = BgmIcons.ChatBubbleOutline,
-                        contentDescription = null,
-                        modifier = Modifier.size(12.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Text(
-                        text = "${episode.commentCount}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            if (episode.isWatched) {
-                Spacer(modifier = Modifier.width(8.dp))
+                val shortDate = formatShortAirdate(episode.airdate)
                 Surface(
                     shape = RoundedCornerShape(4.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
                     Text(
-                        text = stringResource(R.string.feature_subject_player_watched),
+                        text =
+                            if (shortDate.isNotBlank()) {
+                                stringResource(R.string.feature_subject_player_episode_airing_date, shortDate)
+                            } else {
+                                stringResource(R.string.feature_subject_status_future)
+                            },
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                     )
+                }
+            } else {
+                if (episode.commentCount > 0) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = BgmIcons.ChatBubbleOutline,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = "${episode.commentCount}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (episode.isWatched) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.feature_subject_player_watched),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                        )
+                    }
                 }
             }
         }

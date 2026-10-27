@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -600,8 +601,11 @@ internal fun BiliEpisodeRowCard(
             "SP${episode.sort.toInt()}"
         }
 
+    val isNotAired = episode.isNotAired
+
     val stateLabel =
         when {
+            isNotAired -> stringResource(R.string.feature_subject_player_episode_not_aired)
             isSelected -> stringResource(R.string.feature_subject_player_playing)
             episode.isWatched -> stringResource(R.string.feature_subject_player_watched)
             else -> null
@@ -609,18 +613,25 @@ internal fun BiliEpisodeRowCard(
 
     Surface(
         onClick = onClick,
+        enabled = !isNotAired,
         shape = RoundedCornerShape(8.dp),
-        color =
-            if (isSelected) {
-                MaterialTheme.colorScheme.primary
+        border =
+            if (isNotAired) {
+                BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
             } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
+                null
+            },
+        color =
+            when {
+                isSelected -> MaterialTheme.colorScheme.primary
+                isNotAired -> MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.45f)
+                else -> MaterialTheme.colorScheme.surfaceContainerHigh
             },
         contentColor =
-            if (isSelected) {
-                MaterialTheme.colorScheme.onPrimary
-            } else {
-                MaterialTheme.colorScheme.onSurface
+            when {
+                isSelected -> MaterialTheme.colorScheme.onPrimary
+                isNotAired -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                else -> MaterialTheme.colorScheme.onSurface
             },
         modifier =
             modifier
@@ -640,7 +651,7 @@ internal fun BiliEpisodeRowCard(
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                 maxLines = 1,
             )
-            if (episode.isWatched) {
+            if (episode.isWatched && !isNotAired) {
                 Box(
                     modifier =
                         Modifier

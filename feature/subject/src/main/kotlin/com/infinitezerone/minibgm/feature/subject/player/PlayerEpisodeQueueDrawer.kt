@@ -199,11 +199,12 @@ internal fun PlayerEpisodeQueueDrawer(
                         val selected =
                             (selectedEpisodeId > 0 && ep.id == selectedEpisodeId) ||
                                 (ep.sort == selectedEpisodeSort && ep.type == selectedEpisodeType)
+                        val notAired = ep.isNotAired
                         Row(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .clickable { onSelectEpisode(ep) }
+                                    .clickable(enabled = !notAired) { onSelectEpisode(ep) }
                                     .background(
                                         if (selected) {
                                             MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
@@ -219,10 +220,10 @@ internal fun PlayerEpisodeQueueDrawer(
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                 color =
-                                    if (selected) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    when {
+                                        selected -> MaterialTheme.colorScheme.primary
+                                        notAired -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                        else -> MaterialTheme.colorScheme.onSurfaceVariant
                                     },
                             )
                             Text(
@@ -230,16 +231,34 @@ internal fun PlayerEpisodeQueueDrawer(
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                                 color =
-                                    if (selected) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
+                                    when {
+                                        selected -> MaterialTheme.colorScheme.primary
+                                        notAired -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                                        else -> MaterialTheme.colorScheme.onSurface
                                     },
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
                             )
-                            if (ep.isWatched) {
+                            if (notAired) {
+                                val shortDate = formatShortAirdate(ep.airdate)
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
+                                ) {
+                                    Text(
+                                        text =
+                                            if (shortDate.isNotBlank()) {
+                                                stringResource(R.string.feature_subject_player_episode_airing_date, shortDate)
+                                            } else {
+                                                stringResource(R.string.feature_subject_status_future)
+                                            },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                    )
+                                }
+                            } else if (ep.isWatched) {
                                 Surface(
                                     shape = RoundedCornerShape(4.dp),
                                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
