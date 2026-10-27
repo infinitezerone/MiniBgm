@@ -92,6 +92,12 @@ internal fun OverviewTabPage(
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
             }
+        } else if (uiState.isDetailsLoading) {
+            item(key = "characters_skeleton") {
+                SubjectCharactersSkeleton(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
         }
 
         // 4. 演职制作团队 Staff
@@ -100,6 +106,12 @@ internal fun OverviewTabPage(
                 StaffSection(
                     persons = uiState.persons,
                     onPersonClick = onPersonClick,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+        } else if (uiState.isDetailsLoading) {
+            item(key = "staff_skeleton") {
+                SubjectStaffSkeleton(
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
             }
@@ -115,6 +127,12 @@ internal fun OverviewTabPage(
                     currentSubjectName = displaySubject.nameCn.ifBlank { displaySubject.name },
                     currentSubjectCover = displaySubject.images?.bestImage ?: displaySubject.images?.large,
                     currentSubjectScore = displaySubject.rating?.score ?: 0.0,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
+            }
+        } else if (uiState.isDetailsLoading) {
+            item(key = "relations_skeleton") {
+                SubjectRelationsSkeleton(
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
             }

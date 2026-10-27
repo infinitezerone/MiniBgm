@@ -470,4 +470,64 @@ class SubjectDetailComponentsTest {
         composeTestRule.onNodeWithText("开始观看 第 1 话").assertIsDisplayed().performTouchInput { longClick() }
         assertTrue(playNextLongClicked)
     }
+
+    @Test
+    fun subject_detail_full_skeleton_renders_without_crash() {
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                Surface {
+                    SubjectDetailFullSkeleton()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun overview_tab_page_renders_skeletons_when_details_loading() {
+        val testSubject = sampleSubject
+        val loadingState =
+            SubjectDetailUiState(
+                isDetailsLoading = true,
+                characters = emptyList(),
+                persons = emptyList(),
+                relations = emptyList(),
+            )
+
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                Surface {
+                    OverviewTabPage(
+                        subject = testSubject,
+                        displaySubject = testSubject,
+                        uiState = loadingState,
+                        onTagClick = {},
+                        onCharacterClick = {},
+                        onActorClick = {},
+                        onPreviewCharacter = {},
+                        onPersonClick = {},
+                        onSubjectClick = {},
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
+    fun community_section_renders_skeletons_when_loading() {
+        composeTestRule.setContent {
+            MiniBgmTheme(darkTheme = false) {
+                Surface {
+                    SubjectCommunitySection(
+                        comments = emptyList(),
+                        commentTotal = 0,
+                        isLoadingMoreComments = false,
+                        hasMoreComments = false,
+                        onLoadMoreComments = {},
+                        topics = emptyList(),
+                        isLoading = true,
+                    )
+                }
+            }
+        }
+    }
 }

@@ -265,6 +265,9 @@ internal fun SubjectDetailContent(
                     )
                 }
                 if (uiState.isLoading || isTransitionStabilizing) {
+                    Spacer(Modifier.height(SubjectHeaderTabGap))
+                    SubjectDetailTabBarSkeleton(modifier = Modifier.padding(horizontal = 16.dp))
+                    Spacer(Modifier.height(SubjectTabTopPadding))
                     SubjectDetailBodySkeleton(modifier = Modifier.padding(horizontal = 16.dp))
                 }
             }
