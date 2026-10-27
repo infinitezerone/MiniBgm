@@ -347,13 +347,19 @@ fun SettingsScreen(
                 } else {
                     showNotificationRationale()
                 }
-            } else if (!hasAiringChannel) {
-                openAiringChannelSettings(context)
             } else {
                 viewModel.setAiringReminderEnabled(true)
             }
         } else {
             viewModel.setAiringReminderEnabled(false)
+        }
+    }
+
+    val toggleAiringPreAir: (Boolean) -> Unit = { enabled ->
+        if (enabled && !hasAiringChannel) {
+            openAiringChannelSettings(context)
+        } else {
+            viewModel.setAiringPreAirEnabled(enabled)
         }
     }
 
@@ -364,7 +370,7 @@ fun SettingsScreen(
         onToggleAiringReminder = toggleAiringReminder,
         hasAiringChannel = hasAiringChannel,
         airingPreAirEnabled = uiState.airingPreAirEnabled,
-        onToggleAiringPreAir = viewModel::setAiringPreAirEnabled,
+        onToggleAiringPreAir = toggleAiringPreAir,
         airingBingeFinaleEnabled = uiState.airingBingeFinaleEnabled,
         onToggleAiringBingeFinale = viewModel::setAiringBingeFinaleEnabled,
         hasNotificationPermission = hasNotificationPermission,

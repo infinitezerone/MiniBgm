@@ -220,13 +220,13 @@ internal fun ReminderSettingsCard(
     onOpenKeepAliveSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val notificationsUsable = hasNotificationPermission && hasAiringChannel
-    val isReminderActive = airingReminderEnabled && notificationsUsable
+    val isReminderActive = airingReminderEnabled && hasNotificationPermission
+    val isPreAirActive = airingPreAirEnabled && hasNotificationPermission && hasAiringChannel
     val reminderSubtitle =
-        when {
-            !hasNotificationPermission -> stringResource(R.string.feature_user_settings_reminder_perm_subtitle)
-            !hasAiringChannel -> stringResource(R.string.feature_user_settings_channel_disabled_subtitle)
-            else -> null
+        if (!hasNotificationPermission) {
+            stringResource(R.string.feature_user_settings_reminder_perm_subtitle)
+        } else {
+            null
         }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -235,13 +235,13 @@ internal fun ReminderSettingsCard(
             SettingsItemRow(
                 icon = BgmIcons.NotificationsActive,
                 iconTint =
-                    if (notificationsUsable) {
+                    if (hasNotificationPermission) {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     } else {
                         MaterialTheme.colorScheme.error
                     },
                 iconContainerColor =
-                    if (notificationsUsable) {
+                    if (hasNotificationPermission) {
                         MaterialTheme.colorScheme.surfaceContainerHigh
                     } else {
                         MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
@@ -286,17 +286,24 @@ internal fun ReminderSettingsCard(
                     SettingsItemRow(
                         icon = BgmIcons.PlayCircle,
                         title = stringResource(R.string.feature_user_settings_pre_air_title),
-                        subtitle = null,
-                        onClick = null,
+                        subtitle =
+                            if (!hasAiringChannel) {
+                                stringResource(
+                                    R.string.feature_user_settings_channel_disabled_subtitle,
+                                )
+                            } else {
+                                null
+                            },
+                        onClick = { onToggleAiringPreAir(!isPreAirActive) },
                         trailing = {
                             Switch(
-                                checked = airingPreAirEnabled,
+                                checked = isPreAirActive,
                                 onCheckedChange = onToggleAiringPreAir,
                             )
                         },
                     )
 
-                    if (airingPreAirEnabled) {
+                    if (isPreAirActive) {
                         SettingsItemRow(
                             icon = BgmIcons.Schedule,
                             title = stringResource(R.string.feature_user_settings_reminder_time_title),
