@@ -1072,11 +1072,10 @@ private fun PlayerVideoStage(
             }
         }
 
-        // 控制栏收起时常驻在视频最底边的极简进度线（播放中或暂停中均保持可见，避免暂停时进度条突兀消失）
+        // 控制栏收起时常驻在视频最底边的极简进度线（播放中、暂停中或缓冲中均保持可见，避免突兀消失）
         AnimatedVisibility(
             visible =
                 !controlsVisible &&
-                    !playback.isBuffering &&
                     !playback.isEnded &&
                     errorMessage == null &&
                     playback.durationMs > 0L,
