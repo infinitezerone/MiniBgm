@@ -41,6 +41,9 @@ class MainActivity : ComponentActivity() {
     /** 小组件条目点击携带的"直达番剧详情"条目 ID，消费后复位 */
     private var openSubjectId by mutableStateOf<Long?>(null)
 
+    /** 通知点击携带的"直达分集"话数，消费后复位 */
+    private var openSubjectEpisodeNumber by mutableStateOf<Int?>(null)
+
     /** 小组件点击"去登录"携带的"直达个人中心"标记，消费后复位 */
     private var openUser by mutableStateOf(false)
 
@@ -81,7 +84,11 @@ class MainActivity : ComponentActivity() {
                     openSchedule = openSchedule,
                     onScheduleNavigated = { openSchedule = false },
                     openSubjectId = openSubjectId,
-                    onSubjectNavigated = { openSubjectId = null },
+                    openSubjectEpisodeNumber = openSubjectEpisodeNumber,
+                    onSubjectNavigated = {
+                        openSubjectId = null
+                        openSubjectEpisodeNumber = null
+                    },
                     openUser = openUser,
                     onUserNavigated = { openUser = false },
                     showBottomAiButton = settings.showBottomAiButton,
@@ -93,6 +100,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         handleIntent(intent)
         Sync.refreshAiringNotificationSummary(this)
     }
@@ -112,7 +120,9 @@ class MainActivity : ComponentActivity() {
         val subjectId = intent.getLongExtra(EXTRA_SUBJECT_ID, -1L)
         if (subjectId > 0L) {
             openSubjectId = subjectId
+            openSubjectEpisodeNumber = intent.getIntExtra(EXTRA_EPISODE_NUMBER, -1).takeIf { it > 0 }
             intent.removeExtra(EXTRA_SUBJECT_ID)
+            intent.removeExtra(EXTRA_EPISODE_NUMBER)
         }
         if (intent.getBooleanExtra(EXTRA_TRIGGER_LOGIN, false)) {
             // 小组件「去登录」只负责把用户带进应用（BgmApp 会切到「我的」并直接打开登录接管页）：
@@ -125,6 +135,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val EXTRA_OPEN_SCHEDULE = BgmNavIntents.EXTRA_OPEN_SCHEDULE
         const val EXTRA_SUBJECT_ID = BgmNavIntents.EXTRA_SUBJECT_ID
+        const val EXTRA_EPISODE_NUMBER = BgmNavIntents.EXTRA_EPISODE_NUMBER
         const val EXTRA_TRIGGER_LOGIN = BgmNavIntents.EXTRA_TRIGGER_LOGIN
     }
 

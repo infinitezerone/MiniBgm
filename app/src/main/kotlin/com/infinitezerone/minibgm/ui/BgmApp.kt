@@ -68,6 +68,7 @@ fun BgmApp(
     openSchedule: Boolean = false,
     onScheduleNavigated: () -> Unit = {},
     openSubjectId: Long? = null,
+    openSubjectEpisodeNumber: Int? = null,
     onSubjectNavigated: () -> Unit = {},
     openUser: Boolean = false,
     onUserNavigated: () -> Unit = {},
@@ -126,10 +127,15 @@ fun BgmApp(
     }
 
     // 小组件单项点击直达番剧详情页：消费标记后直达对应番剧
-    LaunchedEffect(openSubjectId) {
+    LaunchedEffect(openSubjectId, openSubjectEpisodeNumber) {
         val subjectId = openSubjectId
         if (subjectId != null && subjectId > 0L) {
-            navState.navigateTo(SubjectDetailRoute(subjectId))
+            navState.navigateTo(
+                SubjectDetailRoute(
+                    subjectId = subjectId,
+                    initialEpisodeNumber = openSubjectEpisodeNumber,
+                ),
+            )
             onSubjectNavigated()
         }
     }

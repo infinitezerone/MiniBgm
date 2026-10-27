@@ -29,6 +29,7 @@ fun EntryProviderScope<NavKey>.subjectEntry(
             initialCoverUrl = route.initialCoverUrl,
             initialScore = route.initialScore,
             source = route.source,
+            initialEpisodeNumber = route.initialEpisodeNumber,
             onBackClick = onBackClick,
             onSubjectClick = onSubjectClick,
             onEpisodeClick = onEpisodeClick,

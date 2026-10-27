@@ -48,6 +48,7 @@ data class SearchRoute(
 @Serializable
 data class SubjectDetailRoute(
     val subjectId: Long,
+    val initialEpisodeNumber: Int? = null,
     val initialName: String = "",
     val initialCoverUrl: String = "",
     val initialScore: Double = 0.0,

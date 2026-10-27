@@ -104,6 +104,7 @@ fun SubjectDetailScreen(
     initialCoverUrl: String = "",
     initialScore: Double = 0.0,
     source: String = "",
+    initialEpisodeNumber: Int? = null,
     onSubjectClick: (Long) -> Unit = {},
     onEpisodeClick: (EpisodeDetailRoute) -> Unit = {},
     onPlayClick: ((PlayerRoute) -> Unit)? = null,
@@ -431,6 +432,22 @@ fun SubjectDetailScreen(
                     startInPicker = startInPicker,
                 ),
             )
+        }
+    }
+
+    var hasAutoOpenedInitialEpisode by rememberSaveable(subjectId, initialEpisodeNumber) {
+        mutableStateOf(false)
+    }
+    LaunchedEffect(uiState.episodes, displaySubject, initialEpisodeNumber) {
+        if (!hasAutoOpenedInitialEpisode && displaySubject != null) {
+            val targetEpisode =
+                initialEpisodeNumber?.let { number ->
+                    uiState.episodes.firstOrNull { it.episodeInt == number }
+                }
+            if (targetEpisode != null) {
+                hasAutoOpenedInitialEpisode = true
+                openEpisodeOverlay(targetEpisode, false)
+            }
         }
     }
 

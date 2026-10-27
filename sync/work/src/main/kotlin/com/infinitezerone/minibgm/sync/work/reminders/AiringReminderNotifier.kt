@@ -97,7 +97,7 @@ class AiringReminderNotifier(
                     .setContentTitle(contentTitle)
                     .setContentText(itemText)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(itemText))
-                    .setContentIntent(launchSubjectIntent(item.subjectId))
+                    .setContentIntent(launchSubjectIntent(item.subjectId, item.episode))
                     .setDeleteIntent(launchDismissIntent(item.subjectId))
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
                     .setDefaults(NotificationCompat.DEFAULT_ALL)
@@ -219,10 +219,13 @@ class AiringReminderNotifier(
         return false
     }
 
-    private fun launchSubjectIntent(subjectId: Long): PendingIntent? {
+    private fun launchSubjectIntent(
+        subjectId: Long,
+        episodeNumber: Int,
+    ): PendingIntent? {
         val launch =
-            BgmNavIntents.createSubjectIntent(context, subjectId).apply {
-                data = Uri.parse("minibgm://subject/$subjectId")
+            BgmNavIntents.createSubjectIntent(context, subjectId, episodeNumber).apply {
+                data = Uri.parse("minibgm://subject/$subjectId/episode/$episodeNumber")
             }
         if (launch.component == null && launch.action == null) return null
         return PendingIntent.getActivity(
