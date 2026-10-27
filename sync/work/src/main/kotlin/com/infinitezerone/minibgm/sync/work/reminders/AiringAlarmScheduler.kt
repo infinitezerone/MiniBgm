@@ -54,12 +54,23 @@ class AiringAlarmScheduler(
             return
         }
 
-        val trackedSubjectIds =
+        val doingIds =
             collectionRepository
                 .getCollectionsByTypeStream(CollectionType.DOING)
                 .firstOrNull()
                 .orEmpty()
                 .map { it.subjectId }
+                .toSet()
+
+        val wishIds =
+            collectionRepository
+                .getCollectionsByTypeStream(CollectionType.WISH)
+                .firstOrNull()
+                .orEmpty()
+                .map { it.subjectId }
+                .toSet()
+
+        val trackedSubjectIds = (doingIds + wishIds).toList()
 
         if (trackedSubjectIds.isEmpty()) {
             cancelPreAirAlarm()
@@ -86,6 +97,7 @@ class AiringAlarmScheduler(
                 airDelayOffsetMinutes = prefs.airDelayOffsetMinutes.toLong(),
                 bingeSubjectIds = prefs.bingeSubjectIds,
                 bingeFinaleEnabled = prefs.airingBingeFinaleEnabled,
+                wishSubjectIds = wishIds,
                 upcoming = upcoming,
             )
 

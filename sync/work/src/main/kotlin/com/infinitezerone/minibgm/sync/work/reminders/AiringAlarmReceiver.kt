@@ -67,12 +67,23 @@ class AiringAlarmReceiver :
         }
 
         val today = LocalDate.now().toString()
-        val trackedSubjectIds =
+        val doingIds =
             collectionRepository
                 .getCollectionsByTypeStream(CollectionType.DOING)
                 .firstOrNull()
                 .orEmpty()
                 .map { it.subjectId }
+                .toSet()
+
+        val wishIds =
+            collectionRepository
+                .getCollectionsByTypeStream(CollectionType.WISH)
+                .firstOrNull()
+                .orEmpty()
+                .map { it.subjectId }
+                .toSet()
+
+        val trackedSubjectIds = (doingIds + wishIds).toList()
 
         // 回看窗口与 [AiringReminderPlanner.PRE_AIR_GRACE_MINUTES] 同源：闹钟可能被系统
         // 晚投递至多 1 小时，窗口若窄于容错区间会让本该补发的提醒查不出来
@@ -102,6 +113,7 @@ class AiringAlarmReceiver :
                 airDelayOffsetMinutes = prefs.airDelayOffsetMinutes.toLong(),
                 bingeSubjectIds = prefs.bingeSubjectIds,
                 bingeFinaleEnabled = prefs.airingBingeFinaleEnabled,
+                wishSubjectIds = wishIds,
                 upcoming = upcoming,
             )
 
@@ -152,12 +164,23 @@ class AiringAlarmReceiver :
             return
         }
 
-        val trackedSubjectIds =
+        val doingIds =
             collectionRepository
                 .getCollectionsByTypeStream(CollectionType.DOING)
                 .firstOrNull()
                 .orEmpty()
                 .map { it.subjectId }
+                .toSet()
+
+        val wishIds =
+            collectionRepository
+                .getCollectionsByTypeStream(CollectionType.WISH)
+                .firstOrNull()
+                .orEmpty()
+                .map { it.subjectId }
+                .toSet()
+
+        val trackedSubjectIds = (doingIds + wishIds).toList()
 
         val startOfDayMillis =
             todayDate
@@ -182,9 +205,13 @@ class AiringAlarmReceiver :
                 lookbackHours = lookbackHours,
             )
 
-        // 严格以用户设备当前时区自然日（00:00:00 ~ 23:59:59）过滤当天的更新条目
+        // 严格以用户设备当前时区自然日（00:00:00 ~ 23:59:59）过滤当天的更新条目；
+        // 对于「想看」条目，仅首集（第 1 话）首播纳入今日汇总，后续在播剧集保持静默
         val todayItems =
             upcomingCandidates.filter { item ->
+                if (wishIds.contains(item.subjectId) && item.episode > 1) {
+                    return@filter false
+                }
                 val airMillis = runCatching { TimeUtils.epochMillisOfIso(item.airAtUtc) }.getOrNull()
                 airMillis != null && airMillis in startOfDayMillis..endOfDayMillis
             }

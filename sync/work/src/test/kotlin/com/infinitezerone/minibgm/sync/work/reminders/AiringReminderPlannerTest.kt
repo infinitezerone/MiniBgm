@@ -391,4 +391,58 @@ class AiringReminderPlannerTest {
 
         assertEquals(1, planned.size)
     }
+
+    @Test
+    fun pickPreAir_wishItem_notifiesEpisode1() {
+        val ep1Item = airingAt(10).copy(episode = 1)
+        val planned =
+            AiringReminderPlanner.pickPreAir(
+                enabled = true,
+                isLoggedIn = true,
+                notifiedKeys = emptyList(),
+                today = today,
+                nowEpochMillis = nowEpochMillis,
+                leadMinutes = 15L,
+                wishSubjectIds = setOf(ep1Item.subjectId),
+                upcoming = listOf(ep1Item),
+            )
+
+        assertEquals(1, planned.size)
+    }
+
+    @Test
+    fun pickPreAir_wishItem_silencesLaterEpisodes() {
+        val ep4Item = airingAt(10).copy(episode = 4)
+        val planned =
+            AiringReminderPlanner.pickPreAir(
+                enabled = true,
+                isLoggedIn = true,
+                notifiedKeys = emptyList(),
+                today = today,
+                nowEpochMillis = nowEpochMillis,
+                leadMinutes = 15L,
+                wishSubjectIds = setOf(ep4Item.subjectId),
+                upcoming = listOf(ep4Item),
+            )
+
+        assertTrue(planned.isEmpty())
+    }
+
+    @Test
+    fun nextAiringSchedule_wishItem_onlySchedulesEpisode1() {
+        val ep1Item = airingAt(30).copy(subjectId = 101L, episode = 1)
+        val ep2Item = airingAt(20).copy(subjectId = 102L, episode = 2)
+
+        val next =
+            AiringReminderPlanner.nextAiringSchedule(
+                notifiedKeys = emptyList(),
+                nowEpochMillis = nowEpochMillis,
+                leadMinutes = 15L,
+                wishSubjectIds = setOf(101L, 102L),
+                upcoming = listOf(ep2Item, ep1Item),
+            )
+
+        // 虽然 ep2Item 更近，但因为属于 wishIds 且 ep > 1，被自动过滤；正确调度第 1 集的 ep1Item
+        assertEquals(ep1Item, next?.first)
+    }
 }
