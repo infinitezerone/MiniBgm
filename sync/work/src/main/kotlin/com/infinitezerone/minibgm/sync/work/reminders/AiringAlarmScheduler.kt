@@ -47,7 +47,7 @@ class AiringAlarmScheduler(
         val isLoggedIn = tokenProvider.activeUserId.first() != null
 
         // 开关未开或未登录，直接取消已注册的单集闹钟
-        if (!prefs.airingReminderEnabled || !prefs.airingPreAirEnabled || !isLoggedIn) {
+        if (!prefs.airingReminderEnabled || !isLoggedIn) {
             cancelPreAirAlarm()
             return
         }
@@ -93,6 +93,7 @@ class AiringAlarmScheduler(
                 nowEpochMillis = TimeUtils.nowEpochMillis(),
                 leadMinutes = prefs.notifyBeforeAirMinutes.toLong(),
                 airDelayOffsetMinutes = prefs.airDelayOffsetMinutes.toLong(),
+                preAirEnabled = prefs.airingPreAirEnabled,
                 bingeSubjectIds = prefs.bingeSubjectIds,
                 bingeFinaleEnabled = prefs.airingBingeFinaleEnabled,
                 wishSubjectIds = wishIds,

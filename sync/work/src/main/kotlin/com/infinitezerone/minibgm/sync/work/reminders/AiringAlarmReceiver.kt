@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.ScheduleRepository
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.CollectionType
+import com.infinitezerone.minibgm.core.model.UpcomingAiring
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -64,7 +65,7 @@ class AiringAlarmReceiver :
     private suspend fun handlePreAir(context: Context) {
         val prefs = userPreferences.userPreferences.firstOrNull() ?: return
         val isLoggedIn = tokenProvider.activeUserId.first() != null
-        if (!prefs.airingReminderEnabled || !prefs.airingPreAirEnabled || !isLoggedIn) {
+        if (!prefs.airingReminderEnabled || !isLoggedIn) {
             scheduler.cancelPreAirAlarm()
             return
         }
@@ -107,7 +108,7 @@ class AiringAlarmReceiver :
         val nowEpoch = TimeUtils.nowEpochMillis()
         val preAir =
             AiringReminderPlanner.pickPreAir(
-                enabled = prefs.airingReminderEnabled && prefs.airingPreAirEnabled,
+                enabled = prefs.airingPreAirEnabled,
                 isLoggedIn = isLoggedIn,
                 notifiedKeys = prefs.airingReminderNotifiedKeys,
                 today = today,
@@ -121,6 +122,7 @@ class AiringAlarmReceiver :
             )
 
         if (preAir.isNotEmpty()) {
+            val notifiedItems = mutableListOf<UpcomingAiring>()
             for (item in preAir) {
                 val isStarted =
                     AiringReminderPlanner.isAlreadyStarted(
@@ -129,9 +131,16 @@ class AiringAlarmReceiver :
                         airDelayOffsetMinutes = prefs.airDelayOffsetMinutes.toLong(),
                     )
                 runCatching {
-                    notifier.notifyImminent(listOf(item), isAlreadyStarted = isStarted)
-                }.onSuccess {
-                    log.i { "[ALARM_RECEIVER:PRE_AIR:SUCCESS] notified 《${item.displayName}》ep${item.episode}" }
+                    notifier.notifyImminent(
+                        listOf(item),
+                        isAlreadyStarted = isStarted,
+                        bingeSubjectIds = prefs.bingeSubjectIds,
+                    )
+                }.onSuccess { posted ->
+                    if (posted) {
+                        notifiedItems += item
+                        log.i { "[ALARM_RECEIVER:PRE_AIR:SUCCESS] notified 《${item.displayName}》ep${item.episode}" }
+                    }
                 }.onFailure { e ->
                     log.e(e) { "[ALARM_RECEIVER:PRE_AIR:FAILED] failed notifying 《${item.displayName}》" }
                 }
@@ -143,7 +152,7 @@ class AiringAlarmReceiver :
             val keptKeys =
                 AiringReminderPlanner
                     .pruneNotifiedKeys(prefs.airingReminderNotifiedKeys, today)
-                    .toSet() + preAir.map { AiringReminderPlanner.preAirKey(today, it) }
+                    .toSet() + notifiedItems.map { AiringReminderPlanner.preAirKey(today, it) }
             userPreferences.setAiringReminderNotifiedKeys(keptKeys.toList())
         }
 

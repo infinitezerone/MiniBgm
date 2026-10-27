@@ -1,6 +1,5 @@
 package com.infinitezerone.minibgm.core.data.download
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
@@ -185,18 +184,7 @@ class TorrentDownloadService :
     }
 
     private fun ensureNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel =
-                NotificationChannel(
-                    CHANNEL_ID,
-                    strings.channelName,
-                    NotificationManager.IMPORTANCE_LOW,
-                ).apply {
-                    description = strings.channelDesc
-                    setShowBadge(false)
-                }
-            notificationManager.createNotificationChannel(channel)
-        }
+        TorrentNotificationChannels.ensure(this, strings)
     }
 
     private fun buildProgressNotification(
@@ -218,7 +206,7 @@ class TorrentDownloadService :
             }
 
         return NotificationCompat
-            .Builder(this, CHANNEL_ID)
+            .Builder(this, TorrentNotificationChannels.CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(title)
             .setContentText(statusText)
@@ -280,7 +268,7 @@ class TorrentDownloadService :
             }
 
         return NotificationCompat
-            .Builder(this, CHANNEL_ID)
+            .Builder(this, TorrentNotificationChannels.CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(strings.completedTitle)
             .setContentText(task.title)
@@ -290,7 +278,6 @@ class TorrentDownloadService :
     }
 
     companion object {
-        const val CHANNEL_ID = "minibgm_torrent_downloads"
         const val NOTIFICATION_ID = 2001
         const val NOTIFICATION_ID_COMPLETE = 2002
 

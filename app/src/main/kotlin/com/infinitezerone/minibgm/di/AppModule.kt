@@ -55,6 +55,8 @@ fun appModule(
     single<com.infinitezerone.minibgm.core.data.download.TorrentNotificationStrings> {
         val context = androidContext()
         object : com.infinitezerone.minibgm.core.data.download.TorrentNotificationStrings {
+            override val channelGroupName: String =
+                context.getString(com.infinitezerone.minibgm.R.string.app_download_notification_channel_group_name)
             override val channelName: String =
                 context.getString(com.infinitezerone.minibgm.R.string.app_download_notification_channel_name)
             override val channelDesc: String =

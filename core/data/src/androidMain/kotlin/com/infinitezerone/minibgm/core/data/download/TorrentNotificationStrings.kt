@@ -8,6 +8,7 @@ package com.infinitezerone.minibgm.core.data.download
  * 彻底消除反射查找 getIdentifier 与资源缩减 (isShrinkResources) 盲区。
  */
 interface TorrentNotificationStrings {
+    val channelGroupName: String
     val channelName: String
     val channelDesc: String
     val initialTitle: String
@@ -26,6 +27,7 @@ interface TorrentNotificationStrings {
 }
 
 object DefaultTorrentNotificationStrings : TorrentNotificationStrings {
+    override val channelGroupName: String = "下载"
     override val channelName: String = "磁力与视频下载"
     override val channelDesc: String = "展示后台磁力与视频文件下载进度"
     override val initialTitle: String = "正在下载资源"

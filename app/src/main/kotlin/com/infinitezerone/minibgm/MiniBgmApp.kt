@@ -10,6 +10,8 @@ import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import com.infinitezerone.minibgm.core.data.crash.CrashLogRecorder
+import com.infinitezerone.minibgm.core.data.download.TorrentNotificationChannels
+import com.infinitezerone.minibgm.core.data.download.TorrentNotificationStrings
 import com.infinitezerone.minibgm.core.data.repository.AuthRepository
 import com.infinitezerone.minibgm.core.data.repository.CollectionRepository
 import com.infinitezerone.minibgm.core.data.repository.SettingsRepository
@@ -110,6 +112,8 @@ class MiniBgmApp :
 
         // 初始化后台同步与开播提醒调度（封装在 :sync:work 内部，按偏好动态配置）
         val userPreferences: UserPreferencesDataSource by inject()
+        val torrentNotificationStrings: TorrentNotificationStrings by inject()
+        TorrentNotificationChannels.ensure(this@MiniBgmApp, torrentNotificationStrings)
         Sync.initialize(this@MiniBgmApp, userPreferences, appScope)
 
         // 登录会话建立（含冷启动或多账号切换）后同步一次云端「在看」收藏到本地库：

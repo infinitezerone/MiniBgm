@@ -331,4 +331,40 @@ class AiringReminderPlannerTest {
         // 虽然 ep2Item 更近，但因为属于 wishIds 且 ep > 1，被自动过滤；正确调度第 1 集的 ep1Item
         assertEquals(ep1Item, next?.first)
     }
+
+    @Test
+    fun pickPreAir_bingeFinaleWorksWhenPreAirDisabled() {
+        val finale = airingAt(10).copy(subjectId = 201L, episode = 12, totalEpisodes = 12)
+        val planned =
+            AiringReminderPlanner.pickPreAir(
+                enabled = false,
+                isLoggedIn = true,
+                notifiedKeys = emptyList(),
+                today = today,
+                nowEpochMillis = nowEpochMillis,
+                leadMinutes = 15L,
+                bingeSubjectIds = setOf(finale.subjectId),
+                bingeFinaleEnabled = true,
+                upcoming = listOf(finale),
+            )
+
+        assertEquals(1, planned.size)
+    }
+
+    @Test
+    fun nextAiringSchedule_bingeFinaleWorksWhenPreAirDisabled() {
+        val finale = airingAt(10).copy(subjectId = 201L, episode = 12, totalEpisodes = 12)
+        val next =
+            AiringReminderPlanner.nextAiringSchedule(
+                notifiedKeys = emptyList(),
+                nowEpochMillis = nowEpochMillis,
+                leadMinutes = 15L,
+                preAirEnabled = false,
+                bingeSubjectIds = setOf(finale.subjectId),
+                bingeFinaleEnabled = true,
+                upcoming = listOf(finale),
+            )
+
+        assertEquals(finale, next?.first)
+    }
 }

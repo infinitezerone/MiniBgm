@@ -35,13 +35,13 @@ class AiringReminderNotifier(
             } else {
                 true
             }
-        return permissionGranted && preAirChannelEnabled()
+        return permissionGranted
     }
 
-    private fun preAirChannelEnabled(): Boolean {
+    fun channelEnabled(channelId: String): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
         val notificationManager = context.getSystemService(NotificationManager::class.java) ?: return true
-        return notificationManager.getNotificationChannel(AiringNotificationChannels.PRE_AIR)?.importance !=
+        return notificationManager.getNotificationChannel(channelId)?.importance !=
             NotificationManager.IMPORTANCE_NONE
     }
 
@@ -52,17 +52,27 @@ class AiringReminderNotifier(
     fun notifyImminent(
         upcoming: List<UpcomingAiring>,
         isAlreadyStarted: Boolean = false,
-    ) {
-        if (upcoming.isEmpty()) return
+        bingeSubjectIds: Set<Long> = emptySet(),
+    ): Boolean {
+        if (upcoming.isEmpty()) return false
         createNotificationChannels(context)
         val manager = NotificationManagerCompat.from(context)
         if (!notificationsEnabled()) {
             refreshPreAirSummary()
-            return
+            return false
         }
 
+        var postedAny = false
         for (item in upcoming) {
             val isFinale = item.isFinale
+            val isBingeFinale = isFinale && bingeSubjectIds.contains(item.subjectId)
+            val channelId =
+                if (isBingeFinale) {
+                    AiringNotificationChannels.BINGE_FINALE
+                } else {
+                    AiringNotificationChannels.PRE_AIR
+                }
+            if (!channelEnabled(channelId)) continue
             val contentTitle =
                 if (isFinale) {
                     context.getString(R.string.airing_finale_title, item.displayName)
@@ -82,7 +92,7 @@ class AiringReminderNotifier(
 
             val notification =
                 NotificationCompat
-                    .Builder(context, AiringNotificationChannels.PRE_AIR)
+                    .Builder(context, channelId)
                     .setSmallIcon(R.drawable.ic_notification_airing)
                     .setContentTitle(contentTitle)
                     .setContentText(itemText)
@@ -98,15 +108,18 @@ class AiringReminderNotifier(
                     .setAutoCancel(true)
                     .build()
 
-            post(
-                manager = manager,
-                tag = AiringNotificationKeys.subjectTag(item.subjectId),
-                id = AiringNotificationKeys.CHILD_ID,
-                notification = notification,
-            )
+            postedAny =
+                post(
+                    manager = manager,
+                    tag = AiringNotificationKeys.subjectTag(item.subjectId),
+                    id = AiringNotificationKeys.CHILD_ID,
+                    notification = notification,
+                ) ||
+                postedAny
         }
 
         refreshPreAirSummary()
+        return postedAny
     }
 
     /**
@@ -156,9 +169,18 @@ class AiringReminderNotifier(
             )
         }
 
+        val summaryChannelId =
+            when {
+                channelEnabled(AiringNotificationChannels.PRE_AIR) -> AiringNotificationChannels.PRE_AIR
+                channelEnabled(AiringNotificationChannels.BINGE_FINALE) -> AiringNotificationChannels.BINGE_FINALE
+                else -> {
+                    manager.cancel(AiringNotificationKeys.SUMMARY_TAG, AiringNotificationKeys.SUMMARY_ID)
+                    return
+                }
+            }
         val summary =
             NotificationCompat
-                .Builder(context, AiringNotificationChannels.PRE_AIR)
+                .Builder(context, summaryChannelId)
                 .setSmallIcon(R.drawable.ic_notification_airing)
                 .setContentTitle(title)
                 .setContentText(context.getString(R.string.airing_pre_air_summary_text))
@@ -187,12 +209,14 @@ class AiringReminderNotifier(
         tag: String,
         id: Int,
         notification: android.app.Notification,
-    ) {
+    ): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         ) {
             manager.notify(tag, id, notification)
+            return true
         }
+        return false
     }
 
     private fun launchSubjectIntent(subjectId: Long): PendingIntent? {
@@ -279,6 +303,22 @@ class AiringReminderNotifier(
                     lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
                 }
             manager.createNotificationChannel(preAirChannel)
+
+            // 3. 囤番完结提醒渠道 (HIGH, 独立开关)
+            val bingeFinaleChannel =
+                NotificationChannel(
+                    AiringNotificationChannels.BINGE_FINALE,
+                    context.getString(R.string.airing_binge_channel_name),
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    group = AiringNotificationChannels.GROUP_ID
+                    description = context.getString(R.string.airing_binge_channel_desc)
+                    enableVibration(true)
+                    vibrationPattern = VIBRATION_PATTERN
+                    setShowBadge(true)
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                }
+            manager.createNotificationChannel(bingeFinaleChannel)
         }
     }
 }

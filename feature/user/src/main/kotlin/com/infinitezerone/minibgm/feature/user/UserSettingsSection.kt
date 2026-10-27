@@ -209,6 +209,7 @@ internal fun ReminderSettingsCard(
     onToggleAiringReminder: (Boolean) -> Unit,
     hasNotificationPermission: Boolean,
     hasAiringChannel: Boolean,
+    hasBingeChannel: Boolean,
     airingPreAirEnabled: Boolean,
     onToggleAiringPreAir: (Boolean) -> Unit,
     airingNotificationOffsetMinutes: Int,
@@ -222,6 +223,7 @@ internal fun ReminderSettingsCard(
 ) {
     val isReminderActive = airingReminderEnabled && hasNotificationPermission
     val isPreAirActive = airingPreAirEnabled && hasNotificationPermission && hasAiringChannel
+    val isBingeActive = airingBingeFinaleEnabled && hasNotificationPermission && hasBingeChannel
 
     Column(modifier = modifier.fillMaxWidth()) {
         SettingsSectionHeader(text = stringResource(R.string.feature_user_section_sync_reminder))
@@ -305,10 +307,10 @@ internal fun ReminderSettingsCard(
                         icon = BgmIcons.Inventory,
                         title = stringResource(R.string.feature_user_settings_binge_finale_title),
                         subtitle = null,
-                        onClick = null,
+                        onClick = { onToggleAiringBingeFinale(!isBingeActive) },
                         trailing = {
                             Switch(
-                                checked = airingBingeFinaleEnabled,
+                                checked = isBingeActive,
                                 onCheckedChange = onToggleAiringBingeFinale,
                             )
                         },
@@ -316,7 +318,7 @@ internal fun ReminderSettingsCard(
 
                     SettingsDivider()
 
-                    // 4. 系统通知
+                    // 3. 系统通知
                     SettingsItemRow(
                         icon = BgmIcons.OpenInNew,
                         title = stringResource(R.string.feature_user_settings_system_notification_title),
@@ -326,7 +328,7 @@ internal fun ReminderSettingsCard(
 
                     SettingsDivider()
 
-                    // 5. 后台保活
+                    // 4. 后台保活
                     SettingsItemRow(
                         icon = BgmIcons.Bolt,
                         title = stringResource(R.string.feature_user_settings_keep_alive_title),

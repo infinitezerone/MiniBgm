@@ -50,7 +50,6 @@ object AiringReminderPlanner {
         wishSubjectIds: Set<Long> = emptySet(),
         upcoming: List<UpcomingAiring>,
     ): List<UpcomingAiring> {
-        if (!enabled) return emptyList()
         if (!isLoggedIn) return emptyList()
         val notifiedContent = notifiedKeys.map { it.substringAfter(':') }.toSet()
         return upcoming.filter { item ->
@@ -59,6 +58,8 @@ object AiringReminderPlanner {
                 if (!bingeFinaleEnabled || !item.isFinale) {
                     return@filter false
                 }
+            } else if (!enabled) {
+                return@filter false
             }
             // 若为「想看」条目（仅首播预约）：仅首集（第 1 话）触发开播提醒；若是已在播后续剧集（ep > 1）则保持静默
             if (wishSubjectIds.contains(item.subjectId) && item.episode > 1) {
@@ -95,6 +96,7 @@ object AiringReminderPlanner {
         leadMinutes: Long,
         airDelayOffsetMinutes: Long = 0L,
         graceMinutes: Long = PRE_AIR_GRACE_MINUTES,
+        preAirEnabled: Boolean = true,
         bingeSubjectIds: Set<Long> = emptySet(),
         bingeFinaleEnabled: Boolean = true,
         wishSubjectIds: Set<Long> = emptySet(),
@@ -103,8 +105,13 @@ object AiringReminderPlanner {
         val notifiedContent = notifiedKeys.map { it.substringAfter(':') }.toSet()
         return upcoming
             .asSequence()
-            .filter { !bingeSubjectIds.contains(it.subjectId) || (bingeFinaleEnabled && it.isFinale) }
-            .filter { !wishSubjectIds.contains(it.subjectId) || it.episode <= 1 }
+            .filter {
+                if (bingeSubjectIds.contains(it.subjectId)) {
+                    bingeFinaleEnabled && it.isFinale
+                } else {
+                    preAirEnabled
+                }
+            }.filter { !wishSubjectIds.contains(it.subjectId) || it.episode <= 1 }
             .filter { preAirContentKey(it) !in notifiedContent }
             .mapNotNull { item ->
                 val airAt = runCatching { TimeUtils.epochMillisOfIso(item.airAtUtc) }.getOrNull() ?: return@mapNotNull null

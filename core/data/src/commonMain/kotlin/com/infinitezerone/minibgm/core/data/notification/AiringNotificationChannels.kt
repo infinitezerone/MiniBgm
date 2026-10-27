@@ -4,4 +4,5 @@ package com.infinitezerone.minibgm.core.data.notification
 object AiringNotificationChannels {
     const val GROUP_ID = "group_airing"
     const val PRE_AIR = "airing_pre_air"
+    const val BINGE_FINALE = "airing_binge_finale"
 }

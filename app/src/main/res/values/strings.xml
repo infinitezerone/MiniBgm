@@ -44,6 +44,7 @@
     <!-- 后台下载通知 (Download Notification) -->
     <string name="app_download_notification_channel_name">磁力与视频下载</string>
     <string name="app_download_notification_channel_desc">展示后台磁力与视频文件下载进度</string>
+    <string name="app_download_notification_channel_group_name">下载</string>
     <string name="app_download_notification_initial_title">正在下载资源</string>
     <string name="app_download_notification_preparing">准备下载…</string>
     <string name="app_download_notification_resolving">正在解析磁力元数据…</string>
