@@ -14,6 +14,7 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.infinitezerone.minibgm.core.common.bgmLogger
@@ -62,9 +63,13 @@ class ExoPlayerEngine(
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
+    private val renderersFactory =
+        DefaultRenderersFactory(context)
+            .setEnableDecoderFallback(true)
+
     private val exoPlayer =
         ExoPlayer
-            .Builder(context)
+            .Builder(context, renderersFactory)
             .setMediaSourceFactory(
                 DefaultMediaSourceFactory(DefaultDataSource.Factory(context, httpDataSourceFactory)),
             ).setAudioAttributes(audioAttributes, true)
