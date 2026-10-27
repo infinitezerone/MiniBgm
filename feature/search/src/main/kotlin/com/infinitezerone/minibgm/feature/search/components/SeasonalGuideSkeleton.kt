@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
+import com.infinitezerone.minibgm.core.designsystem.component.LocalSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
@@ -41,12 +43,13 @@ import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 @Composable
 fun SeasonalGuideSkeletonList(modifier: Modifier = Modifier) {
     val skeletonState = rememberSkeletonState()
-    LazyColumn(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        userScrollEnabled = false,
-        modifier = modifier,
-    ) {
+    CompositionLocalProvider(LocalSkeletonState provides skeletonState) {
+        LazyColumn(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            userScrollEnabled = false,
+            modifier = modifier,
+        ) {
         items(6) {
             Row(
                 modifier =
@@ -97,6 +100,7 @@ fun SeasonalGuideSkeletonList(modifier: Modifier = Modifier) {
         }
     }
 }
+}
 
 /** 骨架屏加载网格 */
 @Composable
@@ -109,14 +113,15 @@ fun SeasonalGuideSkeletonGrid(modifier: Modifier = Modifier) {
         } else {
             GridCells.Fixed(3)
         }
-    LazyVerticalGrid(
-        columns = gridColumns,
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 32.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        userScrollEnabled = false,
-        modifier = modifier,
-    ) {
+    CompositionLocalProvider(LocalSkeletonState provides skeletonState) {
+        LazyVerticalGrid(
+            columns = gridColumns,
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 32.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            userScrollEnabled = false,
+            modifier = modifier,
+        ) {
         items(9) {
             Column(
                 modifier =
@@ -153,6 +158,7 @@ fun SeasonalGuideSkeletonGrid(modifier: Modifier = Modifier) {
             }
         }
     }
+}
 }
 
 /** 错误提示与重试状态 */

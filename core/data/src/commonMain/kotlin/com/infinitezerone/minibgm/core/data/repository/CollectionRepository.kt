@@ -13,6 +13,7 @@ import com.infinitezerone.minibgm.core.network.BangumiApiService
 import com.infinitezerone.minibgm.core.network.BgmNetworkException
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -178,6 +180,7 @@ internal class CollectionRepositoryImpl(
                         .map { list -> list.map { it.asExternalModel() } }
                 }
             }.distinctUntilChanged()
+            .flowOn(Dispatchers.Default)
 
     override fun observeTrackingFootprint(): Flow<TrackingFootprint?> =
         activeUserIdFlow
@@ -198,6 +201,7 @@ internal class CollectionRepositoryImpl(
                         }
                 }
             }.distinctUntilChanged()
+            .flowOn(Dispatchers.Default)
 
     override suspend fun fetchUserCollections(
         username: String,
@@ -206,40 +210,44 @@ internal class CollectionRepositoryImpl(
         limit: Int,
         offset: Int,
     ): AppResult<List<UserCollection>> =
-        try {
-            val response =
-                apiService.getUserCollections(
-                    username = username,
-                    subjectType = subjectType,
-                    type = type?.value,
-                    limit = limit,
-                    offset = offset,
-                )
-            AppResult.Success(response.data)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            AppResult.Error(e, e.toUserFriendlyMessage("获取用户收藏"))
+        withContext(Dispatchers.Default) {
+            try {
+                val response =
+                    apiService.getUserCollections(
+                        username = username,
+                        subjectType = subjectType,
+                        type = type?.value,
+                        limit = limit,
+                        offset = offset,
+                    )
+                AppResult.Success(response.data)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                AppResult.Error(e, e.toUserFriendlyMessage("获取用户收藏"))
+            }
         }
 
     override suspend fun fetchCollectionCount(
         username: String,
         type: CollectionType,
     ): AppResult<Int> =
-        try {
-            val response =
-                apiService.getUserCollections(
-                    username = username,
-                    subjectType = 0,
-                    type = type.value,
-                    limit = 1,
-                    offset = 0,
-                )
-            AppResult.Success(response.total)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            AppResult.Error(e, e.toUserFriendlyMessage("获取收藏总数"))
+        withContext(Dispatchers.Default) {
+            try {
+                val response =
+                    apiService.getUserCollections(
+                        username = username,
+                        subjectType = 0,
+                        type = type.value,
+                        limit = 1,
+                        offset = 0,
+                    )
+                AppResult.Success(response.total)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                AppResult.Error(e, e.toUserFriendlyMessage("获取收藏总数"))
+            }
         }
 
     private val countsMutex = Mutex()
@@ -258,34 +266,36 @@ internal class CollectionRepositoryImpl(
         username: String,
         force: Boolean,
     ): AppResult<Map<CollectionType, Int>> =
-        try {
-            val now = TimeUtils.nowEpochMillis()
-            val cached = countsMutex.withLock { collectionCountsCache[username] }
-            if (!force && cached != null && (now - cached.timestamp) < CACHE_TTL_MILLIS) {
-                AppResult.Success(cached.counts)
-            } else {
-                val stats = apiService.getUserCollectionStats(username)
-                val counts = mutableMapOf<CollectionType, Int>()
-                for (group in stats) {
-                    for (entry in group.collects) {
-                        val type = CollectionType.fromValue(entry.status.id)
-                        counts[type] = (counts[type] ?: 0) + entry.count
+        withContext(Dispatchers.Default) {
+            try {
+                val now = TimeUtils.nowEpochMillis()
+                val cached = countsMutex.withLock { collectionCountsCache[username] }
+                if (!force && cached != null && (now - cached.timestamp) < CACHE_TTL_MILLIS) {
+                    AppResult.Success(cached.counts)
+                } else {
+                    val stats = apiService.getUserCollectionStats(username)
+                    val counts = mutableMapOf<CollectionType, Int>()
+                    for (group in stats) {
+                        for (entry in group.collects) {
+                            val type = CollectionType.fromValue(entry.status.id)
+                            counts[type] = (counts[type] ?: 0) + entry.count
+                        }
                     }
+                    // 确保五大分类键值完整存在（无条目的分类置 0）
+                    CollectionType.entries.forEach { type ->
+                        counts.putIfAbsent(type, 0)
+                    }
+                    val resultMap = counts.toMap()
+                    countsMutex.withLock {
+                        collectionCountsCache[username] = CachedCounts(resultMap, now)
+                    }
+                    AppResult.Success(resultMap)
                 }
-                // 确保五大分类键值完整存在（无条目的分类置 0）
-                CollectionType.entries.forEach { type ->
-                    counts.putIfAbsent(type, 0)
-                }
-                val resultMap = counts.toMap()
-                countsMutex.withLock {
-                    collectionCountsCache[username] = CachedCounts(resultMap, now)
-                }
-                AppResult.Success(resultMap)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                AppResult.Error(e, e.toUserFriendlyMessage("获取收藏统计"))
             }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            AppResult.Error(e, e.toUserFriendlyMessage("获取收藏统计"))
         }
 
     override suspend fun fetchCollection(

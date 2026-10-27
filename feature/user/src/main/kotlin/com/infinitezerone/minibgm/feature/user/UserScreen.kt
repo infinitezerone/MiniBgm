@@ -1,13 +1,19 @@
 package com.infinitezerone.minibgm.feature.user
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
@@ -18,6 +24,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -33,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -76,6 +85,8 @@ import com.infinitezerone.minibgm.feature.user.components.UserProfileHero
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import org.koin.androidx.compose.koinViewModel
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
@@ -93,7 +104,10 @@ fun UserScreen(
     onOpenTokenPage: (String) -> Unit = {},
     scrollToTop: Flow<Unit>? = null,
     modifier: Modifier = Modifier,
-    viewModel: UserViewModel = koinViewModel(),
+    viewModel: UserViewModel =
+        koinViewModel(
+            viewModelStoreOwner = (LocalContext.current as? ViewModelStoreOwner) ?: checkNotNull(LocalViewModelStoreOwner.current),
+        ),
     collectionsViewModel: UserCollectionsViewModel = koinViewModel(),
     downloadViewModel: DownloadViewModel = koinViewModel(),
 ) {
@@ -257,80 +271,105 @@ fun UserScreenContent(
     BgmFloatingPageScaffold(
         topBarMode = BgmTopBarMode.Immersive,
         topBar = {
-            BgmTopAppBar(
-                mode = BgmTopBarMode.Immersive,
-                contentMaxWidth = 1200.dp,
-                title = {
-                    Text(text = stringResource(R.string.feature_user_title_home))
-                },
-                actions = {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        FeatureGate(capability = { it.isInternalPlayerEnabled }) {
-                            BgmCircleActionButton(
-                                onClick = onHistoryClick,
-                                icon = BgmIcons.History,
-                                contentDescription = stringResource(R.string.feature_user_history_title),
-                            )
-                        }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                BgmTopAppBar(
+                    mode = BgmTopBarMode.Immersive,
+                    contentMaxWidth = 1200.dp,
+                    title = {
+                        Text(text = stringResource(R.string.feature_user_title_home))
+                    },
+                    actions = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            FeatureGate(capability = { it.isInternalPlayerEnabled }) {
+                                BgmCircleActionButton(
+                                    onClick = onHistoryClick,
+                                    icon = BgmIcons.History,
+                                    contentDescription = stringResource(R.string.feature_user_history_title),
+                                )
+                            }
 
-                        val activeDownloadCount = downloadGroups.sumOf { it.downloadingCount }
-                        if (activeDownloadCount > 0) {
-                            BadgedBox(
-                                badge = {
-                                    Badge {
-                                        Text(text = "$activeDownloadCount")
-                                    }
-                                },
-                            ) {
+                            val activeDownloadCount = downloadGroups.sumOf { it.downloadingCount }
+                            if (activeDownloadCount > 0) {
+                                BadgedBox(
+                                    badge = {
+                                        Badge {
+                                            Text(text = "$activeDownloadCount")
+                                        }
+                                    },
+                                ) {
+                                    BgmCircleActionButton(
+                                        onClick = onDownloadsClick,
+                                        icon = BgmIcons.Download,
+                                        contentDescription = stringResource(R.string.feature_user_downloads_title),
+                                    )
+                                }
+                            } else {
                                 BgmCircleActionButton(
                                     onClick = onDownloadsClick,
                                     icon = BgmIcons.Download,
                                     contentDescription = stringResource(R.string.feature_user_downloads_title),
                                 )
                             }
-                        } else {
-                            BgmCircleActionButton(
-                                onClick = onDownloadsClick,
-                                icon = BgmIcons.Download,
-                                contentDescription = stringResource(R.string.feature_user_downloads_title),
-                            )
-                        }
 
-                        if (uiState.isLoggedIn) {
-                            if (uiState.savedAccounts.size > 1) {
-                                BadgedBox(
-                                    badge = {
-                                        Badge {
-                                            Text(text = "${uiState.savedAccounts.size}")
-                                        }
-                                    },
-                                ) {
+                            if (uiState.isLoggedIn) {
+                                if (uiState.savedAccounts.size > 1) {
+                                    BadgedBox(
+                                        badge = {
+                                            Badge {
+                                                Text(text = "${uiState.savedAccounts.size}")
+                                            }
+                                        },
+                                    ) {
+                                        BgmCircleActionButton(
+                                            onClick = { showAccountSheet = true },
+                                            icon = BgmIcons.ManageAccounts,
+                                            contentDescription = stringResource(R.string.feature_user_account_management),
+                                        )
+                                    }
+                                } else {
                                     BgmCircleActionButton(
                                         onClick = { showAccountSheet = true },
                                         icon = BgmIcons.ManageAccounts,
                                         contentDescription = stringResource(R.string.feature_user_account_management),
                                     )
                                 }
-                            } else {
-                                BgmCircleActionButton(
-                                    onClick = { showAccountSheet = true },
-                                    icon = BgmIcons.ManageAccounts,
-                                    contentDescription = stringResource(R.string.feature_user_account_management),
-                                )
                             }
-                        }
 
-                        BgmCircleActionButton(
-                            onClick = onSettingsClick,
-                            icon = BgmIcons.SettingsBorder,
-                            contentDescription = stringResource(R.string.feature_user_title_settings),
-                        )
-                    }
-                },
-            )
+                            BgmCircleActionButton(
+                                onClick = onSettingsClick,
+                                icon = BgmIcons.SettingsBorder,
+                                contentDescription = stringResource(R.string.feature_user_title_settings),
+                            )
+                        }
+                    },
+                )
+
+                val isPageLoading =
+                    collectionsState.isLoading ||
+                        uiState.isCountsLoading ||
+                        uiState.isAuthenticating
+                AnimatedVisibility(
+                    visible = isPageLoading,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    LinearProgressIndicator(
+                        modifier =
+                            Modifier
+                                .widthIn(max = 1200.dp)
+                                .fillMaxWidth()
+                                .height(2.dp),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color.Transparent,
+                    )
+                }
+            }
         },
         snackbarHost = {
             BgmSnackbarHost(
@@ -347,8 +386,8 @@ fun UserScreenContent(
         ) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                 when {
-                    uiState.isLoading -> {
-                        // 首帧加载态：沉浸式骨架屏，平滑过渡，杜绝未决会话前抢先闪烁未登录引导卡片
+                    uiState.isLoading || (uiState.isLoggedIn && uiState.activeProfile == null) -> {
+                        // 首帧加载态 / 登录已建立但资料拉取中：沉浸式骨架屏，平滑过渡，杜绝未决会话前抢先闪烁未登录引导卡片
                         UserScreenSkeleton(
                             modifier =
                                 Modifier

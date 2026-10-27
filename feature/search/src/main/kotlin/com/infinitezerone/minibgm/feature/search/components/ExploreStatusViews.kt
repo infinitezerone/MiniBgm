@@ -20,6 +20,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
+import com.infinitezerone.minibgm.core.designsystem.component.LocalSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
@@ -43,35 +45,37 @@ fun ExploreSkeletonLoading(
 ) {
     val columns = StaggeredGridCells.Adaptive(minSize = 160.dp)
 
-    LazyVerticalStaggeredGrid(
-        columns = columns,
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 32.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalItemSpacing = 10.dp,
-        userScrollEnabled = false,
-        modifier = modifier,
-    ) {
-        // 1. 顶部焦点大卡骨架
-        item(span = StaggeredGridItemSpan.FullLine) {
-            SpotlightSkeletonCard(
-                skeletonState = skeletonState,
-                modifier = Modifier.padding(bottom = 6.dp),
-            )
-        }
+    CompositionLocalProvider(LocalSkeletonState provides skeletonState) {
+        LazyVerticalStaggeredGrid(
+            columns = columns,
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 32.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalItemSpacing = 10.dp,
+            userScrollEnabled = false,
+            modifier = modifier,
+        ) {
+            // 1. 顶部焦点大卡骨架
+            item(span = StaggeredGridItemSpan.FullLine) {
+                SpotlightSkeletonCard(
+                    skeletonState = skeletonState,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
 
-        // 2. 双列瀑布流骨架卡片（精简为首屏 4 张，兼顾视觉饱满度与帧率流畅性）
-        val variations =
-            listOf(
-                WaterfallCardVariation(hookLines = 1),
-                WaterfallCardVariation(hookLines = 2),
-                WaterfallCardVariation(hookLines = 2),
-                WaterfallCardVariation(hookLines = 1),
-            )
-        items(variations.size) { index ->
-            WaterfallSkeletonCard(
-                variation = variations[index],
-                skeletonState = skeletonState,
-            )
+            // 2. 双列瀑布流骨架卡片（精简为首屏 4 张，兼顾视觉饱满度与帧率流畅性）
+            val variations =
+                listOf(
+                    WaterfallCardVariation(hookLines = 1),
+                    WaterfallCardVariation(hookLines = 2),
+                    WaterfallCardVariation(hookLines = 2),
+                    WaterfallCardVariation(hookLines = 1),
+                )
+            items(variations.size) { index ->
+                WaterfallSkeletonCard(
+                    variation = variations[index],
+                    skeletonState = skeletonState,
+                )
+            }
         }
     }
 }

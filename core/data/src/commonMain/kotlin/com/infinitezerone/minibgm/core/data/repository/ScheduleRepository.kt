@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.BgmDispatchers
 import com.infinitezerone.minibgm.core.common.TimeUtils
 import com.infinitezerone.minibgm.core.common.runCatchingCancellable
 import com.infinitezerone.minibgm.core.common.toSecureUrl
@@ -27,15 +28,18 @@ import com.infinitezerone.minibgm.core.network.ScheduleSnapshotResult
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlin.math.abs
@@ -143,6 +147,7 @@ internal class ScheduleRepositoryImpl(
     private val collectionRepository: CollectionRepository? = null,
     private val seasonalDiskCache: com.infinitezerone.minibgm.core.data.seasonal.SeasonalDiskCache? = null,
     private val json: Json = BgmHttpClient.jsonConfig,
+    private val dispatchers: BgmDispatchers = BgmDispatchers(),
 ) : ScheduleRepository {
     private val seasonalCache = mutableMapOf<String, List<com.infinitezerone.minibgm.core.model.Subject>>()
     private val seasonalCacheMutex = kotlinx.coroutines.sync.Mutex()
@@ -198,74 +203,75 @@ internal class ScheduleRepositoryImpl(
             entities
                 .filter { it.bgmId > 0 && it.isActiveForSchedule(nowMillis) }
                 .map { it.toModel(json) }
-        }
+        }.flowOn(dispatchers.default)
 
     override suspend fun getSchedulesForDate(
         dateStr: String,
         weekday: Int,
         allowAdult: Boolean,
-    ): List<AirSchedule> {
-        val rawSchedules = scheduleDao.getAllSchedulesList().map { it.toModel(json) }
-        val allSchedules = if (allowAdult) rawSchedules else rawSchedules.filter { !it.isAdult }
-        val schedulesByBgmId = allSchedules.associateBy { it.bgmId }
+    ): List<AirSchedule> =
+        withContext(dispatchers.default) {
+            val rawSchedules = scheduleDao.getAllSchedulesList().map { it.toModel(json) }
+            val allSchedules = if (allowAdult) rawSchedules else rawSchedules.filter { !it.isAdult }
+            val schedulesByBgmId = allSchedules.associateBy { it.bgmId }
 
-        val storedEvents = airEventDao.getAllAirEvents()
-        val eventsOnThisDay =
-            storedEvents.filter {
-                TimeUtils.formatIsoToCstDate(it.airAtUtc) == dateStr
-            }
-        val subjectIdsWithEvents = storedEvents.map { it.subjectId }.toSet()
+            val storedEvents = airEventDao.getAllAirEvents()
+            val eventsOnThisDay =
+                storedEvents.filter {
+                    TimeUtils.formatIsoToCstDate(it.airAtUtc) == dateStr
+                }
+            val subjectIdsWithEvents = storedEvents.map { it.subjectId }.toSet()
 
-        val list = mutableListOf<AirSchedule>()
-        val seenSubjectIdsOnThisDay = mutableSetOf<Long>()
+            val list = mutableListOf<AirSchedule>()
+            val seenSubjectIdsOnThisDay = mutableSetOf<Long>()
 
-        eventsOnThisDay.groupBy { it.subjectId }.forEach { (subId, events) ->
-            val schedule = schedulesByBgmId[subId]
-            if (schedule != null) {
-                seenSubjectIdsOnThisDay.add(subId)
-                val distinctEvents = events.distinctBy { it.episode }.sortedBy { it.episode }
-                distinctEvents.forEach { event ->
-                    list.add(
-                        schedule.copy(
-                            weekday = weekday,
-                            nextEpisodeNumber = event.episode,
-                            nextEpisodeAtUtc = event.airAtUtc,
-                            timeCst = TimeUtils.formatToCstTime(event.airAtUtc).ifBlank { schedule.timeCst },
-                            timeJst = TimeUtils.formatToJstTime(event.airAtUtc).ifBlank { schedule.timeJst },
-                        ),
-                    )
+            eventsOnThisDay.groupBy { it.subjectId }.forEach { (subId, events) ->
+                val schedule = schedulesByBgmId[subId]
+                if (schedule != null) {
+                    seenSubjectIdsOnThisDay.add(subId)
+                    val distinctEvents = events.distinctBy { it.episode }.sortedBy { it.episode }
+                    distinctEvents.forEach { event ->
+                        list.add(
+                            schedule.copy(
+                                weekday = weekday,
+                                nextEpisodeNumber = event.episode,
+                                nextEpisodeAtUtc = event.airAtUtc,
+                                timeCst = TimeUtils.formatToCstTime(event.airAtUtc).ifBlank { schedule.timeCst },
+                                timeJst = TimeUtils.formatToJstTime(event.airAtUtc).ifBlank { schedule.timeJst },
+                            ),
+                        )
+                    }
                 }
             }
-        }
 
-        allSchedules.forEach { schedule ->
-            if (schedule.bgmId in seenSubjectIdsOnThisDay) return@forEach
-            if (schedule.bgmId in subjectIdsWithEvents) return@forEach
+            allSchedules.forEach { schedule ->
+                if (schedule.bgmId in seenSubjectIdsOnThisDay) return@forEach
+                if (schedule.bgmId in subjectIdsWithEvents) return@forEach
 
-            if (schedule.nextEpisodeAtUtc.isNotBlank()) {
-                val scheduleDate = TimeUtils.formatIsoToCstDate(schedule.nextEpisodeAtUtc)
-                if (scheduleDate == dateStr) {
-                    list.add(schedule.copy(weekday = weekday))
+                if (schedule.nextEpisodeAtUtc.isNotBlank()) {
+                    val scheduleDate = TimeUtils.formatIsoToCstDate(schedule.nextEpisodeAtUtc)
+                    if (scheduleDate == dateStr) {
+                        list.add(schedule.copy(weekday = weekday))
+                    }
+                } else if (schedule.weekday == weekday) {
+                    list.add(schedule)
                 }
-            } else if (schedule.weekday == weekday) {
-                list.add(schedule)
             }
-        }
 
-        return list.sortedWith(
-            compareBy<AirSchedule> {
-                val time = it.timeCst.ifBlank { it.timeJst }
-                if (time.isNotBlank()) 0 else 1
-            }.thenBy {
-                it.timeCst.ifBlank { it.timeJst }
-            },
-        )
-    }
+            list.sortedWith(
+                compareBy<AirSchedule> {
+                    val time = it.timeCst.ifBlank { it.timeJst }
+                    if (time.isNotBlank()) 0 else 1
+                }.thenBy {
+                    it.timeCst.ifBlank { it.timeJst }
+                },
+            )
+        }
 
     override fun getAllAirEventsStream(): Flow<List<AirScheduleEvent>> =
         airEventDao.getAllAirEventsStream().map { list ->
             list.map { AirScheduleEvent(it.subjectId, it.episode, it.airAtUtc, it.kind) }
-        }
+        }.flowOn(dispatchers.default)
 
     /**
      * 同步闸门：全量刷新管线进行中为 true。
@@ -322,7 +328,7 @@ internal class ScheduleRepositoryImpl(
                     }
                 }
             }
-        }
+        }.flowOn(dispatchers.default)
 
     override suspend fun getUpcomingAiringForSubjects(
         subjectIds: List<Long>,

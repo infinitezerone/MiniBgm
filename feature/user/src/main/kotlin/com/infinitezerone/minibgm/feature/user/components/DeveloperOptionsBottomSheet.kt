@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -57,23 +58,36 @@ import com.infinitezerone.minibgm.feature.user.R
 import kotlinx.coroutines.launch
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
 
+private val MIRROR_PRESETS =
+    listOf(
+        "直连 (默认)" to "",
+        "ghproxy.net" to "https://ghproxy.net/",
+        "mirror.ghproxy.com" to "https://mirror.ghproxy.com/",
+        "moeyy.xyz" to "https://github.moeyy.xyz/",
+    )
+
+private fun normalizeMirrorPrefix(input: String): String {
+    val trimmed = input.trim()
+    if (trimmed.isEmpty()) return ""
+    val withProtocol =
+        if (!trimmed.startsWith("http://", ignoreCase = true) && !trimmed.startsWith("https://", ignoreCase = true)) {
+            "https://$trimmed"
+        } else {
+            trimmed
+        }
+    return if (withProtocol.endsWith("/")) withProtocol else "$withProtocol/"
+}
+
 /**
  * 现代应用内开发者调试抽屉（In-App Developer Panel / Debug Drawer）。
  *
- * 提供真机动态调试入口，支持特性开关覆写、原生组件状态模拟、网络加速前缀配置与系统诊断信息导出，
- * 避免每次测试改动都需要重新打 Gradle 包。
+ * 提供真机动态调试入口，支持详细日志排查、GitHub 下载加速前缀配置与系统诊断信息导出。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeveloperOptionsBottomSheet(
     developerSettings: DeveloperSettings,
-    onOverrideAi: (Boolean?) -> Unit,
-    onOverridePlayer: (Boolean?) -> Unit,
     onToggleVerboseLogging: (Boolean) -> Unit,
-    isSimulatingTorrentUninstalled: Boolean,
-    isTorrentPluginInstalled: Boolean,
-    onToggleSimulateTorrentUninstalled: (Boolean) -> Unit,
-    onResetTorrentPlugin: () -> Unit,
     onCustomMirrorPrefixChange: (String) -> Unit,
     onResetAllOverrides: () -> Unit,
     onDisableDeveloperMode: () -> Unit,
@@ -90,6 +104,12 @@ fun DeveloperOptionsBottomSheet(
 
     var customMirrorInput by remember(developerSettings.customMirrorPrefixOverride) {
         mutableStateOf(developerSettings.customMirrorPrefixOverride)
+    }
+
+    val applyNormalizedPrefix = { raw: String ->
+        val normalized = normalizeMirrorPrefix(raw)
+        customMirrorInput = normalized
+        onCustomMirrorPrefixChange(normalized)
     }
 
     val appDiagnosticsText =
@@ -165,142 +185,51 @@ fun DeveloperOptionsBottomSheet(
                 }
             }
 
-            // 分区 1：特性开关覆写
-            DevCategoryCard(title = stringResource(R.string.feature_user_dev_category_feature_toggles)) {
-                // AI 追番助手覆写
-                ThreeStateToggleRow(
-                    title = stringResource(R.string.feature_user_dev_override_ai_title),
-                    currentValue = developerSettings.enableAiOverride,
-                    onSelect = onOverrideAi,
-                )
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 14.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
-
-                // 内置播放器覆写
-                ThreeStateToggleRow(
-                    title = stringResource(R.string.feature_user_dev_override_player_title),
-                    currentValue = developerSettings.enablePlayerOverride,
-                    onSelect = onOverridePlayer,
-                )
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 14.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
-
-                // 详细调试日志开关
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { onToggleVerboseLogging(!developerSettings.verboseLoggingEnabled) }
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(R.string.feature_user_dev_verbose_logging_title),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Switch(
-                        checked = developerSettings.verboseLoggingEnabled,
-                        onCheckedChange = onToggleVerboseLogging,
-                    )
-                }
-            }
-
-            // 分区 2：流媒体与离线引擎
-            DevCategoryCard(title = stringResource(R.string.feature_user_dev_category_torrent)) {
-                val simulateSubtitle =
-                    when {
-                        !isSimulatingTorrentUninstalled -> ""
-                        isTorrentPluginInstalled ->
-                            stringResource(R.string.feature_user_dev_simulate_torrent_uninstalled_on_ready)
-                        else ->
-                            stringResource(R.string.feature_user_dev_simulate_torrent_uninstalled_on_empty)
-                    }
-
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { onToggleSimulateTorrentUninstalled(!isSimulatingTorrentUninstalled) }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                        Text(
-                            text = stringResource(R.string.feature_user_dev_simulate_torrent_uninstalled_title),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        if (simulateSubtitle.isNotBlank()) {
-                            Text(
-                                text = simulateSubtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    Switch(
-                        checked = isSimulatingTorrentUninstalled,
-                        onCheckedChange = onToggleSimulateTorrentUninstalled,
-                    )
-                }
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 14.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
-
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = onResetTorrentPlugin)
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(R.string.feature_user_dev_reset_torrent_plugin_title),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Icon(
-                        imageVector = BgmIcons.CleaningServices,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-
-            // 分区 3：网络与镜像
+            // 分区 1：GitHub 镜像与下载加速
             DevCategoryCard(title = stringResource(R.string.feature_user_dev_category_network)) {
                 Column(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Text(
-                        text = stringResource(R.string.feature_user_dev_custom_mirror_title),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        text = stringResource(R.string.feature_user_dev_custom_mirror_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        MIRROR_PRESETS.forEach { (label, presetUrl) ->
+                            val isSelected =
+                                if (presetUrl.isEmpty()) {
+                                    customMirrorInput.isEmpty()
+                                } else {
+                                    customMirrorInput.trimEnd('/') == presetUrl.trimEnd('/')
+                                }
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    applyNormalizedPrefix(presetUrl)
+                                    focusManager.clearFocus()
+                                },
+                                label = { Text(label) },
+                                colors =
+                                    FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    ),
+                            )
+                        }
+                    }
+
                     OutlinedTextField(
                         value = customMirrorInput,
                         onValueChange = {
                             customMirrorInput = it
-                            onCustomMirrorPrefixChange(it)
+                            onCustomMirrorPrefixChange(it.trim())
                         },
                         placeholder = {
                             Text(
@@ -312,8 +241,8 @@ fun DeveloperOptionsBottomSheet(
                             if (customMirrorInput.isNotEmpty()) {
                                 BgmGhostIconButton(
                                     onClick = {
-                                        customMirrorInput = ""
-                                        onCustomMirrorPrefixChange("")
+                                        applyNormalizedPrefix("")
+                                        focusManager.clearFocus()
                                     },
                                     icon = BgmIcons.Clear,
                                     contentDescription = null,
@@ -322,13 +251,87 @@ fun DeveloperOptionsBottomSheet(
                         },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                        keyboardActions =
+                            KeyboardActions(
+                                onDone = {
+                                    applyNormalizedPrefix(customMirrorInput)
+                                    focusManager.clearFocus()
+                                },
+                            ),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
 
-            // 分区 4：系统诊断与崩溃排查
+            // 分区 2：运行日志与排查
+            DevCategoryCard(title = stringResource(R.string.feature_user_dev_category_logging)) {
+                // 详细调试日志开关
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleVerboseLogging(!developerSettings.verboseLoggingEnabled) }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = stringResource(R.string.feature_user_dev_verbose_logging_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = stringResource(R.string.feature_user_dev_verbose_logging_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = developerSettings.verboseLoggingEnabled,
+                        onCheckedChange = onToggleVerboseLogging,
+                    )
+                }
+
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                )
+
+                // 查看最近崩溃日志
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onOpenCrashLog)
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text(
+                            text = stringResource(R.string.feature_user_dev_crash_log_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = stringResource(R.string.feature_user_dev_crash_log_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(
+                        imageVector = BgmIcons.History,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+
+            // 分区 3：系统与诊断
             DevCategoryCard(title = stringResource(R.string.feature_user_dev_category_diagnostics)) {
                 Column(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -376,35 +379,6 @@ fun DeveloperOptionsBottomSheet(
                         )
                     }
                 }
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 14.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
-                )
-
-                // 查看最近崩溃日志
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable(onClick = onOpenCrashLog)
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = stringResource(R.string.feature_user_dev_crash_log_title),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Icon(
-                        imageVector = BgmIcons.History,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
             }
 
             // 关闭开发者选项按钮
@@ -448,70 +422,6 @@ private fun DevCategoryCard(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
             )
             content()
-        }
-    }
-}
-
-@Composable
-private fun ThreeStateToggleRow(
-    title: String,
-    currentValue: Boolean?,
-    onSelect: (Boolean?) -> Unit,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null,
-) {
-    Column(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (!subtitle.isNullOrBlank()) {
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(
-                selected = currentValue == null,
-                onClick = { onSelect(null) },
-                label = { Text(stringResource(R.string.feature_user_dev_override_default)) },
-                colors =
-                    FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
-            )
-            FilterChip(
-                selected = currentValue == true,
-                onClick = { onSelect(true) },
-                label = { Text(stringResource(R.string.feature_user_dev_override_enabled)) },
-                colors =
-                    FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
-            )
-            FilterChip(
-                selected = currentValue == false,
-                onClick = { onSelect(false) },
-                label = { Text(stringResource(R.string.feature_user_dev_override_disabled)) },
-                colors =
-                    FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.errorContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onErrorContainer,
-                    ),
-            )
         }
     }
 }

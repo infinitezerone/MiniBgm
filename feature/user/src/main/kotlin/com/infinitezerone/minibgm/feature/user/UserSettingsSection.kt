@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.user
 
+import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -429,6 +430,17 @@ internal fun DeveloperEntrySettingsCard(
     }
 }
 
+@Volatile
+private var cachedClientVersionName: String? = null
+
+internal fun Context.getAppClientVersion(): String {
+    val cached = cachedClientVersionName
+    if (cached != null) return cached
+    val version = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull().orEmpty()
+    cachedClientVersionName = version
+    return version
+}
+
 @Composable
 internal fun AboutSettingsCard(
     onOpenWebUrl: (String) -> Unit,
@@ -438,12 +450,7 @@ internal fun AboutSettingsCard(
     onVersionClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    val clientVersion =
-        remember {
-            runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
-                .getOrNull()
-                .orEmpty()
-        }
+    val clientVersion = remember(context) { context.getAppClientVersion() }
 
     Column(modifier = modifier.fillMaxWidth()) {
         SettingsSectionHeader(text = stringResource(R.string.feature_user_section_about))

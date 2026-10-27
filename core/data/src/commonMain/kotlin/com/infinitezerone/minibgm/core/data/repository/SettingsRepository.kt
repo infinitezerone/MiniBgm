@@ -12,13 +12,16 @@ import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 
 /** 当前生效的 AI 密钥在加密库中的键；方案池密钥用 `ai.profile.<id>.apiKey` */
@@ -352,28 +355,29 @@ internal class SettingsRepositoryImpl(
     private var healingTriggered = false
     private val healingMutex = Mutex()
 
-    private suspend fun triggerSubscriptionHealingIfMissing() {
-        if (healingTriggered) return
-        healingMutex.withLock {
-            if (healingTriggered) return
-            healingTriggered = true
-            val prefs = userPreferences.userPreferences.first()
-            val url = prefs.playbackSubscriptionUrl.trim()
-            val rawJson = prefs.playbackRulesJson.trim()
-            val currentRules =
-                if (rawJson.isBlank()) {
-                    emptyList()
-                } else {
-                    runCatching { json.decodeFromString<List<PlaybackSourceRule>>(rawJson) }.getOrDefault(emptyList())
-                }
-            if (url.isNotBlank()) {
-                val hasSubRules = currentRules.any { it.id.startsWith("sub_") }
-                if (!hasSubRules || currentRules.size <= 1) {
-                    runCatching { refreshPlaybackSubscription() }
+    private suspend fun triggerSubscriptionHealingIfMissing() =
+        withContext(Dispatchers.IO) {
+            if (healingTriggered) return@withContext
+            healingMutex.withLock {
+                if (healingTriggered) return@withLock
+                healingTriggered = true
+                val prefs = userPreferences.userPreferences.first()
+                val url = prefs.playbackSubscriptionUrl.trim()
+                val rawJson = prefs.playbackRulesJson.trim()
+                val currentRules =
+                    if (rawJson.isBlank()) {
+                        emptyList()
+                    } else {
+                        runCatching { json.decodeFromString<List<PlaybackSourceRule>>(rawJson) }.getOrDefault(emptyList())
+                    }
+                if (url.isNotBlank()) {
+                    val hasSubRules = currentRules.any { it.id.startsWith("sub_") }
+                    if (!hasSubRules || currentRules.size <= 1) {
+                        runCatching { refreshPlaybackSubscription() }
+                    }
                 }
             }
         }
-    }
 
     override val playbackRules: Flow<List<PlaybackSourceRule>> =
         userPreferences.userPreferences
@@ -387,7 +391,7 @@ internal class SettingsRepositoryImpl(
                 }
             }.onStart {
                 triggerSubscriptionHealingIfMissing()
-            }
+            }.flowOn(Dispatchers.Default)
 
     override val playbackParses: Flow<List<com.infinitezerone.minibgm.core.model.TvBoxParse>> =
         userPreferences.userPreferences.map { prefs ->
@@ -398,7 +402,7 @@ internal class SettingsRepositoryImpl(
                     json.decodeFromString<List<com.infinitezerone.minibgm.core.model.TvBoxParse>>(prefs.playbackParsesJson)
                 }.getOrDefault(emptyList())
             }
-        }
+        }.flowOn(Dispatchers.Default)
 
     override suspend fun setPlaybackParses(parses: List<com.infinitezerone.minibgm.core.model.TvBoxParse>) {
         userPreferences.setPlaybackParsesJson(json.encodeToString(parses))

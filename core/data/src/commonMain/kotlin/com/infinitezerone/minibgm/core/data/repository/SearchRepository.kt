@@ -1,6 +1,7 @@
 package com.infinitezerone.minibgm.core.data.repository
 
 import com.infinitezerone.minibgm.core.common.AppResult
+import com.infinitezerone.minibgm.core.common.BgmDispatchers
 import com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource
 import com.infinitezerone.minibgm.core.model.SearchFilter
 import com.infinitezerone.minibgm.core.model.SearchResult
@@ -12,6 +13,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -75,8 +77,10 @@ interface SearchRepository {
 internal class SearchRepositoryImpl(
     private val apiService: BangumiApiService,
     private val userPreferences: UserPreferencesDataSource,
+    private val dispatchers: BgmDispatchers = BgmDispatchers(),
 ) : SearchRepository {
-    override fun getSearchHistory(): Flow<List<String>> = userPreferences.userPreferences.map { it.searchHistory }
+    override fun getSearchHistory(): Flow<List<String>> =
+        userPreferences.userPreferences.map { it.searchHistory }.flowOn(dispatchers.default)
 
     override suspend fun addSearchHistory(query: String) {
         withContext(NonCancellable) {
@@ -104,7 +108,8 @@ internal class SearchRepositoryImpl(
         }
     }
 
-    override fun getBlockedSubjectTags(): Flow<List<String>> = userPreferences.userPreferences.map { it.blockedSubjectTags }
+    override fun getBlockedSubjectTags(): Flow<List<String>> =
+        userPreferences.userPreferences.map { it.blockedSubjectTags }.flowOn(dispatchers.default)
 
     override suspend fun setBlockedSubjectTags(tags: List<String>) {
         withContext(NonCancellable) {
@@ -112,7 +117,8 @@ internal class SearchRepositoryImpl(
         }
     }
 
-    override fun getCustomFilterTags(): Flow<List<String>> = userPreferences.userPreferences.map { it.customFilterTags }
+    override fun getCustomFilterTags(): Flow<List<String>> =
+        userPreferences.userPreferences.map { it.customFilterTags }.flowOn(dispatchers.default)
 
     override suspend fun addCustomFilterTag(tag: String) {
         withContext(NonCancellable) {
@@ -132,62 +138,65 @@ internal class SearchRepositoryImpl(
         sort: String?,
         limit: Int,
         offset: Int,
-    ): AppResult<SearchResult> {
-        if (query.isBlank()) return AppResult.Success(SearchResult())
-        return try {
-            val response =
-                apiService.searchSubjectsAdvanced(
-                    request =
-                        SearchSubjectsRequest(
-                            keyword = query,
-                            sort = sort?.ifBlank { null },
-                            filter = (if (type > 0) SearchFilter(type = listOf(type)) else SearchFilter()).copy(nsfw = resolveNsfwFilter()),
-                        ),
-                    limit = limit,
-                    offset = offset,
-                )
-            AppResult.Success(SearchResult(total = response.total, list = response.data))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: BgmNetworkException) {
-            // 若高级搜索异常，降级回退至旧版搜索接口
+    ): AppResult<SearchResult> =
+        withContext(dispatchers.default) {
+            if (query.isBlank()) return@withContext AppResult.Success(SearchResult())
             try {
-                val legacy =
-                    apiService.searchSubjects(
-                        keyword = query,
-                        type = type,
+                val response =
+                    apiService.searchSubjectsAdvanced(
+                        request =
+                            SearchSubjectsRequest(
+                                keyword = query,
+                                sort = sort?.ifBlank { null },
+                                filter = (if (type > 0) SearchFilter(type = listOf(type)) else SearchFilter()).copy(nsfw = resolveNsfwFilter()),
+                            ),
                         limit = limit,
                         offset = offset,
                     )
-                AppResult.Success(SearchResult(total = legacy.results, list = legacy.list))
-            } catch (fallbackCe: CancellationException) {
-                throw fallbackCe
-            } catch (fallbackEx: Exception) {
-                AppResult.Error(fallbackEx, fallbackEx.toUserFriendlyMessage("搜索"))
+                AppResult.Success(SearchResult(total = response.total, list = response.data))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: BgmNetworkException) {
+                // 若高级搜索异常，降级回退至旧版搜索接口
+                try {
+                    val legacy =
+                        apiService.searchSubjects(
+                            keyword = query,
+                            type = type,
+                            limit = limit,
+                            offset = offset,
+                        )
+                    AppResult.Success(SearchResult(total = legacy.results, list = legacy.list))
+                } catch (fallbackCe: CancellationException) {
+                    throw fallbackCe
+                } catch (fallbackEx: Exception) {
+                    AppResult.Error(fallbackEx, fallbackEx.toUserFriendlyMessage("搜索"))
+                }
+            } catch (e: Exception) {
+                AppResult.Error(e, e.toUserFriendlyMessage("搜索"))
             }
-        } catch (e: Exception) {
-            AppResult.Error(e, e.toUserFriendlyMessage("搜索"))
         }
-    }
 
     override suspend fun searchSubjectsAdvanced(
         request: SearchSubjectsRequest,
         limit: Int,
         offset: Int,
     ): AppResult<SearchResult> =
-        try {
-            val response =
-                apiService.searchSubjectsAdvanced(
-                    request = withNsfwPolicy(request),
-                    limit = limit,
-                    offset = offset,
-                )
-            AppResult.Success(SearchResult(total = response.total, list = response.data))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            // 前缀是**面向用户**的措辞，别写成「高级搜索」这种实现术语——它会原样进 Snackbar。
-            AppResult.Error(e, e.toUserFriendlyMessage("搜索"))
+        withContext(dispatchers.default) {
+            try {
+                val response =
+                    apiService.searchSubjectsAdvanced(
+                        request = withNsfwPolicy(request),
+                        limit = limit,
+                        offset = offset,
+                    )
+                AppResult.Success(SearchResult(total = response.total, list = response.data))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                // 前缀是**面向用户**的措辞，别写成「高级搜索」这种实现术语——它会原样进 Snackbar。
+                AppResult.Error(e, e.toUserFriendlyMessage("搜索"))
+            }
         }
 
     private suspend fun resolveNsfwFilter(request: SearchSubjectsRequest? = null): Boolean? {

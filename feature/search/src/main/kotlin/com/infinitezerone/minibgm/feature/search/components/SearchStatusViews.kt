@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -29,6 +30,7 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmLoginPromptDial
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmPillVariant
 import com.infinitezerone.minibgm.core.designsystem.component.BgmStatusState
+import com.infinitezerone.minibgm.core.designsystem.component.LocalSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
@@ -42,56 +44,58 @@ fun SearchSkeletonLoading(
     modifier: Modifier = Modifier,
     skeletonState: SkeletonState = rememberSkeletonState(),
 ) {
-    Column(
-        modifier = modifier.padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        repeat(4) {
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier.padding(10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+    CompositionLocalProvider(LocalSkeletonState provides skeletonState) {
+        Column(
+            modifier = modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            repeat(4) {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    SkeletonBox(
-                        modifier =
-                            Modifier
-                                .width(74.dp)
-                                .height(104.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        state = skeletonState,
-                    )
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         SkeletonBox(
                             modifier =
                                 Modifier
-                                    .fillMaxWidth(0.7f)
-                                    .height(18.dp),
-                            shape = RoundedCornerShape(4.dp),
+                                    .width(74.dp)
+                                    .height(104.dp),
+                            shape = RoundedCornerShape(8.dp),
                             state = skeletonState,
                         )
-                        SkeletonBox(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth(0.4f)
-                                    .height(14.dp),
-                            shape = RoundedCornerShape(4.dp),
-                            state = skeletonState,
-                        )
-                        SkeletonBox(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth(0.55f)
-                                    .height(14.dp),
-                            shape = RoundedCornerShape(4.dp),
-                            state = skeletonState,
-                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            SkeletonBox(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth(0.7f)
+                                        .height(18.dp),
+                                shape = RoundedCornerShape(4.dp),
+                                state = skeletonState,
+                            )
+                            SkeletonBox(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth(0.4f)
+                                        .height(14.dp),
+                                shape = RoundedCornerShape(4.dp),
+                                state = skeletonState,
+                            )
+                            SkeletonBox(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth(0.55f)
+                                        .height(14.dp),
+                                shape = RoundedCornerShape(4.dp),
+                                state = skeletonState,
+                            )
+                        }
                     }
                 }
             }

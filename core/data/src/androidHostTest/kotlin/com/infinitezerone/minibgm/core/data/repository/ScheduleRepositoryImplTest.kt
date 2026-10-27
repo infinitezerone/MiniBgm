@@ -32,8 +32,11 @@ import com.infinitezerone.minibgm.core.network.model.EpisodePageResponse
 import com.infinitezerone.minibgm.core.network.model.PageResponse
 import com.infinitezerone.minibgm.core.network.model.SearchSubjectResponse
 import com.infinitezerone.minibgm.core.network.model.UserCollectionPageResponse
+import com.infinitezerone.minibgm.core.common.BgmDispatchers
 import com.infinitezerone.minibgm.core.testing.datastore.createTestUserPreferencesDataSource
 import com.infinitezerone.minibgm.core.testing.repository.FakeCollectionRepository
+import com.infinitezerone.minibgm.core.testing.util.MainDispatcherRule
+import com.infinitezerone.minibgm.core.testing.util.testBgmDispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -43,6 +46,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import org.junit.Rule
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -50,6 +54,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class ScheduleRepositoryImplTest {
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
+
     private companion object {
         val DAY_MILLIS = 24L * 60 * 60 * 1000
     }
@@ -361,6 +368,7 @@ class ScheduleRepositoryImplTest {
         userPreferences: com.infinitezerone.minibgm.core.datastore.UserPreferencesDataSource = createTestUserPreferencesDataSource(),
         collectionRepository: CollectionRepository? = null,
         seasonalDiskCache: com.infinitezerone.minibgm.core.data.seasonal.SeasonalDiskCache? = null,
+        dispatchers: BgmDispatchers = testBgmDispatchers(mainDispatcherRule.testDispatcher),
     ): ScheduleRepositoryImpl =
         ScheduleRepositoryImpl(
             scheduleDao = scheduleDao,
@@ -370,6 +378,7 @@ class ScheduleRepositoryImplTest {
             userPreferences = userPreferences,
             collectionRepository = collectionRepository,
             seasonalDiskCache = seasonalDiskCache,
+            dispatchers = dispatchers,
         )
 
     @Test

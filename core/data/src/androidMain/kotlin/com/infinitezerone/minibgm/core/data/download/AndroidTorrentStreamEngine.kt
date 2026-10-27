@@ -147,11 +147,12 @@ class AndroidTorrentStreamEngine internal constructor(
         }
     }
 
-    override suspend fun isPluginInstalled(): Boolean {
-        val currentVersion = pluginVersionProvider()
-        return ensureVersionedPluginLoaded(currentVersion) &&
-            runCatching { nativeBridge.isAvailable() }.getOrDefault(false)
-    }
+    override suspend fun isPluginInstalled(): Boolean =
+        withContext(Dispatchers.IO) {
+            val currentVersion = pluginVersionProvider()
+            ensureVersionedPluginLoaded(currentVersion) &&
+                runCatching { nativeBridge.isAvailable() }.getOrDefault(false)
+        }
 
     override suspend fun installPlugin(): Result<Unit> =
         withContext(Dispatchers.IO) {

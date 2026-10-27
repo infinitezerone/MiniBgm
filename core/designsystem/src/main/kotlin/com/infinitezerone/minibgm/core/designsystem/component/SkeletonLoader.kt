@@ -1,5 +1,8 @@
 package com.infinitezerone.minibgm.core.designsystem.component
 
+import android.graphics.LinearGradient as AndroidLinearGradient
+import android.graphics.Matrix
+import android.graphics.Shader as AndroidShader
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -13,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -24,11 +28,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.positionInRoot
@@ -75,6 +81,12 @@ class SkeletonState(
     var baseColor by mutableStateOf(baseColor)
     var highlightColor by mutableStateOf(highlightColor)
 }
+
+/**
+ * 局部骨架屏状态 CompositionLocal，供顶层骨架容器跨组件树隐式透传共享动画时钟，
+ * 避免深层子组件未显式传参时退化为独立无协调的局部动画循环。
+ */
+val LocalSkeletonState = compositionLocalOf<SkeletonState?> { null }
 
 /**
  * 记住并提供统一的 [SkeletonState]，自动驱动流光扫光循环。
@@ -296,10 +308,11 @@ fun Modifier.bgmSkeleton(
     shape: Shape = RoundedCornerShape(4.dp),
     state: SkeletonState? = null,
     useRootCoordinates: Boolean = true,
-): Modifier =
-    if (state != null) {
+): Modifier {
+    val effectiveState = state ?: LocalSkeletonState.current
+    return if (effectiveState != null) {
         skeletonNode(
-            state = state,
+            state = effectiveState,
             shape = shape,
             useRootCoordinates = useRootCoordinates,
         )
@@ -309,6 +322,7 @@ fun Modifier.bgmSkeleton(
             useRootCoordinates = useRootCoordinates,
         )
     }
+}
 
 /**
  * 独立的骨架占位方块组件。
@@ -320,11 +334,12 @@ fun SkeletonBox(
     state: SkeletonState? = null,
     useRootCoordinates: Boolean = true,
 ) {
+    val effectiveState = state ?: LocalSkeletonState.current
     Box(
         modifier =
             modifier.bgmSkeleton(
                 shape = shape,
-                state = state,
+                state = effectiveState,
                 useRootCoordinates = useRootCoordinates,
             ),
     )
@@ -403,6 +418,60 @@ private class SkeletonNode(
     private var cachedOutlineLayoutDirection: LayoutDirection? = null
     private var cachedOutlineShape: Shape? = null
 
+    // 预计算扫光角度三角函数，避免每帧重复调用 cos / sin
+    private var dx: Float = 1f
+    private var dy: Float = 0f
+
+    // 缓存底层着色器与变换矩阵，通过 setLocalMatrix 平移扫光，彻底消除 120Hz 每帧创建销毁 SkLinearGradientShader 原生对象的巨大开销
+    private val localMatrix = Matrix()
+    private var cachedLinearGradient: AndroidLinearGradient? = null
+    private var cachedShaderBrush: ShaderBrush? = null
+    private var cachedShaderWidth: Float = -1f
+    private var cachedShaderBaseColor: Color = Color.Unspecified
+    private var cachedShaderHighlightColor: Color = Color.Unspecified
+
+    private fun obtainShaderBrush(
+        width: Float,
+        base: Color,
+        highlight: Color,
+    ): ShaderBrush {
+        val existingBrush = cachedShaderBrush
+        val existingShader = cachedLinearGradient
+        if (existingBrush != null &&
+            existingShader != null &&
+            cachedShaderWidth == width &&
+            cachedShaderBaseColor == base &&
+            cachedShaderHighlightColor == highlight
+        ) {
+            return existingBrush
+        }
+
+        val baseArgb = base.toArgb()
+        val highlightArgb = highlight.toArgb()
+        val colors = intArrayOf(baseArgb, baseArgb, highlightArgb, baseArgb, baseArgb)
+        val positions = floatArrayOf(0.00f, 0.25f, 0.50f, 0.75f, 1.00f)
+
+        val shader =
+            AndroidLinearGradient(
+                0f,
+                0f,
+                width * dx,
+                width * dy,
+                colors,
+                positions,
+                AndroidShader.TileMode.CLAMP,
+            )
+        val brush = ShaderBrush(shader)
+
+        cachedLinearGradient = shader
+        cachedShaderBrush = brush
+        cachedShaderWidth = width
+        cachedShaderBaseColor = base
+        cachedShaderHighlightColor = highlight
+
+        return brush
+    }
+
     override fun onAttach() {
         onParamsChanged()
     }
@@ -415,6 +484,9 @@ private class SkeletonNode(
         cachedRootSize = null
         cachedOutline = null
         cachedOutlineShape = null
+        cachedLinearGradient = null
+        cachedShaderBrush = null
+        cachedShaderWidth = -1f
     }
 
     override fun onPlaced(coordinates: LayoutCoordinates) {
@@ -439,6 +511,15 @@ private class SkeletonNode(
     }
 
     fun onParamsChanged() {
+        val currentRad = angleDegrees * (PI.toFloat() / 180f)
+        dx = cos(currentRad)
+        dy = sin(currentRad)
+        if (cachedShaderBaseColor != baseColor || cachedShaderHighlightColor != highlightColor) {
+            cachedLinearGradient = null
+            cachedShaderBrush = null
+            cachedShaderWidth = -1f
+        }
+
         if (cachedOutlineShape != shape) {
             cachedOutline = null
             cachedOutlineShape = null
@@ -506,10 +587,6 @@ private class SkeletonNode(
             return
         }
 
-        val rad = angleDegrees * (PI.toFloat() / 180f)
-        val dx = cos(rad)
-        val dy = sin(rad)
-
         val progressValue = progressState?.value ?: progress.value
         val coords = coordinates
         val isCoordsAttached = coords != null && coords.isAttached
@@ -535,12 +612,8 @@ private class SkeletonNode(
         // 光束正向投影的最大物理长度：W * cosθ + H * sinθ
         val maxProj = refWidth * dx + refHeight * dy
 
-        val originOffset =
-            if (originInRoot != null && rootSize != null) {
-                Offset(originInRoot.x, originInRoot.y)
-            } else {
-                Offset.Zero
-            }
+        val originX = if (originInRoot != null && rootSize != null) originInRoot.x else 0f
+        val originY = if (originInRoot != null && rootSize != null) originInRoot.y else 0f
 
         val ratio = shimmerRatio
         val actualShimmerWidth =
@@ -555,26 +628,17 @@ private class SkeletonNode(
         val end = maxProj
         val t = start + (end - start) * progressValue
 
-        val startPoint = Offset(t * dx, t * dy) - originOffset
-        val endPoint =
-            Offset(
-                startPoint.x + actualShimmerWidth * dx,
-                startPoint.y + actualShimmerWidth * dy,
-            )
+        val startX = t * dx - originX
+        val startY = t * dy - originY
 
-        val brush =
-            Brush.linearGradient(
-                colorStops =
-                    arrayOf(
-                        0.00f to baseColor,
-                        0.25f to baseColor,
-                        0.50f to highlightColor,
-                        0.75f to baseColor,
-                        1.00f to baseColor,
-                    ),
-                start = startPoint,
-                end = endPoint,
-            )
+        val brush = obtainShaderBrush(actualShimmerWidth, baseColor, highlightColor)
+        val shader = cachedLinearGradient
+        if (shader != null) {
+            localMatrix.reset()
+            localMatrix.setTranslate(startX, startY)
+            shader.setLocalMatrix(localMatrix)
+        }
+
         drawOutline(outline = outline, brush = brush)
         // 注意：无需显式调用 invalidateDraw()，progressState/progress.value 作为 Snapshot State
         // 在 Draw 阶段被读取时，Compose 会自动挂载观察者，在下一帧动画值更新时自动精准触发局部重绘。

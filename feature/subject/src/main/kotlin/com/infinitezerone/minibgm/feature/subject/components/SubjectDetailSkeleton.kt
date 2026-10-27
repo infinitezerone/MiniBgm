@@ -23,11 +23,13 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.LocalSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
@@ -44,25 +46,27 @@ fun SubjectDetailFullSkeleton(
     topPadding: Dp = 12.dp,
     skeletonState: SkeletonState = rememberSkeletonState(),
 ) {
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topPadding, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        userScrollEnabled = false,
-    ) {
-        // 1. 顶部 Hero 卡片骨架
-        item(key = "skeleton_header") {
-            SubjectHeaderSkeleton(skeletonState = skeletonState)
-        }
+    CompositionLocalProvider(LocalSkeletonState provides skeletonState) {
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topPadding, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            userScrollEnabled = false,
+        ) {
+            // 1. 顶部 Hero 卡片骨架
+            item(key = "skeleton_header") {
+                SubjectHeaderSkeleton(skeletonState = skeletonState)
+            }
 
-        // 2. 吸顶二级 Tab 栏骨架
-        item(key = "skeleton_tab_bar") {
-            SubjectDetailTabBarSkeleton(skeletonState = skeletonState)
-        }
+            // 2. 吸顶二级 Tab 栏骨架
+            item(key = "skeleton_tab_bar") {
+                SubjectDetailTabBarSkeleton(skeletonState = skeletonState)
+            }
 
-        // 3. 详情主体骨架段（评分口碑直方图、简介、角色、制作团队）
-        item(key = "skeleton_body") {
-            SubjectDetailBodySkeleton(skeletonState = skeletonState)
+            // 3. 详情主体骨架段（评分口碑直方图、简介、角色、制作团队）
+            item(key = "skeleton_body") {
+                SubjectDetailBodySkeleton(skeletonState = skeletonState)
+            }
         }
     }
 }

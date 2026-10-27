@@ -66,6 +66,7 @@ fun dataModule(danmakuDefaultEndpoint: String = ""): Module =
                 userPreferences = get<UserPreferencesDataSource>(),
                 collectionRepository = getOrNull<CollectionRepository>(),
                 seasonalDiskCache = getOrNull<com.infinitezerone.minibgm.core.data.seasonal.SeasonalDiskCache>(),
+                dispatchers = getOrNull() ?: BgmDispatchers(),
             )
         }
         single<SubjectRepository> {
@@ -77,6 +78,7 @@ fun dataModule(danmakuDefaultEndpoint: String = ""): Module =
             SearchRepositoryImpl(
                 apiService = get<BangumiApiService>(),
                 userPreferences = get<UserPreferencesDataSource>(),
+                dispatchers = getOrNull() ?: BgmDispatchers(),
             )
         }
         single<CommunityRepository> {

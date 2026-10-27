@@ -40,38 +40,24 @@ private val topLevelFadeInSpec = tween<Float>(durationMillis = 210, delayMillis 
 private val topLevelScaleInSpec = tween<Float>(durationMillis = 210, delayMillis = 90, easing = LinearOutSlowInEasing)
 
 /**
- * 顶层 Tab 转场元数据（Material「Fade Through」模式）：
- * 顶层目的地之间没有方向语义，采用官方标准的轻量快速淡入淡出，
- * 避免全屏大比例变形与数据加载重组互相阻塞，经 Navigation 3 官方元数据机制由各顶层 Entry 独立声明。
+ * 顶层 Tab 转场元数据（Material「Fade Through」纯净淡入淡出模式）：
+ * 顶层目的地之间没有方向语义，采用标准的轻量快速 Crossfade，
+ * 避免全屏缩放引发 GPU 分配多份全屏离屏纹理（Vk_MakeWrappedTextureRenderTarget），
+ * 杜绝与首次数据加载和骨架屏重组在 120Hz 刷新率下互踩掉帧。
  */
 val bgmTopLevelTransitionMetadata: Map<String, Any> =
     NavDisplay.transitionSpec {
-        (
-            scaleIn(
-                initialScale = 0.98f,
-                animationSpec = topLevelScaleInSpec,
-            ) + fadeIn(animationSpec = topLevelFadeInSpec)
-        ).togetherWith(
+        fadeIn(animationSpec = topLevelFadeInSpec).togetherWith(
             fadeOut(animationSpec = topLevelFadeOutSpec),
         )
     } +
         NavDisplay.popTransitionSpec {
-            (
-                scaleIn(
-                    initialScale = 0.98f,
-                    animationSpec = topLevelScaleInSpec,
-                ) + fadeIn(animationSpec = topLevelFadeInSpec)
-            ).togetherWith(
+            fadeIn(animationSpec = topLevelFadeInSpec).togetherWith(
                 fadeOut(animationSpec = topLevelFadeOutSpec),
             )
         } +
         NavDisplay.predictivePopTransitionSpec {
-            (
-                scaleIn(
-                    initialScale = 0.98f,
-                    animationSpec = topLevelScaleInSpec,
-                ) + fadeIn(animationSpec = topLevelFadeInSpec)
-            ).togetherWith(
+            fadeIn(animationSpec = topLevelFadeInSpec).togetherWith(
                 fadeOut(animationSpec = topLevelFadeOutSpec),
             )
         }

@@ -18,10 +18,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.infinitezerone.minibgm.core.designsystem.component.LocalSkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonBox
 import com.infinitezerone.minibgm.core.designsystem.component.SkeletonState
 import com.infinitezerone.minibgm.core.designsystem.component.rememberSkeletonState
@@ -40,17 +42,19 @@ internal fun UserScreenSkeleton(
     modifier: Modifier = Modifier,
     skeletonState: SkeletonState = rememberSkeletonState(),
 ) {
-    Column(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .padding(bottom = 96.dp),
-    ) {
-        UserProfileHeroSkeleton(skeletonState = skeletonState)
-        TrackingStatsSkeleton(skeletonState = skeletonState)
-        CollectionTabsSkeleton(skeletonState = skeletonState)
-        Spacer(modifier = Modifier.height(12.dp))
-        CollectionListSkeleton(skeletonState = skeletonState)
+    CompositionLocalProvider(LocalSkeletonState provides skeletonState) {
+        Column(
+            modifier =
+                modifier
+                    .fillMaxSize()
+                    .padding(bottom = 96.dp),
+        ) {
+            UserProfileHeroSkeleton(skeletonState = skeletonState)
+            TrackingStatsSkeleton(skeletonState = skeletonState)
+            CollectionTabsSkeleton(skeletonState = skeletonState)
+            Spacer(modifier = Modifier.height(12.dp))
+            CollectionListSkeleton(skeletonState = skeletonState)
+        }
     }
 }
 
