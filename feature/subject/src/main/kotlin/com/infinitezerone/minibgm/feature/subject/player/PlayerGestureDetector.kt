@@ -50,7 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -296,6 +296,7 @@ private class PlayerGesturesNode(
     private var lastSeekBasePositionMs: Long = 0L
     private var pendingSeekJob: Job? = null
     private var pendingSeekTargetMs: Long = 0L
+    private var handledInPress = false
 
     private fun handleQuickSeek(side: DoubleTapSide) {
         val now = System.currentTimeMillis()
@@ -337,6 +338,7 @@ private class PlayerGesturesNode(
                 onDoubleTapSeek(target)
                 lastDoubleTapSide = null
                 accumulatedSeconds = 0
+                handledInPress = false
                 pendingSeekJob = null
             }
     }
@@ -348,6 +350,7 @@ private class PlayerGesturesNode(
             onDoubleTapSeek(pendingSeekTargetMs)
             lastDoubleTapSide = null
             accumulatedSeconds = 0
+            handledInPress = false
         }
     }
 
@@ -357,6 +360,7 @@ private class PlayerGesturesNode(
         }
         pendingSeekJob?.cancel()
         pendingSeekJob = null
+        handledInPress = false
         super.onDetach()
     }
 
@@ -385,6 +389,7 @@ private class PlayerGesturesNode(
             pendingSeekJob = null
             lastDoubleTapSide = null
             accumulatedSeconds = 0
+            handledInPress = false
             onScrubCancel()
         }
         this.context = context
@@ -417,16 +422,20 @@ private class PlayerGesturesNode(
                             onSingleTap()
                             return@detectTapGestures
                         }
+                        if (handledInPress) {
+                            handledInPress = false
+                            return@detectTapGestures
+                        }
                         val now = System.currentTimeMillis()
                         val width = size.width
                         val isLeftActive =
                             lastDoubleTapSide == DoubleTapSide.LEFT &&
                                 (now - lastDoubleTapTime) <= DOUBLE_TAP_WINDOW_MS &&
-                                offset.x < width * 0.35f
+                                offset.x < width * 0.45f
                         val isRightActive =
                             lastDoubleTapSide == DoubleTapSide.RIGHT &&
                                 (now - lastDoubleTapTime) <= DOUBLE_TAP_WINDOW_MS &&
-                                offset.x > width * 0.65f
+                                offset.x > width * 0.55f
 
                         when {
                             isLeftActive -> handleQuickSeek(DoubleTapSide.LEFT)
@@ -439,6 +448,10 @@ private class PlayerGesturesNode(
                     },
                     onDoubleTap = { offset ->
                         if (isLocked) return@detectTapGestures
+                        if (handledInPress) {
+                            handledInPress = false
+                            return@detectTapGestures
+                        }
                         val width = size.width
                         val x = offset.x
                         when {
@@ -460,13 +473,31 @@ private class PlayerGesturesNode(
                             onHudStateChange(GestureHudState.FastForward(2.0f))
                         }
                     },
-                    onPress = {
-                        tryAwaitRelease()
+                    onPress = { offset ->
+                        val now = System.currentTimeMillis()
+                        val width = size.width
+                        val isLeftActive =
+                            !isLocked &&
+                                lastDoubleTapSide == DoubleTapSide.LEFT &&
+                                (now - lastDoubleTapTime) <= DOUBLE_TAP_WINDOW_MS &&
+                                offset.x < width * 0.45f
+                        val isRightActive =
+                            !isLocked &&
+                                lastDoubleTapSide == DoubleTapSide.RIGHT &&
+                                (now - lastDoubleTapTime) <= DOUBLE_TAP_WINDOW_MS &&
+                                offset.x > width * 0.55f
+
+                        val released = tryAwaitRelease()
                         if (isFastForwarding) {
                             isFastForwarding = false
                             onHaptic(HapticFeedbackType.TextHandleMove)
                             onFastForwardEnd()
                             onHudStateChange(GestureHudState.Idle)
+                        } else if (released && (isLeftActive || isRightActive)) {
+                            // 连击快进活跃期：单次点击松手后零延迟累加（对齐 YouTube 双击激活后单次轻点即可继续 +10s）
+                            val side = if (isLeftActive) DoubleTapSide.LEFT else DoubleTapSide.RIGHT
+                            handleQuickSeek(side)
+                            handledInPress = true
                         }
                     },
                 )
@@ -906,8 +937,8 @@ private fun FastForwardChip(
 
 /**
  * 现代极简双击快进/快退反馈动效（无底座纯净设计）：
- * 告别笨重/生硬的药丸背景框（去 HUD），仅保留方向箭头与动态跳跃秒数，
- * 配合弹簧数字位移、箭头冲击微动效与文字柔和阴影，在明暗画面下均灵动通透。
+ * 告别笨重/生硬的药丸背景框（去 HUD），仅保留单纯净白色方向箭头与动态跳跃秒数，
+ * 配合弹簧数字位移、箭头微冲击与文字柔和阴影，在明暗画面下均灵动通透。
  */
 @Composable
 private fun YouTubeDoubleTapIndicator(
@@ -937,26 +968,21 @@ private fun YouTubeDoubleTapIndicator(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             modifier =
                 Modifier
-                    .padding(horizontal = 40.dp),
+                    .padding(horizontal = 48.dp),
         ) {
             if (isLeft) {
                 Icon(
-                    imageVector = BgmIcons.FastRewind,
+                    imageVector = BgmIcons.Play,
                     contentDescription = null,
                     tint = Color.White,
                     modifier =
                         Modifier
-                            .size(24.dp)
-                            .offset { IntOffset(x = animatedArrowOffset.dp.roundToPx(), y = 0) }
-                            .drawBehind {
-                                drawCircle(
-                                    color = Color.Black.copy(alpha = 0.25f),
-                                    radius = size.minDimension * 0.7f,
-                                )
-                            },
+                            .size(20.dp)
+                            .rotate(180f)
+                            .offset { IntOffset(x = animatedArrowOffset.dp.roundToPx(), y = 0) },
                 )
             }
             AnimatedContent(
@@ -1025,27 +1051,21 @@ private fun YouTubeDoubleTapIndicator(
             }
             if (!isLeft) {
                 Icon(
-                    imageVector = BgmIcons.FastForward,
+                    imageVector = BgmIcons.Play,
                     contentDescription = null,
                     tint = Color.White,
                     modifier =
                         Modifier
-                            .size(24.dp)
-                            .offset { IntOffset(x = animatedArrowOffset.dp.roundToPx(), y = 0) }
-                            .drawBehind {
-                                drawCircle(
-                                    color = Color.Black.copy(alpha = 0.25f),
-                                    radius = size.minDimension * 0.7f,
-                                )
-                            },
+                            .size(20.dp)
+                            .offset { IntOffset(x = animatedArrowOffset.dp.roundToPx(), y = 0) },
                 )
             }
         }
     }
 }
 
-private const val DOUBLE_TAP_WINDOW_MS = 800L
-private const val DOUBLE_TAP_COMMIT_DELAY_MS = 650L
+private const val DOUBLE_TAP_WINDOW_MS = 900L
+private const val DOUBLE_TAP_COMMIT_DELAY_MS = 900L
 
 /** 一屏横滑 ≈ 片长的 1/10；短片托底、长片封顶，保证跨片长手感连续 */
 private const val SEEK_SPAN_DIVISOR = 10L
