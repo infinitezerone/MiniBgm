@@ -16,6 +16,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.data.playback.M3u8AdSanitizer
 import com.infinitezerone.minibgm.feature.subject.R
 import java.io.ByteArrayOutputStream
@@ -227,6 +228,7 @@ internal fun classifyPlaybackError(
 
 private const val CONNECT_TIMEOUT_MS = 15_000
 private const val READ_TIMEOUT_MS = 45_000
+private val adSanitizerLogger = bgmLogger("Bgm/AdSanitizer")
 
 /**
  * 包装底层 [HttpDataSource]，对 HLS 播放列表（.m3u8）透明执行广告切片清洗。
@@ -254,6 +256,8 @@ private class AdSanitizingHttpDataSource(
             return upstream.open(dataSpec)
         }
 
+        adSanitizerLogger.d { "拦截 HLS 播放列表请求: ${dataSpec.uri}" }
+
         // m3u8 播放列表请求：拉取并执行广告切片清洗
         return runCatching {
             upstream.open(dataSpec)
@@ -266,6 +270,11 @@ private class AdSanitizingHttpDataSource(
             val rawText = buffer.toString(Charsets.UTF_8.name())
             if (rawText.startsWith("#EXTM3U")) {
                 val cleaned = M3u8AdSanitizer.sanitize(rawText)
+                if (cleaned != rawText) {
+                    adSanitizerLogger.i { "成功剥离 M3U8 广告切片: ${dataSpec.uri}" }
+                } else {
+                    adSanitizerLogger.d { "M3U8 无需清洗（未检测到广告切片）: ${dataSpec.uri}" }
+                }
                 val bytes = cleaned.toByteArray(Charsets.UTF_8)
                 sanitizedBytes = bytes
                 bytes.size.toLong()

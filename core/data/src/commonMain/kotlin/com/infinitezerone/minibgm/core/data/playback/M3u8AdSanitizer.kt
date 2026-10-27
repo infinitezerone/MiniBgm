@@ -1,33 +1,37 @@
 package com.infinitezerone.minibgm.core.data.playback
 
+import com.infinitezerone.minibgm.core.common.bgmLogger
+
 /**
  * HLS 媒体播放列表（.m3u8）广告切片清洗器。
  *
- * 核心针对 MacCMS / TVBox 切片采集站常见的片头荷官/菠菜硬广切片，
+ * 核心针对切片采集站常见的片头、片中（中插）、片尾硬广切片，
  * 在内存中透明过滤掉广告段，为底层播放器（ExoPlayer）提供纯净的正片切片列表。
  *
  * 严格遵循 Fail-Open 准则：
  * 任何解析异常、未知格式或非切片列表均原样返回原始文本，绝不阻断媒体起播。
  */
 object M3u8AdSanitizer {
-    /** 判定为片头广告段落的最大累计时长阈值（秒） */
-    const val DEFAULT_MAX_HEAD_AD_DURATION_SECONDS: Double = 18.0
+    /** 判定为广告段落的最大累计时长阈值（秒）。通常切片站广告插片为 5~25 秒 */
+    const val DEFAULT_MAX_AD_DURATION_SECONDS: Double = 30.0
+
+    private val logger = bgmLogger("Bgm/AdSanitizer")
 
     private val EXTINF_DURATION_REGEX = Regex("""#EXTINF:([0-9.]+)(?:,.*)?""")
     private val MEDIA_SEQUENCE_REGEX = Regex("""#EXT-X-MEDIA-SEQUENCE:(\d+)""")
 
     /**
-     * 清洗 m3u8 播放列表文本，剥离片头广告切片段落。
+     * 清洗 m3u8 播放列表文本，剥离片头、片中及片尾广告切片段落。
      *
      * @param content 原始 m3u8 文本
      * @param customRules 自定义 TVBox 正则过滤规则列表（可选）
-     * @param maxHeadAdDurationSec 片头广告最大时长阈值（秒）
+     * @param maxAdDurationSec 单段广告最大时长阈值（秒）
      * @return 清洗后的纯净 m3u8 文本；若无广告或格式不匹配则安全返回原文本
      */
     fun sanitize(
         content: String,
         customRules: List<String> = emptyList(),
-        maxHeadAdDurationSec: Double = DEFAULT_MAX_HEAD_AD_DURATION_SECONDS,
+        maxAdDurationSec: Double = DEFAULT_MAX_AD_DURATION_SECONDS,
     ): String =
         runCatching {
             val trimmed = content.trim()
@@ -42,8 +46,8 @@ object M3u8AdSanitizer {
                 processed = applyCustomRules(processed, customRules)
             }
 
-            // 2. 启发式结构化广告切片剥离
-            stripHeuristicAdSegments(processed, maxHeadAdDurationSec)
+            // 2. 启发式结构化广告切片剥离（全面覆盖片头、片中、片尾）
+            stripHeuristicAdSegments(processed, maxAdDurationSec)
         }.getOrDefault(content)
 
     /**
@@ -69,104 +73,140 @@ object M3u8AdSanitizer {
         return current
     }
 
+    private data class SegmentBlock(
+        val lines: MutableList<String> = mutableListOf(),
+        var duration: Double = 0.0,
+        var segmentCount: Int = 0,
+        var hasDiscontinuityPrefix: Boolean = false,
+    )
+
     /**
-     * 针对 MacCMS / TVBox 典型的首部 `#EXT-X-DISCONTINUITY` 切片广告段进行结构化剥离
+     * 针对 MacCMS / TVBox 切片站典型的硬广切片（片头、片中、片尾）进行结构化剥离
      */
     private fun stripHeuristicAdSegments(
         content: String,
-        maxHeadAdDurationSec: Double,
+        maxAdDurationSec: Double,
     ): String {
         val lines = content.lines()
         if (lines.isEmpty()) return content
 
-        // 切分：提取顶部元数据行与媒体段落
         val headerLines = mutableListOf<String>()
-        val segmentBlocks = mutableListOf<MutableList<String>>()
-        var currentBlock: MutableList<String>? = null
+        val blocks = mutableListOf<SegmentBlock>()
+        var currentBlock: SegmentBlock? = null
         var isReadingHeader = true
+        var endListLine: String? = null
 
         for (line in lines) {
             val trimmedLine = line.trim()
+            if (trimmedLine == "#EXT-X-ENDLIST") {
+                endListLine = line
+                continue
+            }
+
             if (isReadingHeader) {
                 if (trimmedLine == "#EXT-X-DISCONTINUITY" || trimmedLine.startsWith("#EXTINF")) {
                     isReadingHeader = false
-                    currentBlock = mutableListOf()
-                    currentBlock.add(line)
-                    segmentBlocks.add(currentBlock)
+                    currentBlock = SegmentBlock(hasDiscontinuityPrefix = (trimmedLine == "#EXT-X-DISCONTINUITY"))
+                    blocks.add(currentBlock)
+                    if (trimmedLine != "#EXT-X-DISCONTINUITY") {
+                        currentBlock.lines.add(line)
+                        inspectSegmentLine(trimmedLine, currentBlock)
+                    }
                 } else {
                     headerLines.add(line)
                 }
             } else {
                 if (trimmedLine == "#EXT-X-DISCONTINUITY") {
-                    currentBlock = mutableListOf(line)
-                    segmentBlocks.add(currentBlock)
+                    currentBlock = SegmentBlock(hasDiscontinuityPrefix = true)
+                    blocks.add(currentBlock)
                 } else {
-                    currentBlock?.add(line)
+                    currentBlock?.let { b ->
+                        b.lines.add(line)
+                        inspectSegmentLine(trimmedLine, b)
+                    }
                 }
             }
         }
 
-        // 如果没有段落切片或只有一个整体段落且无前置不连续标记，无需修改
-        if (segmentBlocks.size < 2) return content
+        // 仅保留有效切片段落
+        val validBlocks = blocks.filter { it.segmentCount > 0 }
+        if (validBlocks.size < 2) return content
 
-        val firstBlock = segmentBlocks.first()
-        // 判定首个段落是否为被注入的独立广告切片：
-        // 1. 首个段落必须显式以 #EXT-X-DISCONTINUITY 开头（切片站标记外接片段）
-        val hasDiscontinuityLead = firstBlock.any { it.trim() == "#EXT-X-DISCONTINUITY" }
-        if (!hasDiscontinuityLead) return content
+        // 识别属于广告的切片段落
+        val adCandidateIndices = mutableSetOf<Int>()
+        for (i in validBlocks.indices) {
+            val block = validBlocks[i]
+            if (block.duration <= maxAdDurationSec) {
+                val isHeadAd = (i == 0) && (block.hasDiscontinuityPrefix || validBlocks.getOrNull(1)?.hasDiscontinuityPrefix == true)
+                val isTailAd = (i == validBlocks.lastIndex) && block.hasDiscontinuityPrefix
+                val isMidAd = (i > 0 && i < validBlocks.lastIndex) && block.hasDiscontinuityPrefix
 
-        // 2. 统计首个段落内的切片总时长与切片个数
-        var firstBlockDuration = 0.0
-        var firstBlockSegmentCount = 0
-        for (line in firstBlock) {
-            val trimmed = line.trim()
-            if (trimmed.startsWith("#EXTINF:")) {
-                val match = EXTINF_DURATION_REGEX.matchEntire(trimmed)
-                val duration = match?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
-                firstBlockDuration += duration
-                firstBlockSegmentCount++
+                if (isHeadAd || isTailAd || isMidAd) {
+                    adCandidateIndices.add(i)
+                }
             }
         }
 
-        // 如果首段切片为空，或者时长超过了设定的广告阈值（例如超过 18 秒通常就是正片内容），不进行误杀
-        if (firstBlockSegmentCount == 0 || firstBlockDuration > maxHeadAdDurationSec) {
+        if (adCandidateIndices.isEmpty()) return content
+
+        val keptBlocks = validBlocks.filterIndexed { index, _ -> index !in adCandidateIndices }
+        // 守卫：必须保留至少一段有实质内容的正片（总时长需超过广告阈值），防止在超短预览片上发生误判
+        if (keptBlocks.isEmpty() || keptBlocks.sumOf { it.duration } <= maxAdDurationSec) {
             return content
         }
 
-        // 3. 剥离首个段落（确认存在后续至少一个正片段落）
-        val remainingBlocks = segmentBlocks.drop(1)
-        val hasRemainingPlayableSegments =
-            remainingBlocks.any { block ->
-                block.any { it.trim().startsWith("#EXTINF:") }
-            }
-        if (!hasRemainingPlayableSegments) return content
+        // 统计剔除数据用于日志与序号更新
+        var headRemovedSegments = 0
+        if (0 in adCandidateIndices) {
+            headRemovedSegments = validBlocks[0].segmentCount
+        }
 
-        // 4. 重建播放列表并修正媒体序列号（EXT-X-MEDIA-SEQUENCE）
         val updatedHeaderLines =
-            headerLines.map { line ->
-                val match = MEDIA_SEQUENCE_REGEX.matchEntire(line.trim())
-                if (match != null) {
-                    val currentSeq = match.groupValues[1].toLongOrNull() ?: 0L
-                    "#EXT-X-MEDIA-SEQUENCE:${currentSeq + firstBlockSegmentCount}"
-                } else {
-                    line
+            if (headRemovedSegments > 0) {
+                headerLines.map { line ->
+                    val match = MEDIA_SEQUENCE_REGEX.matchEntire(line.trim())
+                    if (match != null) {
+                        val currentSeq = match.groupValues[1].toLongOrNull() ?: 0L
+                        "#EXT-X-MEDIA-SEQUENCE:${currentSeq + headRemovedSegments}"
+                    } else {
+                        line
+                    }
                 }
+            } else {
+                headerLines
             }
 
         val resultLines = mutableListOf<String>()
         resultLines.addAll(updatedHeaderLines)
 
-        // 写入剩余的段落，若后续首个段落以 DISCONTINUITY 开头，此时作为正片起点已无需该标记，平滑移除
-        remainingBlocks.forEachIndexed { index, block ->
-            val cleanedBlock =
-                if (index == 0 && block.firstOrNull()?.trim() == "#EXT-X-DISCONTINUITY") {
-                    block.drop(1)
-                } else {
-                    block
-                }
-            resultLines.addAll(cleanedBlock)
+        for (i in keptBlocks.indices) {
+            val block = keptBlocks[i]
+            // 正片分块之间保留一个 #EXT-X-DISCONTINUITY，以保证播放器在跨过广告切片后正确重置解码器与时间戳
+            if (i > 0) {
+                resultLines.add("#EXT-X-DISCONTINUITY")
+            }
+            resultLines.addAll(block.lines)
+        }
+
+        if (endListLine != null) {
+            resultLines.add(endListLine)
+        }
+
+        val strippedDuration = validBlocks.filterIndexed { idx, _ -> idx in adCandidateIndices }.sumOf { it.duration }
+        val strippedCount = validBlocks.filterIndexed { idx, _ -> idx in adCandidateIndices }.sumOf { it.segmentCount }
+        logger.i {
+            "剥离广告成功: 剔除 ${adCandidateIndices.size} 处广告段落, 共 $strippedCount 个切片, 累计时长 %.2fs".format(strippedDuration)
         }
 
         return resultLines.joinToString("\n")
+    }
+
+    private fun inspectSegmentLine(trimmed: String, block: SegmentBlock) {
+        if (trimmed.startsWith("#EXTINF:")) {
+            val match = EXTINF_DURATION_REGEX.matchEntire(trimmed)
+            val dur = match?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+            block.duration += dur
+            block.segmentCount++
+        }
     }
 }
