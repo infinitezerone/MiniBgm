@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicReference
  * 因此换源（Referer 变化）只需更新 holder，**不重建 ExoPlayer**——这正是旧实现每次换源
  * 都重建播放器、进而把 PlayerView 与播放器解绑导致黑屏的根因。
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class ExoPlayerEngine(
     context: Context,
 ) : PlayerEngine {
@@ -234,6 +235,7 @@ private const val READ_TIMEOUT_MS = 45_000
  * 仅对以 .m3u8 结尾或包含 m3u8 的请求拦截，非 m3u8（如 .ts 媒体切片）完全 0 拷贝透传直读；
  * 若解析清洗发生任何异常，安全退化为原样透传。
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 private class AdSanitizingHttpDataSource(
     private val upstream: HttpDataSource,
 ) : HttpDataSource by upstream {
@@ -279,7 +281,11 @@ private class AdSanitizingHttpDataSource(
         }
     }
 
-    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+    override fun read(
+        buffer: ByteArray,
+        offset: Int,
+        length: Int,
+    ): Int {
         val memoryData = sanitizedBytes
         if (memoryData != null) {
             if (bytesReadFromSanitized >= memoryData.size) {
