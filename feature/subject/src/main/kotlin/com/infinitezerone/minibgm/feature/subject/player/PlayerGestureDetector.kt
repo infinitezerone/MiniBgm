@@ -23,7 +23,6 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -846,7 +845,7 @@ private fun TopCapsuleIndicator(
 internal fun SeekFeedbackCard(
     targetMs: Long,
     totalMs: Long,
-    deltaMs: Long,
+    deltaMs: Long = 0L,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -856,43 +855,21 @@ internal fun SeekFeedbackCard(
         contentColor = Color.White,
         modifier = modifier,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+        Box(
+            contentAlignment = Alignment.Center,
             modifier =
                 Modifier
                     .widthIn(min = 160.dp)
-                    .padding(horizontal = 22.dp, vertical = 8.dp),
+                    .padding(horizontal = 22.dp, vertical = 10.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Icon(
-                    imageVector = if (deltaMs >= 0) BgmIcons.FastForward else BgmIcons.FastRewind,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-                val deltaSec = (abs(deltaMs) / 1000).toInt()
-                Text(
-                    text = "${if (deltaMs >= 0) "+" else "-"}${deltaSec}s",
-                    style =
-                        MaterialTheme.typography.titleSmall.copy(
-                            fontFeatureSettings = "tnum",
-                        ),
-                    fontWeight = FontWeight.Bold,
-                    color = if (deltaMs >= 0) MaterialTheme.colorScheme.primary else Color.White,
-                )
-            }
             Text(
                 text = "${formatDuration(targetMs)} / ${formatDuration(totalMs)}",
                 style =
-                    MaterialTheme.typography.labelMedium.copy(
+                    MaterialTheme.typography.titleSmall.copy(
                         fontFeatureSettings = "tnum",
                     ),
-                fontWeight = FontWeight.Medium,
-                color = Color.White.copy(alpha = 0.85f),
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
             )
         }
     }

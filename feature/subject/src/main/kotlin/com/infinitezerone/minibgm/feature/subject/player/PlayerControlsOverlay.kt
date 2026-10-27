@@ -39,7 +39,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -183,13 +182,6 @@ internal fun PlayerControlsOverlay(
 
         // 拖动底部进度条时在画面中央浮现极简微胶囊 SeekFeedbackCard
         val scrubState = scrub.state
-        var scrubStartMs by remember { mutableLongStateOf(0L) }
-        LaunchedEffect(scrubState.active) {
-            if (scrubState.active) {
-                scrubStartMs = position.value
-            }
-        }
-
         AnimatedVisibility(
             visible = scrubState.active && totalDuration > 0L,
             enter = fadeIn(tween(120)) + scaleIn(tween(140), initialScale = 0.88f),
@@ -197,11 +189,9 @@ internal fun PlayerControlsOverlay(
             modifier = Modifier.align(Alignment.Center),
         ) {
             val targetMs = (scrubState.fraction * totalDuration).toLong().coerceIn(0L, totalDuration)
-            val deltaMs = targetMs - scrubStartMs
             SeekFeedbackCard(
                 targetMs = targetMs,
                 totalMs = totalDuration,
-                deltaMs = deltaMs,
             )
         }
 
