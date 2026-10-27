@@ -286,14 +286,7 @@ internal fun ReminderSettingsCard(
                     SettingsItemRow(
                         icon = BgmIcons.PlayCircle,
                         title = stringResource(R.string.feature_user_settings_pre_air_title),
-                        subtitle =
-                            if (!hasAiringChannel) {
-                                stringResource(
-                                    R.string.feature_user_settings_channel_disabled_subtitle,
-                                )
-                            } else {
-                                null
-                            },
+                        subtitle = null,
                         onClick = { onToggleAiringPreAir(!isPreAirActive) },
                         trailing = {
                             Switch(

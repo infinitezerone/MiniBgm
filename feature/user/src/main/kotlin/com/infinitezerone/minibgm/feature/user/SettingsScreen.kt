@@ -357,7 +357,20 @@ fun SettingsScreen(
 
     val toggleAiringPreAir: (Boolean) -> Unit = { enabled ->
         if (enabled && !hasAiringChannel) {
-            openAiringChannelSettings(context)
+            coroutineScope.launch {
+                val confirmed =
+                    overlayHostState.await(
+                        ConfirmDialogAction(
+                            title = context.getString(R.string.feature_user_channel_disabled_title),
+                            message = context.getString(R.string.feature_user_channel_disabled_message),
+                            confirmText = context.getString(R.string.feature_user_action_go_settings),
+                            dismissText = context.getString(DesignSystemR.string.core_designsystem_action_cancel),
+                        ),
+                    )
+                if (confirmed) {
+                    openAiringChannelSettings(context)
+                }
+            }
         } else {
             viewModel.setAiringPreAirEnabled(enabled)
         }
