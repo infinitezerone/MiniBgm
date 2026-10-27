@@ -40,6 +40,11 @@ class AiringAlarmReceiver :
         val action = intent?.action ?: return
         log.d { "[ALARM_RECEIVER:TRIGGERED] action=$action" }
 
+        if (action == AiringReminderNotifier.ACTION_PRE_AIR_NOTIFICATION_DISMISSED) {
+            AiringReminderNotifier(context).refreshPreAirSummary()
+            return
+        }
+
         val pendingResult = goAsync()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 

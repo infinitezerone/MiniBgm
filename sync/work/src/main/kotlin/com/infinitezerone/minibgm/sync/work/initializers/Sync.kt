@@ -62,6 +62,7 @@ object Sync {
     ) {
         // 1. 预注册系统通知渠道与分组（开箱即见）
         AiringReminderNotifier.createNotificationChannels(context)
+        refreshAiringNotificationSummary(context)
 
         // 2. 彻底注销旧版 WorkManager 周期任务（消除历史升级残留）
         WorkManager.getInstance(context).cancelUniqueWork(AiringReminderWorker.PERIODIC_WORK_NAME)
@@ -108,6 +109,11 @@ object Sync {
                     reconfigure(context, syncInterval)
                 }
         }
+    }
+
+    /** 通知点击的 autoCancel 不会触发 deleteIntent，App 回前台时重算一次聚合头。 */
+    fun refreshAiringNotificationSummary(context: Context) {
+        AiringReminderNotifier(context).refreshPreAirSummary()
     }
 
     fun reconfigure(

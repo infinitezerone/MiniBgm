@@ -24,6 +24,7 @@ import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.model.FeatureCapabilities
 import com.infinitezerone.minibgm.core.model.ThemeMode
 import com.infinitezerone.minibgm.core.navigation.BgmNavIntents
+import com.infinitezerone.minibgm.sync.work.initializers.Sync
 import com.infinitezerone.minibgm.ui.BgmApp
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
@@ -93,6 +94,12 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
+        Sync.refreshAiringNotificationSummary(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Sync.refreshAiringNotificationSummary(this)
     }
 
     private fun handleIntent(intent: Intent?) {

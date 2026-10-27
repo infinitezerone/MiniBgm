@@ -7,6 +7,9 @@
     <string name="airing_pre_air_title_started">现已开播</string>
     <string name="airing_pre_air_item">《%1$s》第 %2$d 话马上开始</string>
     <string name="airing_pre_air_item_started">《%1$s》第 %2$d 话现已开播</string>
+    <string name="airing_pre_air_summary_title">开播提醒 · %1$d 部</string>
+    <string name="airing_pre_air_summary_text">点击查看时刻表</string>
+    <string name="airing_pre_air_summary_more">还有 %1$d 部</string>
     <string name="airing_finale_title">🎬《%1$s》全剧完结！</string>
     <string name="airing_finale_item">第 %1$d 话（最终话）现已播出，共 %2$d 话全部完结，可以一口气开刷啦！</string>
 </resources>
