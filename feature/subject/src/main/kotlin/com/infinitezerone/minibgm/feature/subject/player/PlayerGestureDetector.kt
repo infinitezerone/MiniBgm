@@ -656,6 +656,7 @@ internal fun PlayerGestureDetector(
     onFastForwardEnd: () -> Unit,
     modifier: Modifier = Modifier,
     isLocked: Boolean = false,
+    onDoubleTapSeekStart: () -> Unit = {},
     onScrubStart: (Float) -> Unit = {},
     onScrubbing: (Float) -> Unit = {},
     onScrubEnd: (Float) -> Unit = {},
@@ -705,6 +706,7 @@ internal fun PlayerGestureDetector(
                     onTriggerHudDismiss = { hideHudTrigger++ },
                     isLocked = isLocked,
                     onDoubleTapAction = { side, seconds ->
+                        onDoubleTapSeekStart()
                         val token = System.currentTimeMillis()
                         activeDoubleTap = DoubleTapIndicatorState(side = side, seconds = seconds, token = token)
                         doubleTapTrigger = token

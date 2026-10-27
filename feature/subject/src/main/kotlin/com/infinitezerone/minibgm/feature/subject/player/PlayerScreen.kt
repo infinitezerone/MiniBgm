@@ -607,6 +607,7 @@ fun PlayerScreen(
             showEpisodeQueue = config.showEpisodeQueue,
             onSingleTap = { areControlsVisible = !areControlsVisible },
             onDoubleTapSeek = { targetMs ->
+                areControlsVisible = false
                 if (playback.durationMs > 0L) {
                     scrub.end((targetMs.toFloat() / playback.durationMs.toFloat()).coerceIn(0f, 1f))
                 } else {
@@ -614,6 +615,7 @@ fun PlayerScreen(
                 }
                 controller.seekTo(targetMs)
             },
+            onDoubleTapSeekStart = { areControlsVisible = false },
             onDoubleTapPlayPause = {
                 val wasPlaying = playback.isPlaying
                 controller.togglePlayPause()
@@ -621,7 +623,10 @@ fun PlayerScreen(
                     areControlsVisible = true
                 }
             },
-            onFastForwardStart = { controller.setPlaybackSpeed(2f) },
+            onFastForwardStart = {
+                areControlsVisible = false
+                controller.setPlaybackSpeed(2f)
+            },
             onFastForwardEnd = { controller.setPlaybackSpeed(playbackSpeed) },
             onPlayPauseToggle = controller::togglePlayPause,
             onRewind10 = { controller.seekTo((position.value - 10_000L).coerceAtLeast(0L)) },
@@ -973,6 +978,7 @@ private fun PlayerVideoStage(
     showEpisodeQueue: Boolean,
     onSingleTap: () -> Unit,
     onDoubleTapSeek: (Long) -> Unit,
+    onDoubleTapSeekStart: () -> Unit = {},
     onDoubleTapPlayPause: () -> Unit,
     onFastForwardStart: () -> Unit,
     onFastForwardEnd: () -> Unit,
@@ -1019,6 +1025,7 @@ private fun PlayerVideoStage(
             totalDurationMs = { playback.durationMs },
             onSingleTap = onSingleTap,
             onDoubleTapSeek = onDoubleTapSeek,
+            onDoubleTapSeekStart = onDoubleTapSeekStart,
             onDoubleTapPlayPause = onDoubleTapPlayPause,
             onFastForwardStart = onFastForwardStart,
             onFastForwardEnd = onFastForwardEnd,
