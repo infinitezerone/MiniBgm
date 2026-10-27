@@ -144,10 +144,12 @@ class ExoPlayerEngine(
         } else {
             exoPlayer.setMediaItem(MediaItem.fromUri(url))
         }
+        exoPlayer.playWhenReady = true
         exoPlayer.prepare()
     }
 
     override fun retry() {
+        exoPlayer.playWhenReady = true
         exoPlayer.prepare()
     }
 

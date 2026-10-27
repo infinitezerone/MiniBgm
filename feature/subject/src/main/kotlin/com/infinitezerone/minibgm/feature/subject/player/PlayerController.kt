@@ -200,7 +200,7 @@ class PlayerController(
             PlaybackState(
                 mediaUrl = url,
                 isBuffering = true,
-                playWhenReady = engine.playWhenReady,
+                playWhenReady = true,
                 isLooping = looping,
             )
         resetTrackOverridesOnMediaChange()

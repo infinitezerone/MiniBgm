@@ -70,6 +70,7 @@ class PlayerControllerTest {
             loadedUrl = url
             loadedHeaders = headers
             loadedStartPositionMs = startPositionMs
+            playWhenReadyState = true
             if (startPositionMs > 0L) {
                 position = startPositionMs
             }
@@ -196,6 +197,22 @@ class PlayerControllerTest {
 
             assertEquals(2, engine.loadCalls)
             assertEquals("https://cdn/b.m3u8", engine.loadedUrl)
+        }
+
+    @Test
+    fun setMedia_whenPaused_restoresPlayWhenReadyForAutoplay() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+            // 模拟切源前或初始化时暂停（如 isResolvingSource 时 pause）
+            controller.pause()
+            assertFalse(engine.playWhenReady)
+
+            // 加载新媒体应当恢复 playWhenReady = true，确保起播自动播放
+            controller.setMedia("https://cdn/video.m3u8", emptyMap())
+
+            assertTrue(engine.playWhenReady)
+            assertTrue(controller.state.value.playWhenReady)
         }
 
     @Test
