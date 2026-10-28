@@ -174,6 +174,11 @@ class MpvPlayerEngine(
                     MPVLib.MPV_EVENT_END_FILE -> {
                         notify { it.onPlaybackStateChanged(EnginePlaybackState.ENDED) }
                     }
+                    MPVLib.MPV_EVENT_SHUTDOWN -> {
+                        // mpv 核心意外退出（release 正常销毁前监听已被移除，不会走到这）
+                        fileLoaded = false
+                        notify { it.onError("mpv 引擎已退出") }
+                    }
                     MPVLib.MPV_EVENT_PLAYBACK_RESTART -> {
                         notify { it.onPlaybackStateChanged(EnginePlaybackState.READY) }
                     }
@@ -188,14 +193,23 @@ class MpvPlayerEngine(
                 MPVLib.setOptionString("vo", "gpu")
                 MPVLib.setOptionString("gpu-context", "android")
                 MPVLib.setOptionString("opengl-es", "yes")
-                // 官方姿势：surfaceCreated 之前禁用窗口创建，避免 vo 抢在有效 wid 之前初始化
-                MPVLib.setOptionString("force-window", "no")
-                MPVLib.setOptionString("hwdec", "mediacodec")
+                // 直接解码失败自动回退 copy 解码（官方 hwdec 策略），codec 白名单对齐官方
+                MPVLib.setOptionString("hwdec", "mediacodec,mediacodec-copy")
+                MPVLib.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1")
+                MPVLib.setOptionString("ao", "audiotrack,opensles")
+                // 限制 demuxer 缓存：默认 150MiB 在移动端内存压力过大（官方上限 32/64MB）
+                MPVLib.setOptionString("demuxer-max-bytes", "${64 * 1024 * 1024}")
+                MPVLib.setOptionString("demuxer-max-back-bytes", "${32 * 1024 * 1024}")
                 MPVLib.setOptionString("sub-auto", "all")
                 MPVLib.setOptionString("sub-font-provider", "none")
                 MPVLib.setOptionString("sub-ass-override", "no")
                 MPVLib.setOptionString("blend-subtitles", "yes")
                 MPVLib.init()
+
+                // 官方姿势：init 后设置——idle=once 防止 stop 后 mpv 核心退出；
+                // force-window=no 防止 vo 抢在有效 wid 之前初始化
+                MPVLib.setOptionString("idle", "once")
+                MPVLib.setOptionString("force-window", "no")
 
                 MPVLib.addObserver(eventObserver)
                 MPVLib.observeProperty("time-pos", MPVLib.MPV_FORMAT_DOUBLE)
@@ -410,16 +424,16 @@ class MpvPlayerEngine(
                 "video" -> {
                     val width = MPVLib.getPropertyInt("${base}demux-w") ?: 0
                     val height = MPVLib.getPropertyInt("${base}demux-h") ?: 0
-                    // mpv < 0.40 的 track-list 无 demux-bitrate 子属性，退回顶层当前轨码率
-                    val bitrate = MPVLib.getPropertyInt("video-bitrate") ?: 0
                     qualityOptions.add(
                         PlayerQualityOption(
                             id = "mpv-video-$trackId",
                             name = formatQualityLabel(width, height),
-                            detail = formatQualityDetail(width, height, bitrate),
+                            // 不显示码率：mpv 顶层 video-bitrate 是当前轨滑动估算值，
+                            // 不是文件整体码率，展示会误导
+                            detail = formatQualityDetail(width, height, 0),
                             width = width,
                             height = height,
-                            bitrate = bitrate,
+                            bitrate = 0,
                             isSelected = selected,
                         ),
                     )
