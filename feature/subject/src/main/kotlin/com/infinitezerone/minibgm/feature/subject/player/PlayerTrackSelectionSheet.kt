@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.Player
-import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmModalBottomSheet
@@ -99,7 +98,7 @@ enum class SubtitleMode {
 }
 
 /**
- * 视频清晰度选项视图模型。
+ * 视频清晰度选项视图模型（引擎中立：id 由各引擎在快照中下发，选中命令原样回传引擎）。
  */
 data class PlayerQualityOption(
     val id: String,
@@ -109,19 +108,15 @@ data class PlayerQualityOption(
     val height: Int,
     val bitrate: Int,
     val isSelected: Boolean,
-    val group: Tracks.Group? = null,
-    val trackIndex: Int = 0,
 )
 
 /**
- * 播放器轨道项视图模型（字幕/音轨）。
+ * 播放器轨道项视图模型（字幕/音轨，引擎中立）。
  */
 data class PlayerTrackOption(
     val id: String,
     val name: String,
     val isSelected: Boolean,
-    val group: Tracks.Group,
-    val trackIndex: Int,
 )
 
 /**
@@ -428,8 +423,6 @@ fun extractPlayerTracksSnapshot(player: Player): PlayerTracksSnapshot {
                             height = format.height,
                             bitrate = format.bitrate,
                             isSelected = isSelected,
-                            group = group,
-                            trackIndex = i,
                         ),
                     )
                 }
@@ -447,8 +440,6 @@ fun extractPlayerTracksSnapshot(player: Player): PlayerTracksSnapshot {
                             id = trackId,
                             name = name,
                             isSelected = isSelected,
-                            group = group,
-                            trackIndex = i,
                         ),
                     )
                 }
@@ -466,8 +457,6 @@ fun extractPlayerTracksSnapshot(player: Player): PlayerTracksSnapshot {
                             id = trackId,
                             name = name,
                             isSelected = isSelected,
-                            group = group,
-                            trackIndex = i,
                         ),
                     )
                 }

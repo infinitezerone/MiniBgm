@@ -110,6 +110,27 @@ class PlayerControllerTest {
 
         override var trackSelectionParameters: TrackSelectionParameters = TrackSelectionParameters.DEFAULT_WITHOUT_CONTEXT
 
+        val selectedTracks = mutableListOf<Pair<EngineTrackType, String>>()
+        val clearedOverrides = mutableListOf<EngineTrackType>()
+
+        override fun extractTracksSnapshot(): PlayerTracksSnapshot = PlayerTracksSnapshot()
+
+        override fun selectTrack(
+            type: EngineTrackType,
+            id: String,
+        ) {
+            selectedTracks += type to id
+        }
+
+        override fun clearTrackOverride(type: EngineTrackType) {
+            clearedOverrides += type
+            val builder = trackSelectionParameters.buildUpon().clearOverridesOfType(type.toMedia3TrackType())
+            if (type == EngineTrackType.TEXT) {
+                builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            }
+            trackSelectionParameters = builder.build()
+        }
+
         var loopEnabled = false
         var loopCalls = 0
 
@@ -523,6 +544,31 @@ class PlayerControllerTest {
             // 依赖真机；这里验证自适应切换路径不炸且维持空覆盖
             controller.selectAutoVideoQuality()
             assertTrue(engine.trackSelectionParameters.overrides.isEmpty())
+        }
+
+    @Test
+    fun trackSelection_routesThroughEngineWithNeutralIds() =
+        runTest {
+            val engine = FakePlayerEngine()
+            val controller = PlayerController(engine, backgroundScope)
+
+            // 字幕：先解除关闭态，再按引擎中立 id 路由（mpv 无 Media3 TrackGroup，唯一可行通道）
+            controller.disableSubtitles()
+            controller.selectSubtitleTrack(PlayerTrackOption(id = "mpv-sub-2", name = "字幕", isSelected = false))
+            assertEquals(
+                listOf(EngineTrackType.TEXT to "mpv-sub-2"),
+                engine.selectedTracks,
+            )
+            assertFalse(engine.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
+
+            // 音轨路由不触碰字幕关闭态；清晰度自适应只清 VIDEO 覆盖；
+            // 字幕自动选择先解除关闭态再清 TEXT 覆盖
+            controller.selectAudioTrack(PlayerTrackOption(id = "mpv-audio-1", name = "音轨", isSelected = false))
+            assertEquals(EngineTrackType.AUDIO, engine.selectedTracks.last().first)
+            controller.selectAutoVideoQuality()
+            controller.autoSelectSubtitles()
+            assertEquals(listOf(EngineTrackType.VIDEO, EngineTrackType.TEXT), engine.clearedOverrides)
+            assertFalse(engine.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT))
         }
 
     @Test

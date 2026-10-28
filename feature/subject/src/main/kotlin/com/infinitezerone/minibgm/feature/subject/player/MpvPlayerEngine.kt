@@ -13,6 +13,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 private val logger = bgmLogger("Bgm/MpvEngine")
 
+/** mpv 轨道显示名：title 优先，其次解析后的语言名，最后退回「字幕 N / 音轨 N」 */
+private fun trackDisplayName(
+    title: String?,
+    language: String?,
+    defaultLabel: String,
+    trackId: Int,
+): String {
+    val parts = listOfNotNull(title?.takeIf { it.isNotBlank() }, language?.takeIf { it.isNotBlank() })
+    return parts.joinToString(" · ").ifBlank { "$defaultLabel $trackId" }
+}
+
 /**
  * [PlayerEngine] 的 MPV 原生内核实现。
  *
@@ -331,6 +342,95 @@ class MpvPlayerEngine(
             }
             listener?.onTrackSelectionParametersChanged()
         }
+
+    /** 逐条读取 mpv track-list 属性（免 JSON 依赖），映射成引擎中立快照 */
+    override fun extractTracksSnapshot(): PlayerTracksSnapshot {
+        if (!isInitialized.get()) return PlayerTracksSnapshot()
+        val count = MPVLib.getPropertyInt("track-list/count") ?: 0
+        val qualityOptions = mutableListOf<PlayerQualityOption>()
+        val subtitleOptions = mutableListOf<PlayerTrackOption>()
+        val audioOptions = mutableListOf<PlayerTrackOption>()
+
+        for (i in 0 until count) {
+            val base = "track-list/$i/"
+            val type = MPVLib.getPropertyString("${base}type") ?: continue
+            val trackId = MPVLib.getPropertyInt("${base}id") ?: continue
+            val selected = (MPVLib.getPropertyInt("${base}selected") ?: 0) == 1
+            val title = MPVLib.getPropertyString("${base}title")
+            val lang = resolveLanguageName(MPVLib.getPropertyString("${base}lang"))
+
+            when (type) {
+                "video" -> {
+                    val width = MPVLib.getPropertyInt("${base}demux-w") ?: 0
+                    val height = MPVLib.getPropertyInt("${base}demux-h") ?: 0
+                    qualityOptions.add(
+                        PlayerQualityOption(
+                            id = "mpv-video-$trackId",
+                            name = formatQualityLabel(width, height),
+                            detail = null,
+                            width = width,
+                            height = height,
+                            bitrate = 0,
+                            isSelected = selected,
+                        ),
+                    )
+                }
+                "sub" ->
+                    subtitleOptions.add(
+                        PlayerTrackOption(
+                            id = "mpv-sub-$trackId",
+                            name = trackDisplayName(title, lang, "字幕", trackId),
+                            isSelected = selected,
+                        ),
+                    )
+                "audio" ->
+                    audioOptions.add(
+                        PlayerTrackOption(
+                            id = "mpv-audio-$trackId",
+                            name = trackDisplayName(title, lang, "音轨", trackId),
+                            isSelected = selected,
+                        ),
+                    )
+            }
+        }
+
+        val isTextDisabled = trackParams.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
+        val hasSelectable =
+            qualityOptions.isNotEmpty() || subtitleOptions.isNotEmpty() || audioOptions.size > 1
+
+        return PlayerTracksSnapshot(
+            qualityTracks =
+                qualityOptions.sortedWith(
+                    compareByDescending<PlayerQualityOption> { it.height }.thenByDescending { it.bitrate },
+                ),
+            subtitleTracks = disambiguateTrackOptions(subtitleOptions),
+            audioTracks = disambiguateTrackOptions(audioOptions),
+            subtitleMode = if (isTextDisabled) SubtitleMode.OFF else SubtitleMode.AUTO,
+            hasSelectableTracks = hasSelectable,
+        )
+    }
+
+    override fun selectTrack(
+        type: EngineTrackType,
+        id: String,
+    ) {
+        if (!isInitialized.get()) return
+        val trackNo = id.substringAfterLast('-')
+        when (type) {
+            EngineTrackType.VIDEO -> MPVLib.setPropertyString("vid", trackNo)
+            EngineTrackType.AUDIO -> MPVLib.setPropertyString("aid", trackNo)
+            EngineTrackType.TEXT -> MPVLib.setPropertyString("sid", trackNo)
+        }
+    }
+
+    override fun clearTrackOverride(type: EngineTrackType) {
+        if (!isInitialized.get()) return
+        when (type) {
+            EngineTrackType.VIDEO -> MPVLib.setPropertyString("vid", "auto")
+            EngineTrackType.AUDIO -> MPVLib.setPropertyString("aid", "auto")
+            EngineTrackType.TEXT -> MPVLib.setPropertyString("sid", "auto")
+        }
+    }
 
     override fun release() {
         pendingLoad = null

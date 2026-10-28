@@ -3,7 +3,6 @@ package com.infinitezerone.minibgm.feature.subject.player
 import android.util.Rational
 import androidx.media3.common.C
 import androidx.media3.common.Player
-import androidx.media3.common.TrackSelectionOverride
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -155,11 +154,11 @@ class PlayerController(
             }
 
             override fun onTracksChanged() {
-                _tracksSnapshot.value = extractPlayerTracksSnapshot(engine.player)
+                refreshTracksSnapshot()
             }
 
             override fun onTrackSelectionParametersChanged() {
-                _tracksSnapshot.value = extractPlayerTracksSnapshot(engine.player)
+                refreshTracksSnapshot()
             }
 
             override fun onVideoSizeChanged(
@@ -174,9 +173,8 @@ class PlayerController(
     init {
         engine.setListener(engineListener)
         // 播放器复用（换源不重建）时轨道/尺寸可能已就绪，进入页面即补一次初值。
-        // FakePlayerEngine（纯 JVM 单测）不提供真实 Player，按 Fail-Open 跳过
+        refreshTracksSnapshot()
         runCatching {
-            _tracksSnapshot.value = extractPlayerTracksSnapshot(engine.player)
             engine.player.videoSize.let { vs ->
                 _videoAspectRatio.value = videoAspectRatioOf(vs.width, vs.height)
             }
@@ -282,31 +280,18 @@ class PlayerController(
 
     /** 切换清晰度为指定档位（轨道覆盖）。 */
     fun selectVideoQuality(quality: PlayerQualityOption) {
-        val group = quality.group ?: return
-        engine.trackSelectionParameters =
-            engine.trackSelectionParameters
-                .buildUpon()
-                .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, quality.trackIndex))
-                .build()
+        engine.selectTrack(EngineTrackType.VIDEO, quality.id)
     }
 
     /** 切换清晰度为自适应模式（ABR）：清除视频覆盖，交给自适应选择。 */
     fun selectAutoVideoQuality() {
-        engine.trackSelectionParameters =
-            engine.trackSelectionParameters
-                .buildUpon()
-                .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
-                .build()
+        engine.clearTrackOverride(EngineTrackType.VIDEO)
     }
 
     /** 切换字幕为指定轨道。 */
     fun selectSubtitleTrack(track: PlayerTrackOption) {
-        engine.trackSelectionParameters =
-            engine.trackSelectionParameters
-                .buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                .setOverrideForType(TrackSelectionOverride(track.group.mediaTrackGroup, track.trackIndex))
-                .build()
+        enableTrackType(C.TRACK_TYPE_TEXT)
+        engine.selectTrack(EngineTrackType.TEXT, track.id)
     }
 
     /** 关闭字幕。 */
@@ -320,12 +305,8 @@ class PlayerController(
 
     /** 自动选择字幕（遵循 ExoPlayer 与系统首选语言配置）。 */
     fun autoSelectSubtitles() {
-        engine.trackSelectionParameters =
-            engine.trackSelectionParameters
-                .buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                .clearOverridesOfType(C.TRACK_TYPE_TEXT)
-                .build()
+        enableTrackType(C.TRACK_TYPE_TEXT)
+        engine.clearTrackOverride(EngineTrackType.TEXT)
     }
 
     /**
@@ -349,18 +330,26 @@ class PlayerController(
     /** 主动刷新轨道快照（供打开设置面板等场景确保轨道列表最新）。 */
     fun refreshTracksSnapshot() {
         runCatching {
-            _tracksSnapshot.value = extractPlayerTracksSnapshot(engine.player)
+            _tracksSnapshot.value = engine.extractTracksSnapshot()
         }
     }
 
     /** 切换音轨为指定轨道。 */
     fun selectAudioTrack(track: PlayerTrackOption) {
-        engine.trackSelectionParameters =
-            engine.trackSelectionParameters
-                .buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-                .setOverrideForType(TrackSelectionOverride(track.group.mediaTrackGroup, track.trackIndex))
-                .build()
+        enableTrackType(C.TRACK_TYPE_AUDIO)
+        engine.selectTrack(EngineTrackType.AUDIO, track.id)
+    }
+
+    /** 解除某轨道类型的关闭态（mpv 侧触发 sid/aid 回 auto，随后 selectTrack 再落具体轨道） */
+    private fun enableTrackType(type: Int) {
+        val params = engine.trackSelectionParameters
+        if (params.disabledTrackTypes.contains(type)) {
+            engine.trackSelectionParameters =
+                params
+                    .buildUpon()
+                    .setTrackTypeDisabled(type, false)
+                    .build()
+        }
     }
 
     /** 界面离开时调用：停止轮询并释放引擎。 */

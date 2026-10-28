@@ -564,7 +564,7 @@ fun PlayerScreen(
         val tracks = tracksSnapshot.qualityTracks
         if (tracks.isEmpty()) return@LaunchedEffect
         val match = tracks.minByOrNull { kotlin.math.abs(it.height - target) }
-        if (match != null && match.group != null) {
+        if (match != null) {
             controller.selectVideoQuality(match)
         }
         qualityAppliedKey = playback.mediaUrl

@@ -6,6 +6,9 @@ import androidx.media3.common.TrackSelectionParameters
 /** 引擎侧播放阶段；与 media3 的 `Player.STATE_*` 解耦，便于纯 JVM 单测。 */
 enum class EnginePlaybackState { IDLE, BUFFERING, READY, ENDED }
 
+/** 引擎中立轨道类型；Media3 的 `C.TRACK_TYPE_*` 映射收在 [ExoPlayerEngine] 内部。 */
+enum class EngineTrackType { VIDEO, AUDIO, TEXT }
+
 /** 引擎向 [PlayerController] 回传的播放事件。 */
 interface PlayerEngineListener {
     fun onIsPlayingChanged(isPlaying: Boolean)
@@ -92,6 +95,24 @@ interface PlayerEngine {
      * UI 层不再直接摸 `Player.trackSelectionParameters`。
      */
     var trackSelectionParameters: TrackSelectionParameters
+
+    /**
+     * 引擎自报轨道快照（清晰度/字幕/音轨）。
+     *
+     * 轨道数据是引擎私有知识：ExoPlayer 读自己的 `currentTracks`，MPV 解析自己的
+     * `track-list`。消费方严禁绕过本方法经 [player] 取轨道——[player] 只是渲染与
+     * 系统集成（PlayerSurface / MediaSession）的出口，对非 Media3 内核是假身份。
+     */
+    fun extractTracksSnapshot(): PlayerTracksSnapshot
+
+    /** 选中指定轨道；id 必须来自 [extractTracksSnapshot] 下发的引擎中立 id。 */
+    fun selectTrack(
+        type: EngineTrackType,
+        id: String,
+    )
+
+    /** 清除指定类型的手动轨道覆盖，交回引擎自动选择（TEXT 同时解除关闭态）。 */
+    fun clearTrackOverride(type: EngineTrackType)
 
     fun release()
 }

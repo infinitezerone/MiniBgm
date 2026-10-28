@@ -10,11 +10,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.C
-import androidx.media3.common.Format
-import androidx.media3.common.MimeTypes
-import androidx.media3.common.TrackGroup
-import androidx.media3.common.Tracks
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.infinitezerone.minibgm.core.designsystem.theme.MiniBgmTheme
 import com.infinitezerone.minibgm.core.model.DanmakuEpisodeCandidate
@@ -80,12 +75,12 @@ class PlayerPanelsScreenshotTest {
             currentVideoSizeQualityName = "1080P",
             subtitleTracks =
                 listOf(
-                    PlayerTrackOption(id = "text_zh", name = "中文（简体）", isSelected = true, group = textTrackGroup("zh"), trackIndex = 0),
+                    PlayerTrackOption(id = "text_zh", name = "中文（简体）", isSelected = true),
                 ),
             audioTracks =
                 listOf(
-                    PlayerTrackOption(id = "audio_ja", name = "日语", isSelected = true, group = textTrackGroup("ja"), trackIndex = 0),
-                    PlayerTrackOption(id = "audio_zh", name = "汉语", isSelected = false, group = textTrackGroup("zh"), trackIndex = 0),
+                    PlayerTrackOption(id = "audio_ja", name = "日语", isSelected = true),
+                    PlayerTrackOption(id = "audio_zh", name = "汉语", isSelected = false),
                 ),
             subtitleMode = SubtitleMode.SPECIFIC,
             hasSelectableTracks = true,
@@ -525,20 +520,5 @@ class PlayerPanelsScreenshotTest {
         composeTestRule.onRoot().captureRoboImage("src/test/snapshots/images/player_sources_drawer.png")
     }
 
-    private companion object {
-        /** Robolectric 提供真实 android.* 实现，TrackGroup 可直接构造 */
-        fun textTrackGroup(language: String): Tracks.Group =
-            Tracks.Group(
-                TrackGroup(
-                    Format
-                        .Builder()
-                        .setSampleMimeType(MimeTypes.APPLICATION_SUBRIP)
-                        .setLanguage(language)
-                        .build(),
-                ),
-                false,
-                intArrayOf(C.FORMAT_HANDLED),
-                booleanArrayOf(false),
-            )
-    }
+    private companion object
 }

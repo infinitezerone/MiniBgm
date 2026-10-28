@@ -105,6 +105,15 @@ class DualPlayerEngine(
             activeEngine.trackSelectionParameters = value
         }
 
+    override fun extractTracksSnapshot(): PlayerTracksSnapshot = activeEngine.extractTracksSnapshot()
+
+    override fun selectTrack(
+        type: EngineTrackType,
+        id: String,
+    ) = activeEngine.selectTrack(type, id)
+
+    override fun clearTrackOverride(type: EngineTrackType) = activeEngine.clearTrackOverride(type)
+
     override fun release() {
         exoEngine.release()
         if (isMpv) {

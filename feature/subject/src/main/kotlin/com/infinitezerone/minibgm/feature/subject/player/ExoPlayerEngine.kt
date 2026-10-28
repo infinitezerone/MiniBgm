@@ -7,6 +7,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
@@ -197,6 +198,43 @@ class ExoPlayerEngine(
             exoPlayer.trackSelectionParameters = value
         }
 
+    override fun extractTracksSnapshot(): PlayerTracksSnapshot = extractPlayerTracksSnapshot(exoPlayer)
+
+    override fun selectTrack(
+        type: EngineTrackType,
+        id: String,
+    ) {
+        val builder = exoPlayer.trackSelectionParameters.buildUpon()
+        if (type == EngineTrackType.TEXT) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+        }
+        for (group in exoPlayer.currentTracks.groups) {
+            if (group.type != type.toMedia3TrackType()) continue
+            for (i in 0 until group.length) {
+                // id 方案必须与 extractPlayerTracksSnapshot 下发的保持一致
+                if ("video_${group.mediaTrackGroup.id}_$i" == id &&
+                    type == EngineTrackType.VIDEO ||
+                    "audio_${group.mediaTrackGroup.id}_$i" == id &&
+                    type == EngineTrackType.AUDIO ||
+                    "text_${group.mediaTrackGroup.id}_$i" == id &&
+                    type == EngineTrackType.TEXT
+                ) {
+                    builder.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, i))
+                    exoPlayer.trackSelectionParameters = builder.build()
+                    return
+                }
+            }
+        }
+    }
+
+    override fun clearTrackOverride(type: EngineTrackType) {
+        val builder = exoPlayer.trackSelectionParameters.buildUpon().clearOverridesOfType(type.toMedia3TrackType())
+        if (type == EngineTrackType.TEXT) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+        }
+        exoPlayer.trackSelectionParameters = builder.build()
+    }
+
     override fun release() {
         exoPlayer.removeListener(playerListener)
         exoPlayer.release()
@@ -209,6 +247,13 @@ private fun Int.toEngineState(): EnginePlaybackState =
         Player.STATE_READY -> EnginePlaybackState.READY
         Player.STATE_ENDED -> EnginePlaybackState.ENDED
         else -> EnginePlaybackState.IDLE
+    }
+
+internal fun EngineTrackType.toMedia3TrackType(): Int =
+    when (this) {
+        EngineTrackType.VIDEO -> C.TRACK_TYPE_VIDEO
+        EngineTrackType.AUDIO -> C.TRACK_TYPE_AUDIO
+        EngineTrackType.TEXT -> C.TRACK_TYPE_TEXT
     }
 
 internal fun classifyPlaybackError(
