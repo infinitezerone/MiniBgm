@@ -50,56 +50,56 @@ fun SeasonalGuideSkeletonList(modifier: Modifier = Modifier) {
             userScrollEnabled = false,
             modifier = modifier,
         ) {
-        items(6) {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SkeletonBox(
+            items(6) {
+                Row(
                     modifier =
                         Modifier
-                            .width(58.dp)
-                            .height(83.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    state = skeletonState,
-                )
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                            .fillMaxWidth()
+                            .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     SkeletonBox(
                         modifier =
                             Modifier
-                                .fillMaxWidth(0.9f)
-                                .height(16.dp),
-                        shape = RoundedCornerShape(4.dp),
+                                .width(58.dp)
+                                .height(83.dp),
+                        shape = RoundedCornerShape(8.dp),
                         state = skeletonState,
                     )
-                    SkeletonBox(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth(0.55f)
-                                .height(14.dp),
-                        shape = RoundedCornerShape(4.dp),
-                        state = skeletonState,
-                    )
-                    SkeletonBox(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth(0.35f)
-                                .height(12.dp),
-                        shape = RoundedCornerShape(4.dp),
-                        state = skeletonState,
-                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        SkeletonBox(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth(0.9f)
+                                    .height(16.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
+                        )
+                        SkeletonBox(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth(0.55f)
+                                    .height(14.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
+                        )
+                        SkeletonBox(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth(0.35f)
+                                    .height(12.dp),
+                            shape = RoundedCornerShape(4.dp),
+                            state = skeletonState,
+                        )
+                    }
                 }
             }
         }
     }
-}
 }
 
 /** 骨架屏加载网格 */
@@ -122,43 +122,43 @@ fun SeasonalGuideSkeletonGrid(modifier: Modifier = Modifier) {
             userScrollEnabled = false,
             modifier = modifier,
         ) {
-        items(9) {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(2.dp),
-            ) {
-                SkeletonBox(
+            items(9) {
+                Column(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .height(165.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    state = skeletonState,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                SkeletonBox(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth(0.85f)
-                            .height(16.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    state = skeletonState,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                SkeletonBox(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth(0.5f)
-                            .height(14.dp),
-                    shape = RoundedCornerShape(4.dp),
-                    state = skeletonState,
-                )
+                            .padding(2.dp),
+                ) {
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(165.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        state = skeletonState,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(0.85f)
+                                .height(16.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        state = skeletonState,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SkeletonBox(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(0.5f)
+                                .height(14.dp),
+                        shape = RoundedCornerShape(4.dp),
+                        state = skeletonState,
+                    )
+                }
             }
         }
     }
-}
 }
 
 /** 错误提示与重试状态 */

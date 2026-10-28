@@ -28,7 +28,6 @@ import com.infinitezerone.minibgm.core.network.ScheduleSnapshotResult
 import com.infinitezerone.minibgm.core.network.ScheduleSnapshotService
 import com.infinitezerone.minibgm.core.network.toUserFriendlyMessage
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -198,12 +197,14 @@ internal class ScheduleRepositoryImpl(
     }
 
     override fun getSchedulesByWeekday(weekday: Int): Flow<List<AirSchedule>> =
-        scheduleDao.getSchedulesByWeekday(weekday).map { entities ->
-            val nowMillis = TimeUtils.nowEpochMillis()
-            entities
-                .filter { it.bgmId > 0 && it.isActiveForSchedule(nowMillis) }
-                .map { it.toModel(json) }
-        }.flowOn(dispatchers.default)
+        scheduleDao
+            .getSchedulesByWeekday(weekday)
+            .map { entities ->
+                val nowMillis = TimeUtils.nowEpochMillis()
+                entities
+                    .filter { it.bgmId > 0 && it.isActiveForSchedule(nowMillis) }
+                    .map { it.toModel(json) }
+            }.flowOn(dispatchers.default)
 
     override suspend fun getSchedulesForDate(
         dateStr: String,
@@ -269,9 +270,11 @@ internal class ScheduleRepositoryImpl(
         }
 
     override fun getAllAirEventsStream(): Flow<List<AirScheduleEvent>> =
-        airEventDao.getAllAirEventsStream().map { list ->
-            list.map { AirScheduleEvent(it.subjectId, it.episode, it.airAtUtc, it.kind) }
-        }.flowOn(dispatchers.default)
+        airEventDao
+            .getAllAirEventsStream()
+            .map { list ->
+                list.map { AirScheduleEvent(it.subjectId, it.episode, it.airAtUtc, it.kind) }
+            }.flowOn(dispatchers.default)
 
     /**
      * 同步闸门：全量刷新管线进行中为 true。

@@ -148,7 +148,16 @@ internal class SearchRepositoryImpl(
                             SearchSubjectsRequest(
                                 keyword = query,
                                 sort = sort?.ifBlank { null },
-                                filter = (if (type > 0) SearchFilter(type = listOf(type)) else SearchFilter()).copy(nsfw = resolveNsfwFilter()),
+                                filter =
+                                    (
+                                        if (type >
+                                            0
+                                        ) {
+                                            SearchFilter(type = listOf(type))
+                                        } else {
+                                            SearchFilter()
+                                        }
+                                    ).copy(nsfw = resolveNsfwFilter()),
                             ),
                         limit = limit,
                         offset = offset,

@@ -240,6 +240,7 @@ class SubjectDetailViewModel(
     private var torrentJob: Job? = null
     private var lastLoadedTorrentSubjectId: Long? = null
     private var lastLoadedTorrentEpisodeId: Long? = null
+    private val subjectTorrentPool = mutableListOf<TorrentMediaResource>()
 
     /**
      * 检索通用 P2P 种子与磁力链接资源。
@@ -256,6 +257,7 @@ class SubjectDetailViewModel(
         val activeTorrentRules = state.playbackRules.filter { it.isEnabled && it.kind == PlaybackRuleKind.TORRENT }
         if (activeTorrentRules.isEmpty()) {
             torrentJob?.cancel()
+            subjectTorrentPool.clear()
             _uiState.update {
                 it.copy(
                     torrentResources = emptyList(),
@@ -266,9 +268,13 @@ class SubjectDetailViewModel(
             return
         }
 
+        if (lastLoadedTorrentSubjectId != subjectId) {
+            subjectTorrentPool.clear()
+            lastLoadedTorrentSubjectId = subjectId
+        }
+
         val targetEpisodeId = if (ignoreEpisodeFilter) -999L else (episode?.id ?: -1L)
         if (!forceRefresh &&
-            lastLoadedTorrentSubjectId == subjectId &&
             lastLoadedTorrentEpisodeId == targetEpisodeId &&
             state.torrentResources.isNotEmpty() &&
             state.isTorrentEpisodeFilterIgnored == ignoreEpisodeFilter
@@ -277,7 +283,6 @@ class SubjectDetailViewModel(
             return
         }
 
-        val title = subject.displayName
         val primaryEpSort = if (ignoreEpisodeFilter) null else episode?.episodeNumber
         val candidateSorts =
             if (ignoreEpisodeFilter) {
@@ -288,6 +293,30 @@ class SubjectDetailViewModel(
                     episode?.sort?.takeIf { it > 0f && it != episode.ep },
                 ).distinct().ifEmpty { listOfNotNull(primaryEpSort) }
             }
+
+        // 核心优化：若已有番剧种子池且非强制刷新，立即尝试同步本地切片分发（0ms 零闪烁、不置空、无网络）
+        if (!forceRefresh && subjectTorrentPool.isNotEmpty()) {
+            val instantMatches =
+                if (ignoreEpisodeFilter) {
+                    subjectTorrentPool
+                } else {
+                    TorrentFeedRepository.filterAndSort(subjectTorrentPool, candidateSorts)
+                }
+            if (instantMatches.isNotEmpty()) {
+                torrentJob?.cancel()
+                lastLoadedTorrentEpisodeId = targetEpisodeId
+                _uiState.update {
+                    it.copy(
+                        torrentResources = instantMatches,
+                        isTorrentLoading = false,
+                        isTorrentEpisodeFilterIgnored = ignoreEpisodeFilter,
+                    )
+                }
+                return
+            }
+        }
+
+        val title = subject.displayName
         val altTitles =
             (
                 listOfNotNull(
@@ -306,38 +335,80 @@ class SubjectDetailViewModel(
                 isTorrentEpisodeFilterIgnored = ignoreEpisodeFilter,
             )
         }
-        lastLoadedTorrentSubjectId = subjectId
         lastLoadedTorrentEpisodeId = targetEpisodeId
 
         torrentJob =
             viewModelScope.launch {
                 val feedRepo = torrentFeedRepository
-                val allResources =
-                    if (feedRepo != null) {
+                if (feedRepo == null) {
+                    _uiState.update { it.copy(isTorrentLoading = false) }
+                    return@launch
+                }
+
+                // 首次拉取或强制刷新时，优先拉取番剧全量种子池（candidateSorts 为空），让后续所有分集均可 0ms 纯本地秒开
+                if (subjectTorrentPool.isEmpty() || forceRefresh) {
+                    val fullSubjectResources =
                         coroutineScope {
                             activeTorrentRules
                                 .map { rule ->
                                     async {
-                                        feedRepo.getTorrentResources(
+                                        feedRepo.getSubjectTorrentResources(
                                             title = title,
-                                            episodeSort = primaryEpSort,
                                             alternativeTitles = altTitles,
                                             subjectId = subjectId,
                                             rule = rule,
                                             forceRefresh = forceRefresh,
-                                            candidateEpisodeSorts = candidateSorts,
                                         )
                                     }
                                 }.awaitAll()
                                 .flatten()
                         }
+                    val fullDeduplicated = fullSubjectResources.mergeAndDeduplicate().distinctBy { it.dedupeKey }
+                    subjectTorrentPool.clear()
+                    subjectTorrentPool.addAll(fullDeduplicated)
+                }
+
+                // 从种子池中切片出当前分集
+                val matched =
+                    if (ignoreEpisodeFilter) {
+                        subjectTorrentPool
                     } else {
-                        emptyList()
+                        TorrentFeedRepository.filterAndSort(subjectTorrentPool, candidateSorts)
                     }
-                val deduplicated = allResources.mergeAndDeduplicate().distinctBy { it.dedupeKey }
+
+                // 异常边缘：若单集未在全量 Feed 首屏中命中（如被挤出最新列表），定向对该集进行二阶段检索补漏
+                val finalResources =
+                    if (matched.isEmpty() && candidateSorts.isNotEmpty()) {
+                        val targetedResources =
+                            coroutineScope {
+                                activeTorrentRules
+                                    .map { rule ->
+                                        async {
+                                            feedRepo.getTorrentResources(
+                                                title = title,
+                                                episodeSort = primaryEpSort,
+                                                alternativeTitles = altTitles,
+                                                subjectId = subjectId,
+                                                rule = rule,
+                                                forceRefresh = forceRefresh,
+                                                candidateEpisodeSorts = candidateSorts,
+                                            )
+                                        }
+                                    }.awaitAll()
+                                    .flatten()
+                            }
+                        val targetedDeduplicated = targetedResources.mergeAndDeduplicate().distinctBy { it.dedupeKey }
+                        // 将补漏得到的条目合并入池
+                        val existingKeys = subjectTorrentPool.map { it.dedupeKey }.toSet()
+                        subjectTorrentPool.addAll(targetedDeduplicated.filterNot { it.dedupeKey in existingKeys })
+                        targetedDeduplicated
+                    } else {
+                        matched
+                    }
+
                 _uiState.update {
                     it.copy(
-                        torrentResources = deduplicated,
+                        torrentResources = finalResources,
                         isTorrentLoading = false,
                         isTorrentEpisodeFilterIgnored = ignoreEpisodeFilter,
                     )

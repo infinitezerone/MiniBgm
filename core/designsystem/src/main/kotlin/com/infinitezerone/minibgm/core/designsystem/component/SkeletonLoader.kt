@@ -1,8 +1,6 @@
 package com.infinitezerone.minibgm.core.designsystem.component
 
-import android.graphics.LinearGradient as AndroidLinearGradient
 import android.graphics.Matrix
-import android.graphics.Shader as AndroidShader
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -25,7 +23,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.ShaderBrush
@@ -57,6 +54,8 @@ import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import android.graphics.LinearGradient as AndroidLinearGradient
+import android.graphics.Shader as AndroidShader
 
 /**
  * 骨架屏配置状态，用于在多个骨架子节点间同步扫光动画进度。

@@ -9,8 +9,10 @@ import com.infinitezerone.minibgm.core.model.CommentUser
 import com.infinitezerone.minibgm.core.model.Episode
 import com.infinitezerone.minibgm.core.model.EpisodeComment
 import com.infinitezerone.minibgm.core.model.PersonDetail
+import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.RelatedWork
+import com.infinitezerone.minibgm.core.model.RuleParserType
 import com.infinitezerone.minibgm.core.model.SubjectComment
 import com.infinitezerone.minibgm.core.model.SubjectCommentPage
 import com.infinitezerone.minibgm.core.model.SubjectTopic
@@ -1873,5 +1875,88 @@ class SubjectDetailViewModelTest {
             assertFalse(viewModel.uiState.value.isTorrentEpisodeFilterIgnored)
             viewModel.showAllTorrentsWithoutEpisodeFilter(null)
             assertTrue(viewModel.uiState.value.isTorrentEpisodeFilterIgnored)
+        }
+
+    @Test
+    fun loadTorrentResources_switchingEpisodesWithCachedPool_updatesSynchronouslyWithoutLoadingSpinner() =
+        runTest {
+            val repository = FakeSubjectRepository().apply { sendSubject(sampleSubject) }
+            val fakeFeedRepo =
+                object : com.infinitezerone.minibgm.core.data.repository.TorrentFeedRepository {
+                    var callCount = 0
+
+                    override suspend fun getTorrentResources(
+                        title: String,
+                        episodeSort: Float?,
+                        alternativeTitles: List<String>,
+                        subjectId: Long,
+                        rule: PlaybackSourceRule?,
+                        forceRefresh: Boolean,
+                        candidateEpisodeSorts: List<Float>,
+                    ): List<com.infinitezerone.minibgm.core.model.TorrentMediaResource> {
+                        callCount++
+                        return listOf(
+                            com.infinitezerone.minibgm.core.model.TorrentMediaResource(
+                                title = "番剧 01 [1080p]",
+                                episodeSort = 1f,
+                                contentLength = 100L,
+                            ),
+                            com.infinitezerone.minibgm.core.model.TorrentMediaResource(
+                                title = "番剧 02 [1080p]",
+                                episodeSort = 2f,
+                                contentLength = 200L,
+                            ),
+                        )
+                    }
+                }
+            val rule =
+                PlaybackSourceRule(
+                    id = "torrent-1",
+                    name = "Torrent Rule",
+                    urlTemplate = "https://example.com/rss",
+                    kind = PlaybackRuleKind.TORRENT,
+                    parserType = RuleParserType.RSS_TORRENT,
+                )
+            val settingsRepo =
+                com.infinitezerone.minibgm.core.testing.repository.FakeSettingsRepository().apply {
+                    addPlaybackRule(rule)
+                }
+            val viewModel =
+                SubjectDetailViewModel(
+                    subjectRepository = repository,
+                    subjectId = sampleSubject.id,
+                    collectionRepository = FakeCollectionRepository(),
+                    communityRepository = FakeCommunityRepository(),
+                    authRepository = FakeAuthRepository(initialLoggedIn = true),
+                    settingsRepository = settingsRepo,
+                    torrentFeedRepository = fakeFeedRepo,
+                )
+
+            val ep1 = Episode(id = 101L, sort = 1f, ep = 1f, name = "第 1 话")
+            val ep2 = Episode(id = 102L, sort = 2f, ep = 2f, name = "第 2 话")
+
+            // 首次加载第 1 集：触网/拉取并建立池
+            viewModel.loadTorrentResources(ep1)
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(1, viewModel.uiState.value.torrentResources.size)
+            assertEquals(
+                "番剧 01 [1080p]",
+                viewModel.uiState.value.torrentResources[0]
+                    .title,
+            )
+            assertEquals(1, fakeFeedRepo.callCount)
+
+            // 原位切到第 2 集：本地种子池直接瞬时命中，0ms 零网络且 isTorrentLoading 保持 false！
+            viewModel.loadTorrentResources(ep2)
+            assertFalse(viewModel.uiState.value.isTorrentLoading)
+            assertEquals(1, viewModel.uiState.value.torrentResources.size)
+            assertEquals(
+                "番剧 02 [1080p]",
+                viewModel.uiState.value.torrentResources[0]
+                    .title,
+            )
+            // 校验没有再次触发外部检索
+            assertEquals(1, fakeFeedRepo.callCount)
         }
 }

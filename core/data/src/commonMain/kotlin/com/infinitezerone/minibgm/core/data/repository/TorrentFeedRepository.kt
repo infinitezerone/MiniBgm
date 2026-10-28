@@ -38,6 +38,66 @@ interface TorrentFeedRepository {
         forceRefresh: Boolean = false,
         candidateEpisodeSorts: List<Float> = emptyList(),
     ): List<TorrentMediaResource>
+
+    /**
+     * 获取指定番剧的完整种子池（不按具体分集过滤，返回该番剧在 Feed 中的全量资源）。
+     */
+    suspend fun getSubjectTorrentResources(
+        title: String,
+        alternativeTitles: List<String> = emptyList(),
+        subjectId: Long = 0L,
+        rule: PlaybackSourceRule? = null,
+        forceRefresh: Boolean = false,
+    ): List<TorrentMediaResource> =
+        getTorrentResources(
+            title = title,
+            episodeSort = null,
+            alternativeTitles = alternativeTitles,
+            subjectId = subjectId,
+            rule = rule,
+            forceRefresh = forceRefresh,
+            candidateEpisodeSorts = emptyList(),
+        )
+
+    companion object {
+        /**
+         * 纯函数：根据目标分集集合从候选种子池中筛选匹配资源并排序。
+         */
+        fun filterAndSort(
+            resources: List<TorrentMediaResource>,
+            candidateSorts: List<Float>,
+        ): List<TorrentMediaResource> {
+            val filtered =
+                if (candidateSorts.isNotEmpty()) {
+                    val matched =
+                        resources.filter { res ->
+                            res.episodeSort != null && res.episodeSort in candidateSorts
+                        }
+                    // 分集未命中时只回退到合集/BD 整包项（episodeSort == null），绝不回退整份 Feed：
+                    // 否则请求第 5 集会看到第 1-4 集，点单文件资源还会被 Rust 侧「单一候选即选中」
+                    // 静默播成第 1 集，用户全程无提示。
+                    val batchItems = resources.filter { it.episodeSort == null }
+                    matched.ifEmpty { batchItems.filter { isExplicitBatch(it.title) } }
+                } else {
+                    resources
+                }
+            return filtered.sortedWith(
+                compareByDescending<TorrentMediaResource> { it.resolution == "1080P" }
+                    .thenByDescending { it.resolution == "4K" }
+                    .thenByDescending { it.contentLength },
+            )
+        }
+
+        fun isExplicitBatch(title: String): Boolean {
+            val batchKeywords = listOf("合集", "全集", "Fin]", "Fin)", "【Fin】", "[Fin]", "Complete")
+            val batchEpRangeRegex =
+                Regex(
+                    """(?i)(?:\[\s*(?:ep)?\s*\d{1,3}\s*[-~至到]\s*\d{1,3}\s*\]|\b(?:ep|e)\s*\d{1,3}\s*[-~至到]\s*\d{1,3}\b|0\d\s*[-~至到]\s*\d{1,3})""",
+                )
+            return batchKeywords.any { title.contains(it, ignoreCase = true) } ||
+                batchEpRangeRegex.containsMatchIn(title)
+        }
+    }
 }
 
 class TorrentFeedRepositoryImpl(
@@ -317,37 +377,7 @@ class TorrentFeedRepositoryImpl(
     private fun filterAndSort(
         resources: List<TorrentMediaResource>,
         candidateSorts: List<Float>,
-    ): List<TorrentMediaResource> {
-        val filtered =
-            if (candidateSorts.isNotEmpty()) {
-                val matched =
-                    resources.filter { res ->
-                        res.episodeSort != null && res.episodeSort in candidateSorts
-                    }
-                // 分集未命中时只回退到合集/BD 整包项（episodeSort == null），绝不回退整份 Feed：
-                // 否则请求第 5 集会看到第 1-4 集，点单文件资源还会被 Rust 侧「单一候选即选中」
-                // 静默播成第 1 集，用户全程无提示。
-                val batchItems = resources.filter { it.episodeSort == null }
-                matched.ifEmpty { batchItems.filter { isExplicitBatch(it.title) } }
-            } else {
-                resources
-            }
-        return filtered.sortedWith(
-            compareByDescending<TorrentMediaResource> { it.resolution == "1080P" }
-                .thenByDescending { it.resolution == "4K" }
-                .thenByDescending { it.contentLength },
-        )
-    }
-
-    private fun isExplicitBatch(title: String): Boolean {
-        val batchKeywords = listOf("合集", "全集", "Fin]", "Fin)", "【Fin】", "[Fin]", "Complete")
-        val batchEpRangeRegex =
-            Regex(
-                """(?i)(?:\[\s*(?:ep)?\s*\d{1,3}\s*[-~至到]\s*\d{1,3}\s*\]|\b(?:ep|e)\s*\d{1,3}\s*[-~至到]\s*\d{1,3}\b|0\d\s*[-~至到]\s*\d{1,3})""",
-            )
-        return batchKeywords.any { title.contains(it, ignoreCase = true) } ||
-            batchEpRangeRegex.containsMatchIn(title)
-    }
+    ): List<TorrentMediaResource> = TorrentFeedRepository.filterAndSort(resources, candidateSorts)
 
     private companion object {
         /** 缓存条目上限：每个 (规则, 解析后 URL) 组合一条，按插入序淘汰最旧条目。 */

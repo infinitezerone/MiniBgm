@@ -600,4 +600,90 @@ class TorrentFeedRepositoryTest {
             assertEquals(2f, results[0].episodeSort)
             assertTrue(results[0].title.contains("- 02"))
         }
+
+    @Test
+    fun getSubjectTorrentResources_returnsAllEpisodesWithoutFiltering() =
+        runTest {
+            val rss =
+                """
+                <?xml version="1.0" encoding="utf-8"?>
+                <rss version="2.0">
+                  <channel>
+                    <title>Sample Torrent Feed</title>
+                    <item>
+                      <title>[字幕组A] 番剧名 - 01 [1080p].mp4</title>
+                      <link>magnet:?xt=urn:btih:1111111111111111111111111111111111111111</link>
+                      <enclosure url="https://feed.example.com/1.torrent" length="350000000" type="application/x-bittorrent"/>
+                    </item>
+                    <item>
+                      <title>[字幕组A] 番剧名 - 02 [1080p].mp4</title>
+                      <link>magnet:?xt=urn:btih:2222222222222222222222222222222222222222</link>
+                      <enclosure url="https://feed.example.com/2.torrent" length="350000000" type="application/x-bittorrent"/>
+                    </item>
+                  </channel>
+                </rss>
+                """.trimIndent()
+
+            val fake = FakeFeedFetchService(rss)
+            val rule =
+                PlaybackSourceRule(
+                    id = "test-torrent-rule",
+                    name = "Test Torrent Feed",
+                    urlTemplate = "https://feed.example.com/rss?keyword={title}",
+                    kind = PlaybackRuleKind.TORRENT,
+                    parserType = RuleParserType.RSS_TORRENT,
+                )
+
+            val repository = TorrentFeedRepositoryImpl(fake)
+            val results = repository.getSubjectTorrentResources(title = "番剧名", rule = rule)
+
+            assertEquals(2, results.size)
+            assertEquals(1f, results[0].episodeSort)
+            assertEquals(2f, results[1].episodeSort)
+        }
+
+    @Test
+    fun filterAndSort_correctlyFiltersEpisodesAndSortsResolution() {
+        val res1 =
+            com.infinitezerone.minibgm.core.model.TorrentMediaResource(
+                title = "番剧 01 [720p]",
+                episodeSort = 1f,
+                resolution = "720P",
+                contentLength = 200L,
+            )
+        val res2 =
+            com.infinitezerone.minibgm.core.model.TorrentMediaResource(
+                title = "番剧 01 [1080p]",
+                episodeSort = 1f,
+                resolution = "1080P",
+                contentLength = 500L,
+            )
+        val res3 =
+            com.infinitezerone.minibgm.core.model.TorrentMediaResource(
+                title = "番剧 02 [1080p]",
+                episodeSort = 2f,
+                resolution = "1080P",
+                contentLength = 500L,
+            )
+        val resBatch =
+            com.infinitezerone.minibgm.core.model.TorrentMediaResource(
+                title = "番剧 [01-12] 全集合集 [1080p]",
+                episodeSort = null,
+                resolution = "1080P",
+                contentLength = 5000L,
+            )
+
+        val pool = listOf(res1, res2, res3, resBatch)
+
+        // 过滤第 1 集：只应出现第 1 集且 1080P 优先于 720P
+        val ep1Matches = TorrentFeedRepository.filterAndSort(pool, listOf(1f))
+        assertEquals(2, ep1Matches.size)
+        assertEquals("1080P", ep1Matches[0].resolution)
+        assertEquals("720P", ep1Matches[1].resolution)
+
+        // 过滤未收录的第 5 集：应回退到合集
+        val ep5Matches = TorrentFeedRepository.filterAndSort(pool, listOf(5f))
+        assertEquals(1, ep5Matches.size)
+        assertEquals(resBatch.title, ep5Matches[0].title)
+    }
 }

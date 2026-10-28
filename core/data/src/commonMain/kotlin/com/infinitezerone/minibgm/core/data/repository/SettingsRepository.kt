@@ -394,15 +394,16 @@ internal class SettingsRepositoryImpl(
             }.flowOn(Dispatchers.Default)
 
     override val playbackParses: Flow<List<com.infinitezerone.minibgm.core.model.TvBoxParse>> =
-        userPreferences.userPreferences.map { prefs ->
-            if (prefs.playbackParsesJson.isBlank()) {
-                emptyList()
-            } else {
-                runCatching {
-                    json.decodeFromString<List<com.infinitezerone.minibgm.core.model.TvBoxParse>>(prefs.playbackParsesJson)
-                }.getOrDefault(emptyList())
-            }
-        }.flowOn(Dispatchers.Default)
+        userPreferences.userPreferences
+            .map { prefs ->
+                if (prefs.playbackParsesJson.isBlank()) {
+                    emptyList()
+                } else {
+                    runCatching {
+                        json.decodeFromString<List<com.infinitezerone.minibgm.core.model.TvBoxParse>>(prefs.playbackParsesJson)
+                    }.getOrDefault(emptyList())
+                }
+            }.flowOn(Dispatchers.Default)
 
     override suspend fun setPlaybackParses(parses: List<com.infinitezerone.minibgm.core.model.TvBoxParse>) {
         userPreferences.setPlaybackParsesJson(json.encodeToString(parses))
