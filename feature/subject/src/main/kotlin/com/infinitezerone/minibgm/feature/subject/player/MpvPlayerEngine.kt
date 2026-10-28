@@ -355,7 +355,9 @@ class MpvPlayerEngine(
             val base = "track-list/$i/"
             val type = MPVLib.getPropertyString("${base}type") ?: continue
             val trackId = MPVLib.getPropertyInt("${base}id") ?: continue
-            val selected = (MPVLib.getPropertyInt("${base}selected") ?: 0) == 1
+            val selected =
+                MPVLib.getPropertyBoolean("${base}selected")
+                    ?: ((MPVLib.getPropertyInt("${base}selected") ?: 0) == 1)
             val title = MPVLib.getPropertyString("${base}title")
             val lang = resolveLanguageName(MPVLib.getPropertyString("${base}lang"))
 
@@ -363,7 +365,8 @@ class MpvPlayerEngine(
                 "video" -> {
                     val width = MPVLib.getPropertyInt("${base}demux-w") ?: 0
                     val height = MPVLib.getPropertyInt("${base}demux-h") ?: 0
-                    val bitrate = MPVLib.getPropertyInt("${base}demux-bitrate") ?: 0
+                    // mpv < 0.40 的 track-list 无 demux-bitrate 子属性，退回顶层当前轨码率
+                    val bitrate = MPVLib.getPropertyInt("video-bitrate") ?: 0
                     qualityOptions.add(
                         PlayerQualityOption(
                             id = "mpv-video-$trackId",
