@@ -5,6 +5,10 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
+# 纯 Android FFI 胶水（JNI 入口 + dlopen/dladdr），宿主上没有 liblog/dl 无法链接测试目标；
+# 本 crate 也没有可脱离设备运行的单元测试。
+test = false
+doctest = false
 
 [dependencies]
 jni = "0.21"

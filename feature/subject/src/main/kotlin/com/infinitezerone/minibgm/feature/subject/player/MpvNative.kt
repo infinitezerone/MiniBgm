@@ -55,27 +55,66 @@ object MpvNative {
     var renderUpdateListener: (() -> Unit)? = null
 
     /**
-     * 当前绑定中的渲染视图。
+     * 当前绑定中的渲染视图（[MpvSurfaceView]，自持 EGL）。
      *
-     * 时序陷阱：Compose 进入播放页时会**先**组合出 [MpvRenderView]，而 mpv 句柄
-     * 要等到第一次 [create]/[init]（由 `load()` 触发）才存在。视图的
-     * `onSurfaceCreated` 早于句柄就绪时，原生侧会因 `mpv_handle()` 为空而静默放弃创建
-     * render context——表现就是黑屏 + 无限缓冲（时间停在 00:00）。
-     * 因此引擎初始化完成后必须回头通知该视图补建，见 [notifyMpvReady]。
+     * 时序陷阱：Compose 进入播放页时会**先**组合出视图，而 mpv 句柄要等第一次
+     * `create/init`（由 `load()` 触发）才存在。视图 surfaceCreated 早于句柄就绪时，
+     * 原生侧会因 `mpv_handle()` 为空而放弃创建 render context——表现为黑屏 + 无限缓冲。
+     * 因此引擎初始化完成后必须回头通知视图补建，见 [notifyMpvReady]。
      */
     @Volatile
-    private var renderViewRef: java.lang.ref.WeakReference<MpvRenderView>? = null
+    private var renderViewRef: java.lang.ref.WeakReference<MpvSurfaceView>? = null
 
-    fun bindRenderView(view: MpvRenderView) {
+    fun bindRenderView(view: MpvSurfaceView) {
         renderViewRef = java.lang.ref.WeakReference(view)
         renderUpdateListener = { view.requestRenderSafely() }
     }
 
-    fun unbindRenderView(view: MpvRenderView) {
+    fun unbindRenderView(view: MpvSurfaceView) {
         if (renderViewRef?.get() === view) {
             renderViewRef = null
             renderUpdateListener = null
         }
+    }
+
+    /** mpv 句柄（create+init）是否就绪：视图据此判断能否建 render context */
+    @Volatile
+    var isMpvHandleReady: Boolean = false
+
+    /**
+     * render context 是否已建成。
+     *
+     * `vo=libmpv` 的 vo 初始化只尝试一次，此时若上下文还没建好，原生侧直接
+     * `No render context set.` → `Video: no video`，之后**永久**放弃视频轨
+     * （只剩声音、画面全黑）。因此 load 必须等这个标志为 true。
+     */
+    @Volatile
+    var isRenderContextReady: Boolean = false
+        private set
+
+    /** 上下文从无到有时回调（引擎用它放行挂起的 load） */
+    @Volatile
+    var onRenderContextBecameReady: (() -> Unit)? = null
+
+    /** 渲染宿主在渲染线程建好 render context 后调用 */
+    fun markRenderContextReady() {
+        isRenderContextReady = true
+        onRenderContextBecameReady?.invoke()
+    }
+
+    /** 上下文释放后调用 */
+    fun markRenderContextReleased() {
+        isRenderContextReady = false
+        // mpv 句柄重建后，旧上下文已随句柄作废；宿主必须同步复位，
+        // 否则它会以为"已建过"而跳过 renderContextCreate → 新句柄没有上下文 →
+        // vo 报 `No render context set.`，表现为只有声音、画面全黑（实测复现）
+        MpvRenderer.resetContextState()
+    }
+
+    /** 同步等待渲染线程释放上下文（销毁 mpv 句柄前必须先做完） */
+    fun releaseRenderContextBlocking() {
+        MpvRenderer.releaseRenderContextBlocking()
+        isRenderContextReady = false
     }
 
     /** mpv create/init 完成后调用：让已存在的渲染视图补建 render context（幂等） */
@@ -148,6 +187,9 @@ object MpvNative {
         width: Int,
         height: Int,
     )
+
+    /** mpv 是否真的有新帧可画（MPV_RENDER_UPDATE_FRAME） */
+    external fun renderContextUpdate(): Boolean
 
     external fun renderContextReportSwap()
 

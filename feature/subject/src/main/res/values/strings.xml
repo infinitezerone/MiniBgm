@@ -410,6 +410,9 @@
     <string name="feature_subject_player_screen_locked">屏幕已锁定</string>
     <string name="feature_subject_player_screen_unlocked">屏幕已解锁</string>
     <string name="feature_subject_player_pip">画中画</string>
+    <string name="feature_subject_player_pip_play">播放</string>
+    <string name="feature_subject_player_pip_pause">暂停</string>
+    <string name="feature_subject_player_pip_toggle_failed">临时无法切换播放状态</string>
     <string name="feature_subject_player_rewind_10s">快退 10 秒</string>
     <string name="feature_subject_player_pause">暂停</string>
     <string name="feature_subject_player_play">播放</string>

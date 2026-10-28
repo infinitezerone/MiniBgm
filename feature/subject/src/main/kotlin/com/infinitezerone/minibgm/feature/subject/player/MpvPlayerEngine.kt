@@ -9,6 +9,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 private val logger = bgmLogger("Bgm/MpvEngine")
 
+/** 等 render context 的上限：无 surface（纯音频）时不能无限期不 load */
+private const val RENDER_CONTEXT_TIMEOUT_MS = 800L
+
 /**
  * [PlayerEngine] 的 MPV 原生内核实现（render API 架构）。
  *
@@ -49,6 +52,27 @@ class MpvPlayerEngine(
     private var trackParams: TrackSelectionParameters = TrackSelectionParameters.Builder(context).build()
 
     /**
+     * 等待 render context 期间挂起的 loadfile。
+     *
+     * `vo=libmpv` 的 vo 只初始化一次，若那时上下文还没建好，mpv 会直接
+     * `No render context set.` → `Video: no video` 并**永久**丢弃视频轨
+     * （症状：只有声音、画面全黑、时间停在 00:00）。GL surface 总是晚于
+     * 首次 loadfile 就绪，故 load 先挂起，等 [MpvNative.markRenderContextReady]
+     * 或超时兜底（无 surface 的纯音频场景）再真正下命令。
+     */
+    private var pendingLoad: (() -> Unit)? = null
+
+    /** 当前媒体地址：GL 上下文重建后需要据此重新起播以重绑 vo */
+    private var currentUrl: String? = null
+
+    init {
+        // 上下文常驻（自持 EGL）：surface 变化只换 EGLSurface，不会再有"重建 mpv"分支
+        MpvNative.onRenderContextBecameReady = {
+            mainHandler.post { flushPendingLoad() }
+        }
+    }
+
+    /**
      * 对上收敛线程模型：mpv 事件线程到达的回调统一投递主线程。
      * 主线程发起的调用同步执行，避免无谓的异步化。
      */
@@ -68,6 +92,8 @@ class MpvPlayerEngine(
                 when (eventId) {
                     MpvNative.MpvEvent.MPV_EVENT_FILE_LOADED -> {
                         fileLoaded = true
+                        // 硬解真实生效值（mediacodec-copy / no / ...），排查软解回退只看这一条
+                        logger.d { "hwdec-current=${MpvNative.getPropertyString("hwdec-current")}" }
                         notify {
                             it.onPlaybackStateChanged(EnginePlaybackState.READY)
                             it.onTracksChanged()
@@ -160,9 +186,15 @@ class MpvPlayerEngine(
         if (isInitialized.compareAndSet(false, true)) {
             try {
                 MpvNative.create(appContext)
+                // create 会释放上一轮的 render context（新句柄从零开始），
+                // 标志必须同步复位：否则下一轮 load 会误以为上下文还在，
+                // 抢在 GL 上下文建好前下发 loadfile → vo 永久丢视频轨（黑屏只剩声音）
+                MpvNative.markRenderContextReleased()
                 // render API：视频输出由 MpvRenderView 的 GL 上下文承载
                 MpvNative.setOptionString("vo", "libmpv")
-                // 直接解码失败自动回退 copy 解码（官方 hwdec 策略），codec 白名单对齐官方
+                // 先要 mpv 自己的零拷贝 mediacodec（内部走 AImageReader + 外部纹理），
+                // 失败再退到 ffmpeg 的回拷模式。能否零拷贝取决于 mpv 侧的 JNI/EGL 能力，
+                // 实测日志会打印真实生效值（hwdec-current）。
                 MpvNative.setOptionString("hwdec", "mediacodec,mediacodec-copy")
                 MpvNative.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1")
                 MpvNative.setOptionString("ao", "audiotrack,opensles")
@@ -244,14 +276,37 @@ class MpvPlayerEngine(
             MpvNative.setOptionString("http-header-fields", headerString)
         }
 
-        logger.d { "load url=${url.takeLast(60)} startPos=$startPositionMs" }
-        if (startPositionMs > 0L) {
-            val startSeconds = startPositionMs / 1000.0
-            MpvNative.command(arrayOf("loadfile", url, "replace", "start=$startSeconds"))
+        val startLoad = { startLoad(url, startPositionMs) }
+        currentUrl = url
+        if (MpvNative.isRenderContextReady) {
+            startLoad()
         } else {
-            MpvNative.command(arrayOf("loadfile", url))
+            // 等上下文就绪再 loadfile，否则 vo 初始化失败会永久丢视频
+            pendingLoad = startLoad
+            mainHandler.postDelayed(::flushPendingLoad, RENDER_CONTEXT_TIMEOUT_MS)
         }
+    }
+
+    private fun startLoad(
+        url: String,
+        startPositionMs: Long,
+    ) {
+        logger.d { "load url=${url.takeLast(60)} startPos=$startPositionMs" }
+        // 注意：loadfile 的 `start=` 只接受**整数秒**，传小数会被 mpv 拒绝
+        // （`The loadfile option must be an integer: start=228.567` → 命令整体失败）。
+        // 因此这里只下发 loadfile，定位交给 FILE_LOADED 后的 pendingSeek 精确 seek。
+        if (startPositionMs > 0L) {
+            pendingSeekMs = startPositionMs
+        }
+        MpvNative.command(arrayOf("loadfile", url, "replace"))
         MpvNative.setPropertyBoolean("pause", false)
+    }
+
+    /** 放行挂起的 load（上下文就绪或超时兜底），幂等 */
+    private fun flushPendingLoad() {
+        val pending = pendingLoad ?: return
+        pendingLoad = null
+        pending.invoke()
     }
 
     override fun retry() {
@@ -264,6 +319,8 @@ class MpvPlayerEngine(
         hasActiveMedia = false
         fileLoaded = false
         pendingSeekMs = -1L
+        pendingLoad = null
+        currentUrl = null
         if (isInitialized.get()) {
             MpvNative.command(arrayOf("stop"))
         }
@@ -415,6 +472,9 @@ class MpvPlayerEngine(
     }
 
     override fun release() {
+        MpvNative.onRenderContextBecameReady = null
+        mainHandler.removeCallbacksAndMessages(null)
+        pendingLoad = null
         if (isInitialized.compareAndSet(true, false)) {
             try {
                 MpvNative.eventListener = null

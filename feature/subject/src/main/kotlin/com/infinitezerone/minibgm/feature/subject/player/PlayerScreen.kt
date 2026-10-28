@@ -1,12 +1,18 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
+import android.app.PendingIntent
 import android.app.PictureInPictureParams
+import android.app.RemoteAction
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Rect
+import android.graphics.drawable.Icon
 import android.util.Rational
 import android.view.View
 import android.view.WindowManager
@@ -74,6 +80,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.PictureInPictureModeChangedInfo
+import androidx.core.content.ContextCompat
 import androidx.core.util.Consumer
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -110,6 +117,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+
+/** PiP 小窗播放/暂停动作的广播 action 与请求码 */
+private const val PIP_ACTION_TOGGLE = "com.infinitezerone.minibgm.action.PIP_TOGGLE"
+private const val PIP_TOGGLE_REQUEST_CODE = 1001
 
 private const val CONTROLS_AUTO_HIDE_MS = 3_500L
 
@@ -261,6 +272,31 @@ fun PlayerScreen(
         }
     }
 
+    val pipPlayLabel = stringResource(R.string.feature_subject_player_pip_play)
+    val pipPauseLabel = stringResource(R.string.feature_subject_player_pip_pause)
+
+    fun buildPipToggleAction(playing: Boolean): RemoteAction {
+        val iconRes =
+            if (playing) {
+                android.R.drawable.ic_media_pause
+            } else {
+                android.R.drawable.ic_media_play
+            }
+        val label = if (playing) pipPauseLabel else pipPlayLabel
+        val intent =
+            Intent(PIP_ACTION_TOGGLE)
+                .setPackage(context.packageName)
+                .setAction(PIP_ACTION_TOGGLE)
+        val pending =
+            PendingIntent.getBroadcast(
+                context,
+                PIP_TOGGLE_REQUEST_CODE,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        return RemoteAction(Icon.createWithResource(context, iconRes), label, label, pending)
+    }
+
     fun buildPipParams(autoEnter: Boolean): PictureInPictureParams =
         PictureInPictureParams
             .Builder()
@@ -270,6 +306,8 @@ fun PlayerScreen(
             .setSeamlessResizeEnabled(true)
             // 以实际视频画面区域为过渡起点，保证宽高比与 targetAspectRatio 一致
             .apply { videoSourceRect?.let { setSourceRectHint(it) } }
+            // 小窗里的播放/暂停按钮：不注册 RemoteAction，系统那条按钮就是死的
+            .setActions(listOf(buildPipToggleAction(playing = playback.isPlaying)))
             .build()
 
     fun enterPictureInPicture() {
@@ -511,6 +549,28 @@ fun PlayerScreen(
         } else {
             onBackClick()
         }
+    }
+
+    // PiP 小窗动作：RemoteAction 的点击经广播回到这里切播放态
+    DisposableEffect(context, controller) {
+        val receiver =
+            object : BroadcastReceiver() {
+                override fun onReceive(
+                    receivingContext: Context?,
+                    intent: Intent?,
+                ) {
+                    if (intent?.action == PIP_ACTION_TOGGLE) {
+                        controller.togglePlayPause()
+                    }
+                }
+            }
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(PIP_ACTION_TOGGLE),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
 
     // Android 12+：播放中且画中画开关开启时「划回桌面」自动进入 PiP；暂停/结束/开关关闭时关闭自动进入。
@@ -1256,7 +1316,7 @@ private fun PlayerVideoSurface(
             // render API：渲染上下文常驻，surface 重建只是 GL 层换目标——
             // 旋转/PiP/后台往返零拆卸，无需任何 surface 生命周期管理
             androidx.compose.ui.viewinterop.AndroidView(
-                factory = { ctx -> MpvRenderView(ctx) },
+                factory = { ctx -> MpvSurfaceView(ctx) },
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
