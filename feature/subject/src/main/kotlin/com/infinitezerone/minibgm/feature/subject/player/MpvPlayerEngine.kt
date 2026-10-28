@@ -363,14 +363,15 @@ class MpvPlayerEngine(
                 "video" -> {
                     val width = MPVLib.getPropertyInt("${base}demux-w") ?: 0
                     val height = MPVLib.getPropertyInt("${base}demux-h") ?: 0
+                    val bitrate = MPVLib.getPropertyInt("${base}demux-bitrate") ?: 0
                     qualityOptions.add(
                         PlayerQualityOption(
                             id = "mpv-video-$trackId",
                             name = formatQualityLabel(width, height),
-                            detail = null,
+                            detail = formatQualityDetail(width, height, bitrate),
                             width = width,
                             height = height,
-                            bitrate = 0,
+                            bitrate = bitrate,
                             isSelected = selected,
                         ),
                     )
