@@ -1271,6 +1271,7 @@ private fun PlayerVideoSurface(
                                     height: Int,
                                 ) {
                                     controller.attachSurface(holder.surface)
+                                    controller.surfaceSizeChanged(width, height)
                                 }
 
                                 override fun surfaceDestroyed(holder: SurfaceHolder) {

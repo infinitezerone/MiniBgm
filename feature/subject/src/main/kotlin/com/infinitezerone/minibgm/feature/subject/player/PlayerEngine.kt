@@ -53,6 +53,12 @@ interface PlayerEngine {
     /** MPV 画面渲染面脱离 */
     fun detachSurface() {}
 
+    /** 渲染面尺寸变化（旋转/PiP 往返；mpv 需要 android-surface-size 跟随） */
+    fun surfaceSizeChanged(
+        width: Int,
+        height: Int,
+    ) {}
+
     val currentPositionMs: Long
 
     val bufferedPositionMs: Long get() = currentPositionMs

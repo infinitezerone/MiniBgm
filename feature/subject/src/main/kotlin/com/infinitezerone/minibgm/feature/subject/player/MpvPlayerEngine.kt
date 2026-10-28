@@ -53,6 +53,7 @@ class MpvPlayerEngine(
     @Volatile private var cachedTimeSeconds: Double = 0.0
 
     private var currentSurface: Surface? = null
+    private var hasActiveMedia = false
     private var trackParams: TrackSelectionParameters = TrackSelectionParameters.Builder(context).build()
 
     /** loadfile 早于 Surface 就绪时挂起，等 attachSurface 到达再真正加载（vo 初始化需要有效 WinID） */
@@ -174,6 +175,9 @@ class MpvPlayerEngine(
                 MPVLib.create(appContext)
                 MPVLib.setOptionString("vo", "gpu")
                 MPVLib.setOptionString("gpu-context", "android")
+                MPVLib.setOptionString("opengl-es", "yes")
+                // 官方姿势：surfaceCreated 之前禁用窗口创建，避免 vo 抢在有效 wid 之前初始化
+                MPVLib.setOptionString("force-window", "no")
                 MPVLib.setOptionString("hwdec", "mediacodec")
                 MPVLib.setOptionString("sub-auto", "all")
                 MPVLib.setOptionString("sub-font-provider", "none")
@@ -251,6 +255,7 @@ class MpvPlayerEngine(
         headers: Map<String, String>,
         startPositionMs: Long,
     ) {
+        hasActiveMedia = true
         if (headers.isNotEmpty()) {
             val headerString = headers.entries.joinToString(",") { "${it.key}: ${it.value}" }
             MPVLib.setOptionString("http-header-fields", headerString)
@@ -269,6 +274,12 @@ class MpvPlayerEngine(
         currentSurface = surface
         if (isInitialized.get()) {
             MPVLib.attachSurface(surface)
+            MPVLib.setOptionString("force-window", "yes")
+            if (hasActiveMedia) {
+                // 官方姿势（mpv-android BaseMPVView）：vo 是运行时可换属性，
+                // 重设即触发 vo 全量重建并绑定刚注入的新 wid——旋转/PiP 恢复画面的正解
+                MPVLib.setPropertyString("vo", "gpu")
+            }
             pendingLoad?.let { pending ->
                 pendingLoad = null
                 startLoadfile(pending.url, pending.headers, pending.startPositionMs)
@@ -279,7 +290,20 @@ class MpvPlayerEngine(
     override fun detachSurface() {
         currentSurface = null
         if (isInitialized.get()) {
+            // 官方姿势：先把 vo 切到 null 干净拆掉视频输出（不再向将死的窗口渲染），
+            // 再拔 wid；直接拔 wid 会让 vo 继续持有失效 ANativeWindow
+            MPVLib.setPropertyString("vo", "null")
+            MPVLib.setOptionString("force-window", "no")
             MPVLib.detachSurface()
+        }
+    }
+
+    override fun surfaceSizeChanged(
+        width: Int,
+        height: Int,
+    ) {
+        if (isInitialized.get() && width > 0 && height > 0) {
+            MPVLib.setPropertyString("android-surface-size", "${width}x$height")
         }
     }
 
@@ -289,6 +313,7 @@ class MpvPlayerEngine(
 
     override fun clear() {
         pendingLoad = null
+        hasActiveMedia = false
         if (isInitialized.get()) {
             MPVLib.command(arrayOf("stop"))
         }
