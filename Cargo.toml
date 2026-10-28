@@ -3,6 +3,7 @@ members = [
     "crates/minibgm-ech",
     "crates/minibgm-torrent",
     "crates/jgate-cli",
+    "crates/minibgm-mpv",
 ]
 resolver = "2"
 

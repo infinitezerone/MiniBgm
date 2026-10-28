@@ -1,5 +1,6 @@
 import com.infinitezerone.minibgm.androidLibrary
 import com.infinitezerone.minibgm.configureAndroidUnitTests
+import com.infinitezerone.minibgm.registerPrebuiltJniLibsForLibrary
 
 plugins {
     alias(libs.plugins.minibgm.android.feature)
@@ -15,6 +16,12 @@ androidLibrary {
         }
     }
 }
+
+// mpv render API 桥（libminibgm_mpv.so）：由 tools/build-native mpv 预构建
+registerPrebuiltJniLibsForLibrary(
+    buildSubPath = "mpv-native/jniLibs",
+    libraryFileName = "libminibgm_mpv.so",
+)
 
 dependencies {
     implementation(libs.androidx.media3.exoplayer)

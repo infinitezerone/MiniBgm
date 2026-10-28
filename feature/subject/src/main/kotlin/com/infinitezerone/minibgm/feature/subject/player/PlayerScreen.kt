@@ -8,8 +8,6 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Rect
 import android.util.Rational
-import android.view.SurfaceHolder
-import android.view.SurfaceView
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -1255,33 +1253,10 @@ private fun PlayerVideoSurface(
         contentAlignment = Alignment.Center,
     ) {
         if (isMpv) {
+            // render API：渲染上下文常驻，surface 重建只是 GL 层换目标——
+            // 旋转/PiP/后台往返零拆卸，无需任何 surface 生命周期管理
             androidx.compose.ui.viewinterop.AndroidView(
-                factory = { ctx ->
-                    SurfaceView(ctx).apply {
-                        holder.addCallback(
-                            object : SurfaceHolder.Callback {
-                                override fun surfaceCreated(holder: SurfaceHolder) {
-                                    controller.attachSurface(holder.surface)
-                                }
-
-                                override fun surfaceChanged(
-                                    holder: SurfaceHolder,
-                                    format: Int,
-                                    width: Int,
-                                    height: Int,
-                                ) {
-                                    // 官方姿势：surfaceChanged 只更新输出尺寸，严禁重新 attach——
-                                    // 那会触发 vo 在拿到新尺寸之前重建，第一次旋转画面比例错乱
-                                    controller.surfaceSizeChanged(width, height)
-                                }
-
-                                override fun surfaceDestroyed(holder: SurfaceHolder) {
-                                    controller.detachSurface()
-                                }
-                            },
-                        )
-                    }
-                },
+                factory = { ctx -> MpvRenderView(ctx) },
                 modifier = Modifier.fillMaxSize(),
             )
         } else {

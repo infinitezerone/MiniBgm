@@ -438,6 +438,7 @@ fn handle_native_mode(root: &Path, args: &[String]) {
             }
             "ech" | "minibgm-ech" => targets.push(native::TARGET_ECH),
             "torrent" | "minibgm-torrent" => targets.push(native::TARGET_TORRENT),
+            "mpv" | "minibgm-mpv" => targets.push(native::TARGET_MPV),
             _ => {
                 eprintln!("[jgate native] ❌ 未知参数：{}", arg);
                 std::process::exit(2);

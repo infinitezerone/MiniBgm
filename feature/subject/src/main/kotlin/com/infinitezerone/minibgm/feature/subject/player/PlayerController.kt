@@ -90,21 +90,6 @@ class PlayerController(
     private val _isMpv = MutableStateFlow(engine.isMpv)
     val isMpvFlow: StateFlow<Boolean> = _isMpv.asStateFlow()
 
-    fun attachSurface(surface: android.view.Surface) {
-        engine.attachSurface(surface)
-    }
-
-    fun detachSurface() {
-        engine.detachSurface()
-    }
-
-    fun surfaceSizeChanged(
-        width: Int,
-        height: Int,
-    ) {
-        engine.surfaceSizeChanged(width, height)
-    }
-
     private var pollJob: Job? = null
 
     private val engineListener =

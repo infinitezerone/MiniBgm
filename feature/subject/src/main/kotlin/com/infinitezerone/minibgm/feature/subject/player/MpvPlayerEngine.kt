@@ -1,38 +1,24 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
-import android.view.Surface
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
 import com.infinitezerone.minibgm.core.common.bgmLogger
-import dev.jdtech.mpv.MPVLib
 import java.util.concurrent.atomic.AtomicBoolean
 
 private val logger = bgmLogger("Bgm/MpvEngine")
 
-/** mpv 轨道显示名：title 优先，其次解析后的语言名，最后退回「字幕 N / 音轨 N」 */
-private fun trackDisplayName(
-    title: String?,
-    language: String?,
-    defaultLabel: String,
-    trackId: Int,
-): String {
-    val parts = listOfNotNull(title?.takeIf { it.isNotBlank() }, language?.takeIf { it.isNotBlank() })
-    return parts.joinToString(" · ").ifBlank { "$defaultLabel $trackId" }
-}
-
 /**
- * [PlayerEngine] 的 MPV 原生内核实现。
+ * [PlayerEngine] 的 MPV 原生内核实现（render API 架构）。
  *
- * 专为包含 ASS/SSA 特效字幕、内封特种字体、复杂报纸/招牌对位以及 10-bit HEVC/H.264
- * 的动漫视频提供终极播放支持，底层由 [MPVLib] 原生 C 语言管线驱动。
+ * 专为 ASS/SSA 特效字幕、内封字体与 10-bit HEVC 的动漫片源提供参考级渲染。
  *
- * 线程契约：mpv 事件回调全部来自原生 event 线程，本类负责把对 [PlayerEngineListener]
- * 的所有回调统一投递回主线程——消费方（[PlayerController]）按 ExoPlayer 语义假设
- * 回调在主线程，这里收口后对上永远是同一份线程模型。
+ * 架构要点：
+ * - `vo=libmpv` + [MpvRenderView] 的 GLSurfaceView：渲染上下文常驻，surface 重建
+ *   只是换渲染目标——旋转/PiP/后台往返零拆卸，没有任何 vo 拆建时序竞态。
+ * - loadfile 不依赖 surface：无视图时照常解码出声，视图出现即出画。
+ * - 事件回调经 [MpvNative] 事件线程到达，[notify] 统一收口主线程。
  */
 class MpvPlayerEngine(
     context: Context,
@@ -41,7 +27,7 @@ class MpvPlayerEngine(
     private val appContext = context.applicationContext
     private var listener: PlayerEngineListener? = null
     private val isInitialized = AtomicBoolean(false)
-    private val mainHandler = Handler(Looper.getMainLooper())
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     /** 事件线程与主线程并发读写，volatile 保证可见性 */
     @Volatile private var isPlayingState = false
@@ -52,12 +38,7 @@ class MpvPlayerEngine(
 
     @Volatile private var cachedTimeSeconds: Double = 0.0
 
-    private var currentSurface: Surface? = null
     private var hasActiveMedia = false
-    private var trackParams: TrackSelectionParameters = TrackSelectionParameters.Builder(context).build()
-
-    /** loadfile 早于 Surface 就绪时挂起，等 attachSurface 到达再真正加载（vo 初始化需要有效 WinID） */
-    private var pendingLoad: PendingLoad? = null
 
     /** 当前 loadfile 是否已到 FILE_LOADED（此前 mpv 会静默丢弃 seek 命令） */
     @Volatile private var fileLoaded = false
@@ -65,45 +46,65 @@ class MpvPlayerEngine(
     /** fileLoaded 之前到达的 seek：FILE_LOADED 后补放，否则续播定位在快速起播时被吞 */
     @Volatile private var pendingSeekMs = -1L
 
-    private data class PendingLoad(
-        val url: String,
-        val headers: Map<String, String>,
-        val startPositionMs: Long,
-    )
+    private var trackParams: TrackSelectionParameters = TrackSelectionParameters.Builder(context).build()
 
     /**
      * 对上收敛线程模型：mpv 事件线程到达的回调统一投递主线程。
      * 主线程发起的调用同步执行，避免无谓的异步化。
      */
-    private fun dispatchToMain(block: () -> Unit) {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            block()
+    private fun notify(block: (PlayerEngineListener) -> Unit) {
+        val target = listener
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            target?.let(block)
         } else {
-            mainHandler.post(block)
+            mainHandler.post { listener?.let(block) }
         }
     }
 
-    private fun notify(block: (PlayerEngineListener) -> Unit) {
-        dispatchToMain { listener?.let(block) }
-    }
+    private val nativeListener =
+        object : MpvNative.EventListener {
+            override fun onEvent(eventId: Int) {
+                when (eventId) {
+                    MpvNative.MpvEvent.MPV_EVENT_FILE_LOADED -> {
+                        fileLoaded = true
+                        notify {
+                            it.onPlaybackStateChanged(EnginePlaybackState.READY)
+                            it.onTracksChanged()
+                        }
+                        pendingSeekMs.takeIf { it >= 0L }?.let { target ->
+                            pendingSeekMs = -1L
+                            val seconds = target / 1000.0
+                            MpvNative.command(arrayOf("seek", "$seconds", "absolute"))
+                        }
+                    }
+                    MpvNative.MpvEvent.MPV_EVENT_END_FILE -> {
+                        notify { it.onPlaybackStateChanged(EnginePlaybackState.ENDED) }
+                    }
+                    MpvNative.MpvEvent.MPV_EVENT_SHUTDOWN -> {
+                        fileLoaded = false
+                        notify { it.onError("mpv 引擎已退出") }
+                    }
+                    MpvNative.MpvEvent.MPV_EVENT_PLAYBACK_RESTART -> {
+                        notify { it.onPlaybackStateChanged(EnginePlaybackState.READY) }
+                    }
+                }
+            }
 
-    private val eventObserver =
-        object : MPVLib.EventObserver {
-            override fun eventProperty(property: String) {}
+            override fun onProperty(name: String) {}
 
-            override fun eventProperty(
-                property: String,
+            override fun onPropertyLong(
+                name: String,
                 value: Long,
             ) {
-                when (property) {
+                when (name) {
                     "width" -> {
-                        val height = MPVLib.getPropertyInt("height") ?: 0
+                        val height = MpvNative.getInt("height") ?: 0
                         if (value > 0 && height > 0) {
                             notify { it.onVideoSizeChanged(value.toInt(), height) }
                         }
                     }
                     "height" -> {
-                        val width = MPVLib.getPropertyInt("width") ?: 0
+                        val width = MpvNative.getInt("width") ?: 0
                         if (width > 0 && value > 0) {
                             notify { it.onVideoSizeChanged(width, value.toInt()) }
                         }
@@ -111,29 +112,25 @@ class MpvPlayerEngine(
                 }
             }
 
-            override fun eventProperty(
-                property: String,
+            override fun onPropertyDouble(
+                name: String,
                 value: Double,
             ) {
-                when (property) {
-                    "time-pos" -> {
-                        timePosSeconds = value
-                    }
+                when (name) {
+                    "time-pos" -> timePosSeconds = value
                     "duration" -> {
                         durationSeconds = value
                         notify { it.onDurationChanged((value * 1000.0).toLong()) }
                     }
-                    "demuxer-cache-time" -> {
-                        cachedTimeSeconds = value
-                    }
+                    "demuxer-cache-time" -> cachedTimeSeconds = value
                 }
             }
 
-            override fun eventProperty(
-                property: String,
+            override fun onPropertyFlag(
+                name: String,
                 value: Boolean,
             ) {
-                when (property) {
+                when (name) {
                     "pause" -> {
                         isPlayingState = !value
                         notify { it.onIsPlayingChanged(isPlayingState) }
@@ -152,73 +149,42 @@ class MpvPlayerEngine(
                 }
             }
 
-            override fun eventProperty(
-                property: String,
+            override fun onPropertyString(
+                name: String,
                 value: String,
             ) {}
-
-            override fun event(eventId: Int) {
-                when (eventId) {
-                    MPVLib.MPV_EVENT_FILE_LOADED -> {
-                        fileLoaded = true
-                        notify {
-                            it.onPlaybackStateChanged(EnginePlaybackState.READY)
-                            it.onTracksChanged()
-                        }
-                        pendingSeekMs.takeIf { it >= 0L }?.let { target ->
-                            pendingSeekMs = -1L
-                            val seconds = target / 1000.0
-                            MPVLib.command(arrayOf("seek", "$seconds", "absolute"))
-                        }
-                    }
-                    MPVLib.MPV_EVENT_END_FILE -> {
-                        notify { it.onPlaybackStateChanged(EnginePlaybackState.ENDED) }
-                    }
-                    MPVLib.MPV_EVENT_SHUTDOWN -> {
-                        // mpv 核心意外退出（release 正常销毁前监听已被移除，不会走到这）
-                        fileLoaded = false
-                        notify { it.onError("mpv 引擎已退出") }
-                    }
-                    MPVLib.MPV_EVENT_PLAYBACK_RESTART -> {
-                        notify { it.onPlaybackStateChanged(EnginePlaybackState.READY) }
-                    }
-                }
-            }
         }
 
     private fun ensureInitialized() {
         if (isInitialized.compareAndSet(false, true)) {
             try {
-                MPVLib.create(appContext)
-                MPVLib.setOptionString("vo", "gpu")
-                MPVLib.setOptionString("gpu-context", "android")
-                MPVLib.setOptionString("opengl-es", "yes")
+                MpvNative.create(appContext)
+                // render API：视频输出由 MpvRenderView 的 GL 上下文承载
+                MpvNative.setOptionString("vo", "libmpv")
                 // 直接解码失败自动回退 copy 解码（官方 hwdec 策略），codec 白名单对齐官方
-                MPVLib.setOptionString("hwdec", "mediacodec,mediacodec-copy")
-                MPVLib.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1")
-                MPVLib.setOptionString("ao", "audiotrack,opensles")
+                MpvNative.setOptionString("hwdec", "mediacodec,mediacodec-copy")
+                MpvNative.setOptionString("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1")
+                MpvNative.setOptionString("ao", "audiotrack,opensles")
                 // 限制 demuxer 缓存：默认 150MiB 在移动端内存压力过大（官方上限 32/64MB）
-                MPVLib.setOptionString("demuxer-max-bytes", "${64 * 1024 * 1024}")
-                MPVLib.setOptionString("demuxer-max-back-bytes", "${32 * 1024 * 1024}")
-                MPVLib.setOptionString("sub-auto", "all")
-                MPVLib.setOptionString("sub-font-provider", "none")
-                MPVLib.setOptionString("sub-ass-override", "no")
-                MPVLib.setOptionString("blend-subtitles", "yes")
-                MPVLib.init()
+                MpvNative.setOptionString("demuxer-max-bytes", "${64 * 1024 * 1024}")
+                MpvNative.setOptionString("demuxer-max-back-bytes", "${32 * 1024 * 1024}")
+                MpvNative.setOptionString("sub-auto", "all")
+                MpvNative.setOptionString("sub-font-provider", "none")
+                MpvNative.setOptionString("sub-ass-override", "no")
+                MpvNative.setOptionString("blend-subtitles", "yes")
+                MpvNative.init()
 
-                // 官方姿势：init 后设置——idle=once 防止 stop 后 mpv 核心退出；
-                // force-window=no 防止 vo 抢在有效 wid 之前初始化
-                MPVLib.setOptionString("idle", "once")
-                MPVLib.setOptionString("force-window", "no")
+                // 官方姿势：init 后设置——idle=once 防止 stop 后 mpv 核心退出
+                MpvNative.setOptionString("idle", "once")
 
-                MPVLib.addObserver(eventObserver)
-                MPVLib.observeProperty("time-pos", MPVLib.MPV_FORMAT_DOUBLE)
-                MPVLib.observeProperty("duration", MPVLib.MPV_FORMAT_DOUBLE)
-                MPVLib.observeProperty("pause", MPVLib.MPV_FORMAT_FLAG)
-                MPVLib.observeProperty("paused-for-cache", MPVLib.MPV_FORMAT_FLAG)
-                MPVLib.observeProperty("demuxer-cache-time", MPVLib.MPV_FORMAT_DOUBLE)
-                MPVLib.observeProperty("width", MPVLib.MPV_FORMAT_INT64)
-                MPVLib.observeProperty("height", MPVLib.MPV_FORMAT_INT64)
+                MpvNative.eventListener = nativeListener
+                MpvNative.observeProperty("time-pos", MpvNative.MpvFormat.MPV_FORMAT_DOUBLE)
+                MpvNative.observeProperty("duration", MpvNative.MpvFormat.MPV_FORMAT_DOUBLE)
+                MpvNative.observeProperty("pause", MpvNative.MpvFormat.MPV_FORMAT_FLAG)
+                MpvNative.observeProperty("paused-for-cache", MpvNative.MpvFormat.MPV_FORMAT_FLAG)
+                MpvNative.observeProperty("demuxer-cache-time", MpvNative.MpvFormat.MPV_FORMAT_DOUBLE)
+                MpvNative.observeProperty("width", MpvNative.MpvFormat.MPV_FORMAT_INT64)
+                MpvNative.observeProperty("height", MpvNative.MpvFormat.MPV_FORMAT_INT64)
             } catch (t: Throwable) {
                 logger.e(t) { "MpvPlayerEngine 初始化失败" }
                 isInitialized.set(false)
@@ -250,7 +216,7 @@ class MpvPlayerEngine(
     override fun setRequestHeaders(headers: Map<String, String>) {
         if (headers.isNotEmpty() && isInitialized.get()) {
             val headerString = headers.entries.joinToString(",") { "${it.key}: ${it.value}" }
-            MPVLib.setOptionString("http-header-fields", headerString)
+            MpvNative.setOptionString("http-header-fields", headerString)
         }
     }
 
@@ -259,94 +225,40 @@ class MpvPlayerEngine(
         headers: Map<String, String>,
         startPositionMs: Long,
     ) {
+        // render API 下 loadfile 不依赖任何 surface：无视图时照常解码出声，
+        // MpvRenderView 出现即出画——没有 wid 时代的时序竞态
         ensureInitialized()
         notify { it.onPlaybackStateChanged(EnginePlaybackState.BUFFERING) }
-
-        // Surface 未就绪（surfaceCreated 尚未回调）时严禁 loadfile：
-        // mpv 的 android vo 初始化拿不到有效 WinID 会触发原生 assert 直接 SIGABRT，
-        // Kotlin 层无法兜底。挂起待 attachSurface 到达后由 attachSurface 补发加载。
-        val surface =
-            currentSurface ?: run {
-                pendingLoad = PendingLoad(url, headers, startPositionMs)
-                return
-            }
-
-        // 防引擎重建后 wid 丢失：加载前幂等重挂一次
-        attachSurface(surface)
-        startLoadfile(url, headers, startPositionMs)
-    }
-
-    private fun startLoadfile(
-        url: String,
-        headers: Map<String, String>,
-        startPositionMs: Long,
-    ) {
         hasActiveMedia = true
-        // 新 loadfile 重置加载态：FILE_LOADED 前的 seek 一律排队补放
         fileLoaded = false
         pendingSeekMs = -1L
+
         if (headers.isNotEmpty()) {
             val headerString = headers.entries.joinToString(",") { "${it.key}: ${it.value}" }
-            MPVLib.setOptionString("http-header-fields", headerString)
+            MpvNative.setOptionString("http-header-fields", headerString)
         }
 
         if (startPositionMs > 0L) {
             val startSeconds = startPositionMs / 1000.0
-            MPVLib.command(arrayOf("loadfile", url, "replace", "start=$startSeconds"))
+            MpvNative.command(arrayOf("loadfile", url, "replace", "start=$startSeconds"))
         } else {
-            MPVLib.command(arrayOf("loadfile", url))
+            MpvNative.command(arrayOf("loadfile", url))
         }
-        MPVLib.setPropertyBoolean("pause", false)
-    }
-
-    override fun attachSurface(surface: Surface) {
-        currentSurface = surface
-        if (isInitialized.get()) {
-            MPVLib.attachSurface(surface)
-            MPVLib.setOptionString("force-window", "yes")
-            if (hasActiveMedia) {
-                // 官方姿势（mpv-android BaseMPVView）：vo 是运行时可换属性，
-                // 重设即触发 vo 全量重建并绑定刚注入的新 wid——旋转/PiP 恢复画面的正解
-                MPVLib.setPropertyString("vo", "gpu")
-            }
-            pendingLoad?.let { pending ->
-                pendingLoad = null
-                startLoadfile(pending.url, pending.headers, pending.startPositionMs)
-            }
-        }
-    }
-
-    override fun detachSurface() {
-        currentSurface = null
-        if (isInitialized.get()) {
-            // 官方姿势：先把 vo 切到 null 干净拆掉视频输出（不再向将死的窗口渲染），
-            // 再拔 wid；直接拔 wid 会让 vo 继续持有失效 ANativeWindow
-            MPVLib.setPropertyString("vo", "null")
-            MPVLib.setOptionString("force-window", "no")
-            MPVLib.detachSurface()
-        }
-    }
-
-    override fun surfaceSizeChanged(
-        width: Int,
-        height: Int,
-    ) {
-        if (isInitialized.get() && width > 0 && height > 0) {
-            MPVLib.setPropertyString("android-surface-size", "${width}x$height")
-        }
+        MpvNative.setPropertyBoolean("pause", false)
     }
 
     override fun retry() {
-        MPVLib.setPropertyBoolean("pause", false)
+        if (isInitialized.get()) {
+            MpvNative.setPropertyBoolean("pause", false)
+        }
     }
 
     override fun clear() {
-        pendingLoad = null
         hasActiveMedia = false
         fileLoaded = false
         pendingSeekMs = -1L
         if (isInitialized.get()) {
-            MPVLib.command(arrayOf("stop"))
+            MpvNative.command(arrayOf("stop"))
         }
         timePosSeconds = 0.0
         durationSeconds = 0.0
@@ -356,13 +268,13 @@ class MpvPlayerEngine(
 
     override fun play() {
         if (isInitialized.get()) {
-            MPVLib.setPropertyBoolean("pause", false)
+            MpvNative.setPropertyBoolean("pause", false)
         }
     }
 
     override fun pause() {
         if (isInitialized.get()) {
-            MPVLib.setPropertyBoolean("pause", true)
+            MpvNative.setPropertyBoolean("pause", true)
         }
     }
 
@@ -373,18 +285,18 @@ class MpvPlayerEngine(
             return
         }
         val seconds = positionMs.coerceAtLeast(0L) / 1000.0
-        MPVLib.command(arrayOf("seek", "$seconds", "absolute"))
+        MpvNative.command(arrayOf("seek", "$seconds", "absolute"))
     }
 
     override fun setPlaybackSpeed(speed: Float) {
         if (isInitialized.get()) {
-            MPVLib.setPropertyDouble("speed", speed.toDouble())
+            MpvNative.setPropertyDouble("speed", speed.toDouble())
         }
     }
 
     override fun setLooping(enabled: Boolean) {
         if (isInitialized.get()) {
-            MPVLib.setPropertyString("loop-file", if (enabled) "inf" else "no")
+            MpvNative.setPropertyString("loop-file", if (enabled) "inf" else "no")
         }
     }
 
@@ -394,9 +306,9 @@ class MpvPlayerEngine(
             trackParams = value
             if (isInitialized.get()) {
                 if (value.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) {
-                    MPVLib.setPropertyString("sid", "no")
+                    MpvNative.setPropertyString("sid", "no")
                 } else {
-                    MPVLib.setPropertyString("sid", "auto")
+                    MpvNative.setPropertyString("sid", "auto")
                 }
             }
             listener?.onTrackSelectionParametersChanged()
@@ -405,25 +317,25 @@ class MpvPlayerEngine(
     /** 逐条读取 mpv track-list 属性（免 JSON 依赖），映射成引擎中立快照 */
     override fun extractTracksSnapshot(): PlayerTracksSnapshot {
         if (!isInitialized.get()) return PlayerTracksSnapshot()
-        val count = MPVLib.getPropertyInt("track-list/count") ?: 0
+        val count = MpvNative.getInt("track-list/count") ?: 0
         val qualityOptions = mutableListOf<PlayerQualityOption>()
         val subtitleOptions = mutableListOf<PlayerTrackOption>()
         val audioOptions = mutableListOf<PlayerTrackOption>()
 
         for (i in 0 until count) {
             val base = "track-list/$i/"
-            val type = MPVLib.getPropertyString("${base}type") ?: continue
-            val trackId = MPVLib.getPropertyInt("${base}id") ?: continue
+            val type = MpvNative.getPropertyString("${base}type") ?: continue
+            val trackId = MpvNative.getInt("${base}id") ?: continue
             val selected =
-                MPVLib.getPropertyBoolean("${base}selected")
-                    ?: ((MPVLib.getPropertyInt("${base}selected") ?: 0) == 1)
-            val title = MPVLib.getPropertyString("${base}title")
-            val lang = resolveLanguageName(MPVLib.getPropertyString("${base}lang"))
+                MpvNative.getBoolean("${base}selected")
+                    ?: ((MpvNative.getInt("${base}selected") ?: 0) == 1)
+            val title = MpvNative.getPropertyString("${base}title")
+            val lang = resolveLanguageName(MpvNative.getPropertyString("${base}lang"))
 
             when (type) {
                 "video" -> {
-                    val width = MPVLib.getPropertyInt("${base}demux-w") ?: 0
-                    val height = MPVLib.getPropertyInt("${base}demux-h") ?: 0
+                    val width = MpvNative.getInt("${base}demux-w") ?: 0
+                    val height = MpvNative.getInt("${base}demux-h") ?: 0
                     qualityOptions.add(
                         PlayerQualityOption(
                             id = "mpv-video-$trackId",
@@ -480,31 +392,43 @@ class MpvPlayerEngine(
         if (!isInitialized.get()) return
         val trackNo = id.substringAfterLast('-')
         when (type) {
-            EngineTrackType.VIDEO -> MPVLib.setPropertyString("vid", trackNo)
-            EngineTrackType.AUDIO -> MPVLib.setPropertyString("aid", trackNo)
-            EngineTrackType.TEXT -> MPVLib.setPropertyString("sid", trackNo)
+            EngineTrackType.VIDEO -> MpvNative.setPropertyString("vid", trackNo)
+            EngineTrackType.AUDIO -> MpvNative.setPropertyString("aid", trackNo)
+            EngineTrackType.TEXT -> MpvNative.setPropertyString("sid", trackNo)
         }
     }
 
     override fun clearTrackOverride(type: EngineTrackType) {
         if (!isInitialized.get()) return
         when (type) {
-            EngineTrackType.VIDEO -> MPVLib.setPropertyString("vid", "auto")
-            EngineTrackType.AUDIO -> MPVLib.setPropertyString("aid", "auto")
-            EngineTrackType.TEXT -> MPVLib.setPropertyString("sid", "auto")
+            EngineTrackType.VIDEO -> MpvNative.setPropertyString("vid", "auto")
+            EngineTrackType.AUDIO -> MpvNative.setPropertyString("aid", "auto")
+            EngineTrackType.TEXT -> MpvNative.setPropertyString("sid", "auto")
         }
     }
 
     override fun release() {
-        pendingLoad = null
         if (isInitialized.compareAndSet(true, false)) {
             try {
-                MPVLib.removeObserver(eventObserver)
-                MPVLib.detachSurface()
-                MPVLib.destroy()
+                MpvNative.eventListener = null
+                MpvNative.destroy()
             } catch (t: Throwable) {
                 logger.e(t) { "MpvPlayerEngine 释放失败" }
             }
         }
+        pendingSeekMs = -1L
+        fileLoaded = false
+        hasActiveMedia = false
     }
+}
+
+/** mpv 轨道显示名：title 优先，其次解析后的语言名，最后退回「字幕 N / 音轨 N」 */
+private fun trackDisplayName(
+    title: String?,
+    language: String?,
+    defaultLabel: String,
+    trackId: Int,
+): String {
+    val parts = listOfNotNull(title?.takeIf { it.isNotBlank() }, language?.takeIf { it.isNotBlank() })
+    return parts.joinToString(" · ").ifBlank { "$defaultLabel $trackId" }
 }

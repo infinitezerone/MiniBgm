@@ -23,6 +23,15 @@ pub const TARGET_ECH: NativeTarget = NativeTarget {
     lib_name: "libminibgm_ech.so",
 };
 
+pub const TARGET_MPV: NativeTarget = NativeTarget {
+    short_name: "mpv",
+    crate_name: "minibgm-mpv",
+    crate_dir: "crates/minibgm-mpv",
+    platform_api: "24",
+    out_dir: "feature/subject/build/mpv-native/jniLibs",
+    lib_name: "libminibgm_mpv.so",
+};
+
 pub const TARGET_TORRENT: NativeTarget = NativeTarget {
     short_name: "torrent",
     crate_name: "minibgm-torrent",
