@@ -1,6 +1,8 @@
 package com.infinitezerone.minibgm.feature.subject.player
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.view.Surface
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -16,6 +18,10 @@ private val logger = bgmLogger("Bgm/MpvEngine")
  *
  * 专为包含 ASS/SSA 特效字幕、内封特种字体、复杂报纸/招牌对位以及 10-bit HEVC/H.264
  * 的动漫视频提供终极播放支持，底层由 [MPVLib] 原生 C 语言管线驱动。
+ *
+ * 线程契约：mpv 事件回调全部来自原生 event 线程，本类负责把对 [PlayerEngineListener]
+ * 的所有回调统一投递回主线程——消费方（[PlayerController]）按 ExoPlayer 语义假设
+ * 回调在主线程，这里收口后对上永远是同一份线程模型。
  */
 class MpvPlayerEngine(
     context: Context,
@@ -24,13 +30,44 @@ class MpvPlayerEngine(
     private val appContext = context.applicationContext
     private var listener: PlayerEngineListener? = null
     private val isInitialized = AtomicBoolean(false)
+    private val mainHandler = Handler(Looper.getMainLooper())
 
-    private var isPlayingState = false
-    private var durationSeconds: Double = 0.0
-    private var timePosSeconds: Double = 0.0
-    private var cachedTimeSeconds: Double = 0.0
+    /** 事件线程与主线程并发读写，volatile 保证可见性 */
+    @Volatile private var isPlayingState = false
+
+    @Volatile private var durationSeconds: Double = 0.0
+
+    @Volatile private var timePosSeconds: Double = 0.0
+
+    @Volatile private var cachedTimeSeconds: Double = 0.0
+
     private var currentSurface: Surface? = null
     private var trackParams: TrackSelectionParameters = TrackSelectionParameters.Builder(context).build()
+
+    /** loadfile 早于 Surface 就绪时挂起，等 attachSurface 到达再真正加载（vo 初始化需要有效 WinID） */
+    private var pendingLoad: PendingLoad? = null
+
+    private data class PendingLoad(
+        val url: String,
+        val headers: Map<String, String>,
+        val startPositionMs: Long,
+    )
+
+    /**
+     * 对上收敛线程模型：mpv 事件线程到达的回调统一投递主线程。
+     * 主线程发起的调用同步执行，避免无谓的异步化。
+     */
+    private fun dispatchToMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
+        } else {
+            mainHandler.post(block)
+        }
+    }
+
+    private fun notify(block: (PlayerEngineListener) -> Unit) {
+        dispatchToMain { listener?.let(block) }
+    }
 
     private val eventObserver =
         object : MPVLib.EventObserver {
@@ -44,13 +81,13 @@ class MpvPlayerEngine(
                     "width" -> {
                         val height = MPVLib.getPropertyInt("height") ?: 0
                         if (value > 0 && height > 0) {
-                            listener?.onVideoSizeChanged(value.toInt(), height)
+                            notify { it.onVideoSizeChanged(value.toInt(), height) }
                         }
                     }
                     "height" -> {
                         val width = MPVLib.getPropertyInt("width") ?: 0
                         if (width > 0 && value > 0) {
-                            listener?.onVideoSizeChanged(width, value.toInt())
+                            notify { it.onVideoSizeChanged(width, value.toInt()) }
                         }
                     }
                 }
@@ -66,7 +103,7 @@ class MpvPlayerEngine(
                     }
                     "duration" -> {
                         durationSeconds = value
-                        listener?.onDurationChanged((value * 1000.0).toLong())
+                        notify { it.onDurationChanged((value * 1000.0).toLong()) }
                     }
                     "demuxer-cache-time" -> {
                         cachedTimeSeconds = value
@@ -81,17 +118,17 @@ class MpvPlayerEngine(
                 when (property) {
                     "pause" -> {
                         isPlayingState = !value
-                        listener?.onIsPlayingChanged(isPlayingState)
-                        listener?.onPlayWhenReadyChanged(isPlayingState)
+                        notify { it.onIsPlayingChanged(isPlayingState) }
+                        notify { it.onPlayWhenReadyChanged(isPlayingState) }
                         if (isPlayingState) {
-                            listener?.onPlaybackStateChanged(EnginePlaybackState.READY)
+                            notify { it.onPlaybackStateChanged(EnginePlaybackState.READY) }
                         }
                     }
                     "paused-for-cache" -> {
                         if (value) {
-                            listener?.onPlaybackStateChanged(EnginePlaybackState.BUFFERING)
+                            notify { it.onPlaybackStateChanged(EnginePlaybackState.BUFFERING) }
                         } else if (isPlayingState) {
-                            listener?.onPlaybackStateChanged(EnginePlaybackState.READY)
+                            notify { it.onPlaybackStateChanged(EnginePlaybackState.READY) }
                         }
                     }
                 }
@@ -105,14 +142,16 @@ class MpvPlayerEngine(
             override fun event(eventId: Int) {
                 when (eventId) {
                     MPVLib.MPV_EVENT_FILE_LOADED -> {
-                        listener?.onPlaybackStateChanged(EnginePlaybackState.READY)
-                        listener?.onTracksChanged()
+                        notify {
+                            it.onPlaybackStateChanged(EnginePlaybackState.READY)
+                            it.onTracksChanged()
+                        }
                     }
                     MPVLib.MPV_EVENT_END_FILE -> {
-                        listener?.onPlaybackStateChanged(EnginePlaybackState.ENDED)
+                        notify { it.onPlaybackStateChanged(EnginePlaybackState.ENDED) }
                     }
                     MPVLib.MPV_EVENT_PLAYBACK_RESTART -> {
-                        listener?.onPlaybackStateChanged(EnginePlaybackState.READY)
+                        notify { it.onPlaybackStateChanged(EnginePlaybackState.READY) }
                     }
                 }
             }
@@ -180,9 +219,27 @@ class MpvPlayerEngine(
         startPositionMs: Long,
     ) {
         ensureInitialized()
-        listener?.onPlaybackStateChanged(EnginePlaybackState.BUFFERING)
-        currentSurface?.let { attachSurface(it) }
+        notify { it.onPlaybackStateChanged(EnginePlaybackState.BUFFERING) }
 
+        // Surface 未就绪（surfaceCreated 尚未回调）时严禁 loadfile：
+        // mpv 的 android vo 初始化拿不到有效 WinID 会触发原生 assert 直接 SIGABRT，
+        // Kotlin 层无法兜底。挂起待 attachSurface 到达后由 attachSurface 补发加载。
+        val surface =
+            currentSurface ?: run {
+                pendingLoad = PendingLoad(url, headers, startPositionMs)
+                return
+            }
+
+        // 防引擎重建后 wid 丢失：加载前幂等重挂一次
+        attachSurface(surface)
+        startLoadfile(url, headers, startPositionMs)
+    }
+
+    private fun startLoadfile(
+        url: String,
+        headers: Map<String, String>,
+        startPositionMs: Long,
+    ) {
         if (headers.isNotEmpty()) {
             val headerString = headers.entries.joinToString(",") { "${it.key}: ${it.value}" }
             MPVLib.setOptionString("http-header-fields", headerString)
@@ -201,6 +258,10 @@ class MpvPlayerEngine(
         currentSurface = surface
         if (isInitialized.get()) {
             MPVLib.attachSurface(surface)
+            pendingLoad?.let { pending ->
+                pendingLoad = null
+                startLoadfile(pending.url, pending.headers, pending.startPositionMs)
+            }
         }
     }
 
@@ -216,6 +277,7 @@ class MpvPlayerEngine(
     }
 
     override fun clear() {
+        pendingLoad = null
         if (isInitialized.get()) {
             MPVLib.command(arrayOf("stop"))
         }
@@ -271,6 +333,7 @@ class MpvPlayerEngine(
         }
 
     override fun release() {
+        pendingLoad = null
         if (isInitialized.compareAndSet(true, false)) {
             try {
                 MPVLib.removeObserver(eventObserver)
