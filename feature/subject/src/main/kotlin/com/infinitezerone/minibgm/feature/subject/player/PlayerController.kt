@@ -87,6 +87,18 @@ class PlayerController(
     /** 真实 `Player`，供 UI 层（PlayerSurface / MediaSession）使用。 */
     val player: Player get() = engine.player
 
+    val isMpv: Boolean get() = engine.isMpv
+    private val _isMpv = MutableStateFlow(engine.isMpv)
+    val isMpvFlow: StateFlow<Boolean> = _isMpv.asStateFlow()
+
+    fun attachSurface(surface: android.view.Surface) {
+        engine.attachSurface(surface)
+    }
+
+    fun detachSurface() {
+        engine.detachSurface()
+    }
+
     private var pollJob: Job? = null
 
     private val engineListener =
@@ -205,6 +217,7 @@ class PlayerController(
             )
         resetTrackOverridesOnMediaChange()
         engine.load(url, requestHeaders, validStartPos)
+        _isMpv.value = engine.isMpv
     }
 
     private fun resetTrackOverridesOnMediaChange() {

@@ -8,6 +8,8 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Rect
 import android.util.Rational
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -160,10 +162,11 @@ fun PlayerScreen(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // 单个播放引擎 + 控制器：换源只更新请求头，绝不重建播放器
-    val engine = remember(context) { ExoPlayerEngine(context) }
+    // 智能双播放内核（ExoPlayer + MPV）+ 控制器：换源只更新请求头或切换引擎，绝不销毁上层控制器
+    val engine = remember(context) { DualPlayerEngine(context) }
     val controller = remember(engine, coroutineScope) { PlayerController(engine, coroutineScope) }
     val playback by controller.state.collectAsStateWithLifecycle()
+    val isMpv by controller.isMpvFlow.collectAsStateWithLifecycle()
     val position = controller.positionMs
     val bufferedPosition = controller.bufferedPositionMs
     val player = controller.player
@@ -570,10 +573,12 @@ fun PlayerScreen(
     // 单实例渲染节点：利用 movableContentOf 在常规树与 PiP 极简树之间无损转移 Surface，
     // 彻底杜绝销毁重建引发的黑闪与解码器 Surface 重附着开销。
     val videoSurface =
-        remember(player) {
+        remember(player, isMpv, controller) {
             movableContentOf {
                 PlayerVideoSurface(
                     player = player,
+                    controller = controller,
+                    isMpv = isMpv,
                     resizeMode = resizeMode,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -1240,6 +1245,8 @@ private fun PlayerVideoStage(
 @Composable
 private fun PlayerVideoSurface(
     player: Player,
+    controller: PlayerController,
+    isMpv: Boolean,
     resizeMode: PlayerResizeMode,
     modifier: Modifier = Modifier,
 ) {
@@ -1247,18 +1254,48 @@ private fun PlayerVideoSurface(
         modifier = modifier,
         contentAlignment = Alignment.Center,
     ) {
-        ContentFrame(
-            player = player,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = resizeMode.toContentScale(),
-            // 进/出 PiP 与轨道变化时保留上一帧，避免黑色 shutter 盖住画面造成瞬间黑闪
-            keepContentOnReset = true,
-            shutter = {},
-        )
-        PlayerSubtitleOverlay(
-            player = player,
-            modifier = Modifier.fillMaxSize(),
-        )
+        if (isMpv) {
+            androidx.compose.ui.viewinterop.AndroidView(
+                factory = { ctx ->
+                    SurfaceView(ctx).apply {
+                        holder.addCallback(
+                            object : SurfaceHolder.Callback {
+                                override fun surfaceCreated(holder: SurfaceHolder) {
+                                    controller.attachSurface(holder.surface)
+                                }
+
+                                override fun surfaceChanged(
+                                    holder: SurfaceHolder,
+                                    format: Int,
+                                    width: Int,
+                                    height: Int,
+                                ) {
+                                    controller.attachSurface(holder.surface)
+                                }
+
+                                override fun surfaceDestroyed(holder: SurfaceHolder) {
+                                    controller.detachSurface()
+                                }
+                            },
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            ContentFrame(
+                player = player,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = resizeMode.toContentScale(),
+                // 进/出 PiP 与轨道变化时保留上一帧，避免黑色 shutter 盖住画面造成瞬间黑闪
+                keepContentOnReset = true,
+                shutter = {},
+            )
+            PlayerSubtitleOverlay(
+                player = player,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
 

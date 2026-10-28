@@ -41,6 +41,15 @@ interface PlayerEngine {
     /** 真实 `Player`，仅供 PlayerSurface / MediaSession 等需要它的 Compose/系统层使用。 */
     val player: Player
 
+    /** 当前是否为 MPV 原生引擎 */
+    val isMpv: Boolean get() = false
+
+    /** MPV 画面渲染面附着 */
+    fun attachSurface(surface: android.view.Surface) {}
+
+    /** MPV 画面渲染面脱离 */
+    fun detachSurface() {}
+
     val currentPositionMs: Long
 
     val bufferedPositionMs: Long get() = currentPositionMs

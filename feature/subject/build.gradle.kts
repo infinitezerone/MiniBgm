@@ -22,6 +22,7 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.media3.ui.compose)
     implementation(libs.androidx.media3.session)
+    implementation(libs.libmpv)
 
     // Roborazzi 面板截图自查（Robolectric NATIVE 图形，纯 JVM 无需设备）
     testImplementation(libs.junit)
