@@ -64,6 +64,7 @@ class MpvPlayerEngine(
     private val nativeListener =
         object : MpvNative.EventListener {
             override fun onEvent(eventId: Int) {
+                logger.d { "event=$eventId" }
                 when (eventId) {
                     MpvNative.MpvEvent.MPV_EVENT_FILE_LOADED -> {
                         fileLoaded = true
@@ -185,6 +186,11 @@ class MpvPlayerEngine(
                 MpvNative.observeProperty("demuxer-cache-time", MpvNative.MpvFormat.MPV_FORMAT_DOUBLE)
                 MpvNative.observeProperty("width", MpvNative.MpvFormat.MPV_FORMAT_INT64)
                 MpvNative.observeProperty("height", MpvNative.MpvFormat.MPV_FORMAT_INT64)
+
+                logger.d { "mpv 初始化完成 vo=${MpvNative.getPropertyString("vo")}" }
+                // 渲染视图通常比 mpv 句柄先就绪（视图在组合阶段创建，句柄在首次 load 时创建），
+                // 其 onSurfaceCreated 里的建上下文会因句柄为空而失败——此处补建一次
+                MpvNative.notifyMpvReady()
             } catch (t: Throwable) {
                 logger.e(t) { "MpvPlayerEngine 初始化失败" }
                 isInitialized.set(false)
@@ -238,6 +244,7 @@ class MpvPlayerEngine(
             MpvNative.setOptionString("http-header-fields", headerString)
         }
 
+        logger.d { "load url=${url.takeLast(60)} startPos=$startPositionMs" }
         if (startPositionMs > 0L) {
             val startSeconds = startPositionMs / 1000.0
             MpvNative.command(arrayOf("loadfile", url, "replace", "start=$startSeconds"))

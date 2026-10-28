@@ -54,6 +54,35 @@ object MpvNative {
     @Volatile
     var renderUpdateListener: (() -> Unit)? = null
 
+    /**
+     * 当前绑定中的渲染视图。
+     *
+     * 时序陷阱：Compose 进入播放页时会**先**组合出 [MpvRenderView]，而 mpv 句柄
+     * 要等到第一次 [create]/[init]（由 `load()` 触发）才存在。视图的
+     * `onSurfaceCreated` 早于句柄就绪时，原生侧会因 `mpv_handle()` 为空而静默放弃创建
+     * render context——表现就是黑屏 + 无限缓冲（时间停在 00:00）。
+     * 因此引擎初始化完成后必须回头通知该视图补建，见 [notifyMpvReady]。
+     */
+    @Volatile
+    private var renderViewRef: java.lang.ref.WeakReference<MpvRenderView>? = null
+
+    fun bindRenderView(view: MpvRenderView) {
+        renderViewRef = java.lang.ref.WeakReference(view)
+        renderUpdateListener = { view.requestRenderSafely() }
+    }
+
+    fun unbindRenderView(view: MpvRenderView) {
+        if (renderViewRef?.get() === view) {
+            renderViewRef = null
+            renderUpdateListener = null
+        }
+    }
+
+    /** mpv create/init 完成后调用：让已存在的渲染视图补建 render context（幂等） */
+    fun notifyMpvReady() {
+        renderViewRef?.get()?.requestRenderContext()
+    }
+
     // ---------- 控制面 ----------
 
     external fun create(appctx: Context)
@@ -112,8 +141,8 @@ object MpvNative {
 
     // ---------- render API ----------
 
-    /** 须在 EGL 上下文 current 的线程调用（GLSurfaceView onSurfaceCreated） */
-    external fun renderContextCreate()
+    /** 须在 EGL 上下文 current 的线程调用（GLSurfaceView onSurfaceCreated）；false 表示未建成 */
+    external fun renderContextCreate(): Boolean
 
     external fun renderContextRender(
         width: Int,

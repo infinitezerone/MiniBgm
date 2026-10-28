@@ -826,11 +826,13 @@ unsafe extern "C" fn render_update_callback(_ctx: *mut c_void) {
 pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_MpvNative_renderContextCreate(
     _env: JNIEnv,
     _class: JClass,
-) {
-    let _ = with_api(|api| unsafe {
+) -> jboolean {
+    // 返回 true 表示 render context 可用；false 时调用方需等待 mpv 就绪后重试
+    let result = with_api(|api| unsafe {
         let handle = match mpv_handle() {
             Ok(h) => h,
-            Err(_) => return,
+            // 特殊值 -2：mpv 句柄尚未创建（视图早于引擎初始化的正常时序）
+            Err(_) => return -2,
         };
         // 幂等：已存在先释放（GL 上下文重建场景）
         let old = G_RENDER_CTX.swap(std::ptr::null_mut(), Ordering::AcqRel);
@@ -857,8 +859,9 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_Mp
                 data: std::ptr::null_mut(),
             },
         ];
-        if (api.mpv_render_context_create)(&mut ctx, handle, params.as_mut_ptr()) < 0 {
-            return;
+        let rc = (api.mpv_render_context_create)(&mut ctx, handle, params.as_mut_ptr());
+        if rc < 0 {
+            return rc;
         }
         G_RENDER_CTX.store(ctx, Ordering::Release);
         (api.mpv_render_context_set_update_callback)(
@@ -866,7 +869,12 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_Mp
             Some(render_update_callback),
             std::ptr::null_mut(),
         );
+        0
     });
+    match result {
+        Ok(0) => 1u8,
+        _ => 0u8,
+    }
 }
 
 #[no_mangle]
