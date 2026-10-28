@@ -1270,7 +1270,8 @@ private fun PlayerVideoSurface(
                                     width: Int,
                                     height: Int,
                                 ) {
-                                    controller.attachSurface(holder.surface)
+                                    // 官方姿势：surfaceChanged 只更新输出尺寸，严禁重新 attach——
+                                    // 那会触发 vo 在拿到新尺寸之前重建，第一次旋转画面比例错乱
                                     controller.surfaceSizeChanged(width, height)
                                 }
 

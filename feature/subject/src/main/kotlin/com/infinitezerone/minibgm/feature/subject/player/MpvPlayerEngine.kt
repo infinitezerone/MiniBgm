@@ -59,6 +59,12 @@ class MpvPlayerEngine(
     /** loadfile 早于 Surface 就绪时挂起，等 attachSurface 到达再真正加载（vo 初始化需要有效 WinID） */
     private var pendingLoad: PendingLoad? = null
 
+    /** 当前 loadfile 是否已到 FILE_LOADED（此前 mpv 会静默丢弃 seek 命令） */
+    @Volatile private var fileLoaded = false
+
+    /** fileLoaded 之前到达的 seek：FILE_LOADED 后补放，否则续播定位在快速起播时被吞 */
+    @Volatile private var pendingSeekMs = -1L
+
     private data class PendingLoad(
         val url: String,
         val headers: Map<String, String>,
@@ -154,9 +160,15 @@ class MpvPlayerEngine(
             override fun event(eventId: Int) {
                 when (eventId) {
                     MPVLib.MPV_EVENT_FILE_LOADED -> {
+                        fileLoaded = true
                         notify {
                             it.onPlaybackStateChanged(EnginePlaybackState.READY)
                             it.onTracksChanged()
+                        }
+                        pendingSeekMs.takeIf { it >= 0L }?.let { target ->
+                            pendingSeekMs = -1L
+                            val seconds = target / 1000.0
+                            MPVLib.command(arrayOf("seek", "$seconds", "absolute"))
                         }
                     }
                     MPVLib.MPV_EVENT_END_FILE -> {
@@ -256,6 +268,9 @@ class MpvPlayerEngine(
         startPositionMs: Long,
     ) {
         hasActiveMedia = true
+        // 新 loadfile 重置加载态：FILE_LOADED 前的 seek 一律排队补放
+        fileLoaded = false
+        pendingSeekMs = -1L
         if (headers.isNotEmpty()) {
             val headerString = headers.entries.joinToString(",") { "${it.key}: ${it.value}" }
             MPVLib.setOptionString("http-header-fields", headerString)
@@ -314,6 +329,8 @@ class MpvPlayerEngine(
     override fun clear() {
         pendingLoad = null
         hasActiveMedia = false
+        fileLoaded = false
+        pendingSeekMs = -1L
         if (isInitialized.get()) {
             MPVLib.command(arrayOf("stop"))
         }
@@ -336,10 +353,13 @@ class MpvPlayerEngine(
     }
 
     override fun seekTo(positionMs: Long) {
-        if (isInitialized.get()) {
-            val seconds = positionMs.coerceAtLeast(0L) / 1000.0
-            MPVLib.command(arrayOf("seek", "$seconds", "absolute"))
+        if (!isInitialized.get() || !fileLoaded) {
+            // mpv 在 FILE_LOADED 之前会静默丢弃 seek：排队等加载完成后补放
+            pendingSeekMs = positionMs.coerceAtLeast(0L)
+            return
         }
+        val seconds = positionMs.coerceAtLeast(0L) / 1000.0
+        MPVLib.command(arrayOf("seek", "$seconds", "absolute"))
     }
 
     override fun setPlaybackSpeed(speed: Float) {
