@@ -62,6 +62,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -575,10 +576,11 @@ fun PlayerScreen(
         onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
 
-    // Android 12+：播放中且画中画开关开启时「划回桌面」自动进入 PiP；暂停/结束/开关关闭时关闭自动进入。
-    // 离开播放页时在 onDispose 中彻底重置 autoEnterEnabled，防止退回详情页/首页后误入画中画。
-    DisposableEffect(activity, playback.isPlaying, videoSourceRect, targetAspectRatio, uiState.pipEnabled) {
-        activity?.setPictureInPictureParams(buildPipParams(autoEnter = playback.isPlaying && uiState.pipEnabled))
+    // autoEnter 与播放/暂停按钮即时同步：划回桌面自动进小窗必须跟手（Media3Practice 同款拆分）
+    val isPlayingNow by rememberUpdatedState(playback.isPlaying)
+    val pipEnabledNow by rememberUpdatedState(uiState.pipEnabled)
+    DisposableEffect(activity, playback.isPlaying, uiState.pipEnabled) {
+        activity?.setPictureInPictureParams(buildPipParams(autoEnter = isPlayingNow && pipEnabledNow))
         onDispose {
             activity?.setPictureInPictureParams(
                 PictureInPictureParams
@@ -587,6 +589,15 @@ fun PlayerScreen(
                     .build(),
             )
         }
+    }
+
+    // sourceRectHint/aspectRatio 防抖后推送：进出 PiP 的树重建会让 onGloballyPositioned
+    // 上报中间尺寸，mid-transition 改 params 会让系统转场动画重定向（实测退出小窗画面抖动）。
+    // 布局稳定 300ms 后按最终 rect 推送，转场动画不再被中途改目标。
+    LaunchedEffect(videoSourceRect, targetAspectRatio) {
+        if (videoSourceRect == null) return@LaunchedEffect
+        delay(300)
+        activity?.setPictureInPictureParams(buildPipParams(autoEnter = isPlayingNow && pipEnabledNow))
     }
 
     // 生命周期联动：ON_PAUSE 落盘续播点；ON_STOP 才暂停。
