@@ -50,6 +50,7 @@ object MpvRenderer {
     private var forceNextFrame = true
 
     private var skippedFrames = 0L
+    private var lastDrawAt = 0L
     private var frameWindowStartMs = 0L
     private var frameWindowCount = 0L
 
@@ -175,7 +176,6 @@ object MpvRenderer {
         if (!surfaceReady) return
         val display = eglDisplay ?: return
         val surface = eglSurface ?: return
-        if (viewportWidth <= 0 || viewportHeight <= 0) return
         ensureRenderContext()
         if (!renderContextCreated) return
         // 只在 mpv 真说有新帧时重绘：update 回调也会被 seek/切轨/属性变化触发，
@@ -184,17 +184,51 @@ object MpvRenderer {
             skippedFrames++
             return
         }
-        forceNextFrame = false
         if (!EGL14.eglMakeCurrent(display, surface, surface, eglContext)) {
             logger.w { "eglMakeCurrent 失败，丢弃本帧" }
             return
         }
-        GLES20.glViewport(0, 0, viewportWidth, viewportHeight)
-        MpvNative.renderContextRender(viewportWidth, viewportHeight)
+        // 渲染目标尺寸一律取 EGLSurface 的真实 buffer 尺寸，**不信任** setViewport 缓存：
+        // surfaceChanged 是主线程回调，落地还要再 post 到本线程。PiP 转场期间主线程被布局
+        // 与动画堵住，这个回调会晚几十毫秒；渲染线程独立运转，期间一直拿旧 viewport 往
+        // 已换尺寸的新 buffer 上画 → 画面被错误缩放若干帧，观感就是转场首尾各"抖一下"。
+        // 每帧查询彻底绕开主线程时序，viewportWidth/Height 退化为兜底与日志用途。
+        val bufW = IntArray(1)
+        val bufH = IntArray(1)
+        val hasBuf =
+            EGL14.eglQuerySurface(display, surface, EGL14.EGL_WIDTH, bufW, 0) &&
+                EGL14.eglQuerySurface(display, surface, EGL14.EGL_HEIGHT, bufH, 0)
+        val targetWidth = if (hasBuf && bufW[0] > 0) bufW[0] else viewportWidth
+        val targetHeight = if (hasBuf && bufH[0] > 0) bufH[0] else viewportHeight
+        if (targetWidth <= 0 || targetHeight <= 0) return
+        if (targetWidth != viewportWidth || targetHeight != viewportHeight) {
+            logger.d { "尺寸以 EGL 为准 buf=${targetWidth}x$targetHeight 回调=${viewportWidth}x$viewportHeight" }
+            viewportWidth = targetWidth
+            viewportHeight = targetHeight
+        }
+        forceNextFrame = false
+        GLES20.glViewport(0, 0, targetWidth, targetHeight)
+        val renderStart = SystemClock.elapsedRealtime()
+        MpvNative.renderContextRender(targetWidth, targetHeight)
         MpvNative.renderContextReportSwap()
-        if (!EGL14.eglSwapBuffers(display, surface)) {
+        val swapStart = SystemClock.elapsedRealtime()
+        val swapped = EGL14.eglSwapBuffers(display, surface)
+        val swapMs = SystemClock.elapsedRealtime() - swapStart
+        val renderMs = swapStart - renderStart
+        // 诊断：换缓冲阻塞（>150ms）= 转场期间该层被 shell 冻结/不消费，渲染线程被拖住
+        if (swapMs > 150L || renderMs > 150L) {
+            logger.d { "SLOW render=${renderMs}ms swap=${swapMs}ms buf=${viewportWidth}x$viewportHeight" }
+        }
+        if (!swapped) {
             logger.w { "eglSwapBuffers 失败" }
         } else {
+            val now = SystemClock.elapsedRealtime()
+            val gap = now - lastDrawAt
+            // 诊断：正常 40ms 一帧；>100ms 的间隔就是"画面停住"的空档
+            if (lastDrawAt > 0L && gap > 100L) {
+                logger.d { "GAP ${gap}ms buf=${viewportWidth}x$viewportHeight" }
+            }
+            lastDrawAt = now
             logFrameRate()
         }
     }
@@ -354,9 +388,47 @@ class MpvSurfaceView(
     context: Context,
 ) : SurfaceView(context),
     SurfaceHolder.Callback {
+    /**
+     * 锁定的 buffer 尺寸（只增不减）。
+     *
+     * PiP 转场时窗口尺寸会突变（实测 1272x716 ↔ 697x392）。若让 buffer 跟着变，mpv 就得
+     * 按新尺寸重新缩放画面，而这次重排比窗口变换晚 38~73ms——进小窗时窗口先缩、画面后缩，
+     * 退出时画面先放大、窗口动画后开始。两个方向都错位，观感就是各"抖一下"。
+     *
+     * 锁定后 buffer 尺寸恒定，窗口怎么变都只由合成器做一次等比缩放，与 UI 同一拍落地。
+     * 取"只增不减"是为了横竖屏：横屏会把锁定量抬上去，回竖屏时保持大尺寸渲染再缩小显示，
+     * 画质无损；而 PiP 只变小、永不触发重锁。
+     */
+    private var lockedWidth = 0
+    private var lockedHeight = 0
+
     init {
         holder.addCallback(this)
         MpvNative.bindRenderView(this)
+    }
+
+    override fun onSizeChanged(
+        w: Int,
+        h: Int,
+        oldw: Int,
+        oldh: Int,
+    ) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        logger.d { "viewSize ${oldw}x$oldh -> ${w}x$h 锁定 ${lockedWidth}x$lockedHeight" }
+        // PiP 只让 View 变小，走不进这里；横屏把面积抬大才重锁
+        if (w.toLong() * h > lockedWidth.toLong() * lockedHeight) lockBufferSize(holder, w, h)
+    }
+
+    private fun lockBufferSize(
+        holder: SurfaceHolder,
+        w: Int,
+        h: Int,
+    ) {
+        if (w <= 0 || h <= 0) return
+        lockedWidth = w
+        lockedHeight = h
+        holder.setFixedSize(w, h)
+        logger.d { "锁定 buffer 尺寸 ${w}x$h" }
     }
 
     /**
@@ -375,7 +447,11 @@ class MpvSurfaceView(
     fun requestRenderContext() = MpvRenderer.ensureContextAsync()
 
     override fun surfaceCreated(holder: SurfaceHolder) {
+        logger.d { "surfaceCreated view=${width}x$height" }
+        // 首次附着即锁定 buffer 尺寸；此后 PiP 转场只改窗口不改 buffer
+        lockBufferSize(holder, width, height)
         MpvRenderer.setSurface(holder.surface)
+        MpvRenderer.setViewport(lockedWidth, lockedHeight)
     }
 
     override fun surfaceChanged(
@@ -384,10 +460,15 @@ class MpvSurfaceView(
         width: Int,
         height: Int,
     ) {
-        MpvRenderer.setViewport(width, height)
+        logger.d { "surfaceChanged ${width}x$height 锁定 ${lockedWidth}x$lockedHeight" }
+        // 锁定生效后这里的 width/height 恒等于锁定量；渲染尺寸一律用锁定量，
+        // 避免任何一次转场把 mpv 拖进"按新窗口尺寸重新缩放"的错位窗口
+        if (lockedWidth <= 0 || lockedHeight <= 0) lockBufferSize(holder, width, height)
+        MpvRenderer.setViewport(lockedWidth, lockedHeight)
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
+        logger.d { "surfaceDestroyed" }
         MpvRenderer.clearSurface(holder.surface)
     }
 
