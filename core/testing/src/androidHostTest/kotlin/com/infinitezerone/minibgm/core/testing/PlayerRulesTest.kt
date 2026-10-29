@@ -812,4 +812,157 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
             "PlayerScreen 进入 PiP 模式时必须重置 isScreenLocked = false",
         )
     }
+
+    /**
+     * PiP 布局判定 = 「进过 PiP」的会话锁存 + 窗口几何；不得单看窗口面积，也不得跟 PiP 事件走。
+     *
+     * 事故复盘（2026-10-29）：
+     * 1) `rememberIsPipSizedWindow` 曾用 `窗口面积 < maximumWindowMetrics` 判定小窗。后者的语义是
+     *    「窗口展开到全屏时的最大可能尺寸」——分屏、桌面模式/自由窗口天然满足，于是控制层被
+     *    `hideChrome` 收起、竖屏下方 Tab 与内容区整体不组合，用户在分屏里只剩一块裸画面；
+     * 2) 改成跟 `isInPipMode` 事件（或由事件驱动的会话锁存）走后，事件比窗口真正缩小晚 50ms 以上
+     *    （实测）：小窗里会先渲染几帧带控制栏图标的整页，用户看到的是"进小窗就是图标、不无缝"。
+     *
+     * 红线：布局判定只能看窗口几何（宽高都小于最大可能尺寸），严禁消费 PiP 事件或事件驱动的锁存；
+     * 退出后要留出窗口回弹的稳定期，参数推送在转场期间必须全部掐断。
+     */
+    @Test
+    fun pip_layout_must_not_be_inferred_from_window_area_alone() {
+        val file =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt",
+            )
+        assertTrue(file.isFile, "PlayerScreen.kt 未找到")
+        val code = KotlinSourceScanner.sanitize(file.readText())
+
+        assertTrue(
+            !code.contains("isPipSizedWindow"),
+            "PlayerScreen 不得保留 isPipSizedWindow 命名/调用：分屏与自由窗口会因窗口面积小于最大值被误判成 PiP",
+        )
+
+        val fnToken = "fun rememberIsPipWindow("
+        val fnStart = code.indexOf(fnToken)
+        assertTrue(fnStart >= 0, "PlayerScreen 缺少 rememberIsPipWindow：PiP 布局判定必须是「事件锁存 + 几何兜底」")
+        val fnScope = code.substring(fnStart)
+
+        assertTrue(
+            !mentionsInsideBlock(fnScope, fnToken, "isInPipMode"),
+            "rememberIsPipWindow 不得消费 PiP 事件：事件比窗口缩小晚 50ms 以上（实测），" +
+                "等它会让小窗先渲染几帧带控制栏的整页（不无缝）",
+        )
+        assertTrue(
+            !mentionsInsideBlock(fnScope, fnToken, "pipSessionActive"),
+            "rememberIsPipWindow 不得被会话锁存牵制：锁存同样来自事件，入场几帧照样漏判",
+        )
+        assertTrue(
+            code.contains("containerSize.width <") && code.contains("containerSize.height <"),
+            "PiP 判定必须逐项比较宽高都小于最大尺寸：只看面积会把分屏/自由窗口判成小窗，只比一条边会放过旋转",
+        )
+        assertTrue(
+            code.contains("PIP_EXIT_SETTLE_MS"),
+            "退出 PiP 后必须留出窗口回弹的稳定期（PIP_EXIT_SETTLE_MS）",
+        )
+        assertTrue(
+            !Regex("""return\s+area\s*<\s*displayArea""").containsMatchIn(code),
+            "严禁仅凭窗口面积直接判定 PiP：分屏/自由窗口天然小于 maximumWindowMetrics",
+        )
+
+        // 布局决策必须全部走同一个判定
+        assertTrue(
+            code.contains("hideChrome = isPipLayout"),
+            "PlayerScreen 的 hideChrome 必须使用 isPipLayout（窗口几何 + 退出转场保持）",
+        )
+
+        // 转场期间改 params 会让系统按新落点重定向退出动画（画面突跳放大）
+        assertTrue(
+            mentionsInsideBlock(code, "onGloballyPositioned", "pipSettling.value") &&
+                mentionsInsideBlock(code, "onGloballyPositioned", "isPipWindow"),
+            "onGloballyPositioned 推 params 前必须同时检查 pipSettling 与 isPipWindow：" +
+                "事件晚于窗口缩小时会漏掉一次错误落点推送，事件早于窗口回弹时会重定向退出动画",
+        )
+    }
+
+    /**
+     * 竖屏系统栏让位必须跟窗口几何走，并在退出时用动画回落、进入时同帧归零。
+     *
+     * 复盘（2026-10-29，三轮）：
+     * 1) 跟 PiP 事件走：事件比窗口缩小晚 50ms 以上（实测），小窗里先渲染几帧带控制栏的整页
+     *    （"进小窗直接显示图标，不能无缝"）；
+     * 2) 同帧瞬切：全屏竖屏的视频比小窗内容低一个状态栏高度，退出时整页"被顶一下"；
+     * 3) 动画但无闸口：转场期间每 8ms 改一次布局并推一次 params，系统按新落点重定向动画
+     *    （"以左上角为锚点突然放大闪一下"）。
+     *
+     * 最终形态：`isPipLayout = isPipWindow || (pipSettling && !isInPipMode)` —— 进入跟窗口缩小同帧，
+     * 退出后一直保持小窗形态到转场结束，随后用 `PIP_INSET_SETTLE_MS` 动画回落；
+     * 转场期间的 params 推送由 `pipSettling` 全量掐断。
+     */
+    @Test
+    fun player_portrait_insets_must_follow_pip_window_and_animate_on_exit() {
+        val file =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt",
+            )
+        assertTrue(file.isFile, "PlayerScreen.kt 未找到")
+        val code = KotlinSourceScanner.sanitize(file.readText())
+
+        assertTrue(
+            code.contains("if (isPipLayout) 0.dp else statusBarTop") &&
+                code.contains("if (isPipLayout) 0.dp else navBarBottom"),
+            "竖屏让位目标必须跟 isPipLayout 走：跟事件走会晚 50ms，小窗里漏出整页",
+        )
+        assertTrue(
+            code.contains("val topInset = if (isPipLayout) 0.dp else topInsetAnim"),
+            "进入小窗的让位必须同帧取 0：animateDpAsState 晚一帧，小窗第一帧会带旧 padding 闪一下",
+        )
+        assertTrue(
+            code.contains("isPipWindow || (pipSettling.value && !isInPipMode)"),
+            "isPipLayout 必须：进入跟窗口缩小同帧（几何）、退出用锁存保持到转场结束",
+        )
+        assertTrue(
+            code.contains("val topInsetAnim by animateDpAsState(") && code.contains("val bottomInsetAnim by animateDpAsState("),
+            "退出小窗必须动画回落：全屏视频比小窗低一个状态栏高度，瞬切就是整页被顶一下",
+        )
+    }
+
+    /**
+     * mpv 渲染宿主锁定 buffer 尺寸时必须保持宽高比。
+     *
+     * 事故复盘（2026-10-29）：为消除 PiP 转场重排，`MpvSurfaceView` 用「只增不减」的
+     * `setFixedSize` 锁死 buffer。但 SurfaceView 把 buffer 映射到 View 用的是 x/y 各自独立的
+     * 缩放（AOSP `SurfaceView.updateSurface` 的 postScaleX/postScaleY），比例不一致就会直接
+     * 拉伸：20:9 横屏窗口进 16:9 的 PiP 窗口、分屏/桌面模式拖拽窗口比例都会命中；拉伸发生在
+     * 合成阶段，mpv 的 keepaspect 无法纠正。16:9 测试机上永远看不到，20:9 真机一进 PiP 就变形。
+     *
+     * 红线：重锁判据必须包含宽高比比较（`ASPECT_EPSILON`）；"只增不减"只对比例不变的尺寸生效，
+     * 且必须经统一的重锁判定，不得在 `onSizeChanged` 里直接按面积调用 `lockBufferSize`。
+     */
+    @Test
+    fun mpv_surface_buffer_lock_must_preserve_aspect_ratio() {
+        val file =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/MpvSurfaceView.kt",
+            )
+        assertTrue(file.isFile, "MpvSurfaceView.kt 未找到")
+        val code = KotlinSourceScanner.sanitize(file.readText())
+
+        assertTrue(
+            code.contains("fun shouldRelock("),
+            "MpvSurfaceView 缺少 shouldRelock：buffer 重锁判定必须收口到单一函数",
+        )
+        assertTrue(
+            mentionsInsideBlock(code, "fun shouldRelock(", "ASPECT_EPSILON"),
+            "shouldRelock 必须比较宽高比：比例变化时仍沿用旧 buffer 会让合成阶段拉伸画面",
+        )
+        assertTrue(
+            mentionsInsideBlock(code, "override fun onSizeChanged(", "shouldRelock"),
+            "onSizeChanged 必须经 shouldRelock 决定是否重锁，不得直接按面积调用 lockBufferSize",
+        )
+        assertTrue(
+            !mentionsInsideBlock(code, "override fun onSizeChanged(", "lockBufferSize(holder, w, h)"),
+            "onSizeChanged 不得直接 lockBufferSize(holder, w, h)：绕过比例判定等于恢复拉伸缺陷",
+        )
+    }
 }

@@ -413,6 +413,7 @@
     <string name="feature_subject_player_pip_play">播放</string>
     <string name="feature_subject_player_pip_pause">暂停</string>
     <string name="feature_subject_player_pip_toggle_failed">临时无法切换播放状态</string>
+    <string name="feature_subject_player_pip_unavailable">当前窗口无法进入画中画</string>
     <string name="feature_subject_player_rewind_10s">快退 10 秒</string>
     <string name="feature_subject_player_pause">暂停</string>
     <string name="feature_subject_player_play">播放</string>

@@ -13,6 +13,7 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Rect
 import android.graphics.drawable.Icon
+import android.os.SystemClock
 import android.util.Rational
 import android.view.View
 import android.view.WindowManager
@@ -32,15 +33,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
@@ -75,6 +77,7 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -100,6 +103,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
+import com.infinitezerone.minibgm.core.common.bgmLogger
 import com.infinitezerone.minibgm.core.designsystem.component.BgmOverlayHost
 import com.infinitezerone.minibgm.core.designsystem.component.BgmSnackbarHost
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
@@ -124,7 +128,15 @@ private const val PIP_TOGGLE_REQUEST_CODE = 1001
 
 private const val CONTROLS_AUTO_HIDE_MS = 3_500L
 
+/** 退出 PiP 后保留「小窗几何」判定的时长：等窗口尺寸回弹落地再交还事件语义 */
+private const val PIP_EXIT_SETTLE_MS = 500L
+
+/** 退出小窗时的落位时长：保持期结束后 100ms 内把视频送回状态栏下方 */
+private const val PIP_INSET_SETTLE_MS = 100
+
 private const val EPISODE_GRID_CHUNK_SIZE = 30
+
+private val logger = bgmLogger("Bgm/Player")
 
 /**
  * Kazumi 风格一体化流媒体播放页。
@@ -156,6 +168,8 @@ fun PlayerScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val overlayHostState = rememberOverlayHostState()
     val configuration = LocalConfiguration.current
+    // 窗口像素尺寸：用来判定槽位矩形是不是「铺满窗口」的稳定态（见 onGloballyPositioned）
+    val windowSize = LocalWindowInfo.current.containerSize
     val clipboardManager = LocalClipboard.current
 
     val handleCopyComment: (String) -> Unit = { text ->
@@ -234,7 +248,25 @@ fun PlayerScreen(
     val isSystemLandscape =
         configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    // 会话语义（方向锁、寿命、参数推送）：跟随系统的 PiP 事件
     val isInPipMode = rememberIsInPipMode()
+    // PiP 会话是否仍在转场/回弹中：期间窗口几何不可信，且严禁推 params——
+    // 转场中 setPictureInPictureParams 会带新 sourceRectHint 重定向系统动画，观感是画面突跳放大
+    val pipSettling = remember { mutableStateOf(isInPipMode) }
+    LaunchedEffect(isInPipMode) {
+        if (isInPipMode) {
+            pipSettling.value = true
+        } else if (pipSettling.value) {
+            delay(PIP_EXIT_SETTLE_MS)
+            pipSettling.value = false
+        }
+    }
+    // 窗口是否已经变小（纯几何）
+    val isPipWindow = rememberIsPipWindow(activity)
+    // 布局形态：进入跟窗口缩小同帧（纯几何），退出用会话锁存保持到转场结束。
+    // 进入不能提前到事件（事件早于窗口缩小，全屏窗口会先"塌"一下），也不能滞后
+    // （pipSettling 经 LaunchedEffect 中转会晚一帧，小窗里先漏出带控制栏的整页）。
+    val isPipLayout = isPipWindow || (pipSettling.value && !isInPipMode)
 
     val epLabel =
         if (uiState.episodeType == 0) {
@@ -297,27 +329,44 @@ fun PlayerScreen(
         return RemoteAction(Icon.createWithResource(context, iconRes), label, label, pending)
     }
 
-    fun buildPipParams(autoEnter: Boolean): PictureInPictureParams =
-        PictureInPictureParams
+    fun buildPipParams(
+        autoEnter: Boolean,
+        hint: Rect? = videoSourceRect,
+    ): PictureInPictureParams {
+        // 诊断（临时，搜 PIPT）：退出小窗偶发跳动的取证——记录每一次推送的 params 内容与时刻
+        logger.d {
+            "PIPT params t=${SystemClock.uptimeMillis()} autoEnter=$autoEnter " +
+                "hint=${hint?.toShortString()} aspect=$targetAspectRatio pipWindow=$isPipWindow"
+        }
+        return PictureInPictureParams
             .Builder()
             .setAspectRatio(targetAspectRatio)
             .setAutoEnterEnabled(autoEnter)
-            // 关掉 seamless：实测 seamless=true 时 shell 把 PiP 转场动画整个跳过
-            // （scheduled→entered 仅 39ms），窗口瞬变后画面要等 44~63ms 的重排才追上，
-            // 观感就是进/出小窗各"抖一下"。改回快照缩放动画让尺寸变化被动画遮住。
-            .setSeamlessResizeEnabled(false)
-            // 以实际视频画面区域为过渡起点，保证宽高比与 targetAspectRatio 一致
-            .apply { videoSourceRect?.let { setSourceRectHint(it) } }
+            // 官方文档：视频内容应当保持无缝 resize（true），设成 false 等于要求系统「做过渡来
+            // 掩盖 resize 造成的伪影」——退出小窗那段 1:1 裁切揭示就是这条过渡。
+            .setSeamlessResizeEnabled(true)
+            // 以实际视频画面区域为过渡起点，保证宽高比与 targetAspectRatio 一致；
+            // Android 12+ 的退出转场也会复用这份 bounds，常规布局变化时必须同步刷新
+            .apply { hint?.let { setSourceRectHint(it) } }
             // 小窗里的播放/暂停按钮：不注册 RemoteAction，系统那条按钮就是死的
             .setActions(listOf(buildPipToggleAction(playing = playback.isPlaying)))
             .build()
+    }
 
     fun enterPictureInPicture() {
         // 手动入口不受「自动画中画」开关影响：那个开关只决定返回桌面时是否自动小窗。
         // 刻意保留方向锁：若在此释放，退出小窗会按手机物理朝向重建布局，
         // 布局在转场中间整体翻转（横屏→竖屏）= reparent + 落点错位，抖动明显。
         val act = activity ?: return
-        act.enterPictureInPictureMode(buildPipParams(autoEnter = true))
+        // 分屏/系统禁用 PiP 时会直接返回 false：吞掉返回值等于按钮失灵
+        if (!act.enterPictureInPictureMode(buildPipParams(autoEnter = true))) {
+            coroutineScope.launch {
+                snackbarHostState.currentSnackbarData?.dismiss()
+                snackbarHostState.showSnackbar(
+                    context.resources.getString(R.string.feature_subject_player_pip_unavailable),
+                )
+            }
+        }
     }
 
     fun cycleResizeMode() {
@@ -351,13 +400,13 @@ fun PlayerScreen(
         }
     }
 
-    // 进入 PiP 后释放方向锁定、解除屏幕锁定并关闭抽屉，使得后续点击小窗恢复时根据用户当前手机物理朝向自适应展开且不遮挡画面
+    // 进入 PiP 后解除屏幕锁定并关闭抽屉，避免小窗里残留锁屏遮罩/面板
     LaunchedEffect(isInPipMode) {
         if (isInPipMode) {
             overlayHostState.cancelActive()
             isScreenLocked = false
-            // 方向锁保留到退出之后：释放会让退出转场中途翻转布局（实测抖动主因），
-            // 朝向差异交由退出后的 isSystemLandscape 效果在动画结束再修正
+            // 方向锁刻意保留到退出之后：此刻释放会让退出转场中途翻转布局（实测抖动主因），
+            // 朝向差异交由退出后的 isSystemLandscape 效果处理
         }
     }
 
@@ -578,22 +627,31 @@ fun PlayerScreen(
     DisposableEffect(activity, playback.isPlaying, uiState.pipEnabled) {
         activity?.setPictureInPictureParams(buildPipParams(autoEnter = isPlayingNow && pipEnabledNow))
         onDispose {
-            activity?.setPictureInPictureParams(
-                PictureInPictureParams
-                    .Builder()
-                    .setAutoEnterEnabled(false)
-                    .build(),
-            )
+            // 必须仍然带上 aspectRatio / sourceRectHint：这个 dispose 在每次播放/暂停、
+            // pipEnabled 变化时都会跑（小窗里点播放键也算）。以前这里重建了一个只含
+            // autoEnter 的空 params，等于把退出过渡要用的落点抹掉——壳拿不到落点就只能
+            // 按旧尺寸 1:1 裁切揭示，观感就是画面被突放大一下（实测小窗 697 宽时约 1.8x）。
+            activity?.setPictureInPictureParams(buildPipParams(autoEnter = false))
         }
     }
 
-    // sourceRectHint/aspectRatio 防抖后推送：进出 PiP 的树重建会让 onGloballyPositioned
-    // 上报中间尺寸，mid-transition 改 params 会让系统转场动画重定向（实测退出小窗画面抖动）。
-    // 布局稳定 300ms 后按最终 rect 推送，转场动画不再被中途改目标。
-    LaunchedEffect(videoSourceRect, targetAspectRatio) {
-        if (videoSourceRect == null || isInPipMode) return@LaunchedEffect
-        delay(300)
-        activity?.setPictureInPictureParams(buildPipParams(autoEnter = isPlayingNow && pipEnabledNow))
+    // 常规布局变化（旋转、窗口拉伸、退出 PiP 后尺寸回弹）时按最新画面矩形刷新 params。
+    // 转场进行中（仍在 PiP 小窗几何里）一律不推，避免中途改目标让系统转场重定向。
+    //
+    // 刻意没有用 `androidx.activity.trackPipAnimationHintView`（文档推荐的那个 helper）：
+    // 它的实现是 `setPictureInPictureParams(Builder().setSourceRectHint(hint).build())`，
+    // 每次位置变化都会把 params 重建到只剩 hint——aspectRatio / actions / autoEnter /
+    // seamless 全被抹掉。而"params 被重建空壳"正是退出转场退化成 1:1 裁切的根因
+    // （见上面 DisposableEffect 的 onDispose 注释），换它等于把同一个坑再踩一遍；
+    // 且它同样是 OnLayoutChangeListener，没有任何时序优势。
+    fun pushPipHintNow(stageBounds: Rect) {
+        val act = activity ?: return
+        act.setPictureInPictureParams(
+            buildPipParams(
+                autoEnter = isPlayingNow && pipEnabledNow,
+                hint = calculateVideoSourceRect(stageBounds, targetAspectRatio, resizeMode),
+            ),
+        )
     }
 
     // 生命周期联动：ON_PAUSE 落盘续播点；ON_STOP 才暂停。
@@ -760,9 +818,21 @@ fun PlayerScreen(
                 Modifier
                     .fillMaxSize()
                     .onGloballyPositioned { coords ->
-                        // PiP 期间槽位尺寸是小窗尺寸，写进 sourceRectHint 会让退出动画落点错误
-                        if (!isInPipMode) {
-                            rawStageBounds = coords.boundsInWindow().toAndroidRect()
+                        val bounds = coords.boundsInWindow().toAndroidRect()
+                        // 只认「铺满窗口宽度」的稳定槽位：入场/退场动画期间宽度是 1188、1266…，
+                        // 这些中间态会被 calculateVideoSourceRect 按 16:9 内缩成一个错误矩形，
+                        // 一旦被当成 sourceRectHint 推给系统，退出转场就按错落点缩放——
+                        // 这就是"有时跳有时不跳"的来源（实测一次入场能连推几十个中间值）。
+                        // 宽度比对同时挡住了小窗尺寸（小窗宽度 ≠ 全屏窗口宽度）与首帧的 0x0。
+                        val isStableStage = bounds.height() > 0 && bounds.width() == windowSize.width
+                        // 两道闸口：pipSettling 覆盖「事件已退出但窗口还在回弹」的收尾期，
+                        // isPipWindow 覆盖「窗口已缩小但 PiP 事件还没到」的入场期（几何先行）。
+                        // 转场/回弹期间推 params 会被系统按新 sourceRectHint 重定向动画（画面突跳放大）
+                        if (!isStableStage || isPipWindow || pipSettling.value) return@onGloballyPositioned
+                        if (bounds != rawStageBounds) {
+                            rawStageBounds = bounds
+                            // 退出小窗、窗口回弹落地后，或在常规态旋转/拉伸时，按新落点刷新 params
+                            pushPipHintNow(bounds)
                         }
                     },
         )
@@ -787,9 +857,9 @@ fun PlayerScreen(
                 PlayerStageSection(
                     PlayerStageConfig(
                         isLandscape = true,
-                        isLocked = !isInPipMode && isScreenLocked,
-                        hideChrome = isInPipMode,
-                        showEpisodeQueue = !isInPipMode && (uiState.episodes.size > 1 || uiState.queue.size > 1),
+                        isLocked = !isPipLayout && isScreenLocked,
+                        hideChrome = isPipLayout,
+                        showEpisodeQueue = !isPipLayout && (uiState.episodes.size > 1 || uiState.queue.size > 1),
                         onBackClick = { toggleFullscreen(false) },
                         onToggleFullscreen = { toggleFullscreen(false) },
                         onOpenEpisodeQueue = openEpisodeQueuePanel,
@@ -801,19 +871,31 @@ fun PlayerScreen(
                 )
             }
         } else {
-            // 竖屏常规态：顶部 16:9 播放窗口 + 播放源切换 + 底部选集网格
+            // 竖屏常规态：顶部 16:9 播放窗口 + 播放源切换 + 底部选集网格。
+            // 让位跟 [isPipLayout] 走：转场结束前一直保持小窗形态（视频铺满、无让位），
+            // 转场结束后才用 300ms 动画把视频落回状态栏下方——全屏竖屏的视频比小窗内容低
+            // 一个状态栏高度，瞬切就是"被顶一下"，而在转场里变则是"Tab 出现把画面挤小上移"。
+            val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+            val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            // 退出方向走动画落位；进入方向**不能**走动画状态——animateDpAsState 天然晚一帧，
+            // 小窗第一帧会带着旧 padding 渲染，就是"进小窗闪一下"。所以进入直接取 0（同帧）。
+            val topInsetAnim by animateDpAsState(
+                targetValue = if (isPipLayout) 0.dp else statusBarTop,
+                animationSpec = tween(durationMillis = PIP_INSET_SETTLE_MS),
+                label = "playerTopInset",
+            )
+            val bottomInsetAnim by animateDpAsState(
+                targetValue = if (isPipLayout) 0.dp else navBarBottom,
+                animationSpec = tween(durationMillis = PIP_INSET_SETTLE_MS),
+                label = "playerBottomInset",
+            )
+            val topInset = if (isPipLayout) 0.dp else topInsetAnim
+            val bottomInset = if (isPipLayout) 0.dp else bottomInsetAnim
             Column(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        // PiP 窗口里去掉系统栏留白，画面铺满小窗
-                        .then(
-                            if (isInPipMode) {
-                                Modifier
-                            } else {
-                                Modifier.statusBarsPadding().navigationBarsPadding()
-                            },
-                        ),
+                        .padding(top = topInset, bottom = bottomInset),
             ) {
                 Box(
                     modifier =
@@ -826,7 +908,7 @@ fun PlayerScreen(
                         PlayerStageConfig(
                             isLandscape = false,
                             isLocked = false,
-                            hideChrome = isInPipMode,
+                            hideChrome = isPipLayout,
                             showEpisodeQueue = false,
                             onBackClick = onBackClick,
                             onToggleFullscreen = { toggleFullscreen(true) },
@@ -836,8 +918,8 @@ fun PlayerScreen(
                     )
                 }
 
-                // PiP 窗口只显示画面：下方 Tab 与内容整体不组合
-                if (isInPipMode) {
+                // 小窗只显示画面：下方 Tab 与内容整体不组合（转场结束前也保持这样）
+                if (isPipLayout) {
                     return@Column
                 }
 
@@ -1579,6 +1661,8 @@ private fun rememberIsInPipMode(): Boolean {
         val listener =
             Consumer<PictureInPictureModeChangedInfo> { info ->
                 isInPipMode = info.isInPictureInPictureMode
+                // 诊断（临时，搜 PIPT）
+                logger.d { "PIPT pipMode=${info.isInPictureInPictureMode} t=${SystemClock.uptimeMillis()}" }
             }
         activity.addOnPictureInPictureModeChangedListener(listener)
         onDispose {
@@ -1590,6 +1674,31 @@ private fun rememberIsInPipMode(): Boolean {
 }
 
 /**
+ * 当前窗口是否是 PiP 小窗（只画画面、不给系统栏让位、收起下方内容）。
+ *
+ * **判定只用窗口几何，不看 PiP 事件，也不受会话锁存牵制**：
+ * - `onPictureInPictureModeChanged` 比窗口真正缩小晚 50ms 以上（实测）：布局等它，小窗里会先
+ *   渲染几帧带控制栏图标的整页，"无缝"直接破功；
+ * - 但只用「面积小于 `maximumWindowMetrics`」会把分屏/自由窗口判成小窗（后者是「展开到全屏
+ *   时的最大可能尺寸」，分屏天然小于它），控制层与下方内容会被整体隐藏。
+ *
+ * 所以判据是**宽和高都小于最大可能尺寸**：分屏无论上下还是左右，必有一条边铺满整屏；
+ * PiP 是浮动小窗，两条边都小。逐项比较也天然覆盖旋转（宽高互换后仍各自相等）。
+ * 已知取舍：桌面模式下的自由窗口同样两条边都小，会被按小窗布局处理。
+ */
+@Composable
+private fun rememberIsPipWindow(activity: ComponentActivity?): Boolean {
+    val containerSize = LocalWindowInfo.current.containerSize
+    val configuration = LocalConfiguration.current
+    val maxBounds =
+        remember(activity, configuration) {
+            activity?.windowManager?.maximumWindowMetrics?.bounds
+        } ?: return false
+    if (containerSize.width <= 0 || containerSize.height <= 0) return false
+    return containerSize.width < maxBounds.width() && containerSize.height < maxBounds.height()
+}
+
+/**
  * 横竖屏共用同一段 [PlayerVideoStage] 装配时，仅随形态不同的差异项。
  * 其余约 45 个参数（播放状态、手势回调、弹幕、轨道入口等）在 PlayerStageSection 中固定，
  * 新增能力只改一处，不再出现两份调用点各自漂移。
@@ -1597,7 +1706,7 @@ private fun rememberIsInPipMode(): Boolean {
 private data class PlayerStageConfig(
     val isLandscape: Boolean,
     val isLocked: Boolean,
-    /** PiP 小窗：只留画面本体，控制层/进度线/选集入口全部不渲染 */
+    /** PiP 小窗（含退出转场的几何兜底期）：只留画面本体，控制层/进度线/选集入口全部不渲染 */
     val hideChrome: Boolean = false,
     val showEpisodeQueue: Boolean,
     val onBackClick: () -> Unit,

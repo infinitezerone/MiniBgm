@@ -16,8 +16,15 @@ import android.view.SurfaceView
 import com.infinitezerone.minibgm.core.common.bgmLogger
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 private val logger = bgmLogger("Bgm/MpvSurface")
+
+/** buffer 与 View 宽高比的容差：只吸收 16:9 盒子的整数取整误差，不放过真实比例变化 */
+private const val ASPECT_EPSILON = 0.01
+
+/** 尺寸稳定多久后重锁 buffer：避开 PiP 转场期间连帧改尺寸 */
+private const val RELOCK_DEBOUNCE_MS = 80L
 
 /**
  * mpv render API 的渲染宿主（会话级，**不随 View 重建而销毁**）。
@@ -389,7 +396,7 @@ class MpvSurfaceView(
 ) : SurfaceView(context),
     SurfaceHolder.Callback {
     /**
-     * 锁定的 buffer 尺寸（只增不减）。
+     * 锁定的 buffer 尺寸（比例不变时只增不减）。
      *
      * PiP 转场时窗口尺寸会突变（实测 1272x716 ↔ 697x392）。若让 buffer 跟着变，mpv 就得
      * 按新尺寸重新缩放画面，而这次重排比窗口变换晚 38~73ms——进小窗时窗口先缩、画面后缩，
@@ -398,9 +405,26 @@ class MpvSurfaceView(
      * 锁定后 buffer 尺寸恒定，窗口怎么变都只由合成器做一次等比缩放，与 UI 同一拍落地。
      * 取"只增不减"是为了横竖屏：横屏会把锁定量抬上去，回竖屏时保持大尺寸渲染再缩小显示，
      * 画质无损；而 PiP 只变小、永不触发重锁。
+     *
+     * **前提是 buffer 与 View 的宽高比一致**：SurfaceView 把 buffer 映射到 View 用的是
+     * x/y 各自独立的缩放（AOSP `SurfaceView.updateSurface` 的 postScaleX/postScaleY），
+     * 比例不一致时"缩小显示"就变成拉伸——20:9 横屏窗口进 16:9 的 PiP 窗口、分屏/桌面模式
+     * 拖拽改变窗口比例都会命中。mpv 在 buffer 内按 keepaspect 渲染，拉伸发生在合成阶段，
+     * 渲染侧无法纠正，所以比例一变必须按新比例重锁。
      */
     private var lockedWidth = 0
     private var lockedHeight = 0
+
+    private var pendingWidth = 0
+    private var pendingHeight = 0
+
+    /** 尺寸稳定后再重锁：PiP 转场期间可能连帧改尺寸，逐帧 setFixedSize 会让 mpv 每帧重排 */
+    private val relockRunnable =
+        Runnable {
+            if (pendingWidth > 0 && pendingHeight > 0 && shouldRelock(pendingWidth, pendingHeight)) {
+                lockBufferSize(holder, pendingWidth, pendingHeight)
+            }
+        }
 
     init {
         holder.addCallback(this)
@@ -415,8 +439,31 @@ class MpvSurfaceView(
     ) {
         super.onSizeChanged(w, h, oldw, oldh)
         logger.d { "viewSize ${oldw}x$oldh -> ${w}x$h 锁定 ${lockedWidth}x$lockedHeight" }
-        // PiP 只让 View 变小，走不进这里；横屏把面积抬大才重锁
-        if (w.toLong() * h > lockedWidth.toLong() * lockedHeight) lockBufferSize(holder, w, h)
+        // 比例变了必须重锁（否则合成阶段拉伸画面）；比例不变时只有面积变大才重锁——
+        // PiP 只让 View 变小，走不进重锁，这正是转场不抖的前提
+        if (!shouldRelock(w, h)) return
+        pendingWidth = w
+        pendingHeight = h
+        removeCallbacks(relockRunnable)
+        postDelayed(relockRunnable, RELOCK_DEBOUNCE_MS)
+    }
+
+    /**
+     * 是否需要按新尺寸重锁 buffer。
+     *
+     * - 比例变了：必须重锁，否则合成阶段会拉伸画面（见 [lockedWidth] 的说明）；
+     * - 比例不变：只在面积变大时重锁（PiP 只缩小，永远走不到这里）。
+     */
+    private fun shouldRelock(
+        w: Int,
+        h: Int,
+    ): Boolean {
+        if (w <= 0 || h <= 0) return false
+        if (lockedWidth <= 0 || lockedHeight <= 0) return true
+        val lockedAspect = lockedWidth.toDouble() / lockedHeight
+        val aspectChanged = abs(w.toDouble() / h - lockedAspect) > lockedAspect * ASPECT_EPSILON
+        if (aspectChanged) return true
+        return w.toLong() * h > lockedWidth.toLong() * lockedHeight
     }
 
     private fun lockBufferSize(
@@ -427,6 +474,8 @@ class MpvSurfaceView(
         if (w <= 0 || h <= 0) return
         lockedWidth = w
         lockedHeight = h
+        pendingWidth = 0
+        pendingHeight = 0
         holder.setFixedSize(w, h)
         logger.d { "锁定 buffer 尺寸 ${w}x$h" }
     }
@@ -475,6 +524,7 @@ class MpvSurfaceView(
     override fun onDetachedFromWindow() {
         // 只解绑回调；surface 的解绑由 surfaceDestroyed 负责，且带归属校验，
         // 避免"新 View 先绑、旧 View 后拆"把新画面掐掉
+        removeCallbacks(relockRunnable)
         MpvNative.unbindRenderView(this)
         super.onDetachedFromWindow()
     }
