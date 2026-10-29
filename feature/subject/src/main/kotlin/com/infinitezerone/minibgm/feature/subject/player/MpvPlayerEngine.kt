@@ -22,7 +22,7 @@ private const val SCALER_QUALITY = "quality"
  * 专为 ASS/SSA 特效字幕、内封字体与 10-bit HEVC 的动漫片源提供参考级渲染。
  *
  * 架构要点：
- * - `vo=libmpv` + native EGL 渲染循环：surface 重建只是换 EGLSurface，
+ * - `vo=libmpv` + [MpvRenderer] 的常驻 EGL 上下文：surface 重建只是换 EGLSurface，
  *   旋转/PiP/后台往返零拆卸，没有任何 vo 拆建时序竞态。
  * - loadfile 不依赖 surface：无视图时照常解码出声，视图出现即出画。
  * - 事件回调经 [MpvNative] 事件线程到达，[notify] 统一收口主线程。
@@ -208,8 +208,8 @@ class MpvPlayerEngine(
                 MpvNative.setOptionString("sub-auto", "all")
                 MpvNative.setOptionString("sub-font-provider", "none")
                 MpvNative.setOptionString("sub-ass-override", "no")
-                // 官方默认 no：字幕在输出分辨率上由 OSD 通道绘制，不进视频合成 pass。
-                // 旧值 yes 让 libass 光栅化 + 全屏混合都压在渲染线程上（实测 8.9% 单核的主要构成）
+                // 官方默认 no：字幕走 OSD 通道在输出分辨率绘制，不进视频合成 pass
+                // （实测 yes→no GPU 忙率 14%→11%）
                 MpvNative.setOptionString("blend-subtitles", "no")
                 applyScalerProfile()
                 MpvNative.init()
@@ -229,7 +229,7 @@ class MpvPlayerEngine(
                 logger.d { "mpv 初始化完成 vo=${MpvNative.getPropertyString("vo")}" }
                 // 渲染视图通常比 mpv 句柄先就绪（视图在组合阶段创建，句柄在首次 load 时创建），
                 // 其 onSurfaceCreated 里的建上下文会因句柄为空而失败——此处补建一次
-                MpvNative.retryRenderContext()
+                MpvNative.notifyMpvReady()
             } catch (t: Throwable) {
                 logger.e(t) { "MpvPlayerEngine 初始化失败" }
                 isInitialized.set(false)

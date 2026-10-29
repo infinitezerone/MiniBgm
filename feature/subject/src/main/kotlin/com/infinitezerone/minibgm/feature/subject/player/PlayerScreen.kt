@@ -302,7 +302,9 @@ fun PlayerScreen(
             .Builder()
             .setAspectRatio(targetAspectRatio)
             .setAutoEnterEnabled(autoEnter)
-            // 无缝缩放：进出 PiP 时画面平滑过渡而非瞬间跳变（API 31+）
+            // 无缝缩放实验：旧版黑闪的三根因（首帧慢 / viewport 旧尺寸 / 双跳延迟）已在
+            // MpvRenderer 修复（首帧同步画 + EGL 真实尺寸 + setViewport 收口渲染线程），
+            // 这里 A/B 验证 mpv 能否承受真·无缝转场；黑闪复现则回退为 !isMpv（快照动画）
             .setSeamlessResizeEnabled(true)
             // 以实际视频画面区域为过渡起点，保证宽高比与 targetAspectRatio 一致
             .apply { videoSourceRect?.let { setSourceRectHint(it) } }
@@ -628,8 +630,10 @@ fun PlayerScreen(
         qualityAppliedKey = playback.mediaUrl
     }
 
-    // 单实例渲染节点：利用 movableContentOf 在常规树与 PiP 极简树之间无损转移 Surface，
-    // 彻底杜绝销毁重建引发的黑闪与解码器 Surface 重附着开销。
+    // 单实例渲染节点：movableContentOf 在常规树与 PiP 极简树之间转移时保住 View 实例
+    // 与 Compose 状态（EGLContext / mpv render context 随之常驻）。注意 View 跨父容器
+    // reparent 时 Android 仍会销毁重建 surface——首帧速度由 MpvRenderer 的同步补画兜底，
+    // 转场动画的观感由 buildPipParams 的 seamlessResizeEnabled 按引擎分档兜底。
     val videoSurface =
         remember(player, isMpv, controller) {
             movableContentOf {
