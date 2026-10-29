@@ -56,7 +56,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -303,10 +302,10 @@ fun PlayerScreen(
             .Builder()
             .setAspectRatio(targetAspectRatio)
             .setAutoEnterEnabled(autoEnter)
-            // 无缝缩放实验：旧版黑闪的三根因（首帧慢 / viewport 旧尺寸 / 双跳延迟）已在
-            // MpvRenderer 修复（首帧同步画 + EGL 真实尺寸 + setViewport 收口渲染线程），
-            // 这里 A/B 验证 mpv 能否承受真·无缝转场；黑闪复现则回退为 !isMpv（快照动画）
-            .setSeamlessResizeEnabled(true)
+            // 关掉 seamless：实测 seamless=true 时 shell 把 PiP 转场动画整个跳过
+            // （scheduled→entered 仅 39ms），窗口瞬变后画面要等 44~63ms 的重排才追上，
+            // 观感就是进/出小窗各"抖一下"。改回快照缩放动画让尺寸变化被动画遮住。
+            .setSeamlessResizeEnabled(false)
             // 以实际视频画面区域为过渡起点，保证宽高比与 targetAspectRatio 一致
             .apply { videoSourceRect?.let { setSourceRectHint(it) } }
             // 小窗里的播放/暂停按钮：不注册 RemoteAction，系统那条按钮就是死的
@@ -314,11 +313,10 @@ fun PlayerScreen(
             .build()
 
     fun enterPictureInPicture() {
-        // 手动入口不受「自动画中画」开关影响：那个开关只决定返回桌面时是否自动小窗
+        // 手动入口不受「自动画中画」开关影响：那个开关只决定返回桌面时是否自动小窗。
+        // 刻意保留方向锁：若在此释放，退出小窗会按手机物理朝向重建布局，
+        // 布局在转场中间整体翻转（横屏→竖屏）= reparent + 落点错位，抖动明显。
         val act = activity ?: return
-        if (act.requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
-            act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
         act.enterPictureInPictureMode(buildPipParams(autoEnter = true))
     }
 
@@ -358,10 +356,8 @@ fun PlayerScreen(
         if (isInPipMode) {
             overlayHostState.cancelActive()
             isScreenLocked = false
-            val act = activity
-            if (act != null && act.requestedOrientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
-                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            }
+            // 方向锁保留到退出之后：释放会让退出转场中途翻转布局（实测抖动主因），
+            // 朝向差异交由退出后的 isSystemLandscape 效果在动画结束再修正
         }
     }
 
@@ -595,7 +591,7 @@ fun PlayerScreen(
     // 上报中间尺寸，mid-transition 改 params 会让系统转场动画重定向（实测退出小窗画面抖动）。
     // 布局稳定 300ms 后按最终 rect 推送，转场动画不再被中途改目标。
     LaunchedEffect(videoSourceRect, targetAspectRatio) {
-        if (videoSourceRect == null) return@LaunchedEffect
+        if (videoSourceRect == null || isInPipMode) return@LaunchedEffect
         delay(300)
         activity?.setPictureInPictureParams(buildPipParams(autoEnter = isPlayingNow && pipEnabledNow))
     }
@@ -641,22 +637,17 @@ fun PlayerScreen(
         qualityAppliedKey = playback.mediaUrl
     }
 
-    // 单实例渲染节点：movableContentOf 在常规树与 PiP 极简树之间转移时保住 View 实例
-    // 与 Compose 状态（EGLContext / mpv render context 随之常驻）。注意 View 跨父容器
-    // reparent 时 Android 仍会销毁重建 surface——首帧速度由 MpvRenderer 的同步补画兜底，
-    // 转场动画的观感由 buildPipParams 的 seamlessResizeEnabled 按引擎分档兜底。
-    val videoSurface =
-        remember(player, isMpv, controller) {
-            movableContentOf {
-                PlayerVideoSurface(
-                    player = player,
-                    controller = controller,
-                    isMpv = isMpv,
-                    resizeMode = resizeMode,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        }
+    // 视频渲染节点：常规态与 PiP 共用同一组合位置（见下方骨架），进出小窗只改尺寸与
+    // 兄弟节点显隐，View 不 reparent → surface 只 resize、不销毁重建（PiP 转场零闪零抖）。
+    val videoSurface: @Composable () -> Unit = {
+        PlayerVideoSurface(
+            player = player,
+            controller = controller,
+            isMpv = isMpv,
+            resizeMode = resizeMode,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
 
     // 横竖屏共用同一段 PlayerVideoStage 装配（约 50 参），仅 PlayerStageConfig 声明的 8 项随形态不同——
     // 消灭两处 95 行调用点 85% 的重复，防止后续加参数时两处漂移
@@ -741,6 +732,7 @@ fun PlayerScreen(
                     }
             },
             onOpenEpisodeQueue = config.onOpenEpisodeQueue,
+            hideChrome = config.hideChrome,
             onOpenSourcesPanel = openSourcesPanel,
             onToggleLock = config.onToggleLock,
             onRequestOpenSources = onRequestOpenSources,
@@ -768,22 +760,12 @@ fun PlayerScreen(
                 Modifier
                     .fillMaxSize()
                     .onGloballyPositioned { coords ->
-                        rawStageBounds = coords.boundsInWindow().toAndroidRect()
+                        // PiP 期间槽位尺寸是小窗尺寸，写进 sourceRectHint 会让退出动画落点错误
+                        if (!isInPipMode) {
+                            rawStageBounds = coords.boundsInWindow().toAndroidRect()
+                        }
                     },
         )
-    }
-
-    // 画中画模式下只显示纯净视频视口
-    if (isInPipMode) {
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black),
-        ) {
-            videoSurface()
-        }
-        return
     }
 
     Scaffold(
@@ -796,6 +778,8 @@ fun PlayerScreen(
                 bottomOffset = if (isLandscape) 0.dp else 12.dp,
             )
         },
+        // 背景色不参与 PiP 布局：小窗是 16:9、视频也是 16:9，铺满后根本看不到底色，
+        // 而按 PiP 状态切黑会在退出转场收尾时把整屏背景刷一遍（观感=闪一下）
         containerColor = if (isLandscape) Color.Black else MaterialTheme.colorScheme.background,
     ) { _ ->
         if (isLandscape) {
@@ -803,8 +787,9 @@ fun PlayerScreen(
                 PlayerStageSection(
                     PlayerStageConfig(
                         isLandscape = true,
-                        isLocked = isScreenLocked,
-                        showEpisodeQueue = uiState.episodes.size > 1 || uiState.queue.size > 1,
+                        isLocked = !isInPipMode && isScreenLocked,
+                        hideChrome = isInPipMode,
+                        showEpisodeQueue = !isInPipMode && (uiState.episodes.size > 1 || uiState.queue.size > 1),
                         onBackClick = { toggleFullscreen(false) },
                         onToggleFullscreen = { toggleFullscreen(false) },
                         onOpenEpisodeQueue = openEpisodeQueuePanel,
@@ -821,8 +806,14 @@ fun PlayerScreen(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .statusBarsPadding()
-                        .navigationBarsPadding(),
+                        // PiP 窗口里去掉系统栏留白，画面铺满小窗
+                        .then(
+                            if (isInPipMode) {
+                                Modifier
+                            } else {
+                                Modifier.statusBarsPadding().navigationBarsPadding()
+                            },
+                        ),
             ) {
                 Box(
                     modifier =
@@ -835,6 +826,7 @@ fun PlayerScreen(
                         PlayerStageConfig(
                             isLandscape = false,
                             isLocked = false,
+                            hideChrome = isInPipMode,
                             showEpisodeQueue = false,
                             onBackClick = onBackClick,
                             onToggleFullscreen = { toggleFullscreen(true) },
@@ -842,6 +834,11 @@ fun PlayerScreen(
                             onToggleLock = {},
                         ),
                     )
+                }
+
+                // PiP 窗口只显示画面：下方 Tab 与内容整体不组合
+                if (isInPipMode) {
+                    return@Column
                 }
 
                 // B站风格双 Tab 分栏：[简介] 与 [讨论 (数量)]
@@ -1079,6 +1076,8 @@ private fun PlayerVideoStage(
     onOpenSourcesPanel: (() -> Unit)? = null,
     onToggleLock: () -> Unit,
     onRequestOpenSources: (() -> Unit)?,
+    /** PiP 小窗：隐藏控制层与底边进度线（只留画面，系统在窗口内接管交互） */
+    hideChrome: Boolean = false,
     showPipButton: Boolean = true,
     currentQualityLabel: String? = null,
     onOpenTrackSelection: () -> Unit = {},
@@ -1161,7 +1160,8 @@ private fun PlayerVideoStage(
         // 控制栏收起时常驻在视频最底边的极简进度线（播放中、暂停中或缓冲中均保持可见，避免突兀消失）
         AnimatedVisibility(
             visible =
-                !controlsVisible &&
+                !hideChrome &&
+                    !controlsVisible &&
                     !playback.isEnded &&
                     errorMessage == null &&
                     playback.durationMs > 0L,
@@ -1219,9 +1219,12 @@ private fun PlayerVideoStage(
 
         AnimatedVisibility(
             visible =
-                controlsVisible ||
-                    playback.isEnded ||
-                    errorMessage != null,
+                !hideChrome &&
+                    (
+                        controlsVisible ||
+                            playback.isEnded ||
+                            errorMessage != null
+                    ),
             enter = fadeIn(tween(100)),
             exit = fadeOut(tween(100)),
             modifier = Modifier.fillMaxSize(),
@@ -1594,6 +1597,8 @@ private fun rememberIsInPipMode(): Boolean {
 private data class PlayerStageConfig(
     val isLandscape: Boolean,
     val isLocked: Boolean,
+    /** PiP 小窗：只留画面本体，控制层/进度线/选集入口全部不渲染 */
+    val hideChrome: Boolean = false,
     val showEpisodeQueue: Boolean,
     val onBackClick: () -> Unit,
     val onToggleFullscreen: () -> Unit,
