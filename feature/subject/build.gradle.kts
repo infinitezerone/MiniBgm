@@ -21,6 +21,8 @@ androidLibrary {
 registerPrebuiltJniLibsForLibrary(
     buildSubPath = "mpv-native/jniLibs",
     libraryFileName = "libminibgm_mpv.so",
+    // 源码比产物新就卡死构建：陈旧 .so 会让 Kotlin 与新 JNI 桥不匹配，表现为黑屏且不报错
+    sourceDir = "crates/minibgm-mpv",
 )
 
 dependencies {

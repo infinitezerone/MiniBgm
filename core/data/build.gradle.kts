@@ -15,6 +15,7 @@ kmpAndroidLibrary {
 registerPrebuiltJniLibs(
     buildSubPath = "torrent-native/jniLibs",
     libraryFileName = "libminibgm_torrent.so",
+    sourceDir = "crates/minibgm-torrent",
 )
 
 // 动态 BT 扩展的唯一信任锚：构建期直接从即将随 APK 分发的预构建 .so 计算哈希。

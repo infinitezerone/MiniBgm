@@ -342,6 +342,9 @@ pub fn run_native_build(
 
     if !force && verify_artifacts_exist(&out_dir, target.lib_name, abis) && recorded == fingerprint
     {
+        // 命中缓存也要刷新指纹戳的 mtime：Gradle 侧用「源码 mtime vs 指纹戳 mtime」判断
+        // 产物是否过期，戳不更新会让 build-native 之后的构建继续被判为过时而误报。
+        let _ = fs::write(&stamp_path, format!("{}\n", fingerprint));
         println!(
             "[native] ✓ {} 产物已是最新（命中源码指纹缓存）",
             target.crate_name

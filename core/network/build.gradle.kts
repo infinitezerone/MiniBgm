@@ -13,6 +13,7 @@ kmpAndroidLibrary {
 registerPrebuiltJniLibs(
     buildSubPath = "ech-native/jniLibs",
     libraryFileName = "libminibgm_ech.so",
+    sourceDir = "crates/minibgm-ech",
 )
 
 kotlin {
