@@ -9,10 +9,10 @@ private val logger = bgmLogger("Bgm/MpvNative")
  * libmpv 原生桥（minibgm-mpv.so）：控制面 + render API + 事件泵。
  *
  * 线程契约：
- * - 控制调用（create/load/property）主线程发起即可；
+ * - 控制调用（create/load/property/setSurface）主线程发起即可；
  * - onEvent / onProperty* 来自原生事件线程，消费方必须自行收口主线程
  *   （MpvPlayerEngine.notify 承担）；
- * - onRenderUpdate 来自 mpv 渲染线程，MpvRenderView 响应 requestRender。
+ * - 帧渲染（update/render/swap/换缓冲）全程在原生 mpv-gl 线程，零 JNI 穿透。
  *
  * 生命周期：进程级单句柄——[create] 前原生层自动 terminate 残留旧句柄，
  * 任何时序下都不会触发双句柄 assert 自杀。
@@ -51,36 +51,6 @@ object MpvNative {
     @Volatile
     var eventListener: EventListener? = null
 
-    @Volatile
-    var renderUpdateListener: (() -> Unit)? = null
-
-    /**
-     * 当前绑定中的渲染视图（[MpvSurfaceView]，自持 EGL）。
-     *
-     * 时序陷阱：Compose 进入播放页时会**先**组合出视图，而 mpv 句柄要等第一次
-     * `create/init`（由 `load()` 触发）才存在。视图 surfaceCreated 早于句柄就绪时，
-     * 原生侧会因 `mpv_handle()` 为空而放弃创建 render context——表现为黑屏 + 无限缓冲。
-     * 因此引擎初始化完成后必须回头通知视图补建，见 [notifyMpvReady]。
-     */
-    @Volatile
-    private var renderViewRef: java.lang.ref.WeakReference<MpvSurfaceView>? = null
-
-    fun bindRenderView(view: MpvSurfaceView) {
-        renderViewRef = java.lang.ref.WeakReference(view)
-        renderUpdateListener = { view.requestRenderSafely() }
-    }
-
-    fun unbindRenderView(view: MpvSurfaceView) {
-        if (renderViewRef?.get() === view) {
-            renderViewRef = null
-            renderUpdateListener = null
-        }
-    }
-
-    /** mpv 句柄（create+init）是否就绪：视图据此判断能否建 render context */
-    @Volatile
-    var isMpvHandleReady: Boolean = false
-
     /**
      * render context 是否已建成。
      *
@@ -96,30 +66,16 @@ object MpvNative {
     @Volatile
     var onRenderContextBecameReady: (() -> Unit)? = null
 
-    /** 渲染宿主在渲染线程建好 render context 后调用 */
-    fun markRenderContextReady() {
-        isRenderContextReady = true
-        onRenderContextBecameReady?.invoke()
-    }
-
-    /** 上下文释放后调用 */
+    /** 上下文释放后调用（native 侧 create 时已同步复位，这里只清 Kotlin 侧标志） */
     fun markRenderContextReleased() {
         isRenderContextReady = false
-        // mpv 句柄重建后，旧上下文已随句柄作废；宿主必须同步复位，
-        // 否则它会以为"已建过"而跳过 renderContextCreate → 新句柄没有上下文 →
-        // vo 报 `No render context set.`，表现为只有声音、画面全黑（实测复现）
-        MpvRenderer.resetContextState()
     }
 
-    /** 同步等待渲染线程释放上下文（销毁 mpv 句柄前必须先做完） */
-    fun releaseRenderContextBlocking() {
-        MpvRenderer.releaseRenderContextBlocking()
-        isRenderContextReady = false
-    }
-
-    /** mpv create/init 完成后调用：让已存在的渲染视图补建 render context（幂等） */
-    fun notifyMpvReady() {
-        renderViewRef?.get()?.requestRenderContext()
+    /** native 渲染线程建好 render context 后回调（原生调用，勿手动触发） */
+    @JvmStatic
+    fun onRenderContextReady() {
+        isRenderContextReady = true
+        onRenderContextBecameReady?.invoke()
     }
 
     // ---------- 控制面 ----------
@@ -178,22 +134,19 @@ object MpvNative {
         format: Int,
     )
 
-    // ---------- render API ----------
+    // ---------- 渲染宿主（native EGL 循环：建上下文/查尺寸/渲染/换缓冲全在 native 线程，帧路径零 JNI） ----------
 
-    /** 须在 EGL 上下文 current 的线程调用（GLSurfaceView onSurfaceCreated）；false 表示未建成 */
-    external fun renderContextCreate(): Boolean
+    /** 绑定 surface（同对象重复绑定会被原生侧忽略；换 View 时旧 EGLSurface 自动拆除复用上下文） */
+    external fun setSurface(surface: android.view.Surface)
 
-    external fun renderContextRender(
-        width: Int,
-        height: Int,
-    )
+    /**
+     * 解绑 surface。原生侧带归属校验：布局切换时新旧回调会倒序到达，
+     * 迟到的旧回调必须忽略，否则刚挂好的新画面会被掐掉（黑屏）。
+     */
+    external fun clearSurface(surface: android.view.Surface)
 
-    /** mpv 是否真的有新帧可画（MPV_RENDER_UPDATE_FRAME） */
-    external fun renderContextUpdate(): Boolean
-
-    external fun renderContextReportSwap()
-
-    external fun renderContextRelease()
+    /** mpv 句柄就绪后由引擎触发：让已存在的 surface 补建 render context（幂等） */
+    external fun retryRenderContext()
 
     // ---------- 原生回调入口（勿手动调用） ----------
 
@@ -238,11 +191,6 @@ object MpvNative {
         value: String,
     ) {
         eventListener?.onPropertyString(name, value)
-    }
-
-    @JvmStatic
-    fun onRenderUpdate() {
-        renderUpdateListener?.invoke()
     }
 
     // ---------- mpv 格式常量 ----------

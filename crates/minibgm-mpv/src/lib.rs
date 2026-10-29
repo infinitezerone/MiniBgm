@@ -10,11 +10,11 @@
 //! - render API：mpv_render_context 常驻，surface 重建只是 GL 层换渲染目标，
 //!   解码管线不动——这是旋转/PiP 稳定性的根基。
 
-use jni::objects::{GlobalRef, JClass, JObjectArray, JString, JValue};
+use jni::objects::{GlobalRef, JClass, JObject, JObjectArray, JString, JValue};
 use jni::sys::{jboolean, jdouble, jint, jlong, jobject, JNI_VERSION_1_6};
 use jni::{JNIEnv, JavaVM};
 use libloading::{Library, Symbol};
-use std::ffi::{c_char, c_double, c_int, c_void, CStr, CString};
+use std::ffi::{c_char, c_double, c_int, c_uint, c_void, CStr, CString};
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -671,9 +671,12 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_Mp
         unsafe {
             let old = G_MPVP.swap(std::ptr::null_mut(), Ordering::AcqRel);
             if !old.is_null() {
+                // 旧会话的 GL 循环必须先停（线程退出时会顺手释放 render context），
+                // 否则 terminate_destroy 会踩到 GL 线程仍在使用的上下文。
+                // 无旧句柄（首会话）不能停：视图往往先于引擎绑定 surface，杀线程会丢绑定。
+                stop_gl_thread();
                 HANDLE_VALID.store(false, Ordering::Release);
                 G_EVENT_THREAD_EXIT.store(true, Ordering::Release);
-                // render context 必须先于核心释放，否则 terminate_destroy 时它会踩到已析构的核
                 let stale = G_RENDER_CTX.swap(std::ptr::null_mut(), Ordering::AcqRel);
                 if !stale.is_null() {
                     (api.mpv_render_context_free)(stale);
@@ -757,8 +760,9 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_Mp
     _env: JNIEnv,
     _class: JClass,
 ) {
+    // 先停 GL 循环：线程退出前会释放 render context 与 EGL surface
+    stop_gl_thread();
     let _ = with_api(|api| unsafe {
-        // render context 先于核心释放
         let ctx = G_RENDER_CTX.swap(std::ptr::null_mut(), Ordering::AcqRel);
         if !ctx.is_null() {
             (api.mpv_render_context_free)(ctx);
@@ -1094,43 +1098,406 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_Mp
     let _ = result;
 }
 
-// ---------- render API ----------
+// ---------- 渲染宿主：纯 native EGL 循环（帧路径零 JNI） ----------
+//
+// mpv 的 update 回调只做一件事：向 GL 循环投一条 Wake。建上下文、查尺寸、渲染、
+// 换缓冲全在本线程完成，帧路径上没有任何 JNI 穿越——这是与官方 wid 模式拉平
+// 渲染线程 CPU 的关键（此前 Kotlin 循环 8.8% 单核，官方 3.0%）。
+//
+// 表面归属：Compose 重建 View 时「新 surface 先绑、旧 surface 后拆」的迟到回调
+// 必须忽略，否则刚建好的 EGLSurface 会被误拆（黑屏定格）。
 
-unsafe extern "C" fn render_update_callback(_ctx: *mut c_void) {
-    use std::sync::atomic::AtomicU32;
-    static RENDER_CALLS: AtomicU32 = AtomicU32::new(0);
-    let n = RENDER_CALLS.fetch_add(1, Ordering::Relaxed);
-    if n < 3 {
-        nlog(&format!("render_update_callback #{n}"));
+use std::sync::mpsc::{channel, Receiver, Sender};
+
+/// ANativeWindow 裸指针的 Send 包装（只在 GL 线程解引用）
+#[derive(Clone, Copy)]
+struct AWin(*mut c_void);
+unsafe impl Send for AWin {}
+
+enum GlCmd {
+    /// 绑定新 surface（Java 线程已完成归属校验并取出 ANativeWindow）
+    SetSurface(AWin),
+    /// 解绑当前 surface（迟到的旧回调已在 Java 侧被忽略）
+    Clear,
+    /// mpv 有新帧 / 请求补建 render context
+    Wake,
+    /// 退出循环（退出前释放 render context 与 EGL surface）
+    Exit,
+}
+
+static G_GL_TX: Mutex<Option<Sender<GlCmd>>> = Mutex::new(None);
+static G_GL_THREAD: Mutex<Option<std::thread::JoinHandle<()>>> = Mutex::new(None);
+/// 当前归属的 surface（全局引用，供 clearSurface 的同对象校验）
+static G_CUR_SURFACE: Mutex<Option<GlobalRef>> = Mutex::new(None);
+
+fn gl_tx() -> Option<Sender<GlCmd>> {
+    G_GL_TX.lock().ok().and_then(|g| g.clone())
+}
+
+fn ensure_gl_thread() {
+    let mut guard = match G_GL_THREAD.lock() {
+        Ok(g) => g,
+        Err(_) => return,
+    };
+    if guard.is_some() {
+        return;
     }
-    if let Some(VmPtr(vm_ptr)) = G_VM.get() {
-        let Ok(vm) = (unsafe { JavaVM::from_raw(vm_ptr.cast()) }) else {
-            nlog("render_update_callback: JavaVM 指针无效");
-            return;
-        };
-        let attached = vm.attach_current_thread();
-        match attached {
-            Ok(mut guard) => {
-                let env: &mut JNIEnv = &mut guard;
-                call_static(env, "onRenderUpdate", "()V", &[]);
+    let (tx, rx) = channel::<GlCmd>();
+    match std::thread::Builder::new()
+        .name("mpv-gl".into())
+        .spawn(move || gl_loop(rx))
+    {
+        Ok(handle) => {
+            if let Ok(mut t) = G_GL_TX.lock() {
+                *t = Some(tx);
             }
-            Err(e) => {
-                if n < 3 {
-                    nlog(&format!("render_update_callback: attach 失败 {e:?}"));
+            *guard = Some(handle);
+            nlog("mpv-gl: 线程已启动");
+        }
+        Err(e) => nlog(&format!("mpv-gl: 线程创建失败 {e:?}")),
+    }
+}
+
+/// 停掉 GL 循环并等待退出（线程退出前会释放 render context 与 EGL surface）
+fn stop_gl_thread() {
+    let handle = G_GL_THREAD.lock().ok().and_then(|mut g| g.take());
+    if let Some(handle) = handle {
+        if let Some(tx) = gl_tx() {
+            let _ = tx.send(GlCmd::Exit);
+        }
+        let _ = handle.join();
+    }
+    if let Ok(mut t) = G_GL_TX.lock() {
+        *t = None;
+    }
+    if let Ok(mut s) = G_CUR_SURFACE.lock() {
+        *s = None;
+    }
+}
+
+// ----- EGL 符号（dlopen libEGL，与既有 gl_proc_address 共用同一份加载） -----
+
+const EGL_NONE: c_int = 0x3038;
+const EGL_SURFACE_TYPE: c_int = 0x3033;
+const EGL_WINDOW_BIT: c_int = 0x0004;
+const EGL_RED_SIZE: c_int = 0x3024;
+const EGL_GREEN_SIZE: c_int = 0x3023;
+const EGL_BLUE_SIZE: c_int = 0x3022;
+const EGL_ALPHA_SIZE: c_int = 0x3021;
+const EGL_RENDERABLE_TYPE: c_int = 0x3040;
+const EGL_OPENGL_ES2_BIT: c_int = 0x0004;
+const EGL_WIDTH: c_int = 0x3057;
+const EGL_HEIGHT: c_int = 0x3056;
+const EGL_CONTEXT_CLIENT_VERSION: c_int = 0x3098;
+
+struct EglFns {
+    get_display: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+    initialize: unsafe extern "C" fn(*mut c_void, *mut c_int, *mut c_int) -> c_uint,
+    choose_config: unsafe extern "C" fn(
+        *mut c_void,
+        *const c_int,
+        *mut *mut c_void,
+        c_int,
+        *mut c_int,
+    ) -> c_uint,
+    create_context:
+        unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void, *const c_int) -> *mut c_void,
+    destroy_context: unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_uint,
+    create_window_surface:
+        unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void, *const c_int) -> *mut c_void,
+    make_current:
+        unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> c_uint,
+    swap_buffers: unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_uint,
+    destroy_surface: unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_uint,
+    query_surface: unsafe extern "C" fn(*mut c_void, *mut c_void, c_int, *mut c_int) -> c_uint,
+}
+
+fn egl_fns() -> Option<&'static EglFns> {
+    static FNS: std::sync::OnceLock<Option<EglFns>> = std::sync::OnceLock::new();
+    FNS.get_or_init(|| {
+        let lock = EGL_LIB.get_or_init(|| Mutex::new(unsafe { Library::new("libEGL.so").ok() }));
+        let guard = lock.lock().ok()?;
+        let lib = guard.as_ref()?;
+        macro_rules! fetch {
+            ($name:ident, $ty:ty) => {
+                match unsafe { lib.get::<$ty>(stringify!($name).as_bytes()) } {
+                    Ok(s) => *s,
+                    Err(_) => {
+                        nlog(&format!("EGL 符号缺失: {}", stringify!($name)));
+                        return None;
+                    }
                 }
-            }
+            };
+        }
+        Some(EglFns {
+            get_display: fetch!(
+                eglGetDisplay,
+                unsafe extern "C" fn(*mut c_void) -> *mut c_void
+            ),
+            initialize: fetch!(
+                eglInitialize,
+                unsafe extern "C" fn(*mut c_void, *mut c_int, *mut c_int) -> c_uint
+            ),
+            choose_config: fetch!(
+                eglChooseConfig,
+                unsafe extern "C" fn(
+                    *mut c_void,
+                    *const c_int,
+                    *mut *mut c_void,
+                    c_int,
+                    *mut c_int,
+                ) -> c_uint
+            ),
+            create_context: fetch!(
+                eglCreateContext,
+                unsafe extern "C" fn(
+                    *mut c_void,
+                    *mut c_void,
+                    *mut c_void,
+                    *const c_int,
+                ) -> *mut c_void
+            ),
+            destroy_context: fetch!(
+                eglDestroyContext,
+                unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_uint
+            ),
+            create_window_surface: fetch!(
+                eglCreateWindowSurface,
+                unsafe extern "C" fn(
+                    *mut c_void,
+                    *mut c_void,
+                    *mut c_void,
+                    *const c_int,
+                ) -> *mut c_void
+            ),
+            make_current: fetch!(
+                eglMakeCurrent,
+                unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void, *mut c_void) -> c_uint
+            ),
+            swap_buffers: fetch!(
+                eglSwapBuffers,
+                unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_uint
+            ),
+            destroy_surface: fetch!(
+                eglDestroySurface,
+                unsafe extern "C" fn(*mut c_void, *mut c_void) -> c_uint
+            ),
+            query_surface: fetch!(
+                eglQuerySurface,
+                unsafe extern "C" fn(*mut c_void, *mut c_void, c_int, *mut c_int) -> c_uint
+            ),
+        })
+    })
+    .as_ref()
+}
+
+// ----- ANativeWindow（dlopen libandroid） -----
+
+fn anative_from_surface(env: *mut c_void, surface: jobject) -> *mut c_void {
+    type FromSurface = unsafe extern "C" fn(*mut c_void, jobject) -> *mut c_void;
+    static FNS: std::sync::OnceLock<Option<FromSurface>> = std::sync::OnceLock::new();
+    let f = FNS.get_or_init(|| {
+        let lib = unsafe { Library::new("libandroid.so").ok() }?;
+        let from: FromSurface =
+            *unsafe { lib.get::<FromSurface>(b"ANativeWindow_fromSurface").ok() }?;
+        std::mem::forget(lib); // 常驻，与 libmpv 同生命周期
+        Some(from)
+    });
+    match f {
+        Some(from) => unsafe { from(env, surface) },
+        None => std::ptr::null_mut(),
+    }
+}
+
+unsafe fn anative_release(awin: *mut c_void) {
+    type ReleaseFn = unsafe extern "C" fn(*mut c_void);
+    static FNS: std::sync::OnceLock<Option<ReleaseFn>> = std::sync::OnceLock::new();
+    let fns = FNS.get_or_init(|| {
+        let lib = unsafe { Library::new("libandroid.so").ok() }?;
+        Some(*unsafe { lib.get::<ReleaseFn>(b"ANativeWindow_release").ok() }?)
+    });
+    if let Some(rel) = fns {
+        if !awin.is_null() {
+            unsafe { rel(awin) };
         }
     }
 }
 
-/// 建 render context（幂等）。
+// ----- GL 线程持有的 EGL 状态 -----
+
+#[derive(Default)]
+struct GlEgl {
+    display: *mut c_void,
+    config: *mut c_void,
+    context: *mut c_void,
+    surface: *mut c_void,
+    awin: *mut c_void,
+    current: bool,
+}
+
+impl GlEgl {
+    /// 初始化 display / config / context（进程级常驻，只在首次调用时创建）
+    fn ensure(&mut self) -> bool {
+        if !self.display.is_null() {
+            return true;
+        }
+        let Some(f) = egl_fns() else { return false };
+        unsafe {
+            let display = (f.get_display)(std::ptr::null_mut());
+            if display.is_null() {
+                nlog("mpv-gl: eglGetDisplay 失败");
+                return false;
+            }
+            let (mut major, mut minor): (c_int, c_int) = (0, 0);
+            if (f.initialize)(display, &mut major, &mut minor) == 0 {
+                nlog("mpv-gl: eglInitialize 失败");
+                return false;
+            }
+            let attrs: [c_int; 13] = [
+                EGL_SURFACE_TYPE,
+                EGL_WINDOW_BIT,
+                EGL_RED_SIZE,
+                8,
+                EGL_GREEN_SIZE,
+                8,
+                EGL_BLUE_SIZE,
+                8,
+                EGL_ALPHA_SIZE,
+                8,
+                EGL_RENDERABLE_TYPE,
+                EGL_OPENGL_ES2_BIT,
+                EGL_NONE,
+            ];
+            let mut config: *mut c_void = std::ptr::null_mut();
+            let mut count: c_int = 0;
+            if (f.choose_config)(display, attrs.as_ptr(), &mut config, 1, &mut count) == 0
+                || count < 1
+            {
+                nlog("mpv-gl: eglChooseConfig 失败");
+                return false;
+            }
+            let ctx_attrs: [c_int; 3] = [EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE];
+            let context =
+                (f.create_context)(display, config, std::ptr::null_mut(), ctx_attrs.as_ptr());
+            if context.is_null() {
+                nlog("mpv-gl: eglCreateContext 失败");
+                return false;
+            }
+            self.display = display;
+            self.config = config;
+            self.context = context;
+            true
+        }
+    }
+
+    /// 绑定新窗口表面并 makeCurrent（每帧不再重复 makeCurrent）
+    fn attach_surface(&mut self, awin: AWin) -> bool {
+        let Some(f) = egl_fns() else { return false };
+        unsafe {
+            // 先拆旧的（换 View 场景）
+            if !self.surface.is_null() {
+                (f.make_current)(
+                    self.display,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                );
+                self.current = false;
+                (f.destroy_surface)(self.display, self.surface);
+                self.surface = std::ptr::null_mut();
+            }
+            if !self.awin.is_null() {
+                anative_release(self.awin);
+                self.awin = std::ptr::null_mut();
+            }
+            let surface =
+                (f.create_window_surface)(self.display, self.config, awin.0, [EGL_NONE].as_ptr());
+            if surface.is_null() {
+                nlog("mpv-gl: eglCreateWindowSurface 失败");
+                return false;
+            }
+            self.surface = surface;
+            self.awin = awin.0;
+            self.current = (f.make_current)(self.display, surface, surface, self.context) != 0;
+            if !self.current {
+                nlog("mpv-gl: eglMakeCurrent 失败");
+                return false;
+            }
+            true
+        }
+    }
+
+    /// 解绑（保留 display/context，下一个 View 到来直接复用）
+    fn detach_surface(&mut self) {
+        let Some(f) = egl_fns() else { return };
+        unsafe {
+            if !self.surface.is_null() {
+                (f.make_current)(
+                    self.display,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                );
+                (f.destroy_surface)(self.display, self.surface);
+                self.surface = std::ptr::null_mut();
+            }
+            self.current = false;
+            if !self.awin.is_null() {
+                anative_release(self.awin);
+                self.awin = std::ptr::null_mut();
+            }
+        }
+    }
+
+    /// 销毁 EGLContext（display 保留：进程级复用，句柄本身无成本）
+    fn destroy_context(&mut self) {
+        if self.context.is_null() {
+            return;
+        }
+        if let Some(f) = egl_fns() {
+            unsafe {
+                (f.make_current)(
+                    self.display,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                );
+                (f.destroy_context)(self.display, self.context);
+            }
+        }
+        self.context = std::ptr::null_mut();
+        self.current = false;
+    }
+
+    fn size(&self) -> (c_int, c_int) {
+        let Some(f) = egl_fns() else { return (0, 0) };
+        if self.surface.is_null() {
+            return (0, 0);
+        }
+        unsafe {
+            let (mut w, mut h): (c_int, c_int) = (0, 0);
+            (f.query_surface)(self.display, self.surface, EGL_WIDTH, &mut w);
+            (f.query_surface)(self.display, self.surface, EGL_HEIGHT, &mut h);
+            (w, h)
+        }
+    }
+}
+
+/// mpv 的"有新帧"回调：只向 GL 循环投一条 Wake，绝不穿越 JNI
+unsafe extern "C" fn render_wake_callback(_ctx: *mut c_void) {
+    if let Some(tx) = gl_tx() {
+        let _ = tx.send(GlCmd::Wake);
+    }
+}
+
+/// 建 mpv render context（幂等）。
 ///
-/// 注意：绝不能在这里 free+重建——vo 持有该上下文指针，单独释放会 use-after-free
-/// （实测崩在 `mpv_set_property` 的 strlen）。GL 上下文销毁时必须整体重建 mpv 句柄。
+/// 注意：绝不能在这里 free+重建——vo 持有该上下文指针，单独释放会 use-after-free。
+/// GL 上下文/EGL surface 的生命周期由 GL 线程管理，本函数只负责 mpv 侧的上下文。
 unsafe fn create_render_context(api: &MpvApi) -> c_int {
     let handle = match mpv_handle() {
         Ok(h) => h,
-        // 特殊值 -2：mpv 句柄尚未创建（视图早于引擎初始化的正常时序）
+        // mpv 句柄尚未创建（视图早于引擎初始化的正常时序）
         Err(_) => return -2,
     };
     if !G_RENDER_CTX.load(Ordering::Acquire).is_null() {
@@ -1158,46 +1525,74 @@ unsafe fn create_render_context(api: &MpvApi) -> c_int {
     ];
     let rc = (api.mpv_render_context_create)(&mut ctx, handle, params.as_mut_ptr());
     if rc < 0 {
-        nlog(&format!("render_context_create 失败 rc={rc}"));
+        nlog(&format!("mpv-gl: render_context_create 失败 rc={rc}"));
         return rc;
     }
     G_RENDER_CTX.store(ctx, Ordering::Release);
     (api.mpv_render_context_set_update_callback)(
         ctx,
-        Some(render_update_callback),
+        Some(render_wake_callback),
         std::ptr::null_mut(),
     );
     0
 }
 
-#[no_mangle]
-pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_MpvNative_renderContextCreate(
-    _env: JNIEnv,
-    _class: JClass,
-) -> jboolean {
-    // 返回 true 表示 render context 可用；false 时调用方需等待 mpv 就绪后重试
-    match with_api(|api| unsafe { create_render_context(api) }) {
-        Ok(0) => 1u8,
-        _ => 0u8,
+/// 在 GL 线程上补建 render context（须已 makeCurrent）。成功后通知 Kotlin 放行挂起的 load。
+fn try_create_ctx(egl: &mut GlEgl) {
+    if !G_RENDER_CTX.load(Ordering::Acquire).is_null() {
+        return;
+    }
+    if egl.display.is_null() || !egl.current {
+        return;
+    }
+    let rc = with_api(|api| unsafe { create_render_context(api) });
+    match rc {
+        Ok(0) => {
+            nlog("mpv-gl: render context 已创建");
+            if let Some(VmPtr(vm_ptr)) = G_VM.get() {
+                if let Ok(vm) = unsafe { JavaVM::from_raw(vm_ptr.cast()) } {
+                    // 罕见路径（每次会话一次），attach/detach 的开销可忽略
+                    if let Ok(mut guard) = vm.attach_current_thread() {
+                        let env: &mut JNIEnv = &mut guard;
+                        call_static(env, "onRenderContextReady", "()V", &[]);
+                    }
+                }
+            }
+        }
+        Ok(_) => {}
+        Err(e) => nlog(&format!("mpv-gl: render context 创建失败 {e}")),
     }
 }
 
-#[no_mangle]
-pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_MpvNative_renderContextRender(
-    _env: JNIEnv,
-    _class: JClass,
-    width: jint,
-    height: jint,
-) {
-    let ctx = G_RENDER_CTX.load(Ordering::Acquire);
-    if ctx.is_null() {
+/// 帧路径：查尺寸 → 问 mpv 有无新帧 → render → report_swap → 换缓冲，全程零 JNI
+fn draw_frame(egl: &mut GlEgl, force: &mut bool) {
+    if egl.surface.is_null() || !egl.current {
         return;
     }
+    let mut ctx = G_RENDER_CTX.load(Ordering::Acquire);
+    if ctx.is_null() {
+        try_create_ctx(egl);
+        ctx = G_RENDER_CTX.load(Ordering::Acquire);
+        if ctx.is_null() {
+            return;
+        }
+    }
+    let (w, h) = egl.size();
+    if w <= 0 || h <= 0 {
+        return;
+    }
+    let has_frame = with_api(|api| unsafe { (api.mpv_render_context_update)(ctx) })
+        .map(|flags| flags & MPV_RENDER_UPDATE_FRAME != 0)
+        .unwrap_or(false);
+    if !*force && !has_frame {
+        return;
+    }
+    *force = false;
     let _ = with_api(|api| unsafe {
         let fbo = MpvOpenGLFbo {
             fbo: 0,
-            w: width,
-            h: height,
+            w,
+            h,
             internal_format: 0,
         };
         let flip: c_int = 1;
@@ -1216,55 +1611,133 @@ pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_Mp
             },
         ];
         (api.mpv_render_context_render)(ctx, params.as_mut_ptr());
+        (api.mpv_render_context_report_swap)(ctx);
     });
-}
-
-/// mpv 唤醒后先问一句"真有新帧吗"。
-///
-/// mpv 的 update 回调会在多种情况下触发（seek、轨道切换、属性变化……），
-/// 盲目重绘会画出大量空帧。规范做法是调 mpv_render_context_update() 并检查
-/// MPV_RENDER_UPDATE_FRAME 位，只有置位才真正 render。
-#[no_mangle]
-pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_MpvNative_renderContextUpdate(
-    _env: JNIEnv,
-    _class: JClass,
-) -> jboolean {
-    let ctx = G_RENDER_CTX.load(Ordering::Acquire);
-    if ctx.is_null() {
-        return 0;
-    }
-    match with_api(|api| unsafe { (api.mpv_render_context_update)(ctx) }) {
-        Ok(flags) => {
-            if flags & MPV_RENDER_UPDATE_FRAME != 0 {
-                1
-            } else {
-                0
+    if let Some(f) = egl_fns() {
+        unsafe {
+            if (f.swap_buffers)(egl.display, egl.surface) == 0 {
+                nlog("mpv-gl: eglSwapBuffers 失败");
             }
         }
-        Err(_) => 0,
+    }
+}
+
+fn gl_loop(rx: Receiver<GlCmd>) {
+    // 常驻 attach：只服务偶发的 onRenderContextReady 通知，帧路径不用
+    if let Some(VmPtr(vm_ptr)) = G_VM.get() {
+        if let Ok(vm) = unsafe { JavaVM::from_raw(vm_ptr.cast()) } {
+            let _ = vm.attach_current_thread_permanently();
+        }
+    }
+    let mut egl = GlEgl::default();
+    let mut force = false;
+    while let Ok(cmd) = rx.recv() {
+        let mut exit = false;
+        match cmd {
+            GlCmd::SetSurface(awin) => {
+                if egl.ensure() && egl.attach_surface(awin) {
+                    nlog("mpv-gl: surface 绑定完成");
+                } else {
+                    nlog("mpv-gl: surface 绑定失败");
+                }
+                force = true;
+                try_create_ctx(&mut egl);
+            }
+            GlCmd::Clear => {
+                egl.detach_surface();
+                nlog("mpv-gl: surface 解绑（上下文常驻）");
+            }
+            GlCmd::Wake => {}
+            GlCmd::Exit => {
+                // render context 必须先于 mpv 句柄销毁
+                let ctx = G_RENDER_CTX.swap(std::ptr::null_mut(), Ordering::AcqRel);
+                if !ctx.is_null() {
+                    let _ = with_api(|api| unsafe { (api.mpv_render_context_free)(ctx) });
+                }
+                egl.detach_surface();
+                // 线程随后退出，EGLContext 不随之销毁会逐会话泄漏
+                egl.destroy_context();
+                exit = true;
+            }
+        }
+        if exit {
+            break;
+        }
+        draw_frame(&mut egl, &mut force);
+    }
+    nlog("mpv-gl: 线程退出");
+}
+
+// ----- JNI：surface 生命周期（Java 线程完成归属校验，GL 线程只干活） -----
+
+#[no_mangle]
+pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_MpvNative_setSurface(
+    env: JNIEnv,
+    _class: JClass,
+    surface: JObject,
+) {
+    ensure_gl_thread();
+    // 归属校验：与当前绑定的 surface 同对象则忽略（重复回调）
+    let same = {
+        let cur = G_CUR_SURFACE.lock().ok();
+        match cur.as_ref().and_then(|g| g.as_ref()) {
+            Some(g) => env.is_same_object(g.as_obj(), &surface).unwrap_or(false),
+            None => false,
+        }
+    };
+    if same {
+        return;
+    }
+    let Ok(gref) = env.new_global_ref(&surface) else {
+        return;
+    };
+    let awin = anative_from_surface(env.get_raw().cast(), surface.as_raw());
+    if awin.is_null() {
+        nlog("setSurface: ANativeWindow_fromSurface 失败");
+        return;
+    }
+    if let Ok(mut cur) = G_CUR_SURFACE.lock() {
+        *cur = Some(gref);
+    }
+    if let Some(tx) = gl_tx() {
+        let _ = tx.send(GlCmd::SetSurface(AWin(awin)));
     }
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_MpvNative_renderContextReportSwap(
-    _env: JNIEnv,
+pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_MpvNative_clearSurface(
+    env: JNIEnv,
     _class: JClass,
+    surface: JObject,
 ) {
-    let ctx = G_RENDER_CTX.load(Ordering::Acquire);
-    if ctx.is_null() {
+    // 只清「当前还挂着的」：布局切换时新旧回调会倒序到达，
+    // 迟到的旧回调若在这里执行就是黑屏（此前 Kotlin 版的同款守卫）
+    let is_current = {
+        let cur = G_CUR_SURFACE.lock().ok();
+        match cur.as_ref().and_then(|g| g.as_ref()) {
+            Some(g) => env.is_same_object(g.as_obj(), &surface).unwrap_or(false),
+            None => false,
+        }
+    };
+    if !is_current {
         return;
     }
-    let _ = with_api(|api| unsafe { (api.mpv_render_context_report_swap)(ctx) });
+    if let Ok(mut cur) = G_CUR_SURFACE.lock() {
+        *cur = None;
+    }
+    if let Some(tx) = gl_tx() {
+        let _ = tx.send(GlCmd::Clear);
+    }
 }
 
+/// mpv 句柄就绪后由引擎触发：让已存在的 surface 补建 render context
 #[no_mangle]
-pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_MpvNative_renderContextRelease(
+pub extern "system" fn Java_com_infinitezerone_minibgm_feature_subject_player_MpvNative_retryRenderContext(
     _env: JNIEnv,
     _class: JClass,
 ) {
-    let ctx = G_RENDER_CTX.swap(std::ptr::null_mut(), Ordering::AcqRel);
-    if ctx.is_null() {
-        return;
+    ensure_gl_thread();
+    if let Some(tx) = gl_tx() {
+        let _ = tx.send(GlCmd::Wake);
     }
-    let _ = with_api(|api| unsafe { (api.mpv_render_context_free)(ctx) });
 }

@@ -12,14 +12,18 @@ private val logger = bgmLogger("Bgm/MpvEngine")
 /** 等 render context 的上限：无 surface（纯音频）时不能无限期不 load */
 private const val RENDER_CONTEXT_TIMEOUT_MS = 800L
 
+/** debug 热切换缩放档位的 Settings.Global 键（值为 [SCALER_QUALITY] 时走画质档） */
+private const val SCALER_SETTING_KEY = "bgm_mpv_scaler"
+private const val SCALER_QUALITY = "quality"
+
 /**
  * [PlayerEngine] 的 MPV 原生内核实现（render API 架构）。
  *
  * 专为 ASS/SSA 特效字幕、内封字体与 10-bit HEVC 的动漫片源提供参考级渲染。
  *
  * 架构要点：
- * - `vo=libmpv` + [MpvRenderView] 的 GLSurfaceView：渲染上下文常驻，surface 重建
- *   只是换渲染目标——旋转/PiP/后台往返零拆卸，没有任何 vo 拆建时序竞态。
+ * - `vo=libmpv` + native EGL 渲染循环：surface 重建只是换 EGLSurface，
+ *   旋转/PiP/后台往返零拆卸，没有任何 vo 拆建时序竞态。
  * - loadfile 不依赖 surface：无视图时照常解码出声，视图出现即出画。
  * - 事件回调经 [MpvNative] 事件线程到达，[notify] 统一收口主线程。
  */
@@ -204,7 +208,10 @@ class MpvPlayerEngine(
                 MpvNative.setOptionString("sub-auto", "all")
                 MpvNative.setOptionString("sub-font-provider", "none")
                 MpvNative.setOptionString("sub-ass-override", "no")
-                MpvNative.setOptionString("blend-subtitles", "yes")
+                // 官方默认 no：字幕在输出分辨率上由 OSD 通道绘制，不进视频合成 pass。
+                // 旧值 yes 让 libass 光栅化 + 全屏混合都压在渲染线程上（实测 8.9% 单核的主要构成）
+                MpvNative.setOptionString("blend-subtitles", "no")
+                applyScalerProfile()
                 MpvNative.init()
 
                 // 官方姿势：init 后设置——idle=once 防止 stop 后 mpv 核心退出
@@ -222,7 +229,7 @@ class MpvPlayerEngine(
                 logger.d { "mpv 初始化完成 vo=${MpvNative.getPropertyString("vo")}" }
                 // 渲染视图通常比 mpv 句柄先就绪（视图在组合阶段创建，句柄在首次 load 时创建），
                 // 其 onSurfaceCreated 里的建上下文会因句柄为空而失败——此处补建一次
-                MpvNative.notifyMpvReady()
+                MpvNative.retryRenderContext()
             } catch (t: Throwable) {
                 logger.e(t) { "MpvPlayerEngine 初始化失败" }
                 isInitialized.set(false)
@@ -300,6 +307,48 @@ class MpvPlayerEngine(
         }
         MpvNative.command(arrayOf("loadfile", url, "replace"))
         MpvNative.setPropertyBoolean("pause", false)
+    }
+
+    /**
+     * 缩放与抖动档位（功耗主要开关）。
+     *
+     * 官方 mpv-android 的第一行就是 `profile=fast`：bilinear 三件套 + 关抖动 +
+     * 关 correct/linear-downscaling + 关 hdr-compute-peak。我们此前全走 mpv 默认
+     * （lanczos + fruit 抖动 + 两个 downscaling 后处理 + HDR 峰值统计），
+     * 1920×1080 上采样到 2K 屏时这部分全压 GPU，是"比官方 App 费电"的头号嫌疑。
+     *
+     * 档位：
+     * - fast（默认）：与官方一致，省电优先
+     * - quality：mpv 默认（lanczos 全开），画质优先
+     *
+     * debug 构建可热切换（选项只在 init 前生效，退出播放页重进即可）：
+     * `adb shell settings put global bgm_mpv_scaler quality`
+     */
+    private fun applyScalerProfile() {
+        val debuggable =
+            (appContext.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        val mode =
+            if (debuggable) {
+                android.provider.Settings.Global.getString(
+                    appContext.contentResolver,
+                    SCALER_SETTING_KEY,
+                )
+            } else {
+                null
+            }
+        if (mode != SCALER_QUALITY) {
+            // 官方 profile=fast 的等价集合（见 mpv etc/builtin.conf）
+            MpvNative.setOptionString("scale", "bilinear")
+            MpvNative.setOptionString("dscale", "bilinear")
+            // cscale 默认跟随 scale：不显式设为 bilinear 时，4:2:0→4:4:4 会走 lanczos，
+            // 这是每帧最大的一笔色度上采样开销
+            MpvNative.setOptionString("cscale", "bilinear")
+            MpvNative.setOptionString("dither", "no")
+            MpvNative.setOptionString("correct-downscaling", "no")
+            MpvNative.setOptionString("linear-downscaling", "no")
+            MpvNative.setOptionString("hdr-compute-peak", "no")
+        }
+        logger.d { "scaler profile=${mode ?: "fast(default)"}" }
     }
 
     /** 放行挂起的 load（上下文就绪或超时兜底），幂等 */
