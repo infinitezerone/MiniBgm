@@ -10,10 +10,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.infinitezerone.minibgm.core.designsystem.component.BgmCircleActionButton
 import com.infinitezerone.minibgm.core.designsystem.component.BgmGhostIconButton
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
@@ -49,8 +50,8 @@ import java.time.Instant
 import java.time.ZoneId
 
 /** 封面缩略图尺寸：3:4 海报比例，与收藏卡片的视觉重量错开一档 */
-private val HISTORY_COVER_WIDTH = 52.dp
-private val HISTORY_COVER_HEIGHT = 70.dp
+private val HISTORY_COVER_WIDTH = 56.dp
+private val HISTORY_COVER_HEIGHT = 76.dp
 
 /**
  * 观看记录单条卡片（按番剧聚合）：
@@ -74,7 +75,8 @@ internal fun PlaybackHistoryCard(
 
     Surface(
         shape = BgmShapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        // 与下载列表统一卡片层级：surfaceContainerHigh 作为列表主容器色
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         onClick = { onResume(group.latest) },
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -118,7 +120,7 @@ private fun PlaybackHistoryMainRow(
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier.padding(start = 10.dp, top = 10.dp, bottom = 10.dp, end = 2.dp),
+        modifier = modifier.padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
     ) {
         HistoryCover(
             url = group.coverUrl,
@@ -134,12 +136,12 @@ private fun PlaybackHistoryMainRow(
         Spacer(modifier = Modifier.width(12.dp))
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
                 text = group.subjectName,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -152,10 +154,13 @@ private fun PlaybackHistoryMainRow(
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 2.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
             ) {
                 Text(
-                    text = historyProgressText(group.latest),
+                    text = historySummaryText(group.latest),
                     style = MaterialTheme.typography.labelSmall,
                     color =
                         if (group.latest.isCompleted) {
@@ -168,27 +173,19 @@ private fun PlaybackHistoryMainRow(
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Column(horizontalAlignment = Alignment.End) {
-                    HistoryTimeText(updatedAt = group.latest.updatedAt)
-                    if (group.latest.sourceName.isNotBlank()) {
-                        Text(
-                            text = group.latest.sourceName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.widthIn(max = 108.dp),
-                        )
-                    }
-                }
+                HistoryTimeText(updatedAt = group.latest.updatedAt)
             }
         }
-        BgmGhostIconButton(
+        Spacer(modifier = Modifier.width(8.dp))
+        BgmCircleActionButton(
             onClick = { onResume(group.latest) },
-            icon = BgmIcons.PlayCircle,
+            icon = BgmIcons.PlayArrow,
             contentDescription = stringResource(R.string.feature_user_history_resume_play),
-            tint = MaterialTheme.colorScheme.primary,
-            iconSize = 22.dp,
+            size = 36.dp,
+            iconSize = 20.dp,
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            hasDiffuseShadow = false,
         )
         Box {
             BgmGhostIconButton(
@@ -254,8 +251,9 @@ private fun PlaybackHistoryExpandBar(
     modifier: Modifier = Modifier,
 ) {
     HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 10.dp),
-        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+        modifier = Modifier.padding(horizontal = 12.dp),
+        // 用中性发丝线：主题的 outlineVariant 带主色倾向，会被误读成进度条
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
     )
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -264,6 +262,8 @@ private fun PlaybackHistoryExpandBar(
             modifier
                 .fillMaxWidth()
                 .clickable(onClick = onToggle)
+                // 可点区域至少 44dp：原 6dp 垂直 padding 只有约 30dp 高，容易点空
+                .heightIn(min = 44.dp)
                 .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
         Text(
@@ -379,6 +379,13 @@ private fun historyProgressText(history: PlaybackHistory): String =
                 formatPlaybackPosition(history.durationMs),
             )
     }
+
+/** 主行摘要：进度文案 + 播放源（源名作为弱信息跟在后面，不再单独占一列） */
+@Composable
+private fun historySummaryText(history: PlaybackHistory): String {
+    val progress = historyProgressText(history)
+    return if (history.sourceName.isNotBlank()) "$progress · ${history.sourceName}" else progress
+}
 
 /** 相对时间：刚刚 / N 分钟前 / N 小时前 / 昨天 / N 天前 / yyyy-MM-dd */
 @Composable

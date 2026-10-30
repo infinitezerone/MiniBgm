@@ -1,5 +1,6 @@
 package com.infinitezerone.minibgm.feature.user
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -194,7 +196,11 @@ internal fun DownloadScreenContent(
 
                 item(key = "downloads_filter_chips") {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                // 文案带计数，窄屏/长语言下可横向滚动，不挤成多行
+                                .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         FilterChip(
@@ -340,7 +346,8 @@ private fun DownloadSummaryBanner(
 
     Surface(
         shape = BgmShapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        // 汇总卡是页面第一层级：比列表卡片再深一档，避免读成又一张普通条目
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
         tonalElevation = 2.dp,
         modifier = modifier.fillMaxWidth(),
     ) {

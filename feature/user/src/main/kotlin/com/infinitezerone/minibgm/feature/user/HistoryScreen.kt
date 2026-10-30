@@ -4,11 +4,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -16,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -157,7 +161,7 @@ fun HistoryScreen(
 /** 观看记录主体视图（Stateless）：专职骨架排版与列表呈现 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HistoryContent(
+internal fun HistoryContent(
     uiState: HistoryUiState,
     onBackClick: () -> Unit,
     onClearAll: () -> Unit,
@@ -255,23 +259,31 @@ private fun HistoryContent(
     }
 }
 
-/** 观看记录空状态视图 */
+/** 观看记录空状态视图：与下载页空态同构（圆形底 + 图标 + 说明），保持二级页观感一致 */
 @Composable
 private fun HistoryEmptyState(modifier: Modifier = Modifier) {
     Box(
-        modifier = modifier.padding(32.dp),
+        modifier = modifier.padding(horizontal = 32.dp, vertical = 48.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Icon(
-                imageVector = BgmIcons.History,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                modifier = Modifier.size(56.dp),
-            )
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                modifier = Modifier.size(72.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = BgmIcons.History,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(36.dp),
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
             Text(
                 text = stringResource(R.string.feature_user_history_empty),
                 style = MaterialTheme.typography.bodyMedium,
