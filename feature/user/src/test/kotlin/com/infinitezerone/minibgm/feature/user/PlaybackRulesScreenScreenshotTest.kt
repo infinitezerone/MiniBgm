@@ -65,6 +65,8 @@ class PlaybackRulesScreenScreenshotTest {
                     onToggleRule = { _, _ -> },
                     onDeleteRule = {},
                     overlayHostState = OverlayHostState(),
+                    subscriptionUrl = "https://gist.githubusercontent.com/infinitezerone/945c7c49/minibgm_rules.json",
+                    onClearSubscription = {},
                 )
             }
         }
@@ -83,6 +85,8 @@ class PlaybackRulesScreenScreenshotTest {
                     onToggleRule = { _, _ -> },
                     onDeleteRule = {},
                     overlayHostState = OverlayHostState(),
+                    subscriptionUrl = "https://gist.githubusercontent.com/infinitezerone/945c7c49/minibgm_rules.json",
+                    onClearSubscription = {},
                 )
             }
         }

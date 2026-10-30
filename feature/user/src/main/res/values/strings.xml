@@ -147,6 +147,10 @@
     <string name="feature_user_rule_choice_site_probe">站点探测（自动识别 MacCMS）</string>
     <string name="feature_user_rule_choice_subscription">订阅导入（TVBox 规则集）</string>
     <string name="feature_user_rule_choice_import_json">批量导入 JSON 规则</string>
+    <string name="feature_user_rule_choice_subscription_desc">手上是 TVBox / MiniBgm 订阅链接，自动探活并挑出能用的源</string>
+    <string name="feature_user_rule_choice_site_probe_desc">只有一个站点网址，先替你试标准采集接口</string>
+    <string name="feature_user_rule_choice_add_torrent_desc">自己填 RSS / 磁力模板，支持 {title} 占位符</string>
+    <string name="feature_user_rule_choice_import_json_desc">手里已经有一段规则 JSON，粘贴进来</string>
     <string name="feature_user_history_empty">暂无观看记录。在内置播放器里播放过的番剧会自动出现在这里。</string>
     <string name="feature_user_history_view_subject">查看条目详情</string>
     <string name="feature_user_history_resume_play">继续播放</string>
@@ -213,6 +217,8 @@
     <string name="feature_user_subscription_sync_action">同步规则</string>
     <string name="feature_user_subscription_syncing">正在同步…</string>
     <string name="feature_user_subscription_clear_action">取消订阅</string>
+    <string name="feature_user_subscription_cleared">已取消订阅，已导入的本地规则仍保留</string>
+    <string name="feature_user_subscription_active_desc">同步时会按名称与模板合并，不会重复添加</string>
     <string name="feature_user_clipboard_sub_detected_title">发现播放源订阅</string>
     <string name="feature_user_clipboard_sub_detected_desc">检测到剪贴板中包含播放源订阅链接：\n%1$s\n\n是否立即开始端侧探活并导入？</string>
     <string name="feature_user_clipboard_sub_action_import">探活并导入</string>

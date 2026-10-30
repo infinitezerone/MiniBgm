@@ -30,6 +30,15 @@ data class DiscoveredSource(
     val ext: JsonElement? = null,
 ) {
     /**
+     * 该来源的稳定规则 id。
+     *
+     * 同一来源有四个落库入口（订阅对话框勾选导入、订阅一键刷新、JSON 订阅包导入、AI 提案），
+     * 必须推导出同一个 id，否则「同一条来源」在库里会随每次导入线性增殖——
+     * 曾经对话框路径用随机 UUID，同一订阅导入两次就是两份副本，而刷新却按名称覆盖。
+     */
+    fun stableRuleId(): String = "sub_${name.hashCode().toUInt().toString(16)}"
+
+    /**
      * 转换为本地标准 [PlaybackSourceRule]。
      */
     fun toPlaybackSourceRule(id: String): PlaybackSourceRule =

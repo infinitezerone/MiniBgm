@@ -10,6 +10,7 @@ import com.infinitezerone.minibgm.core.model.DanmakuConfig
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
+import com.infinitezerone.minibgm.core.model.mergeImportedRules
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -223,8 +224,8 @@ class FakeSettingsRepository(
     }
 
     override suspend fun importPlaybackRules(rules: List<com.infinitezerone.minibgm.core.model.PlaybackSourceRule>) {
-        val existingIds = playbackRulesState.value.map { it.id }.toSet()
-        playbackRulesState.value = playbackRulesState.value + rules.filterNot { it.id in existingIds }
+        // 与真实仓库共用同一份合并语义：fake 只认 id 的话，重复导入这类回归在测试里就看不见
+        playbackRulesState.value = mergeImportedRules(playbackRulesState.value, rules)
     }
 
     /** 直接注入播放规则（供 ViewModel 测试构造场景） */

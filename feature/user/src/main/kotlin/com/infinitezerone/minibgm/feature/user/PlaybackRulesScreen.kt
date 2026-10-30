@@ -1,7 +1,6 @@
 package com.infinitezerone.minibgm.feature.user
 
 import android.content.ClipData
-import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -36,6 +36,7 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -51,7 +52,6 @@ import com.infinitezerone.minibgm.core.designsystem.component.BgmTopBarMode
 import com.infinitezerone.minibgm.core.designsystem.component.ConfirmDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.ObserveAsEvents
 import com.infinitezerone.minibgm.core.designsystem.component.OverlayHostState
-import com.infinitezerone.minibgm.core.designsystem.component.SingleChoiceDialogAction
 import com.infinitezerone.minibgm.core.designsystem.component.rememberOverlayHostState
 import com.infinitezerone.minibgm.core.designsystem.icon.BgmIcons
 import com.infinitezerone.minibgm.core.designsystem.theme.BgmShapes
@@ -60,28 +60,14 @@ import com.infinitezerone.minibgm.core.model.PlaybackRuleKind
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.feature.user.components.AddTorrentRuleDialog
 import com.infinitezerone.minibgm.feature.user.components.PlaybackRuleCard
+import com.infinitezerone.minibgm.feature.user.components.RuleAddOption
+import com.infinitezerone.minibgm.feature.user.components.RuleAddSheet
 import com.infinitezerone.minibgm.feature.user.components.RuleImportDialog
 import com.infinitezerone.minibgm.feature.user.components.SiteProbeDialog
 import com.infinitezerone.minibgm.feature.user.components.SubscriptionImportDialog
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import com.infinitezerone.minibgm.core.designsystem.R as DesignSystemR
-
-private enum class RuleAddOption {
-    SUBSCRIPTION,
-    SITE_PROBE,
-    ADD_TORRENT,
-    IMPORT_JSON,
-    ;
-
-    fun label(context: Context): String =
-        when (this) {
-            SUBSCRIPTION -> context.getString(R.string.feature_user_rule_choice_subscription)
-            SITE_PROBE -> context.getString(R.string.feature_user_rule_choice_site_probe)
-            ADD_TORRENT -> context.getString(R.string.feature_user_rule_choice_add_torrent)
-            IMPORT_JSON -> context.getString(R.string.feature_user_rule_choice_import_json)
-        }
-}
 
 private enum class RuleFilter {
     ALL,
@@ -111,6 +97,7 @@ fun PlaybackRulesScreen(
 
     var isImportingRuleJson by remember { mutableStateOf(false) }
     var isAddingTorrentRule by remember { mutableStateOf(false) }
+    var isAddSheetVisible by remember { mutableStateOf(false) }
     val overlayHostState = rememberOverlayHostState()
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -207,26 +194,7 @@ fun PlaybackRulesScreen(
         floatingActionButton = {
             if (!uiState.isLoading) {
                 BgmPillButton(
-                    onClick = {
-                        scope.launch {
-                            val choice =
-                                overlayHostState.await(
-                                    SingleChoiceDialogAction(
-                                        title = context.getString(R.string.feature_user_rule_add_choice_title),
-                                        options = RuleAddOption.entries,
-                                        selectedOption = RuleAddOption.SUBSCRIPTION,
-                                        optionLabel = { it.label(context) },
-                                    ),
-                                )
-                            when (choice) {
-                                RuleAddOption.SUBSCRIPTION -> viewModel.openSubscriptionImport()
-                                RuleAddOption.SITE_PROBE -> viewModel.openSiteProbe()
-                                RuleAddOption.ADD_TORRENT -> isAddingTorrentRule = true
-                                RuleAddOption.IMPORT_JSON -> isImportingRuleJson = true
-                                null -> {}
-                            }
-                        }
-                    },
+                    onClick = { isAddSheetVisible = true },
                     text = stringResource(R.string.feature_user_action_add_rule),
                     icon = BgmIcons.Add,
                     size = BgmPillSize.Large,
@@ -249,10 +217,12 @@ fun PlaybackRulesScreen(
         } else {
             RulesTabContent(
                 rules = uiState.rules,
+                subscriptionUrl = uiState.subscriptionUrl,
                 onOpenSubscriptionImport = viewModel::openSubscriptionImport,
                 onOpenSiteProbe = viewModel::openSiteProbe,
                 onToggleRule = viewModel::toggleRule,
                 onDeleteRule = viewModel::deleteRule,
+                onClearSubscription = viewModel::clearSubscriptionUrl,
                 overlayHostState = overlayHostState,
                 modifier = Modifier.padding(innerPadding),
                 onShowSnackbar = { message ->
@@ -262,6 +232,22 @@ fun PlaybackRulesScreen(
                 },
             )
         }
+    }
+
+    // 添加播放源的四入口底栏：点选后自身先收起，再开对应对话框，避免两层浮层叠着
+    if (isAddSheetVisible) {
+        RuleAddSheet(
+            onSelect = { option ->
+                isAddSheetVisible = false
+                when (option) {
+                    RuleAddOption.SUBSCRIPTION -> viewModel.openSubscriptionImport()
+                    RuleAddOption.SITE_PROBE -> viewModel.openSiteProbe()
+                    RuleAddOption.ADD_TORRENT -> isAddingTorrentRule = true
+                    RuleAddOption.IMPORT_JSON -> isImportingRuleJson = true
+                }
+            },
+            onDismiss = { isAddSheetVisible = false },
+        )
     }
 
     // 规则 JSON 批量导入对话框
@@ -315,7 +301,7 @@ fun PlaybackRulesScreen(
     }
 }
 
-/** 解析规则页签：规则列表 + 分类筛选 + 空态引导 */
+/** 解析规则页签：当前订阅 + 规则列表 + 分类筛选 + 空态引导 */
 @Composable
 internal fun RulesTabContent(
     rules: List<PlaybackSourceRule>,
@@ -326,10 +312,17 @@ internal fun RulesTabContent(
     overlayHostState: OverlayHostState,
     modifier: Modifier = Modifier,
     onShowSnackbar: ((String) -> Unit)? = null,
+    subscriptionUrl: String = "",
+    onClearSubscription: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
+
+    // 订阅卡片的文案在 lambda 里用，必须先经 stringResource 解析（配置变更时可重组刷新）
+    val subscriptionCopiedMessage = stringResource(R.string.feature_user_subscription_copied)
+    val subscriptionClearTitle = stringResource(R.string.feature_user_subscription_clear_action)
+    val subscriptionClearMessage = stringResource(R.string.feature_user_subscription_clear_message)
 
     var selectedFilter by rememberSaveable { mutableStateOf(RuleFilter.ALL) }
 
@@ -361,6 +354,29 @@ internal fun RulesTabContent(
         contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (subscriptionUrl.isNotBlank()) {
+            item(key = "active_subscription") {
+                ActiveSubscriptionCard(
+                    url = subscriptionUrl,
+                    onCopy = { copyToClipboard(subscriptionUrl, subscriptionCopiedMessage) },
+                    onClear = {
+                        scope.launch {
+                            val confirmed =
+                                overlayHostState.await(
+                                    ConfirmDialogAction(
+                                        title = subscriptionClearTitle,
+                                        message = subscriptionClearMessage,
+                                        confirmText = subscriptionClearTitle,
+                                        isDestructive = true,
+                                    ),
+                                )
+                            if (confirmed) onClearSubscription?.invoke()
+                        }
+                    },
+                )
+            }
+        }
+
         if (rules.isEmpty()) {
             item(key = "rules_empty_hero") {
                 Surface(
@@ -519,6 +535,75 @@ internal fun RulesTabContent(
                             )
                         },
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 当前订阅源卡片：地址可见、可复制、可取消。
+ *
+ * 之前这块只有顶栏一个刷新图标——用户既看不出自己订的是哪个地址，也没有退订入口
+ * （`clearSubscriptionUrl` 早就存在，只是一直没接线）。
+ */
+@Composable
+private fun ActiveSubscriptionCard(
+    url: String,
+    onCopy: () -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = BgmShapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = BgmIcons.Sync,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    text = stringResource(R.string.feature_user_subscription_active_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            Text(
+                text = url,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = stringResource(R.string.feature_user_subscription_active_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                TextButton(
+                    onClick = onCopy,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                ) {
+                    Text(stringResource(R.string.feature_user_subscription_copy_action))
+                }
+                TextButton(
+                    onClick = onClear,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    Text(stringResource(R.string.feature_user_subscription_clear_action))
                 }
             }
         }

@@ -238,4 +238,16 @@ class CommunitySubscriptionTest {
         val standalone = "https://api.my-custom-parser.org/anime/search"
         assertEquals(standalone, extractSubscriptionCandidate(standalone))
     }
+
+    @Test
+    fun stableRuleId_isDeterministicPerSourceName() {
+        val first = DiscoveredSource(name = "量子资源", urlTemplate = "https://a.example.tv/{title}")
+        val second = DiscoveredSource(name = "量子资源", urlTemplate = "https://a.example.tv/{title}")
+        val renamed = DiscoveredSource(name = "量子资源 v2", urlTemplate = "https://a.example.tv/{title}")
+
+        // 同一来源反复导入必须落到同一个 id 上，否则规则列表会随每次导入增殖
+        assertEquals(first.stableRuleId(), second.stableRuleId())
+        assertTrue(first.stableRuleId().startsWith("sub_"))
+        kotlin.test.assertNotEquals(first.stableRuleId(), renamed.stableRuleId())
+    }
 }

@@ -195,6 +195,76 @@ class PlaybackRulesViewModelTest {
         }
 
     @Test
+    fun subscriptionImport_allSourcesDead_keepsReportButSelectsNothing() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            fakeRepo.validationReportResult =
+                AppResult.Success(
+                    SubscriptionValidationReport(
+                        isHealthy = true,
+                        subscriptionUrl = "https://example.com/tvbox.json",
+                        totalRules = 2,
+                        aliveRules = 0,
+                        sources =
+                            listOf(
+                                DiscoveredSource(name = "死源甲", urlTemplate = "https://a.example.tv/x", isAlive = false),
+                                DiscoveredSource(name = "死源乙", urlTemplate = "https://b.example.tv/x", isAlive = false),
+                            ),
+                    ),
+                )
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            viewModel.openSubscriptionImport()
+            viewModel.onSubscriptionInputChanged("https://example.com/tvbox.json")
+            viewModel.validateSubscription()
+            advanceUntilIdle()
+
+            val state = viewModel.subscriptionImport.value
+            // 报告仍要看得到（哪几条不通），但一条都不预勾：不能一按导入就把整份死源写进库
+            assertTrue(state.report != null)
+            assertTrue("全不连通时不应默认勾选任何来源", state.selected.isEmpty())
+
+            viewModel.confirmSubscriptionImport()
+            advanceUntilIdle()
+            assertTrue(fakeRepo.playbackRules.first().isEmpty())
+
+            // 用户仍可手动勾选后强导（探活可能误判）
+            viewModel.toggleSubscriptionSource(0)
+            viewModel.confirmSubscriptionImport()
+            advanceUntilIdle()
+            assertEquals(listOf("死源甲"), fakeRepo.playbackRules.first().map { it.name })
+        }
+
+    @Test
+    fun subscriptionImport_sameSubscriptionImportedTwice_doesNotDuplicateRules() =
+        runTest {
+            val fakeRepo = FakeSettingsRepository()
+            fakeRepo.validationReportResult =
+                AppResult.Success(
+                    SubscriptionValidationReport(
+                        isHealthy = true,
+                        subscriptionUrl = "https://example.com/tvbox.json",
+                        totalRules = 1,
+                        aliveRules = 1,
+                        sources = listOf(DiscoveredSource(name = "源A", urlTemplate = "https://a.example.tv/x")),
+                    ),
+                )
+            val viewModel = PlaybackRulesViewModel(fakeRepo)
+
+            repeat(2) {
+                viewModel.openSubscriptionImport()
+                viewModel.onSubscriptionInputChanged("https://example.com/tvbox.json")
+                viewModel.validateSubscription()
+                advanceUntilIdle()
+                viewModel.confirmSubscriptionImport()
+                advanceUntilIdle()
+            }
+
+            // 曾经对话框路径给随机 UUID、仓库只按 id 去重：同一订阅导两次就是两份副本
+            assertEquals(1, fakeRepo.playbackRules.first().size)
+        }
+
+    @Test
     fun subscriptionImport_failure_keepsDialogOpenWithReasonAndImportsNothing() =
         runTest {
             val fakeRepo = FakeSettingsRepository()

@@ -294,15 +294,16 @@ class PlaybackRulesViewModel(
             when (val result = settingsRepository.validateAndTestSubscription(input)) {
                 is AppResult.Success -> {
                     val report = result.data
+                    // 默认只勾选探活通过的来源。全都不通时**一条都不勾**：
+                    // 曾经的兜底是「存活项为空就全选」，用户一按导入就把整份死源写进库，还得回头逐条关掉。
                     val defaultSelected =
                         report.sources
                             .withIndex()
                             .filter { it.value.isAlive }
                             .map { it.index }
                             .toSet()
-                            .ifEmpty { report.sources.indices.toSet() }
 
-                    if ((!report.isHealthy && report.sources.isEmpty()) || defaultSelected.isEmpty()) {
+                    if (report.sources.isEmpty()) {
                         _subscriptionImport.update {
                             it.copy(
                                 isValidating = false,
@@ -333,7 +334,6 @@ class PlaybackRulesViewModel(
     }
 
     /** 把勾选的来源落成规则；落库路径与待确认提案执行器（ImportPlaybackRules）一致 */
-    @OptIn(ExperimentalUuidApi::class)
     fun confirmSubscriptionImport() {
         val state = _subscriptionImport.value
         val report = state.report ?: return
@@ -341,7 +341,7 @@ class PlaybackRulesViewModel(
         val rules =
             state.selected
                 .mapNotNull { report.sources.getOrNull(it) }
-                .map { it.toPlaybackSourceRule(id = Uuid.random().toString()) }
+                .map { source -> source.toPlaybackSourceRule(id = source.stableRuleId()) }
         if (rules.isEmpty()) return
         viewModelScope.launch {
             settingsRepository.importPlaybackRules(rules)
@@ -382,22 +382,19 @@ class PlaybackRulesViewModel(
     fun clearSubscriptionUrl() {
         viewModelScope.launch {
             settingsRepository.setPlaybackSubscriptionUrl("")
-            sendSnackbar("已移除订阅链接")
+            sendResSnackbar(R.string.feature_user_subscription_cleared)
         }
     }
 
-    /** 检测未通过时的内联说明：能说清是地址问题还是来源全被跳过 */
+    /** 订阅里一个可导入来源都没有时的内联说明：能说清是地址问题还是来源全被跳过 */
     private fun describeUnhealthy(report: SubscriptionValidationReport): String {
         report.errorMessage?.let { return it }
-        if (report.sources.isEmpty()) {
-            val skipped =
-                buildList {
-                    if (report.skippedUnsupportedSites > 0) add("${report.skippedUnsupportedSites} 条爬虫/扩展源本应用不支持")
-                    if (report.skippedMalformedSites > 0) add("${report.skippedMalformedSites} 条条目信息不完整")
-                }
-            return if (skipped.isEmpty()) "订阅里没有可导入的来源" else "订阅里没有可导入的来源（${skipped.joinToString("，")}）"
-        }
-        return "订阅里探活通过的来源为 0（共 ${report.totalRules} 条），请检查地址或稍后重试"
+        val skipped =
+            buildList {
+                if (report.skippedUnsupportedSites > 0) add("${report.skippedUnsupportedSites} 条爬虫/扩展源本应用不支持")
+                if (report.skippedMalformedSites > 0) add("${report.skippedMalformedSites} 条条目信息不完整")
+            }
+        return if (skipped.isEmpty()) "订阅里没有可导入的来源" else "订阅里没有可导入的来源（${skipped.joinToString("，")}）"
     }
 
     fun deleteRule(id: String) {

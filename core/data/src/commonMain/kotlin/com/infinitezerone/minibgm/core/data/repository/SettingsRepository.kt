@@ -11,6 +11,7 @@ import com.infinitezerone.minibgm.core.model.FeatureCapabilities
 import com.infinitezerone.minibgm.core.model.PlaybackSourceRule
 import com.infinitezerone.minibgm.core.model.SyncInterval
 import com.infinitezerone.minibgm.core.model.ThemeMode
+import com.infinitezerone.minibgm.core.model.mergeImportedRules
 import com.infinitezerone.minibgm.core.network.BgmHttpClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -176,6 +177,13 @@ interface SettingsRepository {
         isEnabled: Boolean,
     )
 
+    /**
+     * 批量落库播放规则：按 id → 名称 → URL 模板判定「同一条规则」，命中即原位更新
+     * （保留本地 id 与开关状态），未命中追加。
+     *
+     * 合并语义由 [mergeImportedRules] 单一持有，与订阅一键刷新完全一致——
+     * 同一订阅无论走哪个入口、导入几次，库里都只有一份。
+     */
     suspend fun importPlaybackRules(rules: List<PlaybackSourceRule>)
 
     /**
@@ -593,9 +601,7 @@ internal class SettingsRepositoryImpl(
     override suspend fun importPlaybackRules(rules: List<PlaybackSourceRule>) =
         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
             val current = playbackRules.first()
-            val existingIds = current.map { it.id }.toSet()
-            val newRules = rules.filterNot { it.id in existingIds }
-            val updated = current + newRules
+            val updated = mergeImportedRules(current, rules)
             userPreferences.setPlaybackRulesJson(json.encodeToString(updated))
         }
 
@@ -625,9 +631,7 @@ internal class SettingsRepositoryImpl(
                         setPlaybackParses(report.parses)
                     }
                     report.sources.map { source ->
-                        source.toPlaybackSourceRule(
-                            id = "sub_${source.name.hashCode().toUInt().toString(16)}",
-                        )
+                        source.toPlaybackSourceRule(id = source.stableRuleId())
                     }
                 } else {
                     throw IllegalStateException("规则解析失败，请检查 JSON 格式")
@@ -744,34 +748,14 @@ internal class SettingsRepositoryImpl(
                         } else {
                             val newRules =
                                 candidateSources.map { source ->
-                                    source.toPlaybackSourceRule(
-                                        id = "sub_${source.name.hashCode().toUInt().toString(16)}",
-                                    )
+                                    source.toPlaybackSourceRule(id = source.stableRuleId())
                                 }
                             val current = playbackRules.first()
-                            val mutableRules = current.toMutableList()
-                            var accepted = 0
-                            for (rule in newRules) {
-                                val existingIndex =
-                                    mutableRules.indexOfFirst {
-                                        it.name.equals(rule.name, ignoreCase = true) || it.urlTemplate == rule.urlTemplate
-                                    }
-                                if (existingIndex >= 0) {
-                                    val existing = mutableRules[existingIndex]
-                                    mutableRules[existingIndex] =
-                                        rule.copy(
-                                            id = existing.id,
-                                            isEnabled = existing.isEnabled,
-                                        )
-                                } else {
-                                    mutableRules.add(rule)
-                                }
-                                accepted++
-                            }
+                            val merged = mergeImportedRules(current, newRules)
                             kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                                userPreferences.setPlaybackRulesJson(json.encodeToString(mutableRules))
+                                userPreferences.setPlaybackRulesJson(json.encodeToString(merged))
                             }
-                            AppResult.Success(RuleImportSummary(acceptedCount = accepted, rejectedCount = 0))
+                            AppResult.Success(RuleImportSummary(acceptedCount = newRules.size, rejectedCount = 0))
                         }
                     }
                     is AppResult.Error -> AppResult.Error(reportResult.throwable, reportResult.message)

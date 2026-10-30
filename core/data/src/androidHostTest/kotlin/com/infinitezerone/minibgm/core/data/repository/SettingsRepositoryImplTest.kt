@@ -75,6 +75,23 @@ class SettingsRepositoryImplTest {
         }
 
     @Test
+    fun importPlaybackRules_sameSourceWithDifferentIds_staysSingleEntry() =
+        runTest {
+            val repo =
+                SettingsRepositoryImpl(createTestUserPreferencesDataSource(), FakeSecureSecretStore(), FakeCommunitySubscriptionService())
+            // 同一订阅来源：对话框导入曾经给随机 UUID，刷新给 sub_<hash>，两条 id 不同也必须落成一条
+            val fromDialogImport = PlaybackSourceRule(id = "uuid-1", name = "量子资源", urlTemplate = "https://a.com/{title}")
+            val fromRefresh = PlaybackSourceRule(id = "sub_abc", name = "量子资源", urlTemplate = "https://a.com/{title}")
+
+            repo.importPlaybackRules(listOf(fromDialogImport))
+            repo.importPlaybackRules(listOf(fromRefresh))
+
+            val rules = repo.playbackRules.first()
+            assertEquals(1, rules.size)
+            assertEquals("uuid-1", rules.single().id)
+        }
+
+    @Test
     fun importRulesFromJson_validArray_parsesAndPersistsOnlyImportableRules() =
         runTest {
             val repo =
