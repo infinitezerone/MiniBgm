@@ -456,6 +456,8 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
     private val playerScreenTransientState: Set<String> =
         setOf(
             "areControlsVisible",
+            // 手动进小窗的过渡态：只在「隐藏控制层 → 等帧上屏 → enterPictureInPictureMode」之间存活
+            "pipEntering",
             "isLandscape",
             // 播放速度与画面比例：跟着「这一条视频、这一次观看」走，刻意不持久化（见测试内的反向闭锁）
             "playbackSpeed",
@@ -871,7 +873,26 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
         // 布局决策必须全部走同一个判定
         assertTrue(
             code.contains("hideChrome = isPipLayout"),
-            "PlayerScreen 的 hideChrome 必须使用 isPipLayout（窗口几何 + 退出转场保持）",
+            "PlayerScreen 的 hideChrome 必须使用 isPipLayout（纯窗口几何）",
+        )
+
+        // 视觉路径不得硬编码转场时长（2026-10-30 真机）：抖动真因是逐帧推 params，
+        // 布局跟着窗口几何走即可，进入/退出都与放大同拍
+        assertTrue(
+            code.contains("val isPipLayout = isPipWindow\n"),
+            "isPipLayout 必须只取窗口几何：视觉布局不得依赖硬编码的转场时长",
+        )
+        assertTrue(
+            mentionsInsideBlock(code, "LaunchedEffect(rawStageBounds)", "PIP_HINT_DEBOUNCE_MS"),
+            "params 推送必须经 PIP_HINT_DEBOUNCE_MS 防抖：逐帧推 hint 会让真机转场抖",
+        )
+        assertTrue(
+            !code.contains("PIP_INSET_ANIM_MS") && !code.contains("playerTopInset"),
+            "竖屏视频不得做顶部让位动画：留白位移动画会和 PiP 放大叠加成第二下抖动（2026-10-30 真机时序）",
+        )
+        assertTrue(
+            code.contains(".then(if (isPipLayout) Modifier else Modifier.statusBarsPadding())"),
+            "竖屏常规态必须让出状态栏；小窗内不得留白，否则 16:9 视频会被挤出窗口",
         )
 
         // 转场期间改 params 会让系统按新落点重定向退出动画（画面突跳放大）
@@ -884,21 +905,14 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
     }
 
     /**
-     * 竖屏系统栏让位必须跟窗口几何走，并在退出时用动画回落、进入时同帧归零。
+     * 手动进入 PiP 必须先收起控制层、等隐藏后的帧上屏，再调 `enterPictureInPictureMode`。
      *
-     * 复盘（2026-10-29，三轮）：
-     * 1) 跟 PiP 事件走：事件比窗口缩小晚 50ms 以上（实测），小窗里先渲染几帧带控制栏的整页
-     *    （"进小窗直接显示图标，不能无缝"）；
-     * 2) 同帧瞬切：全屏竖屏的视频比小窗内容低一个状态栏高度，退出时整页"被顶一下"；
-     * 3) 动画但无闸口：转场期间每 8ms 改一次布局并推一次 params，系统按新落点重定向动画
-     *    （"以左上角为锚点突然放大闪一下"）。
-     *
-     * 最终形态：`isPipLayout = isPipWindow || (pipSettling && !isInPipMode)` —— 进入跟窗口缩小同帧，
-     * 退出后一直保持小窗形态到转场结束，随后用 `PIP_INSET_SETTLE_MS` 动画回落；
-     * 转场期间的 params 推送由 `pipSettling` 全量掐断。
+     * 事故复盘（2026-10-30）：点小窗按钮时控制栏还在画面上，系统转场取的是当前帧，
+     * 控制层会被带进小窗第一帧；淡出动画（100ms）也来不及在窗口缩小前跑完，所以
+     * 进入方向的 chrome 必须硬隐藏（`ExitTransition.None`），并等两帧再触发 PiP。
      */
     @Test
-    fun player_portrait_insets_must_follow_pip_window_and_animate_on_exit() {
+    fun manual_pip_entry_must_hide_chrome_before_entering() {
         val file =
             File(
                 projectRoot,
@@ -907,37 +921,50 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
         assertTrue(file.isFile, "PlayerScreen.kt 未找到")
         val code = KotlinSourceScanner.sanitize(file.readText())
 
+        val fnToken = "fun enterPictureInPicture("
+        val start = code.indexOf(fnToken)
+        assertTrue(start >= 0, "PlayerScreen 缺少 enterPictureInPicture")
+        val nextFun = code.indexOf("\n    fun ", start + fnToken.length)
+        val body = code.substring(start, if (nextFun < 0) code.length else nextFun)
+
+        val hideIndex = body.indexOf("areControlsVisible = false")
+        val enterIndex = body.indexOf("enterPictureInPictureMode")
+        assertTrue(hideIndex >= 0, "进小窗前必须先收起控制层（areControlsVisible = false）")
+        assertTrue(enterIndex >= 0, "enterPictureInPicture 未调用 enterPictureInPictureMode")
         assertTrue(
-            code.contains("if (isPipLayout) 0.dp else statusBarTop") &&
-                code.contains("if (isPipLayout) 0.dp else navBarBottom"),
-            "竖屏让位目标必须跟 isPipLayout 走：跟事件走会晚 50ms，小窗里漏出整页",
+            hideIndex < enterIndex,
+            "必须先隐藏控制层再触发 PiP：否则系统转场会把控制栏带进小窗第一帧",
         )
         assertTrue(
-            code.contains("val topInset = if (isPipLayout) 0.dp else topInsetAnim"),
-            "进入小窗的让位必须同帧取 0：animateDpAsState 晚一帧，小窗第一帧会带旧 padding 闪一下",
+            body.contains("withFrameNanos"),
+            "隐藏控制层后必须等帧上屏（withFrameNanos）再进小窗，不能用固定延时猜",
         )
         assertTrue(
-            code.contains("isPipWindow || (pipSettling.value && !isInPipMode)"),
-            "isPipLayout 必须：进入跟窗口缩小同帧（几何）、退出用锁存保持到转场结束",
+            code.contains("isTransitioningToPip"),
+            "自动进小窗（上滑回桌面）没有按钮可拦：必须消费 isTransitioningToPip 抢先收起控制层",
         )
         assertTrue(
-            code.contains("val topInsetAnim by animateDpAsState(") && code.contains("val bottomInsetAnim by animateDpAsState("),
-            "退出小窗必须动画回落：全屏视频比小窗低一个状态栏高度，瞬切就是整页被顶一下",
+            code.contains("isWindowFocused"),
+            "上滑预隐藏必须用窗口焦点：isTransitioningToPip 比转场晚约 600ms（真机实测 41.172 vs 41.816），来不及",
+        )
+
+        val progressLineGuard = code.substringBefore("PlayerBottomEdgeProgressBar(").substringAfterLast("AnimatedVisibility(")
+        assertTrue(
+            progressLineGuard.contains("!isLandscape"),
+            "横屏不得显示底边进度线：全屏观影时不该有常驻进度条",
+        )
+        assertTrue(
+            progressLineGuard.contains("ExitTransition.None"),
+            "进小窗时底边进度线必须与控制层一起硬隐藏：淡出会残留到小窗第一帧",
+        )
+
+        val resumeGuard = code.substringBefore("PlayerResumeOverlay(").substringAfterLast("AnimatedVisibility(")
+        assertTrue(
+            resumeGuard.contains("!hideChrome") && resumeGuard.contains("ExitTransition.None"),
+            "续播浮窗也属于 chrome：进小窗必须一起硬隐藏，不能出现在小窗画面里",
         )
     }
 
-    /**
-     * mpv 渲染宿主锁定 buffer 尺寸时必须保持宽高比。
-     *
-     * 事故复盘（2026-10-29）：为消除 PiP 转场重排，`MpvSurfaceView` 用「只增不减」的
-     * `setFixedSize` 锁死 buffer。但 SurfaceView 把 buffer 映射到 View 用的是 x/y 各自独立的
-     * 缩放（AOSP `SurfaceView.updateSurface` 的 postScaleX/postScaleY），比例不一致就会直接
-     * 拉伸：20:9 横屏窗口进 16:9 的 PiP 窗口、分屏/桌面模式拖拽窗口比例都会命中；拉伸发生在
-     * 合成阶段，mpv 的 keepaspect 无法纠正。16:9 测试机上永远看不到，20:9 真机一进 PiP 就变形。
-     *
-     * 红线：重锁判据必须包含宽高比比较（`ASPECT_EPSILON`）；"只增不减"只对比例不变的尺寸生效，
-     * 且必须经统一的重锁判定，不得在 `onSizeChanged` 里直接按面积调用 `lockBufferSize`。
-     */
     @Test
     fun mpv_surface_buffer_lock_must_preserve_aspect_ratio() {
         val file =
@@ -963,6 +990,34 @@ class PlayerRulesTest : ArchitectureRuleTestSupport() {
         assertTrue(
             !mentionsInsideBlock(code, "override fun onSizeChanged(", "lockBufferSize(holder, w, h)"),
             "onSizeChanged 不得直接 lockBufferSize(holder, w, h)：绕过比例判定等于恢复拉伸缺陷",
+        )
+    }
+
+    /**
+     * PiP 内点按钮画面「压一下」属系统壳层转场：同场景 YouTube 同样复现，app 侧不做规避。
+     * 此前的 params 单推/小窗 hint 实验已回退，保留原始 DisposableEffect 双推实现。
+     */
+    @Test
+    fun pip_param_sync_must_keep_canonical_disposable_effect() {
+        val file =
+            File(
+                projectRoot,
+                "feature/subject/src/main/kotlin/com/infinitezerone/minibgm/feature/subject/player/PlayerScreen.kt",
+            )
+        assertTrue(file.isFile, "PlayerScreen.kt 未找到")
+        val code = KotlinSourceScanner.sanitize(file.readText())
+
+        assertTrue(
+            mentionsInsideBlock(
+                code,
+                "DisposableEffect(activity, playback.isPlaying, uiState.pipEnabled)",
+                "setPictureInPictureParams(buildPipParams(autoEnter = isPlayingNow && pipEnabledNow))",
+            ),
+            "播放/暂停同步必须保留常规 DisposableEffect 形态：小窗内点按钮的画面下压是系统转场，不在 app 侧规避",
+        )
+        assertTrue(
+            !code.contains("pipContentRect") && !code.contains("pipContentMode"),
+            "不得保留 PiP 内 hint 改写实验：下压为系统行为，app 侧不做参数特判",
         )
     }
 }

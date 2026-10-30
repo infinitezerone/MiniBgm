@@ -395,6 +395,22 @@ class MpvSurfaceView(
     context: Context,
 ) : SurfaceView(context),
     SurfaceHolder.Callback {
+    companion object {
+        /**
+         * PiP 转场进行中。期间一律禁止重锁 buffer。
+         *
+         * 退出 PiP 时 View 会从 PiP 尺寸长回全屏（面积变大），按「只增不减」的规则会触发重锁：
+         * buffer 换成新尺寸 → mpv 按新尺寸重绘一遍 → 观感就是退出瞬间画面"弹大一下"。
+         * 而这一步完全没有必要：比例没变，合成阶段缩放即可。
+         */
+        @Volatile
+        private var pipTransitionActive = false
+
+        fun setPipTransitionActive(active: Boolean) {
+            pipTransitionActive = active
+        }
+    }
+
     /**
      * 锁定的 buffer 尺寸（比例不变时只增不减）。
      *
@@ -460,6 +476,8 @@ class MpvSurfaceView(
     ): Boolean {
         if (w <= 0 || h <= 0) return false
         if (lockedWidth <= 0 || lockedHeight <= 0) return true
+        // 转场期间一律不重锁：退出 PiP 的面积变大不是"画质需要"，而是一次会重排画面的假动作
+        if (pipTransitionActive) return false
         val lockedAspect = lockedWidth.toDouble() / lockedHeight
         val aspectChanged = abs(w.toDouble() / h - lockedAspect) > lockedAspect * ASPECT_EPSILON
         if (aspectChanged) return true

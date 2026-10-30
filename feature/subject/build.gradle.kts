@@ -26,6 +26,9 @@ registerPrebuiltJniLibsForLibrary(
 )
 
 dependencies {
+    // PiP 进入转场信号（PictureInPictureUiStateCompat.isTransitioningToPip）
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.androidx.media3.ui)

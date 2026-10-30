@@ -21,6 +21,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -33,16 +34,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +67,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -83,6 +84,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.PictureInPictureModeChangedInfo
+import androidx.core.app.PictureInPictureUiStateCompat
 import androidx.core.content.ContextCompat
 import androidx.core.util.Consumer
 import androidx.core.view.WindowCompat
@@ -128,11 +130,11 @@ private const val PIP_TOGGLE_REQUEST_CODE = 1001
 
 private const val CONTROLS_AUTO_HIDE_MS = 3_500L
 
-/** 退出 PiP 后保留「小窗几何」判定的时长：等窗口尺寸回弹落地再交还事件语义 */
-private const val PIP_EXIT_SETTLE_MS = 500L
+/** 退出 PiP 后 params 推送的稳定期：回弹期间不推 hint（只管参数，不参与布局/视觉决策） */
+private const val PIP_EXIT_SETTLE_MS = 300L
 
-/** 退出小窗时的落位时长：保持期结束后 100ms 内把视频送回状态栏下方 */
-private const val PIP_INSET_SETTLE_MS = 100
+/** 画面矩形稳定多久后才推 PiP params：避开布局收尾期间逐帧改 hint */
+private const val PIP_HINT_DEBOUNCE_MS = 150L
 
 private const val EPISODE_GRID_CHUNK_SIZE = 30
 
@@ -170,6 +172,9 @@ fun PlayerScreen(
     val configuration = LocalConfiguration.current
     // 窗口像素尺寸：用来判定槽位矩形是不是「铺满窗口」的稳定态（见 onGloballyPositioned）
     val windowSize = LocalWindowInfo.current.containerSize
+    // 窗口焦点：上滑回桌面的手势在进入 PiP 前约 600ms 就会先丢焦点（2026-10-30 真机实测），
+    // 是最早的预隐藏信号（见下方 LaunchedEffect）
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
     val clipboardManager = LocalClipboard.current
 
     val handleCopyComment: (String) -> Unit = { text ->
@@ -216,6 +221,8 @@ fun PlayerScreen(
 
     // 纯 UI 局部状态（与播放器无关）
     var areControlsVisible by remember { mutableStateOf(true) }
+    // 手动进小窗的过渡态：先收起控制层，等隐藏后的帧上屏再触发 PiP
+    var pipEntering by remember { mutableStateOf(false) }
     var isLandscape by remember { mutableStateOf(false) }
     var playbackSpeed by remember { mutableFloatStateOf(1f) }
     var resizeMode by remember { mutableStateOf(PlayerResizeMode.FIT) }
@@ -263,10 +270,16 @@ fun PlayerScreen(
     }
     // 窗口是否已经变小（纯几何）
     val isPipWindow = rememberIsPipWindow(activity)
-    // 布局形态：进入跟窗口缩小同帧（纯几何），退出用会话锁存保持到转场结束。
-    // 进入不能提前到事件（事件早于窗口缩小，全屏窗口会先"塌"一下），也不能滞后
-    // （pipSettling 经 LaunchedEffect 中转会晚一帧，小窗里先漏出带控制栏的整页）。
-    val isPipLayout = isPipWindow || (pipSettling.value && !isInPipMode)
+    // 布局形态只看窗口几何：进入时窗口一缩、退出时窗口长回全屏，整页就跟着窗口一起恢复。
+    // 视觉路径不依赖任何硬编码转场时长；转场期间真正危险的是逐帧推 params（已由
+    // PIP_HINT_DEBOUNCE_MS 防抖），不是布局本身——实测把两者混在一起才会抖。
+    val isPipLayout = isPipWindow
+
+    // PiP 转场期间冻结 mpv 的 buffer 重锁：退出时 View 变大会触发"只增不减"重锁，
+    // buffer 换尺寸 → mpv 重绘 → 画面"弹大一下"。比例没变就不需要重锁。
+    SideEffect {
+        MpvSurfaceView.setPipTransitionActive(pipSettling.value || isInPipMode)
+    }
 
     val epLabel =
         if (uiState.episodeType == 0) {
@@ -358,9 +371,19 @@ fun PlayerScreen(
         // 刻意保留方向锁：若在此释放，退出小窗会按手机物理朝向重建布局，
         // 布局在转场中间整体翻转（横屏→竖屏）= reparent + 落点错位，抖动明显。
         val act = activity ?: return
-        // 分屏/系统禁用 PiP 时会直接返回 false：吞掉返回值等于按钮失灵
-        if (!act.enterPictureInPictureMode(buildPipParams(autoEnter = true))) {
-            coroutineScope.launch {
+        if (pipEntering) return
+        // 系统转场用的是当前画面：控制层必须先消失并上屏，否则会被带进小窗第一帧。
+        // 两帧 = 第一帧完成重组+绘制，第二帧开始再进小窗（帧信号，不猜时长）。
+        pipEntering = true
+        areControlsVisible = false
+        coroutineScope.launch {
+            withFrameNanos { }
+            withFrameNanos { }
+            // 分屏/系统禁用 PiP 时会直接返回 false：吞掉返回值等于按钮失灵
+            val entered = act.enterPictureInPictureMode(buildPipParams(autoEnter = true))
+            if (!entered) {
+                pipEntering = false
+                areControlsVisible = true
                 snackbarHostState.currentSnackbarData?.dismiss()
                 snackbarHostState.showSnackbar(
                     context.resources.getString(R.string.feature_subject_player_pip_unavailable),
@@ -405,9 +428,44 @@ fun PlayerScreen(
         if (isInPipMode) {
             overlayHostState.cancelActive()
             isScreenLocked = false
+            // 此刻窗口几何已是小窗形态，控制层隐藏交给 isPipLayout 接管
+            pipEntering = false
             // 方向锁刻意保留到退出之后：此刻释放会让退出转场中途翻转布局（实测抖动主因），
             // 朝向差异交由退出后的 isSystemLandscape 效果处理
         }
+    }
+
+    // 上滑回桌面时，窗口焦点比 PiP 转场早约 600ms 丢失（真机实测 41.172 vs 41.816），
+    // 用它抢在转场前收起控制层；isTransitioningToPip 只能当兜底。焦点丢失期间 chrome 硬隐藏，
+    // 焦点回来后若没进小窗（手势取消、下拉通知栏等），恢复正常显隐。
+    LaunchedEffect(windowFocused) {
+        if (!windowFocused) {
+            pipEntering = true
+            areControlsVisible = false
+        } else if (!isInPipMode && !pipSettling.value) {
+            pipEntering = false
+        }
+    }
+
+    // 自动进小窗（上滑回桌面）没有按钮可拦：消费系统的「正在进入 PiP」信号抢先收起控制层，
+    // 与控制层的硬隐藏配合，避免控制栏被带进小窗第一帧。上滑松手取消时信号回落，状态一并复位。
+    DisposableEffect(activity) {
+        val act = activity ?: return@DisposableEffect onDispose {}
+        var wasTransitioning = false
+        val listener =
+            Consumer<PictureInPictureUiStateCompat> { state ->
+                if (state.isTransitioningToPip) {
+                    wasTransitioning = true
+                    pipEntering = true
+                    areControlsVisible = false
+                } else if (wasTransitioning && !act.isInPictureInPictureMode) {
+                    // 上滑松手取消：信号回落且没进小窗，复位，否则控制层会一直藏着
+                    wasTransitioning = false
+                    pipEntering = false
+                }
+            }
+        act.addOnPictureInPictureUiStateChangedListener(listener)
+        onDispose { act.removeOnPictureInPictureUiStateChangedListener(listener) }
     }
 
     // 轻量 MediaSession：随页面创建/释放；只为系统媒体键与 Android 12+ PiP 播放键，
@@ -654,6 +712,15 @@ fun PlayerScreen(
         )
     }
 
+    // 画面矩形停稳后再推 hint：旋转/窗口伸缩期间 bounds 会逐帧变化，逐帧
+    // setPictureInPictureParams 会让系统反复重排（真机观感是抖）；实测一次变化能连推几十次。
+    LaunchedEffect(rawStageBounds) {
+        val bounds = rawStageBounds ?: return@LaunchedEffect
+        delay(PIP_HINT_DEBOUNCE_MS)
+        if (isPipWindow || pipSettling.value) return@LaunchedEffect
+        pushPipHintNow(bounds)
+    }
+
     // 生命周期联动：ON_PAUSE 落盘续播点；ON_STOP 才暂停。
     // PiP 中 Activity 只到 Paused、不会 Stop，因此用 ON_STOP 判定“真正离开前台”，
     // 避免进 PiP 瞬间 onPause 早于 isInPictureInPictureMode 置位而误暂停音频。
@@ -830,9 +897,8 @@ fun PlayerScreen(
                         // 转场/回弹期间推 params 会被系统按新 sourceRectHint 重定向动画（画面突跳放大）
                         if (!isStableStage || isPipWindow || pipSettling.value) return@onGloballyPositioned
                         if (bounds != rawStageBounds) {
+                            // 只更新落点缓存；推送交给上面的防抖 effect，等画面停稳再推
                             rawStageBounds = bounds
-                            // 退出小窗、窗口回弹落地后，或在常规态旋转/拉伸时，按新落点刷新 params
-                            pushPipHintNow(bounds)
                         }
                     },
         )
@@ -858,7 +924,7 @@ fun PlayerScreen(
                     PlayerStageConfig(
                         isLandscape = true,
                         isLocked = !isPipLayout && isScreenLocked,
-                        hideChrome = isPipLayout,
+                        hideChrome = isPipLayout || pipEntering,
                         showEpisodeQueue = !isPipLayout && (uiState.episodes.size > 1 || uiState.queue.size > 1),
                         onBackClick = { toggleFullscreen(false) },
                         onToggleFullscreen = { toggleFullscreen(false) },
@@ -872,30 +938,14 @@ fun PlayerScreen(
             }
         } else {
             // 竖屏常规态：顶部 16:9 播放窗口 + 播放源切换 + 底部选集网格。
-            // 让位跟 [isPipLayout] 走：转场结束前一直保持小窗形态（视频铺满、无让位），
-            // 转场结束后才用 300ms 动画把视频落回状态栏下方——全屏竖屏的视频比小窗内容低
-            // 一个状态栏高度，瞬切就是"被顶一下"，而在转场里变则是"Tab 出现把画面挤小上移"。
-            val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-            val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-            // 退出方向走动画落位；进入方向**不能**走动画状态——animateDpAsState 天然晚一帧，
-            // 小窗第一帧会带着旧 padding 渲染，就是"进小窗闪一下"。所以进入直接取 0（同帧）。
-            val topInsetAnim by animateDpAsState(
-                targetValue = if (isPipLayout) 0.dp else statusBarTop,
-                animationSpec = tween(durationMillis = PIP_INSET_SETTLE_MS),
-                label = "playerTopInset",
-            )
-            val bottomInsetAnim by animateDpAsState(
-                targetValue = if (isPipLayout) 0.dp else navBarBottom,
-                animationSpec = tween(durationMillis = PIP_INSET_SETTLE_MS),
-                label = "playerBottomInset",
-            )
-            val topInset = if (isPipLayout) 0.dp else topInsetAnim
-            val bottomInset = if (isPipLayout) 0.dp else bottomInsetAnim
+            // 系统栏让位由窗口几何决定：小窗里没有系统栏，留白会把 16:9 挤出窗口，所以只在
+            // 常规态生效。不做位移动画、不猜转场时长——留白跟随窗口恢复的那一帧就位。
             Column(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .padding(top = topInset, bottom = bottomInset),
+                        .then(if (isPipLayout) Modifier else Modifier.statusBarsPadding())
+                        .then(if (isPipLayout) Modifier else Modifier.navigationBarsPadding()),
             ) {
                 Box(
                     modifier =
@@ -908,7 +958,7 @@ fun PlayerScreen(
                         PlayerStageConfig(
                             isLandscape = false,
                             isLocked = false,
-                            hideChrome = isPipLayout,
+                            hideChrome = isPipLayout || pipEntering,
                             showEpisodeQueue = false,
                             onBackClick = onBackClick,
                             onToggleFullscreen = { toggleFullscreen(true) },
@@ -1239,16 +1289,18 @@ private fun PlayerVideoStage(
             }
         }
 
-        // 控制栏收起时常驻在视频最底边的极简进度线（播放中、暂停中或缓冲中均保持可见，避免突兀消失）
+        // 控制栏收起时常驻在视频最底边的极简进度线（播放中、暂停中或缓冲中均保持可见，避免突兀消失）。
+        // 横屏不显示：全屏观影时不打扰画面；进小窗时必须和标题栏一样硬隐藏，不能残留到小窗第一帧。
         AnimatedVisibility(
             visible =
                 !hideChrome &&
+                    !isLandscape &&
                     !controlsVisible &&
                     !playback.isEnded &&
                     errorMessage == null &&
                     playback.durationMs > 0L,
             enter = fadeIn(tween(100)),
-            exit = fadeOut(tween(100)),
+            exit = if (hideChrome) ExitTransition.None else fadeOut(tween(100)),
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
         ) {
             // 位置单独订阅：只有底边进度线随 500ms 位置跳重组
@@ -1308,7 +1360,8 @@ private fun PlayerVideoStage(
                             errorMessage != null
                     ),
             enter = fadeIn(tween(100)),
-            exit = fadeOut(tween(100)),
+            // 进小窗必须硬隐藏：淡出会让控制层残留到小窗第一帧（系统转场取的是当前画面）
+            exit = if (hideChrome) ExitTransition.None else fadeOut(tween(100)),
             modifier = Modifier.fillMaxSize(),
         ) {
             PlayerControlsOverlay(
@@ -1370,9 +1423,16 @@ private fun PlayerVideoStage(
         )
 
         AnimatedVisibility(
-            visible = resumeOverlayPosition != null && !isLocked,
+            // 续播浮窗同样属于 chrome：进小窗（含预隐藏）时必须一起收起，不能出现在小窗画面里
+            visible = resumeOverlayPosition != null && !isLocked && !hideChrome,
             enter = fadeIn(tween(100)) + slideInVertically(tween(100)) { it / 2 },
-            exit = fadeOut(tween(100)) + slideOutVertically(tween(100)) { it / 2 },
+            // 进小窗方向硬隐藏：淡出/滑出会残留到小窗第一帧
+            exit =
+                if (hideChrome) {
+                    ExitTransition.None
+                } else {
+                    fadeOut(tween(100)) + slideOutVertically(tween(100)) { it / 2 }
+                },
             modifier =
                 Modifier
                     .align(Alignment.BottomStart)
