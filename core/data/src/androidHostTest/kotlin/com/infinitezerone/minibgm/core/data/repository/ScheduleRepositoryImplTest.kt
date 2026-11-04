@@ -1603,6 +1603,130 @@ class ScheduleRepositoryImplTest {
             assertTrue(schedules.none { it.bgmId == 6002L }, "已完结的僵尸条目应被剔除")
         }
 
+    /**
+     * 红线：翻周/陈旧判据不得清掉 13 天长卷回看窗口内刚播完的条目。
+     *
+     * 真实案例（Sister Breeder，bgm 575204）：分话放送 R18 OVA，CI 登记的 airDate 在一年前、
+     * totalEpisodes=0，最后一话（连播两话）播于上周四。翻周后 `isActiveForSchedule` 分支 1
+     * （旧：仅保活本周）失效，落入"无话数条目开播超 370 天"分支 → 从流中隐藏 →
+     * 用户翻回上周页面时整部消失，而实体与逐话事件其实都还在库里。
+     *
+     * 契约：最后一话播于 7 天宽限窗口内的条目必须（1）不被僵尸剔除、（2）仍出现在
+     * `getAllSchedulesStream`、（3）在对应自然日查询（widget/AI 同源）中可命中；
+     * 最后一话滑出宽限窗口（30 天前）后恢复旧有剔除语义。
+     */
+    @Test
+    fun syncAirEvents_keepsRecentlyAiredSchedulePointEntry_visibleWithinTimelineLookback() =
+        runTest {
+            val nowMillis = TimeUtils.nowEpochMillis()
+            val sixDaysAgoMillis = nowMillis - 6 * DAY_MILLIS
+            val sixDaysAgoEpochSeconds = sixDaysAgoMillis / 1000
+
+            val anilist =
+                FakeScheduleSnapshotService().apply {
+                    mediaSchedules =
+                        mapOf(
+                            901L to
+                                AniListMediaSchedule(
+                                    episodes =
+                                        listOf(
+                                            AniListAiringEpisode(episode = 5, airAtEpochSeconds = sixDaysAgoEpochSeconds),
+                                            AniListAiringEpisode(episode = 6, airAtEpochSeconds = sixDaysAgoEpochSeconds),
+                                        ),
+                                ),
+                            // 回归对照：同样的形态，但最后一话在 30 天前——应维持旧有剔除语义
+                            902L to
+                                AniListMediaSchedule(
+                                    episodes =
+                                        listOf(
+                                            AniListAiringEpisode(episode = 2, airAtEpochSeconds = (nowMillis - 30 * DAY_MILLIS) / 1000),
+                                        ),
+                                ),
+                        )
+                    bgmIdByAnilistId = mapOf(901L to 9001L, 902L to 9002L)
+                    airDateByAnilistId = mapOf(901L to "2025-09-01", 902L to "2025-09-01")
+                }
+
+            val dao =
+                FakeAirScheduleDao().apply {
+                    insertSchedules(
+                        listOf(
+                            // 复刻设备真实行：无话数分话 OVA，开播日登记在一年前，最后一话播于 6 天前
+                            AirScheduleEntity(
+                                bgmId = 9001L,
+                                title = "分话放送 OVA",
+                                titleCn = "分话放送 OVA",
+                                coverUrl = "https://example.com/ova.jpg",
+                                ratingScore = 0.0,
+                                airDate = "2025-09-01",
+                                beginAtUtc = "2025-09-01",
+                                totalEpisodes = 0,
+                                weekday = TimeUtils.cstWeekdayOfEpoch(sixDaysAgoMillis),
+                                timeCst = "23:00",
+                                timeJst = "00:00",
+                                sitesJson = "[]",
+                                anilistId = 901L,
+                                broadcastRule = "format=OVA;adult=true",
+                                source = AirScheduleEntity.SOURCE_BGM_DATA,
+                                nextEpisode = 5,
+                                nextEpisodeAtUtc = TimeUtils.isoUtcFromEpochMillis(sixDaysAgoMillis),
+                                nextEpisodeKind = AirEventKind.ACTUAL,
+                            ),
+                            // 回归对照：同样的形态，但最后一话在 30 天前——应维持旧有剔除语义
+                            AirScheduleEntity(
+                                bgmId = 9002L,
+                                title = "早已播完的分话 OVA",
+                                titleCn = "早已播完的分话 OVA",
+                                coverUrl = "https://example.com/ova2.jpg",
+                                ratingScore = 0.0,
+                                airDate = "2025-09-01",
+                                beginAtUtc = "2025-09-01",
+                                totalEpisodes = 0,
+                                weekday = 4,
+                                timeCst = "23:00",
+                                timeJst = "00:00",
+                                sitesJson = "[]",
+                                anilistId = 902L,
+                                broadcastRule = "format=OVA;adult=true",
+                                source = AirScheduleEntity.SOURCE_BGM_DATA,
+                                nextEpisode = 2,
+                                nextEpisodeAtUtc = TimeUtils.isoUtcFromEpochMillis(nowMillis - 30 * DAY_MILLIS),
+                                nextEpisodeKind = AirEventKind.ACTUAL,
+                            ),
+                        ),
+                    )
+                }
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    scheduleDao = dao,
+                    airEventDao = FakeAirEventDao(),
+                    snapshotService = anilist,
+                    userPreferences = createTestUserPreferencesDataSource(),
+                )
+
+            val result = repo.syncBangumiData()
+            assertIs<AppResult.Success<Unit>>(result)
+
+            // 1. 不被判僵尸：实体行保留（902 已滑出宽限窗口，照旧剔除）
+            val schedules = dao.getAllSchedulesList()
+            assertTrue(schedules.any { it.bgmId == 9001L }, "回看窗口内刚播完的条目不得被僵尸剔除")
+            assertTrue(schedules.none { it.bgmId == 9002L }, "滑出宽限窗口的条目照旧剔除")
+
+            // 2. 仍出现在时刻表流中：用户翻回上周页面必须能看到
+            val stream = repo.getAllSchedulesStream().first()
+            assertTrue(stream.any { it.bgmId == 9001L }, "最后一话播于 7 天宽限内的条目必须保持可见")
+
+            // 3. 对应自然日查询（widget/AI 同源）可命中
+            val dateStr = TimeUtils.formatIsoToCstDate(TimeUtils.isoUtcFromEpochMillis(sixDaysAgoMillis))
+            val weekday = TimeUtils.cstWeekdayOfEpoch(sixDaysAgoMillis)
+            val forDate = repo.getSchedulesForDate(dateStr, weekday, allowAdult = true)
+            assertTrue(
+                forDate.any { it.bgmId == 9001L },
+                "指定自然日查询必须命中回看窗口内刚播完的条目",
+            )
+        }
+
     @Test
     fun syncBangumiData_populatesSnapshotMetadataDirectlyWithoutApiCall() =
         runTest {

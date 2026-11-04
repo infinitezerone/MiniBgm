@@ -1053,8 +1053,11 @@ internal class ScheduleRepositoryImpl(
         val weekStartMillis = TimeUtils.cstWeekStartEpochMillis(nowMillis)
         val nextMillis = TimeUtils.epochMillisOfIso(nextEpisodeAtUtc)
 
-        // 1. 若条目有排期且在当前周或未来：必然处于活跃状态
-        if (nextMillis != null && nextMillis >= weekStartMillis) {
+        // 1. 若条目有排期且落在 13 天长卷回看窗口（今天 -6 天起的整页）或未来：必然处于活跃状态。
+        //    宽限取 7 天而非本周起点：翻周瞬间"上一周刚播完"的条目（next* 已回选最后一话）
+        //    不能立刻落入后面的陈旧判据——否则分话放送 OVA（airDate 可能被登记在一年前、
+        //    totalEpisodes=0）播完当晚就因"开播超 370 天"被隐藏，上周页面再也找不回。
+        if (nextMillis != null && nextMillis >= nowMillis - TIMELINE_LOOKBACK_DAYS * DAY_MILLIS) {
             return true
         }
 
@@ -1134,6 +1137,13 @@ internal class ScheduleRepositoryImpl(
         const val EVENT_SOURCE_ANILIST = "anilist"
         const val EVENT_SOURCE_BGM_DATA = "bgm_data"
         const val ROSTER_LOOKBACK_DAYS = 370L
+
+        /**
+         * 时刻表判活与僵尸剔除共用的回看宽限（天）：覆盖 13 天长卷的 -6 天整页再加一天跨日余量。
+         * 排期点（最后一话/开播日）落在这个窗口内的条目绝不离场——真完结条目也要等滑出
+         * 回看窗口后才允许被隐藏或清除。
+         */
+        const val TIMELINE_LOOKBACK_DAYS = 7L
 
         // 标题归一化用的 TITLE_NOISE_REGEX / ROMAN_NUMERAL_REGEX / ROMAN_NUMERALS
         // 已随 canonicalTitleKey 移至 ScheduleTitleMatcher.kt；

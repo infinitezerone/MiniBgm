@@ -8,6 +8,8 @@ import com.infinitezerone.minibgm.core.database.entity.AirScheduleEntity
  * 判定一条 `bgm_data` 来源的条目是否已过期、可从时刻表清理（stale prunable）：
  * 本周及未来都不会再有任何播出事件，该从时刻表剔除。
  * 非 `bgm_data` 来源（如 AniList 名单）一律不判，直接返回 false。
+ * 例外：最新事件或开播日落在 7 天回看窗口内的条目无条件保活（真完结也要等滑出
+ * 用户还能翻到的时刻表页面后再清理）。
  *
  * 两支判据：**有事件**时看是否已播完全部集数、或总放送周期已过；**无事件**时看距最后事件／开播日
  * 是否已过去足够久（14 天）。
@@ -22,6 +24,15 @@ internal fun isStalePrunableSchedule(
     nowMillis: Long,
 ): Boolean {
     if (entity.source != AirScheduleEntity.SOURCE_BGM_DATA) return false
+
+    // 回看宽限：最新事件或开播日落在 13 天长卷回看窗口（7 天，与 isActiveForSchedule 同宽）内
+    // 的条目绝不判僵尸——否则分话放送 OVA 播完当晚就会被整行删除，翻回上周页面再也找不回。
+    val lookbackMillis = nowMillis - 7 * DAY_MILLIS
+    val latestEventMillis = events.maxOfOrNull { TimeUtils.epochMillisOfIso(it.airAtUtc) ?: 0L } ?: 0L
+    if (latestEventMillis >= lookbackMillis) return false
+    val graceBeginMillis = TimeUtils.epochMillisOfIso(entity.beginUtc)
+    if (graceBeginMillis != null && graceBeginMillis >= lookbackMillis) return false
+
     val weekStartMillis = TimeUtils.cstWeekStartEpochMillis(nowMillis)
     if (events.isNotEmpty()) {
         val hasActiveOrFutureEvent =

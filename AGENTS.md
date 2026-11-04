@@ -18,7 +18,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 - 单元测试配置唯一真源 `configureAndroidUnitTests()`，禁止手抄 `tasks.withType<Test>`；依赖图变更后 `./gradlew graphUpdate`，Lint 基线用 `updateLintBaseline`，质量门 `./gradlew :core:testing:crapCheck`（CRAP ≤ 30）。
 - Rust 原生库：ABI 集合唯一真源 `native/abis.txt`（构建脚本、release workflow、`SUPPORTED_ABIS` 全与它对齐）；Gradle 绝不跨界调度 Cargo/NDK，只经 `registerPrebuiltJniLibs` 挂载产物并在缺库时硬失败；`libminibgm_torrent.so` 在 release 由 `configureOnDemandNativePackaging` 排除、按需下载。
 
-编码中间态用 `.\tools\quick-check.ps1` 秒级自查（等价 `jgate quick`）。
+编码中间态用 `.\tools\quick-check.ps1` 秒级自查。
 
 ## 硬红线
 
@@ -45,7 +45,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 每条规则的完整复盘都在同名红线测试的 KDoc 里（`ArchitectureRulesTest`）；这里只留可执行的约束。动手前按 `.agents/skills/minibgm-playbooks/` 路由表只打开命中任务的 1-2 个 `references/` 剧本，禁止通读。
 
 - 装饰性功能 fail-open：光晕/动效/横幅内部异常一律 `runCatching` 降级为「没有装饰」，绝不崩宿主页面；读硬件位图像素前先 `copy` 成软件位图。
-- 排期真值只来自 AniList 已验证播出事件；禁止算术预测与合成剧集；bangumi-data 只做元数据与平台映射（`schedule_repository_uses_anilist_as_the_only_roster_source`）。
+- 排期真值只来自 AniList 已验证播出事件；禁止算术预测与合成剧集；bangumi-data 只做元数据与平台映射（`schedule_repository_uses_anilist_as_the_only_roster_source`）；7 天回看窗内刚播完的条目不得隐藏或清除。
 - 复用 `BgmHttpClient.jsonConfig`，不手写 `Json {}`（`json_instances_have_a_single_home_per_scope`）。
 - Ktor 401 自动刷新、彻底失败自动登出——调用方永远看不到 401。
 - 播放器会话：续播点按**分集**绑定（`selectEpisode` / `switchTo` 按 `episodeId` 存取，与直链/源解耦；`player_view_model_playback_resume_must_bind_strictly_to_playback_history_repo`），同分集换线路沿用当前进度；
@@ -90,4 +90,4 @@ AI 协同流水线（机械执行，严禁甩锅排错）：
 
 tag 是版本唯一真源：推 `vX.Y.Z` 经 `-Pminibgm.versionName/-Pminibgm.versionCode` 注入构建；发布门禁在 release.yml（缺签名密钥直接失败）。勿为发版手改 build-logic 的默认版本——那是 v0.2.8 事故的根源。
 
-ABI 分包：debug/日常构建**只产 1 个 APK**（`app/build.gradle.kts` 的 `enableAbiSplits` 默认 `false`——开启时 debug 要打 2 个 ABI 包 + 1 个 universal 包，实测 363MB 写盘，是每次 `assembleDebug` 都在付的重复开销）。发版必须产出分 ABI + universal 产物，由 release.yml 传 `-Pminibgm.abiSplits=true` 开启，并有产物断言步骤判死；**勿把仓库默认值改回 `true`**。
+ABI 分包：debug/日常构建**只产 1 个 APK**（`app/build.gradle.kts` 的 `enableAbiSplits` 默认 `false`——开着它每次 `assembleDebug` 都白写 363MB 重复产物）。发版必须产出分 ABI + universal 产物，由 release.yml 传 `-Pminibgm.abiSplits=true` 开启，并有产物断言步骤判死；**勿把仓库默认值改回 `true`**。
