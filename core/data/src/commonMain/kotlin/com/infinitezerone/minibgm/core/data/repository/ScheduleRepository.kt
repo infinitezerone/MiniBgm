@@ -447,8 +447,10 @@ internal class ScheduleRepositoryImpl(
 
     override suspend fun syncBangumiData(): AppResult<Unit> =
         try {
-            // 逐话事件同步与仲裁（全量管线中唯一一次）：快照直拉 + 名单发现 + 排期回写全部收口
-            runCatchingCancellable { syncAirEvents() }
+            // 逐话事件同步与仲裁（全量管线中唯一一次）：快照直拉 + 名单发现 + 排期回写全部收口。
+            // 结果不能丢弃：快照失败抛出的异常必须落到下面的 catch 转 Error，
+            // 且不得走到写节流时间戳那一行——否则失败被记成"刚同步过"，12h 内自动刷新全被节流。
+            syncAirEvents()
             userPreferences.setBangumiDataLastSyncTimestamp(TimeUtils.nowEpochMillis())
             AppResult.Success(Unit)
         } catch (e: CancellationException) {
@@ -484,7 +486,8 @@ internal class ScheduleRepositoryImpl(
      * 1) 下载放送时刻表快照（minibgm-schedule-data，CI 定时扫描 AniList 的产物）；
      * 2) 快照投喂名单发现与本地/快照映射（映射不上直接丢弃，不生成占位条目）；
      * 3) 仲裁回写条目的 next* 字段与 weekday，自动回补高清封面，并剔除已完结僵尸条目。
-     * 快照下载失败时保持本地现状（fail-open），等待下一班 CI / 刷新。
+     * 快照下载失败时保持本地现状（fail-open 不清库），但异常向上抛出——
+     * 由 [syncBangumiData] 转为 Error 且不写节流时间戳，等待下一班 CI / 刷新。
      */
     private suspend fun syncAirEvents() {
         // 空表 + 旧 ETag = 304：本地一条没有，远端却回"没变化"，空表永远得不到回填。
@@ -501,9 +504,10 @@ internal class ScheduleRepositoryImpl(
                         ?.ifBlank { null }
                 }.getOrNull()
             }
-        val snapshotResult =
-            runCatchingCancellable { snapshotService.getSnapshot(cachedEtag) }.getOrNull()
-                ?: return
+        // 快照下载失败必须向上抛出：fail-open 指的是"保持本地现状不清库"，
+        // 绝不等于"把失败伪装成成功"——否则节流时间戳被写成刚刚同步过，
+        // 之后 12 小时内的自动刷新全部被跳过，时刻表静默滞留（红线见同步失败时间戳测试）。
+        val snapshotResult = snapshotService.getSnapshot(cachedEtag)
         val snapshot =
             when (snapshotResult) {
                 is ScheduleSnapshotResult.NotModified -> {

@@ -45,7 +45,7 @@ MiniBgm：Bangumi（bgm.tv）追番排期与收藏管理客户端。模块化 Cl
 每条规则的完整复盘都在同名红线测试的 KDoc 里（`ArchitectureRulesTest`）；这里只留可执行的约束。动手前按 `.agents/skills/minibgm-playbooks/` 路由表只打开命中任务的 1-2 个 `references/` 剧本，禁止通读。
 
 - 装饰性功能 fail-open：光晕/动效/横幅内部异常一律 `runCatching` 降级为「没有装饰」，绝不崩宿主页面；读硬件位图像素前先 `copy` 成软件位图。
-- 排期真值只来自 AniList 已验证播出事件；禁止算术预测与合成剧集；bangumi-data 只做元数据与平台映射（`schedule_repository_uses_anilist_as_the_only_roster_source`）；7 天回看窗内刚播完的条目不得隐藏或清除。
+- 排期真值只来自 AniList 已验证播出事件；禁止算术预测与合成剧集；bangumi-data 只做元数据与平台映射（`schedule_repository_uses_anilist_as_the_only_roster_source`）；7 天回看窗内刚播完的条目不得隐藏或清除；快照同步失败必须 Error 且不得写节流时间戳。
 - 复用 `BgmHttpClient.jsonConfig`，不手写 `Json {}`（`json_instances_have_a_single_home_per_scope`）。
 - Ktor 401 自动刷新、彻底失败自动登出——调用方永远看不到 401。
 - 播放器会话：续播点按**分集**绑定（`selectEpisode` / `switchTo` 按 `episodeId` 存取，与直链/源解耦；`player_view_model_playback_resume_must_bind_strictly_to_playback_history_repo`），同分集换线路沿用当前进度；

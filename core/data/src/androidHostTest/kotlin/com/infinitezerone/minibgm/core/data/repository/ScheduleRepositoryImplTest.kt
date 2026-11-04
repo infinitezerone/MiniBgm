@@ -183,6 +183,10 @@ class ScheduleRepositoryImplTest {
         var airDateByAnilistId: Map<Long, String> = emptyMap()
         var sitesByAnilistId: Map<Long, List<ScheduleSnapshotSiteDto>> = emptyMap()
         var customSnapshot: ScheduleSnapshotDto? = null
+
+        /** 故障注入：非空时 getSnapshot 直接抛出，模拟全部 CDN 不可达 */
+        var snapshotError: Throwable? = null
+        var snapshotErrorRequestedEtag: String? = null
         var snapshot: ScheduleSnapshotDto?
             get() = customSnapshot
             set(value) {
@@ -193,6 +197,10 @@ class ScheduleRepositoryImplTest {
 
         override suspend fun getSnapshot(ifNoneMatchEtag: String?): ScheduleSnapshotResult {
             requestedEtags += ifNoneMatchEtag
+            snapshotError?.let {
+                snapshotErrorRequestedEtag = ifNoneMatchEtag
+                throw it
+            }
             if (customSnapshot != null) return ScheduleSnapshotResult.Modified(customSnapshot!!, etag = "custom-etag")
 
             data class ItemMeta(
@@ -1725,6 +1733,49 @@ class ScheduleRepositoryImplTest {
                 forDate.any { it.bgmId == 9001L },
                 "指定自然日查询必须命中回看窗口内刚播完的条目",
             )
+        }
+
+    /**
+     * 红线：快照下载失败必须以 Error 收场，且不得写节流时间戳 / ETag。
+     *
+     * 曾在 `syncAirEvents` 内部把下载异常吞成静默 return，随后 `syncBangumiData` 照常
+     * 写入 `bangumiDataLastSyncTimestamp` 并返回 Success——一次网络抖动就被记成"刚同步过"，
+     * 12 小时节流把后续自动刷新全部挡掉，时刻表静默滞留且 UI 无任何错误提示。
+     */
+    @Test
+    fun syncBangumiData_snapshotFailure_returnsErrorAndSkipsThrottleTimestamp() =
+        runTest {
+            val anilist =
+                FakeScheduleSnapshotService().apply {
+                    snapshotError = RuntimeException("all cdns down")
+                }
+            val prefs = createTestUserPreferencesDataSource()
+
+            val repo =
+                createRepository(
+                    apiService = FakeBangumiApiService(),
+                    scheduleDao = FakeAirScheduleDao(),
+                    airEventDao = FakeAirEventDao(),
+                    snapshotService = anilist,
+                    userPreferences = prefs,
+                )
+
+            val result = repo.syncBangumiData()
+
+            assertTrue(result is AppResult.Error, "快照下载失败必须返回 Error 而不是伪装成功")
+            val stored = prefs.userPreferences.first()
+            assertEquals(0L, stored.bangumiDataLastSyncTimestamp, "失败不得写节流时间戳")
+            assertEquals("", stored.scheduleSnapshotEtag, "失败不得写快照 ETag")
+            // 空表必须不带 ETag 强制拉全量（304 兜底语义不变）
+            assertEquals(null, anilist.snapshotErrorRequestedEtag)
+
+            // 故障恢复后下一轮同步正常写时间戳
+            anilist.snapshotError = null
+            anilist.customSnapshot =
+                ScheduleSnapshotDto(schema = "minibgm-schedule-snapshot/1", generatedAt = "", items = emptyList())
+            val recovered = repo.syncBangumiData()
+            assertIs<AppResult.Success<Unit>>(recovered)
+            assertTrue(prefs.userPreferences.first().bangumiDataLastSyncTimestamp > 0L, "成功同步必须写节流时间戳")
         }
 
     @Test
